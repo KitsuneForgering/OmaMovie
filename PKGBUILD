@@ -43,6 +43,8 @@ _devdepends=(
     'vulkan-tools'              # vulkaninfo (S1)
     'vulkan-validation-layers'  # validate synchronization in spikes and libs/gpu
     'libva-utils'               # vainfo (S1)
+    'qt6-base'                  # Qt GUI and versioned RHI development headers (S4)
+    'qt6-declarative'           # Qt Quick (S4; move to depends when an app ships)
 )
 
 source=("${pkgname}::git+${url}.git")

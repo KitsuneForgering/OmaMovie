@@ -163,6 +163,17 @@ $(BUILD_DIR)/spikes/%: tools/spikes/%.cpp $(MAKEFILE_LIST)
 
 spikes: $(SPIKE_BINS)
 
+# S4 reuses the real compositor and Qt's versioned RHI headers (limited compatibility API).
+# Keep Qt discovery in this recipe: core library/test builds do not require Qt.
+$(BUILD_DIR)/spikes/s4_qt_shared_device: tools/spikes/s4_qt_shared_device.cpp $(LIB_compositor) $(LIB_media) $(LIB_gpu) $(LIB_base) $(MAKEFILE_LIST)
+	$(call say,SPIKE,$@)
+	@mkdir -p $(@D)
+	$(Q)$(CXX) $(CXXFLAGS_BASE) $(TEST_WARNINGS) $(INC_compositor) \
+		$$(pkg-config --cflags Qt6Quick) \
+		-isystem $$(pkg-config --variable=includedir Qt6Gui)/QtGui/$$(pkg-config --modversion Qt6Gui) \
+		-isystem $$(pkg-config --variable=includedir Qt6Gui)/QtGui/$$(pkg-config --modversion Qt6Gui)/QtGui \
+		$< -o $@ $(LINK_compositor) $$(pkg-config --libs Qt6Quick) $(LDFLAGS_BASE)
+
 all: libs tests compdb
 
 libs: $(ALL_LIBS)
@@ -226,7 +237,7 @@ help:
 	@echo '  format        apply clang-format     | format-check  check without changing'
 	@echo '  tidy          run clang-tidy on the libs'
 	@echo '  fixtures      generate test media in tests/fixtures/generated (needs ffmpeg)'
-	@echo '  spikes        build the M1 spikes in tools/spikes (needs Vulkan + FFmpeg headers)'
+	@echo '  spikes        build the M1 spikes in tools/spikes (Vulkan + FFmpeg + Qt Quick/RHI)'
 	@echo '  deps          install the dependencies declared in the PKGBUILD (uses sudo pacman)'
 	@echo '  clean         remove build/$$BUILD   | distclean     remove all of build/'
 	@echo 'Variables: BUILD=debug|release|asan|tsan  CXX=g++|clang++  WERROR=1|0  V=1 (verbose)'
