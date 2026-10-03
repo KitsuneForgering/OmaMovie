@@ -83,8 +83,12 @@ destroy the object); use non-RAII handles (`vk::Image`) for borrowed objects.
 | **RADV** (AMD) | H.264, H.265 (since Mesa 23.1), AV1 (24.1), VP9 | H.264, H.265 (24.1), AV1 (25.2) |
 | **ANV** (Intel) | H.264, H.265 (since 23.1), **AV1 (25.0, TigerLake onward, including 10-bit)**, VP9 (June 2025) | H.264, H.265 (24.3), AV1 on Arc/DG2 |
 
-Mesa 26.0 brought general Vulkan Video improvements for H.264/H.265/AV1. The development
-machine (Iris Xe, TigerLake) should support AV1 decode through Vulkan **(verify with `vulkaninfo`)**.
+Mesa 26.0 brought general Vulkan Video improvements for H.264/H.265/AV1.
+
+**Verified in S1 (`Docs/spikes/S1-hardware-inventory.md`):** on the Iris Xe (TigerLake) with Mesa
+26.2.2, ANV exposes **no** Vulkan Video extensions by default; they appear only with
+`ANV_DEBUG=video-decode,video-encode`, and AV1 decode still fails to initialize in FFmpeg 9.
+VA-API is the default decode path on this generation.
 
 ### 3.2 FFmpeg and Vulkan
 - **FFmpeg 7.1**: `h264_vulkan` and `hevc_vulkan` encoders; full decode → filter → encode pipelines in Vulkan.

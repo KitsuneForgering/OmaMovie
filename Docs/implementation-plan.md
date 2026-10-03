@@ -109,9 +109,9 @@ Results in `Docs/spikes/Sn-<name>.md` with numbers, driver versions and a conclu
 
 | Spike | Question | Done when | Feeds |
 |---|---|---|---|
-| **S1** Inventory | Which codecs/profiles does the Iris Xe decode and encode through Vulkan Video, VA-API and QSV? | Codec × API × bit depth table | ADR-0004 |
+| **S1** Inventory ✅ | Which codecs/profiles does the Iris Xe decode and encode through Vulkan Video, VA-API and QSV? | Codec × API × bit depth table — **done**, see `Docs/spikes/S1-hardware-inventory.md`: VA-API is the default decode path; Vulkan Video is behind `ANV_DEBUG` on TigerLake; Vulkan compute codecs (ProRes, FFv1) work without flags | ADR-0004 |
 | **S2** FFmpeg on OmaMovie's device | Does FFmpeg 9 accept a `VkDevice` created with Vulkan-Hpp and deliver `AVVkFrame` without readback? How does queue locking work? | H.264/HEVC/AV1 decoded into `AVVkFrame`, zero copy to the CPU confirmed | ADR-0004 |
-| **S3** Vulkan Video vs. VA-API | Which path is better per codec on the Iris Xe? | Frame time, CPU and power per codec; written selection policy | ADR-0004 |
+| **S3** Decode/encode paths | VA-API vs. QSV (vs. flagged Vulkan Video, for reference) per codec on the Iris Xe; FFv1 vs. ProRes for proxies | Frame time, CPU and power per codec; written selection policy | ADR-0004 |
 | **S4** Qt Quick on the same device | Do `QQuickGraphicsDevice::fromDeviceObjects` + `QSGVulkanTexture::fromNative` show the compositor image without a copy? | 60 fps preview, no deadlock between Qt, FFmpeg and the compositor | ADR-0005 |
 | **S5** Minimal compositing | 2 videos + 1 image with transform/crop/opacity and YUV→RGB | 1080p60 frame time measured and recorded | M3 |
 | **S6** libplacebo | Does it operate on OmaMovie's images/device without copies? Quality and cost? | Decision "use libplacebo for color/scaling/LUT or our own shaders" | ADR-0006 |
