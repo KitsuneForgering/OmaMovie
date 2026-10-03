@@ -1,5 +1,5 @@
 <title>OmaMovie Mockup</title>
-<meta name="description" content="Mockup navegável da UI do OmaMovie, baseado em Docs/ui-design.md">
+<meta name="description" content="Interactive OmaMovie UI mockup, based on Docs/ui-design.md">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap">
@@ -301,20 +301,20 @@ button,input,select{font:inherit;color:inherit}
 <div class="page">
   <header class="page-head">
     <div>
-      <h1>OmaMovie · mockup da interface</h1>
-      <p>Protótipo navegável de <code>Docs/ui-design.md</code>. Paletas reais dos temas do Omarchy, ícones SVG próprios, atalhos na convenção iMovie/Final Cut. Mídia e projeto são fictícios.</p>
+      <h1>OmaMovie · interface mockup</h1>
+      <p>Interactive prototype of <code>Docs/ui-design.md</code>. Real Omarchy theme palettes, our own SVG icons, shortcuts following the iMovie/Final Cut convention. Media and project are fictitious.</p>
     </div>
     <div class="ctrls">
-      <div class="ctrl">Tela
-        <div class="seg" id="segScreen"><button data-v="projects" aria-pressed="true">Projetos</button><button data-v="edit" aria-pressed="false">Edição</button></div>
+      <div class="ctrl">Screen
+        <div class="seg" id="segScreen"><button data-v="projects" aria-pressed="true">Projects</button><button data-v="edit" aria-pressed="false">Edit</button></div>
       </div>
-      <div class="ctrl">Janela
-        <div class="seg" id="segWidth"><button data-v="wide" aria-pressed="true">Larga</button><button data-v="half" aria-pressed="false">Meia tela</button><button data-v="narrow" aria-pressed="false">Estreita</button></div>
+      <div class="ctrl">Window
+        <div class="seg" id="segWidth"><button data-v="wide" aria-pressed="true">Wide</button><button data-v="half" aria-pressed="false">Half width</button><button data-v="narrow" aria-pressed="false">Narrow</button></div>
       </div>
-      <label class="ctrl" for="themeSel">Tema do Omarchy
+      <label class="ctrl" for="themeSel">Omarchy theme
         <select id="themeSel"></select>
       </label>
-      <label class="ctrl" for="notesChk"><input type="checkbox" id="notesChk" checked> Anotações</label>
+      <label class="ctrl" for="notesChk"><input type="checkbox" id="notesChk" checked> Annotations</label>
     </div>
   </header>
 
@@ -327,35 +327,35 @@ button,input,select{font:inherit;color:inherit}
           <div class="pj-head">
             <div class="wordmark">Oma<span>Movie</span></div>
             <div class="grow"></div>
-            <button class="tb-btn" id="btnImportP"><span data-ico="import"></span><span class="lb">Importar</span></button>
-            <button class="tb-btn primary" id="btnNew"><span data-ico="plus"></span>Novo projeto</button>
+            <button class="tb-btn" id="btnImportP"><span data-ico="import"></span><span class="lb">Import</span></button>
+            <button class="tb-btn primary" id="btnNew"><span data-ico="plus"></span>New project</button>
           </div>
           <div class="pj-sec">
-            <h3>Recentes</h3>
+            <h3>Recent</h3>
             <div class="pj-grid" id="recentGrid"></div>
           </div>
           <div class="pj-sec">
-            <h3>Gravações recentes do Omarchy <em>~/Videos · ALT+PRINT grava a tela</em></h3>
+            <h3>Recent Omarchy recordings <em>~/Videos · ALT+PRINT records the screen</em></h3>
             <div class="pj-grid" id="recGrid"></div>
           </div>
         </div>
-        <span class="pin" style="left:150px;top:30px" data-n="1" data-tip="§3.1 Aberto pelo launcher: começa em Projetos. Aberto com um arquivo: vai direto para a Edição.">1</span>
-        <span class="pin" style="left:40px;top:300px" data-n="2" data-tip="§3 Gravações do Omarchy aparecem aqui. Editar cria um projeto já com a gravação na timeline.">2</span>
+        <span class="pin" style="left:150px;top:30px" data-n="1" data-tip="§3.1 Opened from the launcher: starts on Projects. Opened with a file: goes straight to Edit.">1</span>
+        <span class="pin" style="left:40px;top:300px" data-n="2" data-tip="§3 Omarchy recordings show up here. Edit creates a project with the recording already on the timeline.">2</span>
       </section>
 
       <!-- ============ EDIT ============ -->
       <section class="screen" id="scrEdit" hidden>
         <div class="topbar">
-          <button class="tb-btn" id="btnBack" title="Voltar para Projetos"><span data-ico="back"></span><span class="lb">Projetos</span></button>
-          <span class="proj-name" id="projName">Hyprland em 5 minutos</span>
+          <button class="tb-btn" id="btnBack" title="Back to Projects"><span data-ico="back"></span><span class="lb">Projects</span></button>
+          <span class="proj-name" id="projName">Hyprland in 5 minutes</span>
           <span class="proj-meta" id="projMeta">16:9 · 1920×1080 · 30 fps</span>
           <div class="grow"></div>
-          <div class="export-prog" id="exportProg"><span>Exportando…</span><span class="bar"><i></i></span></div>
-          <button class="tb-btn" id="btnUndo" title="Desfazer (Ctrl+Z)"><span data-ico="undo"></span></button>
-          <button class="tb-btn" id="btnRedo" title="Refazer (Ctrl+Shift+Z)"><span data-ico="redo"></span></button>
-          <button class="tb-btn" id="btnPal" title="Paleta de comandos (Ctrl+K)"><span data-ico="command"></span></button>
-          <button class="tb-btn" id="btnImport" title="Importar (Ctrl+I)"><span data-ico="import"></span><span class="lb">Importar</span></button>
-          <button class="tb-btn primary" id="btnExport" title="Exportar (Ctrl+E)"><span data-ico="export"></span><span class="lb">Exportar</span></button>
+          <div class="export-prog" id="exportProg"><span>Exporting…</span><span class="bar"><i></i></span></div>
+          <button class="tb-btn" id="btnUndo" title="Undo (Ctrl+Z)"><span data-ico="undo"></span></button>
+          <button class="tb-btn" id="btnRedo" title="Redo (Ctrl+Shift+Z)"><span data-ico="redo"></span></button>
+          <button class="tb-btn" id="btnPal" title="Command palette (Ctrl+K)"><span data-ico="command"></span></button>
+          <button class="tb-btn" id="btnImport" title="Import (Ctrl+I)"><span data-ico="import"></span><span class="lb">Import</span></button>
+          <button class="tb-btn primary" id="btnExport" title="Export (Ctrl+E)"><span data-ico="export"></span><span class="lb">Export</span></button>
         </div>
 
         <div class="edit-body" id="editBody">
@@ -364,10 +364,10 @@ button,input,select{font:inherit;color:inherit}
               <nav class="sources" id="sources"></nav>
               <div class="lib-main">
                 <div class="tabs" role="tablist" id="tabs"></div>
-                <div class="lib-tools"><div class="search"><span data-ico="search" data-s="14"></span><input id="libSearch" placeholder="Buscar (Ctrl+F)" aria-label="Buscar na biblioteca"></div><span id="libCount"></span></div>
+                <div class="lib-tools"><div class="search"><span data-ico="search" data-s="14"></span><input id="libSearch" placeholder="Search (Ctrl+F)" aria-label="Search the library"></div><span id="libCount"></span></div>
                 <div class="grid" id="grid"></div>
               </div>
-              <span class="pin" style="left:128px;top:96px" data-n="4" data-tip="§4 Skimming: passe o mouse sobre a miniatura para percorrer o clip no viewer, sem dar play.">4</span>
+              <span class="pin" style="left:128px;top:96px" data-n="4" data-tip="§4 Skimming: hover over a thumbnail to scrub through the clip in the viewer without playing.">4</span>
             </aside>
 
             <div class="right" id="right">
@@ -375,24 +375,24 @@ button,input,select{font:inherit;color:inherit}
               <div class="drawer" id="drawer"><div class="drawer-in" id="drawerIn"></div></div>
               <div class="viewer" id="viewer">
                 <div class="stage" id="stage"><canvas id="cv"></canvas><div class="vo" id="vo"></div></div>
-                <div class="rt-chip" id="rtChip" hidden><span>Este trecho não toca em tempo real</span><button id="btnRender">Pré-renderizar</button></div>
-                <span class="pin r" style="right:14px;top:12px" data-n="6" data-tip="§5 e §10 O viewer tem fundo neutro fixo: o tema do Omarchy nunca tinge a imagem.">6</span>
+                <div class="rt-chip" id="rtChip" hidden><span>This section will not play in real time</span><button id="btnRender">Pre-render</button></div>
+                <span class="pin r" style="right:14px;top:12px" data-n="6" data-tip="§5 and §10 The viewer has a fixed neutral background: the Omarchy theme never tints the image.">6</span>
               </div>
               <div class="transport">
                 <span class="tc"><span id="tcCur">00:00:00:00</span> <span class="tot">/ <span id="tcTot">00:00:00:00</span></span></span>
                 <div class="grow"></div>
-                <button class="tbtn" id="btnRew" title="Trás (J)"><span data-ico="rew"></span></button>
-                <button class="tbtn" id="btnPlay" title="Play/pausa (Espaço)"><span data-ico="play" id="playIco"></span></button>
-                <button class="tbtn" id="btnFf" title="Frente (L)"><span data-ico="ff"></span></button>
+                <button class="tbtn" id="btnRew" title="Backward (J)"><span data-ico="rew"></span></button>
+                <button class="tbtn" id="btnPlay" title="Play/pause (Space)"><span data-ico="play" id="playIco"></span></button>
+                <button class="tbtn" id="btnFf" title="Forward (L)"><span data-ico="ff"></span></button>
                 <span class="speed" id="speedLbl"></span>
                 <div class="grow"></div>
-                <button class="tbtn" id="btnFull" title="Tela cheia (Ctrl+Shift+F)"><span data-ico="full"></span></button>
+                <button class="tbtn" id="btnFull" title="Full screen (Ctrl+Shift+F)"><span data-ico="full"></span></button>
               </div>
-              <span class="pin" style="left:12px;top:46px" data-n="5" data-tip="§6 Barra de ajustes: só o que vale para a seleção fica ativo. O ponto marca ajustes já aplicados. Os controles abrem numa gaveta que empurra o viewer.">5</span>
+              <span class="pin" style="left:12px;top:46px" data-n="5" data-tip="§6 Adjustments bar: only what applies to the selection is enabled. The dot marks adjustments already applied. Controls open in a drawer that pushes the viewer down.">5</span>
             </div>
           </div>
 
-          <div class="splitter" id="splitter" title="Arraste para redimensionar"></div>
+          <div class="splitter" id="splitter" title="Drag to resize"></div>
 
           <div class="lower">
             <div class="tl-bar">
@@ -401,27 +401,27 @@ button,input,select{font:inherit;color:inherit}
               <button class="tgl" id="tglSkim" aria-pressed="true" title="Skimming (S)"><span data-ico="eye" data-s="15"></span>Skim</button>
               <span class="status" id="status"></span>
               <div class="grow"></div>
-              <div class="zoom"><span data-ico="search" data-s="14"></span><input type="range" id="zoom" min="4" max="80" value="14" aria-label="Zoom da timeline"><button class="tbtn" id="btnFit" title="Ajustar ao projeto (Shift+Z)"><span data-ico="zoomfit" data-s="16"></span></button></div>
+              <div class="zoom"><span data-ico="search" data-s="14"></span><input type="range" id="zoom" min="4" max="80" value="14" aria-label="Timeline zoom"><button class="tbtn" id="btnFit" title="Fit the project (Shift+Z)"><span data-ico="zoomfit" data-s="16"></span></button></div>
             </div>
             <div class="minimap" id="minimap"><canvas id="mmc"></canvas><div class="mm-view" id="mmView"></div>
-              <span class="pin" style="left:44%;top:2px" data-n="7" data-tip="§7.2 Minimapa: o projeto inteiro, com a região visível destacada. Clique para navegar.">7</span>
+              <span class="pin" style="left:44%;top:2px" data-n="7" data-tip="§7.2 Minimap: the whole project, with the visible region highlighted. Click to navigate.">7</span>
             </div>
             <div class="tl-scroll" id="tlScroll"><div class="tl-inner" id="tlInner"></div></div>
           </div>
         </div>
-        <span class="pin" style="left:8px;top:50px" data-n="3" data-tip="§2 Três áreas fixas: biblioteca, viewer e timeline. Um único divisor ajusta a altura.">3</span>
+        <span class="pin" style="left:8px;top:50px" data-n="3" data-tip="§2 Three fixed areas: library, viewer and timeline. A single divider sets the height.">3</span>
       </section>
 
       <div class="scrim" id="fmtScrim" hidden>
         <div class="dialog" role="dialog" aria-labelledby="fmtTitle">
-          <div class="dlg-head" id="fmtTitle">Novo projeto · formato</div>
+          <div class="dlg-head" id="fmtTitle">New project · format</div>
           <div class="fmt-opts" id="fmtOpts"></div>
-          <div class="dlg-foot"><button id="fmtCancel">Cancelar</button><button class="primary" id="fmtOk">Criar</button></div>
+          <div class="dlg-foot"><button id="fmtCancel">Cancel</button><button class="primary" id="fmtOk">Create</button></div>
         </div>
       </div>
       <div class="scrim" id="palScrim" hidden>
-        <div class="dialog pal" role="dialog" aria-label="Paleta de comandos">
-          <input id="palIn" placeholder="Digite um comando… (ex.: dividir, velocidade, exportar)" aria-label="Buscar comando">
+        <div class="dialog pal" role="dialog" aria-label="Command palette">
+          <input id="palIn" placeholder="Type a command… (e.g. split, speed, export)" aria-label="Search commands">
           <ul id="palList" role="listbox"></ul>
         </div>
       </div>
@@ -429,23 +429,23 @@ button,input,select{font:inherit;color:inherit}
     </div>
   </div>
 
-  <p class="hint">Clique dentro do mockup para usar o teclado. Alguns atalhos (como <code>Ctrl+1</code>) podem ser capturados pelo navegador; os botões fazem o mesmo.</p>
+  <p class="hint">Click inside the mockup to use the keyboard. Some shortcuts (such as <code>Ctrl+1</code>) may be captured by the browser; the buttons do the same.</p>
 
   <section class="notes">
     <div>
-      <h2>Experimente</h2>
+      <h2>Try it</h2>
       <ul>
-        <li><kbd>Espaço</kbd> play/pausa · <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd> (repita para acelerar) · <kbd>←</kbd> <kbd>→</kbd> quadro · <kbd>↑</kbd> <kbd>↓</kbd> corte anterior/próximo</li>
-        <li>Clique num clip e use a barra acima do viewer: Cor, Recorte (arraste o retângulo no viewer), Velocidade, Efeitos</li>
-        <li><kbd>Ctrl+B</kbd> divide · <kbd>Delete</kbd> remove fechando o espaço · <kbd>Shift+Delete</kbd> deixa espaço · <kbd>Ctrl+Z</kbd> desfaz</li>
-        <li>Na biblioteca, selecione um item e use <kbd>E</kbd> (adicionar ao fim), <kbd>W</kbd> (inserir), <kbd>Q</kbd> (conectar como camada) · <kbd>F</kbd> favorita</li>
-        <li>Arraste as bordas dos clips · duplo clique numa junção abre o editor de corte · <kbd>B</kbd> lâmina, <kbd>T</kbd> trim, <kbd>A</kbd> seleção</li>
-        <li><kbd>Ctrl+K</kbd> paleta de comandos · troque <em>Janela</em> para "Meia tela" para ver o layout em tiling</li>
-        <li>Efeito "Granulado" mostra o aviso de trecho fora do tempo real</li>
+        <li><kbd>Space</kbd> play/pause · <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd> (repeat to speed up) · <kbd>←</kbd> <kbd>→</kbd> frame · <kbd>↑</kbd> <kbd>↓</kbd> previous/next edit</li>
+        <li>Click a clip and use the bar above the viewer: Color, Crop (drag the rectangle in the viewer), Speed, Effects</li>
+        <li><kbd>Ctrl+B</kbd> splits · <kbd>Delete</kbd> removes and closes the gap · <kbd>Shift+Delete</kbd> leaves a gap · <kbd>Ctrl+Z</kbd> undoes</li>
+        <li>In the library, select an item and press <kbd>E</kbd> (append), <kbd>W</kbd> (insert), <kbd>Q</kbd> (connect as a layer) · <kbd>F</kbd> favorites</li>
+        <li>Drag clip edges · double click a junction to open the cut editor · <kbd>B</kbd> blade, <kbd>T</kbd> trim, <kbd>A</kbd> select</li>
+        <li><kbd>Ctrl+K</kbd> command palette · switch <em>Window</em> to "Half width" to see the tiling layout</li>
+        <li>The "Grain" effect shows the non-real-time warning</li>
       </ul>
     </div>
     <div>
-      <h2>Anotações</h2>
+      <h2>Annotations</h2>
       <ol id="legend"></ol>
     </div>
   </section>
@@ -459,7 +459,7 @@ const app=$('#app');
 const FPS=30;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 
-/* ---------- icons (conjunto próprio, 24px, traço 1.5) ---------- */
+/* ---------- icons (our own set, 24px, 1.5 stroke) ---------- */
 const P={
  color:'<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/>',
  crop:'<path d="M7 3v14h14"/><path d="M3 7h14v14"/>',
@@ -509,7 +509,7 @@ const P={
 const ico=(n,s=18)=>`<svg class="ico" viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true">${P[n]||''}</svg>`;
 const fillIcons=root=>root.querySelectorAll('[data-ico]').forEach(el=>{el.outerHTML=ico(el.dataset.ico,+(el.dataset.s||18)).replace('<svg ',el.id?`<svg id="${el.id}" `:'<svg ')});
 
-/* ---------- Omarchy themes (colors.toml reais, Omarchy 4.0.4) ---------- */
+/* ---------- Omarchy themes (real colors.toml, Omarchy 4.0.4) ---------- */
 const TH={
  'catppuccin':{mode:'dark',accent:'#89b4fa',selection:'#45475a',muted:'#585b70',background:'#1e1e2e',dark_background:'#161622',darker_background:'#101019',lighter_background:'#313244',foreground:'#cdd6f4',dark_foreground:'#6c7086',red:'#f38ba8',yellow:'#f9e2af',green:'#a6e3a1',blue:'#89b4fa',magenta:'#f5c2e7',cyan:'#94e2d5'},
  'catppuccin-latte':{mode:'light',accent:'#1e66f5',selection:'#ccd0da',muted:'#acb0be',background:'#eff1f5',dark_background:'#e3e4e8',darker_background:'#d7d8dc',lighter_background:'#dce0e8',foreground:'#4c4f69',dark_foreground:'#9ca0b0',red:'#d20f39',yellow:'#df8e1d',green:'#40a02b',blue:'#1e66f5',magenta:'#ea76cb',cyan:'#179299'},
@@ -536,23 +536,23 @@ function applyTheme(name){
  renderAll();
 }
 
-/* ---------- mídia fictícia ---------- */
+/* ---------- fictitious media ---------- */
 const M=[
- {id:'r1',name:'screenrecording-2026-10-02_10-42-15.mp4',short:'Gravação 10:42',when:'Hoje 10:42',dur:94,kind:'screen',hue:225,src:'recordings',isNew:true,codec:'AV1 · 2560×1440 · 60 fps CFR · AAC 48 kHz',decode:'Vulkan Video (ANV) · sem cópia para CPU'},
- {id:'r2',name:'screenrecording-2026-10-01_21-03-50.mp4',short:'Gravação 21:03',when:'Ontem 21:03',dur:212,kind:'screen',hue:160,src:'recordings',isNew:true,codec:'HEVC · 1920×1080 · 60 fps CFR · AAC 48 kHz',decode:'VA-API (iHD) → Vulkan · sem cópia para CPU'},
- {id:'r3',name:'screenrecording-2026-10-01_18-10-07.mp4',short:'Gravação 18:10',when:'Ontem 18:10',dur:48,kind:'screen',hue:300,src:'recordings',isNew:false,codec:'H.264 · 1920×1080 · 60 fps CFR · AAC 48 kHz',decode:'VA-API (iHD) → Vulkan · sem cópia para CPU'},
- {id:'v1',name:'PXL_20261001_cafe.mp4',short:'Câmera · intro',dur:31,kind:'camera',hue:28,src:'videos',codec:'HEVC 10-bit · 3840×2160 · 30 fps VFR · AAC',decode:'Vulkan Video (ANV) · sem cópia para CPU'},
- {id:'v2',name:'PXL_20260928_trilha.mp4',short:'Trilha',dur:46,kind:'outdoor',hue:200,src:'videos',codec:'H.264 · 1920×1080 · 60 fps · AAC',decode:'VA-API (iHD) → Vulkan · sem cópia para CPU'},
- {id:'v3',name:'PXL_20260928_lago.mp4',short:'Lago',dur:22,kind:'outdoor',hue:180,src:'videos',codec:'H.264 · 1920×1080 · 30 fps · AAC',decode:'VA-API (iHD) → Vulkan · sem cópia para CPU'},
- {id:'v4',name:'webcam_take2.mkv',short:'Webcam · take 2',dur:58,kind:'camera',hue:250,src:'videos',codec:'MJPEG · 1280×720 · 30 fps · Opus',decode:'Software (libavcodec) · upload único'},
- {id:'v5',name:'por_do_sol.jpg',short:'Pôr do sol',dur:5,kind:'outdoor',hue:15,src:'videos',still:true,codec:'JPEG · 4032×3024',decode:'Imagem estática'},
- {id:'a1',name:'lofi_loop_01.flac',short:'lofi loop 01',dur:180,kind:'music',hue:120,src:'audio',codec:'FLAC · 48 kHz estéreo',decode:'Software'},
- {id:'a2',name:'narracao_take3.wav',short:'Narração take 3',dur:70,kind:'voice',hue:90,src:'audio',codec:'PCM 24-bit · 48 kHz mono',decode:'Software'},
+ {id:'r1',name:'screenrecording-2026-10-02_10-42-15.mp4',short:'Recording 10:42',when:'Today 10:42',dur:94,kind:'screen',hue:225,src:'recordings',isNew:true,codec:'AV1 · 2560×1440 · 60 fps CFR · AAC 48 kHz',decode:'Vulkan Video (ANV) · no CPU copy'},
+ {id:'r2',name:'screenrecording-2026-10-01_21-03-50.mp4',short:'Recording 21:03',when:'Yesterday 21:03',dur:212,kind:'screen',hue:160,src:'recordings',isNew:true,codec:'HEVC · 1920×1080 · 60 fps CFR · AAC 48 kHz',decode:'VA-API (iHD) → Vulkan · no CPU copy'},
+ {id:'r3',name:'screenrecording-2026-10-01_18-10-07.mp4',short:'Recording 18:10',when:'Yesterday 18:10',dur:48,kind:'screen',hue:300,src:'recordings',isNew:false,codec:'H.264 · 1920×1080 · 60 fps CFR · AAC 48 kHz',decode:'VA-API (iHD) → Vulkan · no CPU copy'},
+ {id:'v1',name:'PXL_20261001_cafe.mp4',short:'Camera · intro',dur:31,kind:'camera',hue:28,src:'videos',codec:'HEVC 10-bit · 3840×2160 · 30 fps VFR · AAC',decode:'Vulkan Video (ANV) · no CPU copy'},
+ {id:'v2',name:'PXL_20260928_trail.mp4',short:'Trail',dur:46,kind:'outdoor',hue:200,src:'videos',codec:'H.264 · 1920×1080 · 60 fps · AAC',decode:'VA-API (iHD) → Vulkan · no CPU copy'},
+ {id:'v3',name:'PXL_20260928_lake.mp4',short:'Lake',dur:22,kind:'outdoor',hue:180,src:'videos',codec:'H.264 · 1920×1080 · 30 fps · AAC',decode:'VA-API (iHD) → Vulkan · no CPU copy'},
+ {id:'v4',name:'webcam_take2.mkv',short:'Webcam · take 2',dur:58,kind:'camera',hue:250,src:'videos',codec:'MJPEG · 1280×720 · 30 fps · Opus',decode:'Software (libavcodec) · single upload'},
+ {id:'v5',name:'sunset.jpg',short:'Sunset',dur:5,kind:'outdoor',hue:15,src:'videos',still:true,codec:'JPEG · 4032×3024',decode:'Still image'},
+ {id:'a1',name:'lofi_loop_01.flac',short:'lofi loop 01',dur:180,kind:'music',hue:120,src:'audio',codec:'FLAC · 48 kHz stereo',decode:'Software'},
+ {id:'a2',name:'voiceover_take3.wav',short:'Voiceover take 3',dur:70,kind:'voice',hue:90,src:'audio',codec:'PCM 24-bit · 48 kHz mono',decode:'Software'},
 ];
 M.forEach(m=>{m.fav=m.id==='v2';m.rej=false});
 const mediaById=id=>M.find(m=>m.id===id);
 
-/* ---------- estado ---------- */
+/* ---------- state ---------- */
 let uid=100; const nid=()=>'c'+(uid++);
 const S={
  screen:'projects',theme:null,aspect:'16:9',
@@ -571,7 +571,7 @@ function demoTimeline(){
    {id:nid(),mediaId:'v1',in:18,dur:6,adj:{},trans:false},
   ],
   overlays:[
-   {id:nid(),type:'title',start:0.5,dur:5,text:'Hyprland em 5 minutos',style:'lower',size:8,x:.06,y:.74,color:'#ffffff',anim:'fade',adj:{}},
+   {id:nid(),type:'title',start:0.5,dur:5,text:'Hyprland in 5 minutes',style:'lower',size:8,x:.06,y:.74,color:'#ffffff',anim:'fade',adj:{}},
    {id:nid(),type:'pip',mediaId:'v4',start:9,dur:12,mode:'pip',x:.69,y:.06,w:.27,adj:{}},
   ],
   audio:[
@@ -583,7 +583,7 @@ function demoTimeline(){
 }
 function recordingTimeline(mid){const m=mediaById(mid);return{primary:[{id:nid(),mediaId:mid,in:0,dur:Math.min(m.dur,40),adj:{},trans:false}],overlays:[],audio:[],markers:[]}}
 
-/* ---------- helpers de timeline ---------- */
+/* ---------- timeline helpers ---------- */
 const starts=()=>{let a=0;return S.tl.primary.map(c=>{const s=a;a+=c.dur;return s})};
 const primaryEnd=()=>S.tl.primary.reduce((a,c)=>a+c.dur,0);
 const totalDur=()=>Math.max(primaryEnd(),...S.tl.overlays.map(o=>o.start+o.dur),...S.tl.audio.map(o=>o.start+o.dur),1);
@@ -593,10 +593,10 @@ const findAny=id=>S.tl.primary.find(c=>c.id===id)||S.tl.overlays.find(c=>c.id===
 function tc(t){const f=Math.round(t*FPS);const ff=f%FPS,s=Math.floor(f/FPS);const p=n=>String(n).padStart(2,'0');return`${p(Math.floor(s/3600))}:${p(Math.floor(s/60)%60)}:${p(s%60)}:${p(ff)}`}
 const mmss=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
 function snap(){S.hist.push(JSON.stringify(S.tl));if(S.hist.length>120)S.hist.shift();S.fut=[]}
-function undo(){if(!S.hist.length)return toast('Nada para desfazer');S.fut.push(JSON.stringify(S.tl));S.tl=JSON.parse(S.hist.pop());S.sel=null;renderAll();toast('Desfeito')}
-function redo(){if(!S.fut.length)return toast('Nada para refazer');S.hist.push(JSON.stringify(S.tl));S.tl=JSON.parse(S.fut.pop());S.sel=null;renderAll();toast('Refeito')}
+function undo(){if(!S.hist.length)return toast('Nothing to undo');S.fut.push(JSON.stringify(S.tl));S.tl=JSON.parse(S.hist.pop());S.sel=null;renderAll();toast('Undone')}
+function redo(){if(!S.fut.length)return toast('Nothing to redo');S.hist.push(JSON.stringify(S.tl));S.tl=JSON.parse(S.fut.pop());S.sel=null;renderAll();toast('Redone')}
 
-/* ---------- desenho de "footage" fictícia (conteúdo de imagem, nunca tematizado) ---------- */
+/* ---------- fictitious "footage" drawing (image content, never themed) ---------- */
 const rnd=s=>{const x=Math.sin(s*12.9898+78.233)*43758.5453;return x-Math.floor(x)};
 const hsl=(h,s,l,a=1)=>`hsla(${h},${s}%,${l}%,${a})`;
 function drawOutdoor(c,w,h,m,lt){
@@ -719,15 +719,15 @@ function drawViewer(){
 }
 function updateRt(p){const chip=$('#rtChip');chip.hidden=!(p&&p.clip.adj.fx==='grain'&&!p.clip.rendered)}
 
-/* manipulação direta no viewer */
+/* direct manipulation in the viewer */
 function renderManip(){
  const vo=$('#vo');let html='';
  const sel=S.sel&&findAny(S.sel.id);
  if(sel&&S.sel.kind==='overlay'&&bbMap.has(sel.id)){const b=bbMap.get(sel.id);
   const can=sel.type==='title'||(sel.mode||'pip')==='pip';
-  if(can)html=`<div class="mbox" data-m="move" style="left:${b.x*100}%;top:${b.y*100}%;width:${b.w*100}%;height:${b.h*100}%"><span class="tag">${sel.type==='title'?'Arraste para posicionar o título':'Arraste · alça redimensiona'}</span>${sel.type==='pip'?'<i class="hd" data-m="size"></i>':''}</div>`}
+  if(can)html=`<div class="mbox" data-m="move" style="left:${b.x*100}%;top:${b.y*100}%;width:${b.w*100}%;height:${b.h*100}%"><span class="tag">${sel.type==='title'?'Drag to position the title':'Drag · the handle resizes'}</span>${sel.type==='pip'?'<i class="hd" data-m="size"></i>':''}</div>`}
  if(sel&&S.sel.kind==='primary'&&S.tool==='crop'&&(sel.adj.crop||{}).mode==='crop'){
-  const r=sel.adj.crop.r;html=`<svg class="cropshade" viewBox="0 0 100 100" preserveAspectRatio="none"><path fill="rgba(0,0,0,.55)" fill-rule="evenodd" d="M0 0H100V100H0Z M${r.x*100} ${r.y*100}h${r.w*100}v${r.w*100}h${-r.w*100}Z"/></svg><div class="mbox" data-m="crop" style="left:${r.x*100}%;top:${r.y*100}%;width:${r.w*100}%;height:${r.w*100}%"><span class="tag">Recorte · arraste ou use a alça</span><i class="hd" data-m="cropsize"></i></div>`}
+  const r=sel.adj.crop.r;html=`<svg class="cropshade" viewBox="0 0 100 100" preserveAspectRatio="none"><path fill="rgba(0,0,0,.55)" fill-rule="evenodd" d="M0 0H100V100H0Z M${r.x*100} ${r.y*100}h${r.w*100}v${r.w*100}h${-r.w*100}Z"/></svg><div class="mbox" data-m="crop" style="left:${r.x*100}%;top:${r.y*100}%;width:${r.w*100}%;height:${r.w*100}%"><span class="tag">Crop · drag or use the handle</span><i class="hd" data-m="cropsize"></i></div>`}
  vo.innerHTML=html;
 }
 $('#vo').addEventListener('pointerdown',e=>{
@@ -744,13 +744,13 @@ $('#vo').addEventListener('pointerdown',e=>{
  window.addEventListener('pointermove',mv);window.addEventListener('pointerup',up);
 });
 
-/* ---------- biblioteca ---------- */
-const SOURCES=[{id:'project',label:'Projeto',ico:'project'},{id:'recordings',label:'Gravações',ico:'record'},{id:'videos',label:'Vídeos',ico:'video'},{id:'favs',label:'Favoritos',ico:'star'}];
-const TABS=[{id:'media',l:'Mídia'},{id:'titles',l:'Títulos'},{id:'transitions',l:'Transições'},{id:'audio',l:'Áudio'}];
+/* ---------- library ---------- */
+const SOURCES=[{id:'project',label:'Project',ico:'project'},{id:'recordings',label:'Recordings',ico:'record'},{id:'videos',label:'Videos',ico:'video'},{id:'favs',label:'Favorites',ico:'star'}];
+const TABS=[{id:'media',l:'Media'},{id:'titles',l:'Titles'},{id:'transitions',l:'Transitions'},{id:'audio',l:'Audio'}];
 function usedIds(){return new Set([...S.tl.primary.map(c=>c.mediaId),...S.tl.overlays.map(o=>o.mediaId),...S.tl.audio.map(a=>a.mediaId)])}
 function renderLib(){
  const newCount=M.filter(m=>m.src==='recordings'&&m.isNew).length;
- $('#sources').innerHTML='<div class="lbl">Fontes</div>'+SOURCES.map(s=>`<button class="src" data-src="${s.id}" aria-current="${S.source===s.id}">${ico(s.ico,15)}<span>${s.label}</span>${s.id==='recordings'&&newCount?'<span class="dot" title="Novas gravações"></span>':''}</button>`).join('')+`<button class="src add" data-src="add">${ico('plus',15)}<span>Pasta</span></button>`;
+ $('#sources').innerHTML='<div class="lbl">Sources</div>'+SOURCES.map(s=>`<button class="src" data-src="${s.id}" aria-current="${S.source===s.id}">${ico(s.ico,15)}<span>${s.label}</span>${s.id==='recordings'&&newCount?'<span class="dot" title="New recordings"></span>':''}</button>`).join('')+`<button class="src add" data-src="add">${ico('plus',15)}<span>Folder</span></button>`;
  $('#tabs').innerHTML=TABS.map(t=>`<button class="tab" role="tab" data-tab="${t.id}" aria-selected="${S.tab===t.id}">${t.l}</button>`).join('');
  const g=$('#grid');const used=usedIds();
  if(S.tab==='media'){
@@ -759,30 +759,30 @@ function renderLib(){
   else if(S.source==='favs')list=list.filter(m=>m.fav);
   else list=list.filter(m=>m.src===S.source);
   if(S.search)list=list.filter(m=>(m.short+m.name).toLowerCase().includes(S.search));
-  $('#libCount').textContent=list.length+' itens';
-  g.innerHTML=list.map(m=>`<div class="mi ${S.libSel===m.id?'sel':''} ${m.rej?'rej':''}" data-mid="${m.id}" tabindex="-1" title="${m.name}"><div class="th"><canvas width="192" height="108"></canvas><span class="skimline"></span>${used.has(m.id)?'<span class="used" style="width:'+(30+rnd(m.hue)*50)+'%"></span>':''}${m.fav?'<span class="star">'+ico('starf',13)+'</span>':''}${m.isNew?'<span class="new">NOVA</span>':''}</div><span class="nm">${m.short}</span><span class="du">${mmss(m.dur)}${m.kind==='screen'?' · gravação de tela':''}</span></div>`).join('')||`<p class="hint" style="grid-column:1/-1">Nada aqui ainda.</p>`;
+  $('#libCount').textContent=list.length+' items';
+  g.innerHTML=list.map(m=>`<div class="mi ${S.libSel===m.id?'sel':''} ${m.rej?'rej':''}" data-mid="${m.id}" tabindex="-1" title="${m.name}"><div class="th"><canvas width="192" height="108"></canvas><span class="skimline"></span>${used.has(m.id)?'<span class="used" style="width:'+(30+rnd(m.hue)*50)+'%"></span>':''}${m.fav?'<span class="star">'+ico('starf',13)+'</span>':''}${m.isNew?'<span class="new">NEW</span>':''}</div><span class="nm">${m.short}</span><span class="du">${mmss(m.dur)}${m.kind==='screen'?' · screen recording':''}</span></div>`).join('')||`<p class="hint" style="grid-column:1/-1">Nothing here yet.</p>`;
   g.querySelectorAll('.mi').forEach(el=>drawThumb(el,mediaById(el.dataset.mid),.35));
  }else if(S.tab==='titles'){
-  $('#libCount').textContent='4 estilos';
-  const ts=[['simple','Simples'],['lower','Faixa inferior'],['outline','Contorno'],['accent','Destaque']];
-  g.innerHTML=ts.map(([k,l])=>`<div class="card" data-title="${k}"><div class="pv" style="${k==='lower'?'justify-content:flex-start;padding-left:8px;background:linear-gradient(transparent 55%,rgba(0,0,0,.6) 55%),#3a3f4b':k==='accent'?'background:#3a3f4b':''}"><span style="${k==='accent'?'background:#f9e2af;color:#111;padding:1px 4px':k==='outline'?'-webkit-text-stroke:1px #000':''}">Título</span></div><b>${l}</b><small>E adiciona na cabeça de leitura</small></div>`).join('');
+  $('#libCount').textContent='4 styles';
+  const ts=[['simple','Simple'],['lower','Lower third'],['outline','Outline'],['accent','Highlight']];
+  g.innerHTML=ts.map(([k,l])=>`<div class="card" data-title="${k}"><div class="pv" style="${k==='lower'?'justify-content:flex-start;padding-left:8px;background:linear-gradient(transparent 55%,rgba(0,0,0,.6) 55%),#3a3f4b':k==='accent'?'background:#3a3f4b':''}"><span style="${k==='accent'?'background:#f9e2af;color:#111;padding:1px 4px':k==='outline'?'-webkit-text-stroke:1px #000':''}">Title</span></div><b>${l}</b><small>E adds it at the playhead</small></div>`).join('');
  }else if(S.tab==='transitions'){
-  $('#libCount').textContent='4 tipos';
-  const tr=[['dissolve','Dissolver'],['dip','Mergulho no preto'],['wipe','Cortina'],['push','Empurrar <span class="badge">v0.2</span>']];
-  g.innerHTML=tr.map(([k,l])=>`<div class="card" data-trans="${k}"><div class="pv" style="background:linear-gradient(90deg,#4a6fa5 ${k==='wipe'?'50%':'0'},${k==='dip'?'#000':'#c27c4a'} ${k==='wipe'?'50%':'100%'})"></div><b>${l}</b><small>Aplica no fim do clip selecionado</small></div>`).join('');
+  $('#libCount').textContent='4 types';
+  const tr=[['dissolve','Dissolve'],['dip','Dip to black'],['wipe','Wipe'],['push','Push <span class="badge">v0.2</span>']];
+  g.innerHTML=tr.map(([k,l])=>`<div class="card" data-trans="${k}"><div class="pv" style="background:linear-gradient(90deg,#4a6fa5 ${k==='wipe'?'50%':'0'},${k==='dip'?'#000':'#c27c4a'} ${k==='wipe'?'50%':'100%'})"></div><b>${l}</b><small>Applies at the end of the selected clip</small></div>`).join('');
  }else{
-  const list=M.filter(m=>m.kind==='music'||m.kind==='voice');$('#libCount').textContent=list.length+' arquivos';
-  g.innerHTML=list.map(m=>`<div class="mi ${S.libSel===m.id?'sel':''}" data-mid="${m.id}" tabindex="-1" title="${m.name}"><div class="th"><canvas width="192" height="108"></canvas><span class="skimline"></span></div><span class="nm">${m.short}</span><span class="du">${mmss(m.dur)} · ${m.kind==='music'?'música':'voz'}</span></div>`).join('')+`<div class="card" style="opacity:.6"><div class="pv">${ico('mic',20)}</div><b>Gravar narração <span class="badge">v0.2</span></b></div>`;
+  const list=M.filter(m=>m.kind==='music'||m.kind==='voice');$('#libCount').textContent=list.length+' files';
+  g.innerHTML=list.map(m=>`<div class="mi ${S.libSel===m.id?'sel':''}" data-mid="${m.id}" tabindex="-1" title="${m.name}"><div class="th"><canvas width="192" height="108"></canvas><span class="skimline"></span></div><span class="nm">${m.short}</span><span class="du">${mmss(m.dur)} · ${m.kind==='music'?'music':'voice'}</span></div>`).join('')+`<div class="card" style="opacity:.6"><div class="pv">${ico('mic',20)}</div><b>Record voiceover <span class="badge">v0.2</span></b></div>`;
   g.querySelectorAll('.mi').forEach(el=>drawThumb(el,mediaById(el.dataset.mid),.35));
  }
 }
 function drawThumb(el,m,frac){const c=el.querySelector('canvas');const x=c.getContext('2d');drawMedia(x,c.width,c.height,m,frac*m.dur)}
-$('#sources').addEventListener('click',e=>{const b=e.target.closest('.src');if(!b)return;if(b.dataset.src==='add')return toast('Adicionar pasta: seletor do sistema (xdg-desktop-portal)');S.source=b.dataset.src;S.tab='media';if(S.source==='recordings')M.forEach(m=>{if(m.src==='recordings')m.seen=true});renderLib()});
+$('#sources').addEventListener('click',e=>{const b=e.target.closest('.src');if(!b)return;if(b.dataset.src==='add')return toast('Add folder: system picker (xdg-desktop-portal)');S.source=b.dataset.src;S.tab='media';if(S.source==='recordings')M.forEach(m=>{if(m.src==='recordings')m.seen=true});renderLib()});
 $('#tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;S.tab=b.dataset.tab;renderLib()});
 $('#libSearch').addEventListener('input',e=>{S.search=e.target.value.toLowerCase();renderLib()});
 const grid=$('#grid');
 grid.addEventListener('click',e=>{
- const mi=e.target.closest('.mi');if(mi){S.libSel=mi.dataset.mid;S.sel={kind:'media',id:mi.dataset.mid};S.focus='lib';renderLib();renderAdj();renderFocus();status(`${mediaById(mi.dataset.mid).short} selecionado · E adiciona ao fim, W insere, Q conecta`);return}
+ const mi=e.target.closest('.mi');if(mi){S.libSel=mi.dataset.mid;S.sel={kind:'media',id:mi.dataset.mid};S.focus='lib';renderLib();renderAdj();renderFocus();status(`${mediaById(mi.dataset.mid).short} selected · E appends, W inserts, Q connects`);return}
  const tc_=e.target.closest('[data-title]');if(tc_){addTitle(tc_.dataset.title);return}
  const tr=e.target.closest('[data-trans]');if(tr){applyTransition(tr.dataset.trans);return}
 });
@@ -794,10 +794,10 @@ grid.addEventListener('mousemove',e=>{
 });
 grid.addEventListener('mouseout',e=>{const mi=e.target.closest('.mi');if(mi&&!mi.contains(e.relatedTarget)){drawThumb(mi,mediaById(mi.dataset.mid),.35);S.skim=null;drawViewer()}});
 
-/* ---------- barra de ajustes e gaveta ---------- */
-const VID=[['color','Cor','color'],['crop','Recorte','crop'],['volume','Volume','volume'],['speed','Velocidade','speed'],['effects','Efeitos','effects'],['overlay','Sobrepor','overlay'],['info','Info','info']];
-const TITLE=[['text','Texto','text'],['style','Estilo','style'],['anim','Animação','anim'],['info','Info','info']];
-const TRANS=[['ttype','Tipo','transition'],['tdur','Duração','duration']];
+/* ---------- adjustments bar and drawer ---------- */
+const VID=[['color','Color','color'],['crop','Crop','crop'],['volume','Volume','volume'],['speed','Speed','speed'],['effects','Effects','effects'],['overlay','Overlay','overlay'],['info','Info','info']];
+const TITLE=[['text','Text','text'],['style','Style','style'],['anim','Animation','anim'],['info','Info','info']];
+const TRANS=[['ttype','Type','transition'],['tdur','Duration','duration']];
 function barFor(){
  const s=S.sel;const o=s&&s.kind!=='media'&&s.kind!=='transition'?findAny(s.id):null;
  if(s&&s.kind==='overlay'&&o&&o.type==='title')return{items:TITLE,en:new Set(TITLE.map(x=>x[0])),obj:o};
@@ -813,10 +813,10 @@ function isOn(o,k){if(!o||!o.adj)return false;const a=o.adj;
  if(k==='color')return!!a.color&&Object.values(a.color).some(v=>v);
  if(k==='crop')return!!a.crop&&(a.crop.mode&&a.crop.mode!=='none'||a.crop.rot);
  if(k==='volume')return!!a.volume;if(k==='speed')return!!a.speed&&a.speed.f!==1;if(k==='effects')return!!a.fx&&a.fx!=='none';if(k==='overlay')return o.type==='pip'&&o.mode&&o.mode!=='pip';return false}
-function selLabel(){const s=S.sel;if(!s)return'Nada selecionado';if(s.kind==='media')return'Biblioteca · '+mediaById(s.id).short;if(s.kind==='transition')return'Transição';const o=findAny(s.id);if(!o)return'';if(o.gap)return'Espaço vazio';if(o.type==='title')return'Título · '+o.text;const m=mediaById(o.mediaId);return(s.kind==='overlay'?'Camada · ':s.kind==='audio'?'Áudio · ':'Clip · ')+m.short}
+function selLabel(){const s=S.sel;if(!s)return'Nothing selected';if(s.kind==='media')return'Library · '+mediaById(s.id).short;if(s.kind==='transition')return'Transition';const o=findAny(s.id);if(!o)return'';if(o.gap)return'Gap';if(o.type==='title')return'Title · '+o.text;const m=mediaById(o.mediaId);return(s.kind==='overlay'?'Layer · ':s.kind==='audio'?'Audio · ':'Clip · ')+m.short}
 function renderAdj(){
  const b=barFor();if(S.tool&&!b.en.has(S.tool)){S.tool=null}
- $('#adjbar').innerHTML=b.items.map(([k,l,ic])=>`<button class="adj" data-tool="${k}" ${b.en.has(k)?'':'disabled'} aria-pressed="${S.tool===k}" title="${l}">${ico(ic,17)}<span class="lb">${l}</span>${isOn(b.obj,k)?'<i class="on"></i>':''}</button>`).join('')+`<span class="adj-sep"></span><span class="sel-label">${selLabel()}</span><button class="adj libtoggle" id="libToggle" title="Biblioteca (Ctrl+1)">${ico('library',17)}<span class="lb">Biblioteca</span></button>`;
+ $('#adjbar').innerHTML=b.items.map(([k,l,ic])=>`<button class="adj" data-tool="${k}" ${b.en.has(k)?'':'disabled'} aria-pressed="${S.tool===k}" title="${l}">${ico(ic,17)}<span class="lb">${l}</span>${isOn(b.obj,k)?'<i class="on"></i>':''}</button>`).join('')+`<span class="adj-sep"></span><span class="sel-label">${selLabel()}</span><button class="adj libtoggle" id="libToggle" title="Library (Ctrl+1)">${ico('library',17)}<span class="lb">Library</span></button>`;
  renderDrawer();
 }
 $('#adjbar').addEventListener('click',e=>{const b=e.target.closest('.adj');if(!b||b.disabled)return;if(b.id==='libToggle')return act('lib');const k=b.dataset.tool;S.tool=S.tool===k?null:k;S.more=false;renderAdj();drawViewer()});
@@ -827,21 +827,21 @@ function renderDrawer(){
  const b=barFor(),o=b.obj,k=S.tool;
  if(!k){d.classList.remove('open','more');return}
  d.classList.add('open');d.classList.toggle('more',S.more);
- const head=(t,more=true)=>`<h4>${t}${more?`<button class="more" id="dMore">${S.more?'Menos':'Mais'}</button>`:''}</h4>`;
+ const head=(t,more=true)=>`<h4>${t}${more?`<button class="more" id="dMore">${S.more?'Less':'More'}</button>`:''}</h4>`;
  let h='';const a=o&&o.adj||{};
- if(k==='color'){const c=a.color||{};h=head('Cor')+`<button class="chip" data-act="auto" aria-pressed="${!!c.auto}">Automático</button>`+rng('exp','Exposição',c.exp||0,-100,100)+rng('con','Contraste',c.con||0,-100,100)+rng('sat','Saturação',c.sat||0,-100,100)+rng('temp','Temperatura',c.temp||0,-100,100)+`<div class="more-row"><span class="fld">Rodas de cor <span class="badge">v0.3</span></span><span class="fld">Curvas <span class="badge">v0.3</span></span><span class="fld">LUT .cube <span class="badge">v0.3</span></span><span class="fld" style="color:var(--fg-d)">Conta-gotas: clique na imagem para neutralizar <span class="badge">v0.1</span></span></div>`}
- if(k==='crop'){const c=a.crop||{};h=head('Recorte e enquadramento')+chips('cropmode',[['none','Original'],['fit','Ajustar'],['fill','Preencher'],['crop','Recortar'],['kb','Pan e zoom']],c.mode||'none')+`<div class="more-row">${rng('rot','Rotação',c.rot||0,-180,180,1,'°')}<span class="fld">Posição numérica X/Y</span></div>`}
- if(k==='volume'){const v=a.volume||{};h=head('Volume')+rng('vol','Volume',v.vol??100,0,200,1,'%')+rng('fin','Fade in',v.fin||0,0,5,.1,'s')+rng('fout','Fade out',v.fout||0,0,5,.1,'s')+`<button class="chip" data-act="mute" aria-pressed="${!!v.mute}">Silenciar</button><div class="more-row"><span class="fld">Equalizador <span class="badge">v0.2</span></span><span class="fld">Redução de ruído <span class="badge">v0.2</span></span><span class="fld">Normalizar <span class="badge">v0.2</span></span></div>`}
- if(k==='speed'){const f=(a.speed&&a.speed.f)||1;h=head('Velocidade')+chips('speed',[['0.5','Lenta 50%'],['1','Normal'],['2','Rápida 200%']],String(f))+`<button class="chip" data-act="rev" aria-pressed="${!!(a.speed&&a.speed.rev)}">Inverter</button><span class="hint">A duração do clip muda com a velocidade.</span><div class="more-row"><span class="fld">Rampas:</span>${['Rampa suave','Câmera lenta dramática','Impacto','Acelerar e frear'].map(x=>`<button class="chip" disabled style="opacity:.6">${x}</button>`).join('')}<span class="badge">v0.2</span><span class="fld">Congelar quadro <span class="badge">v0.2</span></span></div>`}
- if(k==='effects'){const f=a.fx||'none';h=head('Efeitos')+chips('fx',[['none','Nenhum'],['bw','P&B','<i class="sw" style="background:linear-gradient(90deg,#222,#ddd)"></i>'],['warm','Quente','<i class="sw" style="background:#e7a35a"></i>'],['cool','Frio','<i class="sw" style="background:#5a8be7"></i>'],['fade','Desbotado','<i class="sw" style="background:#a9a39a"></i>'],['vivid','Vívido','<i class="sw" style="background:#e55a8b"></i>'],['grain','Granulado (CPU)','<i class="sw" style="background:repeating-linear-gradient(45deg,#777 0 1px,#ccc 1px 2px)"></i>']],f)+`<div class="more-row"><span class="fld">Intensidade <span class="badge">v0.2</span></span><span class="fld">Keyframes <span class="badge">v0.2</span></span></div>`}
- if(k==='overlay'){h=head('Sobrepor')+chips('ovmode',[['pip','Picture-in-picture'],['side','Lado a lado'],['cutaway','Cutaway'],['chroma','Chroma key']],o.mode||'pip')+`<button class="chip" data-act="border" aria-pressed="${o.border!==false}">Borda</button><div class="more-row"><span class="fld">Sombra <span class="badge">v0.2</span></span><span class="fld">Máscara <span class="badge">v0.2</span></span><span class="fld">Modo de mesclagem <span class="badge">v0.2</span></span></div>`}
- if(k==='info'){let m,extra='';if(S.sel.kind==='media')m=mediaById(S.sel.id);else if(o&&o.type==='title'){h=head('Info',false)+`<dl class="info-tbl"><dt>Tipo</dt><dd>Título</dd><dt>Duração</dt><dd>${o.dur.toFixed(1)} s</dd><dt>Início</dt><dd>${tc(o.start)}</dd></dl>`}else m=mediaById(o.mediaId);
-  if(m){if(o)extra=`<dt>No projeto</dt><dd>${(o.dur||0).toFixed(1)} s · entrada ${tc(o.in||0)}</dd>`;h=head('Info',false)+`<dl class="info-tbl"><dt>Arquivo</dt><dd>${m.src==='recordings'?'~/Videos/':'~/Videos/Camera/'}${m.name}</dd><dt>Formato</dt><dd>${m.codec}</dd><dt>Decodificação</dt><dd>${m.decode}</dd><dt>Duração</dt><dd>${mmss(m.dur)}</dd>${extra}</dl>`}}
- if(k==='text'){h=head('Texto')+`<div class="fld"><label for="d_txt">Texto</label><input type="text" id="d_txt" value="${o.text.replace(/"/g,'&quot;')}"></div>`+rng('size','Tamanho',o.size,3,16,.5)+chips('tcolor',[['#ffffff','Branco','<i class="sw" style="background:#fff;border:1px solid #888"></i>'],['#f9e2af','Amarelo','<i class="sw" style="background:#f9e2af"></i>'],['#89dceb','Ciano','<i class="sw" style="background:#89dceb"></i>']],o.color)+`<div class="more-row"><span class="fld">Fonte do título <span class="badge">v0.2</span></span><span class="fld">Alinhamento <span class="badge">v0.2</span></span></div>`}
- if(k==='style'){h=head('Estilo',false)+chips('tstyle',[['simple','Simples'],['lower','Faixa inferior'],['outline','Contorno'],['accent','Destaque']],o.style)}
- if(k==='anim'){h=head('Animação',false)+chips('tanim',[['none','Nenhuma'],['fade','Fade'],['slide','Deslizar']],o.anim)}
- if(k==='ttype'){h=head('Transição',false)+chips('ttype',[['dissolve','Dissolver'],['dip','Mergulho no preto'],['wipe','Cortina']],o.ttype||'dissolve')+`<button class="chip" data-act="rmtrans">Remover</button>`}
- if(k==='tdur'){h=head('Duração',false)+rng('tdur','Duração',o.tdur||1,.2,2,.1,'s')}
+ if(k==='color'){const c=a.color||{};h=head('Color')+`<button class="chip" data-act="auto" aria-pressed="${!!c.auto}">Auto</button>`+rng('exp','Exposure',c.exp||0,-100,100)+rng('con','Contrast',c.con||0,-100,100)+rng('sat','Saturation',c.sat||0,-100,100)+rng('temp','Temperature',c.temp||0,-100,100)+`<div class="more-row"><span class="fld">Color wheels <span class="badge">v0.3</span></span><span class="fld">Curves <span class="badge">v0.3</span></span><span class="fld">LUT .cube <span class="badge">v0.3</span></span><span class="fld" style="color:var(--fg-d)">Eyedropper: click the image to neutralize <span class="badge">v0.1</span></span></div>`}
+ if(k==='crop'){const c=a.crop||{};h=head('Crop and framing')+chips('cropmode',[['none','Original'],['fit','Fit'],['fill','Fill'],['crop','Crop'],['kb','Pan and zoom']],c.mode||'none')+`<div class="more-row">${rng('rot','Rotation',c.rot||0,-180,180,1,'°')}<span class="fld">Numeric X/Y position</span></div>`}
+ if(k==='volume'){const v=a.volume||{};h=head('Volume')+rng('vol','Volume',v.vol??100,0,200,1,'%')+rng('fin','Fade in',v.fin||0,0,5,.1,'s')+rng('fout','Fade out',v.fout||0,0,5,.1,'s')+`<button class="chip" data-act="mute" aria-pressed="${!!v.mute}">Mute</button><div class="more-row"><span class="fld">Equalizer <span class="badge">v0.2</span></span><span class="fld">Noise reduction <span class="badge">v0.2</span></span><span class="fld">Normalize <span class="badge">v0.2</span></span></div>`}
+ if(k==='speed'){const f=(a.speed&&a.speed.f)||1;h=head('Speed')+chips('speed',[['0.5','Slow 50%'],['1','Normal'],['2','Fast 200%']],String(f))+`<button class="chip" data-act="rev" aria-pressed="${!!(a.speed&&a.speed.rev)}">Reverse</button><span class="hint">The clip's duration changes with its speed.</span><div class="more-row"><span class="fld">Ramps:</span>${['Smooth ramp','Dramatic slow motion','Impact','Speed up and brake'].map(x=>`<button class="chip" disabled style="opacity:.6">${x}</button>`).join('')}<span class="badge">v0.2</span><span class="fld">Freeze frame <span class="badge">v0.2</span></span></div>`}
+ if(k==='effects'){const f=a.fx||'none';h=head('Effects')+chips('fx',[['none','None'],['bw','B&W','<i class="sw" style="background:linear-gradient(90deg,#222,#ddd)"></i>'],['warm','Warm','<i class="sw" style="background:#e7a35a"></i>'],['cool','Cool','<i class="sw" style="background:#5a8be7"></i>'],['fade','Faded','<i class="sw" style="background:#a9a39a"></i>'],['vivid','Vivid','<i class="sw" style="background:#e55a8b"></i>'],['grain','Grain (CPU)','<i class="sw" style="background:repeating-linear-gradient(45deg,#777 0 1px,#ccc 1px 2px)"></i>']],f)+`<div class="more-row"><span class="fld">Intensity <span class="badge">v0.2</span></span><span class="fld">Keyframes <span class="badge">v0.2</span></span></div>`}
+ if(k==='overlay'){h=head('Overlay')+chips('ovmode',[['pip','Picture-in-picture'],['side','Side by side'],['cutaway','Cutaway'],['chroma','Chroma key']],o.mode||'pip')+`<button class="chip" data-act="border" aria-pressed="${o.border!==false}">Border</button><div class="more-row"><span class="fld">Shadow <span class="badge">v0.2</span></span><span class="fld">Mask <span class="badge">v0.2</span></span><span class="fld">Blend mode <span class="badge">v0.2</span></span></div>`}
+ if(k==='info'){let m,extra='';if(S.sel.kind==='media')m=mediaById(S.sel.id);else if(o&&o.type==='title'){h=head('Info',false)+`<dl class="info-tbl"><dt>Type</dt><dd>Title</dd><dt>Duration</dt><dd>${o.dur.toFixed(1)} s</dd><dt>Start</dt><dd>${tc(o.start)}</dd></dl>`}else m=mediaById(o.mediaId);
+  if(m){if(o)extra=`<dt>In the project</dt><dd>${(o.dur||0).toFixed(1)} s · in ${tc(o.in||0)}</dd>`;h=head('Info',false)+`<dl class="info-tbl"><dt>File</dt><dd>${m.src==='recordings'?'~/Videos/':'~/Videos/Camera/'}${m.name}</dd><dt>Format</dt><dd>${m.codec}</dd><dt>Decode</dt><dd>${m.decode}</dd><dt>Duration</dt><dd>${mmss(m.dur)}</dd>${extra}</dl>`}}
+ if(k==='text'){h=head('Text')+`<div class="fld"><label for="d_txt">Text</label><input type="text" id="d_txt" value="${o.text.replace(/"/g,'&quot;')}"></div>`+rng('size','Size',o.size,3,16,.5)+chips('tcolor',[['#ffffff','White','<i class="sw" style="background:#fff;border:1px solid #888"></i>'],['#f9e2af','Yellow','<i class="sw" style="background:#f9e2af"></i>'],['#89dceb','Cyan','<i class="sw" style="background:#89dceb"></i>']],o.color)+`<div class="more-row"><span class="fld">Title font <span class="badge">v0.2</span></span><span class="fld">Alignment <span class="badge">v0.2</span></span></div>`}
+ if(k==='style'){h=head('Style',false)+chips('tstyle',[['simple','Simple'],['lower','Lower third'],['outline','Outline'],['accent','Highlight']],o.style)}
+ if(k==='anim'){h=head('Animation',false)+chips('tanim',[['none','None'],['fade','Fade'],['slide','Slide']],o.anim)}
+ if(k==='ttype'){h=head('Transition',false)+chips('ttype',[['dissolve','Dissolve'],['dip','Dip to black'],['wipe','Wipe']],o.ttype||'dissolve')+`<button class="chip" data-act="rmtrans">Remove</button>`}
+ if(k==='tdur'){h=head('Duration',false)+rng('tdur','Duration',o.tdur||1,.2,2,.1,'s')}
  inn.innerHTML=h;
 }
 let sliding=false;
@@ -875,7 +875,7 @@ $('#drawerIn').addEventListener('click',e=>{
  if(ch==='ovmode')o.mode=v;if(ch==='tcolor')o.color=v;if(ch==='tstyle')o.style=v;if(ch==='tanim')o.anim=v;if(ch==='ttype')o.ttype=v;
  renderAll();
 });
-$('#btnRender').addEventListener('click',()=>{const p=primaryAt(S.t);if(p){p.clip.rendered=true;toast('Trecho pré-renderizado em segundo plano (cache)');renderTimeline();drawViewer()}});
+$('#btnRender').addEventListener('click',()=>{const p=primaryAt(S.t);if(p){p.clip.rendered=true;toast('Section pre-rendered in the background (cache)');renderTimeline();drawViewer()}});
 
 /* ---------- timeline ---------- */
 const tlScroll=$('#tlScroll'),tlInner=$('#tlInner');
@@ -894,32 +894,32 @@ function renderTimeline(){
  h+='</div>';
  const lane=(cls,ic,inner,data='')=>`<div class="lane ${cls}" ${data} style="width:${W}px"><span class="lic">${ic?ico(ic,14):''}</span>${inner}</div>`;
  const ovT=S.tl.overlays.filter(o=>o.type==='title'),ovV=S.tl.overlays.filter(o=>o.type==='pip');
- const ovItem=o=>{const m=o.mediaId&&mediaById(o.mediaId);const sel=S.sel&&S.sel.id===o.id;return`<div class="clip ov ${sel?'sel':''}" data-kind="overlay" data-id="${o.id}" style="left:${X(o.start)}px;width:${Math.max(6,o.dur*S.pps)}px;${clipVars(o.type==='title'?'title':'pip')}"><span class="nm">${o.type==='title'?'T  '+o.text:(o.mode&&o.mode!=='pip'?({side:'Lado a lado',cutaway:'Cutaway',chroma:'Chroma key'})[o.mode]+' · ':'PiP · ')+m.short}</span><i class="edge l"></i><i class="edge r"></i></div>`};
- h+=lane('drop','', `<span class="ghost">Arraste para cima da trilha principal para sobrepor (Q)</span>`);
+ const ovItem=o=>{const m=o.mediaId&&mediaById(o.mediaId);const sel=S.sel&&S.sel.id===o.id;return`<div class="clip ov ${sel?'sel':''}" data-kind="overlay" data-id="${o.id}" style="left:${X(o.start)}px;width:${Math.max(6,o.dur*S.pps)}px;${clipVars(o.type==='title'?'title':'pip')}"><span class="nm">${o.type==='title'?'T  '+o.text:(o.mode&&o.mode!=='pip'?({side:'Side by side',cutaway:'Cutaway',chroma:'Chroma key'})[o.mode]+' · ':'PiP · ')+m.short}</span><i class="edge l"></i><i class="edge r"></i></div>`};
+ h+=lane('drop','', `<span class="ghost">Drag above the primary storyline to overlay (Q)</span>`);
  if(ovT.length)h+=lane('ov','text',ovT.map(ovItem).join(''));
  if(ovV.length)h+=lane('ov','overlay',ovV.map(ovItem).join(''));
  let pri='';
  S.tl.primary.forEach((c,i)=>{const x=X(st[i]),w=Math.max(4,c.dur*S.pps),sel=S.sel&&S.sel.id===c.id;
   if(c.gap){pri+=`<div class="clip gap ${sel?'sel':''}" data-kind="primary" data-id="${c.id}" style="left:${x}px;width:${w}px"><i class="edge r"></i></div>`;return}
   const m=mediaById(c.mediaId);const dots=['color','crop','speed','effects'].filter(k=>isOn(c,k)).map(()=> '<i></i>').join('');
-  pri+=`<div class="clip v ${sel?'sel':''}" data-kind="primary" data-id="${c.id}" style="left:${x}px;width:${w}px;${clipVars('video')}"><canvas class="film" data-film="${i}" width="${Math.min(2400,Math.ceil(w))}" height="38"></canvas>${!m.still?`<div class="wave" style="background-image:${waveSvg(m.hue,T.green)}"></div>`:''}${c.adj.fx==='grain'&&!c.rendered?'<span class="rt" title="Não toca em tempo real"></span>':''}<span class="nm">${m.short}${spd(c)!==1?' · '+Math.round(spd(c)*100)+'%':''}</span><span class="dots">${dots}</span><i class="edge l"></i><i class="edge r"></i></div>`;
-  if(i<S.tl.primary.length-1){const bx=X(st[i]+c.dur);pri+=`<span class="junction" data-j="${i}" style="left:${bx}px" title="Duplo clique: editor de corte"></span>`;if(c.trans)pri+=`<button class="trans ${S.sel&&S.sel.kind==='transition'&&S.sel.id===c.id?'sel':''}" data-tr="${c.id}" style="left:${bx}px" title="Transição · duplo clique na junção abre o editor de corte">${ico('transition',12)}</button>`}
+  pri+=`<div class="clip v ${sel?'sel':''}" data-kind="primary" data-id="${c.id}" style="left:${x}px;width:${w}px;${clipVars('video')}"><canvas class="film" data-film="${i}" width="${Math.min(2400,Math.ceil(w))}" height="38"></canvas>${!m.still?`<div class="wave" style="background-image:${waveSvg(m.hue,T.green)}"></div>`:''}${c.adj.fx==='grain'&&!c.rendered?'<span class="rt" title="Will not play in real time"></span>':''}<span class="nm">${m.short}${spd(c)!==1?' · '+Math.round(spd(c)*100)+'%':''}</span><span class="dots">${dots}</span><i class="edge l"></i><i class="edge r"></i></div>`;
+  if(i<S.tl.primary.length-1){const bx=X(st[i]+c.dur);pri+=`<span class="junction" data-j="${i}" style="left:${bx}px" title="Double click: cut editor"></span>`;if(c.trans)pri+=`<button class="trans ${S.sel&&S.sel.kind==='transition'&&S.sel.id===c.id?'sel':''}" data-tr="${c.id}" style="left:${bx}px" title="Transition · double click the junction to open the cut editor">${ico('transition',12)}</button>`}
  });
  h+=lane('pri','film',pri);
  const auItem=a=>{const m=mediaById(a.mediaId);const sel=S.sel&&S.sel.id===a.id;return`<div class="clip au ${sel?'sel':''}" data-kind="audio" data-id="${a.id}" style="left:${X(a.start)}px;width:${Math.max(6,a.dur*S.pps)}px;${clipVars('audio')}"><div class="wave" style="background-image:${waveSvg(m.hue,T.green)}"></div><span class="nm">${m.short}${a.adj.volume?' · '+(a.adj.volume.vol??100)+'%':''}</span><i class="edge l"></i><i class="edge r"></i></div>`};
  const mus=S.tl.audio.filter(a=>a.lane==='music'),voi=S.tl.audio.filter(a=>a.lane==='voice');
  if(mus.length)h+=lane('au','music',mus.map(auItem).join(''));
  if(voi.length)h+=lane('au','mic',voi.map(auItem).join(''));
- h+=lane('drop','',`<span class="ghost">Arraste música ou narração para baixo</span>`);
- h+=S.tl.markers.map(m=>`<span class="marker" style="left:${X(m)}px" title="Marcador ${tc(m)}"></span>`).join('');
+ h+=lane('drop','',`<span class="ghost">Drag music or voiceover below</span>`);
+ h+=S.tl.markers.map(m=>`<span class="marker" style="left:${X(m)}px" title="Marker ${tc(m)}"></span>`).join('');
  h+=`<div class="playhead" id="playhead"></div><div class="skimmer" id="skimmer"></div>`;
- h+=`<span class="pin" style="left:${X(st[1]||0)+30}px;top:118px" data-n="8" data-tip="§7.1 Trilha principal magnética: remover fecha o espaço. Títulos e PiP ficam acima, música e narração abaixo. Sem cabeçalhos de trilha por padrão.">8</span>`;
+ h+=`<span class="pin" style="left:${X(st[1]||0)+30}px;top:118px" data-n="8" data-tip="§7.1 Magnetic primary storyline: removing closes the gap. Titles and PiP sit above, music and voiceover below. No track headers by default.">8</span>`;
  tlInner.style.width=W+'px';tlInner.innerHTML=h;
  tlInner.querySelectorAll('canvas[data-film]').forEach(cn=>{const c=S.tl.primary[+cn.dataset.film];const m=mediaById(c.mediaId);const x=cn.getContext('2d');const tw=68;for(let px=0;px<cn.width;px+=tw){x.save();x.beginPath();x.rect(px,0,tw-1,38);x.clip();x.translate(px,0);drawMedia(x,tw-1,38,m,c.in+(px/S.pps)*spd(c));x.restore()}});
  updatePlayhead();renderMinimap();
 }
 function updatePlayhead(){const ph=$('#playhead');if(ph)ph.style.left=X(S.t)+'px';$('#tcCur').textContent=tc(S.t);$('#tcTot').textContent=tc(totalDur());updateMMView()}
-/* minimapa */
+/* minimap */
 function renderMinimap(){
  const c=$('#mmc'),r=$('#minimap').getBoundingClientRect();if(!r.width)return;const dpr=Math.min(2,devicePixelRatio||1);c.width=r.width*dpr;c.height=r.height*dpr;const x=c.getContext('2d');x.scale(dpr,dpr);
  const tot=totalDur(),k=(r.width-8)/tot,st=starts();
@@ -933,7 +933,7 @@ function updateMMView(){const v=$('#mmView'),r=$('#minimap').getBoundingClientRe
 $('#minimap').addEventListener('pointerdown',e=>{const r=e.currentTarget.getBoundingClientRect();const go=ev=>{const t=clamp((ev.clientX-r.left-4)/(r.width-8),0,1)*totalDur();tlScroll.scrollLeft=X(t)-tlScroll.clientWidth/2};go(e);const up=()=>{removeEventListener('pointermove',go);removeEventListener('pointerup',up)};addEventListener('pointermove',go);addEventListener('pointerup',up)});
 tlScroll.addEventListener('scroll',updateMMView);
 
-/* interação na timeline */
+/* timeline interaction */
 function setT(t){S.t=clamp(t,0,totalDur());updatePlayhead();drawViewer()}
 function snapT(t,withCuts=true){if(!S.snap)return t;const cands=[S.t,...S.tl.markers,...(withCuts?[...starts(),primaryEnd()]:[])];let best=t,bd=8/S.pps;for(const c of cands){if(Math.abs(c-t)<bd){bd=Math.abs(c-t);best=c}}return best}
 tlInner.addEventListener('pointerdown',e=>{
@@ -961,7 +961,7 @@ tlInner.addEventListener('pointerdown',e=>{
    else if(edge==='l'){const ns=clamp(snapT(o0.start+dt),0,o0.start+o0.dur-.3);obj.dur=o0.dur-(ns-o0.start);obj.start=ns}
    else obj.start=Math.max(0,snapT(o0.start+dt));
   }
-  renderTimeline();drawViewer();status(edge?`Aparando · ${obj.dur.toFixed(2)} s`:'Movendo');};
+  renderTimeline();drawViewer();status(edge?`Trimming · ${obj.dur.toFixed(2)} s`:'Moving');};
  const up=()=>{removeEventListener('pointermove',mv);removeEventListener('pointerup',up);S.tl.primary.forEach(c=>delete c._o);if(!moved&&kind!=='primary'){}renderAll();if(!moved)status(toolHint())};
  addEventListener('pointermove',mv);addEventListener('pointerup',up);
  renderAdj();renderTimeline();drawViewer();
@@ -972,94 +972,94 @@ tlInner.addEventListener('mouseleave',()=>{const sk=$('#skimmer');if(sk)sk.style
 tlScroll.addEventListener('wheel',e=>{if(e.ctrlKey){e.preventDefault();const r=tlScroll.getBoundingClientRect();const mx=e.clientX-r.left;const tm=Tx(tlScroll.scrollLeft+mx);S.pps=clamp(S.pps*(e.deltaY<0?1.15:1/1.15),4,80);$('#zoom').value=S.pps;renderTimeline();tlScroll.scrollLeft=X(tm)-mx}},{passive:false});
 $('#zoom').addEventListener('input',e=>{const c=tlScroll.scrollLeft+tlScroll.clientWidth/2,tm=Tx(c);S.pps=+e.target.value;renderTimeline();tlScroll.scrollLeft=X(tm)-tlScroll.clientWidth/2});
 
-/* editor de corte */
+/* cut editor */
 function openCutEditor(i){
  const A=S.tl.primary[i],B=S.tl.primary[i+1];if(!A||!B||A.gap||B.gap)return;
  const ma=mediaById(A.mediaId),mb=mediaById(B.mediaId);
  const ed=document.createElement('div');ed.className='cuted';
  const sc=8,cut=50;const aUsedW=A.dur*sc,aIn=A.in*sc,bW=B.dur*sc,bTail=(mb.dur-B.in-B.dur*spd(B))*sc;
- ed.innerHTML=`<header><b>Editor de corte</b><span class="hint">${ma.short} → ${mb.short}</span><div class="grow"></div><button class="tb-btn" id="ceClose">${ico('close',16)} Fechar (Esc)</button></header>
+ ed.innerHTML=`<header><b>Cut editor</b><span class="hint">${ma.short} → ${mb.short}</span><div class="grow"></div><button class="tb-btn" id="ceClose">${ico('close',16)} Close (Esc)</button></header>
  <div class="rows"><div class="row" style="${clipVars('video')}"><div class="seg-a unused" style="left:calc(${cut}% - ${aUsedW+aIn}px);width:${aIn}px"></div><div class="seg-a" style="left:calc(${cut}% - ${aUsedW}px);width:${aUsedW}px"></div><div class="seg-a unused" style="left:${cut}%;width:${Math.min(160,(ma.dur-A.in-A.dur)*sc)}px"></div></div>
  <div class="row" style="${clipVars('video')}"><div class="seg-b unused" style="left:calc(${cut}% - ${Math.min(160,B.in*sc)}px);width:${Math.min(160,B.in*sc)}px"></div><div class="seg-b" style="left:${cut}%;width:${bW}px"></div><div class="seg-b unused" style="left:calc(${cut}% + ${bW}px);width:${Math.min(160,bTail)}px"></div></div>
  <div class="cutline" style="left:${cut}%;top:0;bottom:0;position:absolute"></div></div>
- <p>O material não usado aparece esmaecido. Arraste o corte para ajustar os dois lados (roll) ou separe o áudio para um J-cut/L-cut. <span class="badge">v0.1: visual · interação na implementação</span></p>`;
+ <p>Unused material is dimmed. Drag the cut to adjust both sides (roll) or split the audio for a J-cut/L-cut. <span class="badge">v0.1: visual only · interaction in the implementation</span></p>`;
  ed.querySelector('.rows').style.position='relative';
  $('.lower').style.position='relative';$('.lower').appendChild(ed);
  ed.querySelector('#ceClose').onclick=()=>ed.remove();
 }
 
-/* ---------- operações de edição ---------- */
-function splitAt(t){const p=primaryAt(t);if(!p||p.clip.gap)return toast('Nada para dividir aqui');const loc=t-p.start;if(loc<1/FPS||p.clip.dur-loc<1/FPS)return toast('Cabeça de leitura no limite do clip');snap();
- const a=p.clip,b=JSON.parse(JSON.stringify(a));b.id=nid();b.in=a.in+loc*spd(a);b.dur=a.dur-loc;a.dur=loc;b.trans=a.trans;a.trans=false;S.tl.primary.splice(p.i+1,0,b);S.sel={kind:'primary',id:b.id};renderAll();toast('Dividido em '+tc(t))}
-function delSel(gap){const s=S.sel;if(!s)return toast('Selecione algo para remover');
- if(s.kind==='media'){const m=mediaById(s.id);m.rej=!m.rej;renderLib();return toast(m.rej?'Rejeitado (o arquivo não é apagado)':'Rejeição removida')}
+/* ---------- editing operations ---------- */
+function splitAt(t){const p=primaryAt(t);if(!p||p.clip.gap)return toast('Nothing to split here');const loc=t-p.start;if(loc<1/FPS||p.clip.dur-loc<1/FPS)return toast('The playhead is at the clip edge');snap();
+ const a=p.clip,b=JSON.parse(JSON.stringify(a));b.id=nid();b.in=a.in+loc*spd(a);b.dur=a.dur-loc;a.dur=loc;b.trans=a.trans;a.trans=false;S.tl.primary.splice(p.i+1,0,b);S.sel={kind:'primary',id:b.id};renderAll();toast('Split at '+tc(t))}
+function delSel(gap){const s=S.sel;if(!s)return toast('Select something to remove');
+ if(s.kind==='media'){const m=mediaById(s.id);m.rej=!m.rej;renderLib();return toast(m.rej?'Rejected (the file is not deleted)':'Rejection cleared')}
  snap();
  if(s.kind==='transition'){const c=S.tl.primary.find(c=>c.id===s.id);if(c)c.trans=false}
  else if(s.kind==='primary'){const i=S.tl.primary.findIndex(c=>c.id===s.id);if(i<0)return;const c=S.tl.primary[i];if(gap&&!c.gap){S.tl.primary[i]={id:nid(),gap:true,dur:c.dur,adj:{}}}else S.tl.primary.splice(i,1)}
  else{S.tl.overlays=S.tl.overlays.filter(o=>o.id!==s.id);S.tl.audio=S.tl.audio.filter(o=>o.id!==s.id)}
- S.sel=null;S.tool=null;renderAll();toast(gap?'Substituído por espaço vazio':'Removido · espaço fechado')}
+ S.sel=null;S.tool=null;renderAll();toast(gap?'Replaced with a gap':'Removed · gap closed')}
 function libMedia(){const id=S.libSel||(S.sel&&S.sel.kind==='media'&&S.sel.id);return id&&mediaById(id)}
 function newPrimary(m){return{id:nid(),mediaId:m.id,in:0,dur:m.still?4:Math.min(m.dur,10),adj:{},trans:false}}
-function append(){const m=libMedia();if(!m)return toast('Selecione um item na biblioteca');snap();
+function append(){const m=libMedia();if(!m)return toast('Select an item in the library');snap();
  if(m.kind==='music'||m.kind==='voice'){const lane=m.kind==='music'?'music':'voice';const end=Math.max(0,...S.tl.audio.filter(a=>a.lane===lane).map(a=>a.start+a.dur));S.tl.audio.push({id:nid(),mediaId:m.id,start:end,dur:Math.min(m.dur,30),lane,adj:{}})}
- else S.tl.primary.push(newPrimary(m));renderAll();toast(m.short+' adicionado ao fim')}
-function insert(){const m=libMedia();if(!m||m.kind==='music'||m.kind==='voice')return toast('Selecione um vídeo na biblioteca');snap();
+ else S.tl.primary.push(newPrimary(m));renderAll();toast(m.short+' appended to the end')}
+function insert(){const m=libMedia();if(!m||m.kind==='music'||m.kind==='voice')return toast('Select a video in the library');snap();
  const p=primaryAt(S.t);let idx=S.tl.primary.length;if(p){const loc=S.t-p.start;if(loc>1/FPS&&p.clip.dur-loc>1/FPS){const a=p.clip,b=JSON.parse(JSON.stringify(a));b.id=nid();b.in=a.in+loc*spd(a);b.dur=a.dur-loc;a.dur=loc;b.trans=a.trans;a.trans=false;S.tl.primary.splice(p.i+1,0,b);idx=p.i+1}else idx=p.i}
- const c=newPrimary(m);S.tl.primary.splice(idx,0,c);S.sel={kind:'primary',id:c.id};renderAll();toast('Inserido na cabeça de leitura')}
-function connect(){const m=libMedia();if(!m||m.kind==='music'||m.kind==='voice')return toast('Selecione um vídeo na biblioteca');snap();const o={id:nid(),type:'pip',mediaId:m.id,start:S.t,dur:Math.min(m.dur,6),mode:'pip',x:.69,y:.06,w:.27,adj:{}};S.tl.overlays.push(o);S.sel={kind:'overlay',id:o.id};renderAll();toast('Conectado como camada (picture-in-picture)')}
-function addTitle(style){snap();const o={id:nid(),type:'title',start:S.t,dur:4,text:'Novo título',style,size:8,x:.08,y:style==='lower'?.74:.42,color:'#ffffff',anim:'fade',adj:{}};S.tl.overlays.push(o);S.sel={kind:'overlay',id:o.id};S.tool='text';renderAll();toast('Título adicionado na cabeça de leitura')}
-function applyTransition(kind){const s=S.sel;if(kind==='push')return toast('Empurrar chega na v0.2');let c=s&&s.kind==='primary'&&S.tl.primary.find(x=>x.id===s.id);if(!c){const p=primaryAt(S.t);c=p&&p.clip}
- const i=S.tl.primary.indexOf(c);if(!c||i>=S.tl.primary.length-1)return toast('Selecione um clip que tenha outro depois');snap();c.trans=true;c.ttype=kind;c.tdur=c.tdur||1;S.sel={kind:'transition',id:c.id};S.tool='ttype';renderAll();toast('Transição aplicada')}
+ const c=newPrimary(m);S.tl.primary.splice(idx,0,c);S.sel={kind:'primary',id:c.id};renderAll();toast('Inserted at the playhead')}
+function connect(){const m=libMedia();if(!m||m.kind==='music'||m.kind==='voice')return toast('Select a video in the library');snap();const o={id:nid(),type:'pip',mediaId:m.id,start:S.t,dur:Math.min(m.dur,6),mode:'pip',x:.69,y:.06,w:.27,adj:{}};S.tl.overlays.push(o);S.sel={kind:'overlay',id:o.id};renderAll();toast('Connected as a layer (picture-in-picture)')}
+function addTitle(style){snap();const o={id:nid(),type:'title',start:S.t,dur:4,text:'New title',style,size:8,x:.08,y:style==='lower'?.74:.42,color:'#ffffff',anim:'fade',adj:{}};S.tl.overlays.push(o);S.sel={kind:'overlay',id:o.id};S.tool='text';renderAll();toast('Title added at the playhead')}
+function applyTransition(kind){const s=S.sel;if(kind==='push')return toast('Push arrives in v0.2');let c=s&&s.kind==='primary'&&S.tl.primary.find(x=>x.id===s.id);if(!c){const p=primaryAt(S.t);c=p&&p.clip}
+ const i=S.tl.primary.indexOf(c);if(!c||i>=S.tl.primary.length-1)return toast('Select a clip followed by another one');snap();c.trans=true;c.ttype=kind;c.tdur=c.tdur||1;S.sel={kind:'transition',id:c.id};S.tool='ttype';renderAll();toast('Transition applied')}
 function cuts(){const st=starts();return[...st,primaryEnd()]}
 function editStep(dir){const cs=cuts();const e=1e-3;const t=dir>0?cs.find(c=>c>S.t+e):[...cs].reverse().find(c=>c<S.t-e);if(t!=null)setT(t)}
 function frameStep(n){setPlay(0);setT(Math.round(S.t*FPS+n)/FPS)}
 
-/* ---------- reprodução ---------- */
+/* ---------- playback ---------- */
 let last=0,running=false;
 function setPlay(sp){S.speed=sp;$('#btnPlay').innerHTML=ico(sp?'pause':'play');$('#speedLbl').textContent=sp&&sp!==1?(sp>0?'':'−')+Math.abs(sp)+'×':'';if(sp&&!running){running=true;last=performance.now();requestAnimationFrame(tick)}}
 function tick(now){if(!S.speed){running=false;return}const dt=(now-last)/1000;last=now;let t=S.t+dt*S.speed;const tot=totalDur();if(t>=tot){t=tot;setPlay(0)}if(t<=0){t=0;setPlay(0)}S.t=t;updatePlayhead();drawViewer();
  const ph=X(S.t);if(ph>tlScroll.scrollLeft+tlScroll.clientWidth-60)tlScroll.scrollLeft=ph-80;if(S.speed)requestAnimationFrame(tick);else running=false}
 function jkl(k){if(k==='K')return setPlay(0);if(k==='L')setPlay(S.speed<=0?1:Math.min(S.speed*2,8));if(k==='J')setPlay(S.speed>=0?-1:Math.max(S.speed*2,-8))}
 
-/* ---------- ações, atalhos, paleta ---------- */
-const TOOLS=[['A','Seleção','cursor'],['B','Lâmina','blade'],['T','Trim','trim'],['P','Posição','position'],['R','Intervalo','range']];
-function toolHint(){return({A:'Seleção · arraste bordas para aparar (com ripple)',B:'Lâmina · clique num clip para dividir',T:'Trim · bordas fazem roll, o meio faz slip',P:'Posição · move sem magnetismo (na implementação)',R:'Intervalo · seleciona parte de clips (na implementação)'})[S.editTool]}
+/* ---------- actions, shortcuts, palette ---------- */
+const TOOLS=[['A','Select','cursor'],['B','Blade','blade'],['T','Trim','trim'],['P','Position','position'],['R','Range','range']];
+function toolHint(){return({A:'Select · drag edges to trim (ripple)',B:'Blade · click a clip to split it',T:'Trim · edges roll, the middle slips',P:'Position · moves without magnetism (in the implementation)',R:'Range · selects part of clips (in the implementation)'})[S.editTool]}
 function renderTools(){$('#tools').innerHTML=TOOLS.map(([k,l,i])=>`<button class="tool" data-t="${k}" aria-pressed="${S.editTool===k}" title="${l} (${k})">${ico(i,15)}</button>`).join('');status(toolHint())}
 $('#tools').addEventListener('click',e=>{const b=e.target.closest('.tool');if(b)act('tool-'+b.dataset.t)});
 const ACTIONS=[
- ['play','Play/pausa','Espaço',()=>setPlay(S.speed?0:1)],['rev','Tocar para trás','J',()=>jkl('J')],['pause','Pausar','K',()=>jkl('K')],['fwd','Tocar para frente (repita para acelerar)','L',()=>jkl('L')],
- ['playsel','Tocar a seleção','/',()=>{const o=S.sel&&findAny(S.sel.id);if(o&&S.sel.kind==='primary'){const st=starts()[S.tl.primary.indexOf(o)];setT(st);setPlay(1)}else setPlay(1)}],
- ['fprev','Quadro anterior','←',()=>frameStep(-1)],['fnext','Próximo quadro','→',()=>frameStep(1)],['tprev','10 quadros para trás','Shift+←',()=>frameStep(-10)],['tnext','10 quadros para frente','Shift+→',()=>frameStep(10)],
- ['eprev','Corte anterior','↑',()=>editStep(-1)],['enext','Próximo corte','↓',()=>editStep(1)],['home','Início do projeto','Home',()=>setT(0)],['end','Fim do projeto','End',()=>setT(totalDur())],
- ['split','Dividir na cabeça de leitura','Ctrl+B',()=>splitAt(S.t)],['delete','Remover (fecha o espaço)','Delete',()=>delSel(false)],['gap','Substituir por espaço vazio','Shift+Delete',()=>delSel(true)],
- ['append','Adicionar ao fim','E',append],['insert','Inserir na cabeça de leitura','W',insert],['connect','Conectar como camada','Q',connect],['overwrite','Sobrescrever na cabeça de leitura','D',()=>toast('Sobrescrever: previsto, não implementado no mockup')],
- ['marker','Adicionar marcador','M',()=>{snap();S.tl.markers.push(S.t);renderTimeline();toast('Marcador em '+tc(S.t))}],['duration','Mudar duração','Ctrl+D',()=>toast('Mudar duração: campo numérico (previsto)')],
- ['undo','Desfazer','Ctrl+Z',undo],['redo','Refazer','Ctrl+Shift+Z',redo],
- ['tool-A','Ferramenta Seleção','A',()=>{S.editTool='A';renderTools()}],['tool-B','Ferramenta Lâmina','B',()=>{S.editTool='B';renderTools()}],['tool-T','Ferramenta Trim','T',()=>{S.editTool='T';renderTools()}],['tool-P','Ferramenta Posição','P',()=>{S.editTool='P';renderTools()}],['tool-R','Ferramenta Intervalo','R',()=>{S.editTool='R';renderTools()}],
- ['snap','Ligar/desligar snapping','N',()=>{S.snap=!S.snap;$('#tglSnap').setAttribute('aria-pressed',S.snap);toast('Snapping '+(S.snap?'ligado':'desligado'))}],
- ['skim','Ligar/desligar skimming','S',()=>{S.skimming=!S.skimming;$('#tglSkim').setAttribute('aria-pressed',S.skimming);toast('Skimming '+(S.skimming?'ligado':'desligado'))}],
- ['fav','Favoritar na biblioteca','F',()=>{const m=libMedia();if(!m)return toast('Selecione um item da biblioteca');m.fav=!m.fav;renderLib();toast(m.fav?'Favoritado':'Favorito removido')}],
- ['unrate','Remover avaliação','U',()=>{const m=libMedia();if(m){m.fav=false;m.rej=false;renderLib()}}],
- ['search','Buscar na biblioteca','Ctrl+F',()=>{if(app.matches('.lib-hidden'))act('lib');$('#libSearch').focus()}],
- ['lib','Mostrar/ocultar biblioteca','Ctrl+1',()=>{const half=app.getBoundingClientRect().width<=1100;if(half)app.classList.toggle('lib-open');else app.classList.toggle('lib-hidden');setTimeout(fitStage,220)}],
- ['zin','Aproximar timeline','Ctrl+=',()=>{S.pps=clamp(S.pps*1.3,4,80);$('#zoom').value=S.pps;renderTimeline()}],['zout','Afastar timeline','Ctrl+-',()=>{S.pps=clamp(S.pps/1.3,4,80);$('#zoom').value=S.pps;renderTimeline()}],
- ['fit','Ajustar projeto à largura','Shift+Z',()=>{S.pps=clamp((tlScroll.clientWidth-LP-30)/totalDur(),4,80);$('#zoom').value=S.pps;renderTimeline();tlScroll.scrollLeft=0}],
- ['focus','Alternar foco entre áreas','Tab',()=>{const o=['lib','viewer','timeline'];S.focus=o[(o.indexOf(S.focus)+1)%3];renderFocus()}],
- ['import','Importar mídia','Ctrl+I',()=>toast('Importar: seletor de arquivos do sistema (xdg-desktop-portal)')],
- ['export','Exportar','Ctrl+E',startExport],
- ['full','Viewer em tela cheia','Ctrl+Shift+F',()=>{app.classList.toggle('viewer-full');setTimeout(fitStage,30)}],
- ['palette','Paleta de comandos','Ctrl+K',openPal],
- ['adj-color','Abrir ajuste: Cor','',()=>openTool('color')],['adj-crop','Abrir ajuste: Recorte','',()=>openTool('crop')],['adj-speed','Abrir ajuste: Velocidade','',()=>openTool('speed')],['adj-fx','Abrir ajuste: Efeitos','',()=>openTool('effects')],
- ['speed50','Velocidade 50% no clip selecionado','',()=>quickSpeed(.5)],['speed200','Velocidade 200% no clip selecionado','',()=>quickSpeed(2)],
- ['title','Adicionar título na cabeça de leitura','',()=>addTitle('lower')],['trans','Adicionar transição (dissolver)','',()=>applyTransition('dissolve')],
- ['fmt916','Mudar formato do projeto para 9:16 vertical','',()=>setAspect('9:16')],['fmt169','Mudar formato do projeto para 16:9','',()=>setAspect('16:9')],['fmt11','Mudar formato do projeto para 1:1','',()=>setAspect('1:1')],
- ['projects','Voltar para Projetos','',()=>go('projects')],
+ ['play','Play/pause','Space',()=>setPlay(S.speed?0:1)],['rev','Play backward','J',()=>jkl('J')],['pause','Pause','K',()=>jkl('K')],['fwd','Play forward (repeat to speed up)','L',()=>jkl('L')],
+ ['playsel','Play the selection','/',()=>{const o=S.sel&&findAny(S.sel.id);if(o&&S.sel.kind==='primary'){const st=starts()[S.tl.primary.indexOf(o)];setT(st);setPlay(1)}else setPlay(1)}],
+ ['fprev','Previous frame','←',()=>frameStep(-1)],['fnext','Next frame','→',()=>frameStep(1)],['tprev','10 frames back','Shift+←',()=>frameStep(-10)],['tnext','10 frames forward','Shift+→',()=>frameStep(10)],
+ ['eprev','Previous edit','↑',()=>editStep(-1)],['enext','Next edit','↓',()=>editStep(1)],['home','Project start','Home',()=>setT(0)],['end','Project end','End',()=>setT(totalDur())],
+ ['split','Split at the playhead','Ctrl+B',()=>splitAt(S.t)],['delete','Remove (close the gap)','Delete',()=>delSel(false)],['gap','Replace with a gap','Shift+Delete',()=>delSel(true)],
+ ['append','Append to the end','E',append],['insert','Insert at the playhead','W',insert],['connect','Connect as a layer','Q',connect],['overwrite','Overwrite at the playhead','D',()=>toast('Overwrite: planned, not implemented in the mockup')],
+ ['marker','Add marker','M',()=>{snap();S.tl.markers.push(S.t);renderTimeline();toast('Marker at '+tc(S.t))}],['duration','Change duration','Ctrl+D',()=>toast('Change duration: numeric field (planned)')],
+ ['undo','Undo','Ctrl+Z',undo],['redo','Redo','Ctrl+Shift+Z',redo],
+ ['tool-A','Select tool','A',()=>{S.editTool='A';renderTools()}],['tool-B','Blade tool','B',()=>{S.editTool='B';renderTools()}],['tool-T','Trim tool','T',()=>{S.editTool='T';renderTools()}],['tool-P','Position tool','P',()=>{S.editTool='P';renderTools()}],['tool-R','Range tool','R',()=>{S.editTool='R';renderTools()}],
+ ['snap','Toggle snapping','N',()=>{S.snap=!S.snap;$('#tglSnap').setAttribute('aria-pressed',S.snap);toast('Snapping '+(S.snap?'on':'off'))}],
+ ['skim','Toggle skimming','S',()=>{S.skimming=!S.skimming;$('#tglSkim').setAttribute('aria-pressed',S.skimming);toast('Skimming '+(S.skimming?'on':'off'))}],
+ ['fav','Favorite in the library','F',()=>{const m=libMedia();if(!m)return toast('Select a library item');m.fav=!m.fav;renderLib();toast(m.fav?'Favorited':'Favorite removed')}],
+ ['unrate','Clear rating','U',()=>{const m=libMedia();if(m){m.fav=false;m.rej=false;renderLib()}}],
+ ['search','Search the library','Ctrl+F',()=>{if(app.matches('.lib-hidden'))act('lib');$('#libSearch').focus()}],
+ ['lib','Show/hide the library','Ctrl+1',()=>{const half=app.getBoundingClientRect().width<=1100;if(half)app.classList.toggle('lib-open');else app.classList.toggle('lib-hidden');setTimeout(fitStage,220)}],
+ ['zin','Zoom in the timeline','Ctrl+=',()=>{S.pps=clamp(S.pps*1.3,4,80);$('#zoom').value=S.pps;renderTimeline()}],['zout','Zoom out the timeline','Ctrl+-',()=>{S.pps=clamp(S.pps/1.3,4,80);$('#zoom').value=S.pps;renderTimeline()}],
+ ['fit','Fit the project to the width','Shift+Z',()=>{S.pps=clamp((tlScroll.clientWidth-LP-30)/totalDur(),4,80);$('#zoom').value=S.pps;renderTimeline();tlScroll.scrollLeft=0}],
+ ['focus','Cycle focus between areas','Tab',()=>{const o=['lib','viewer','timeline'];S.focus=o[(o.indexOf(S.focus)+1)%3];renderFocus()}],
+ ['import','Import media','Ctrl+I',()=>toast('Import: system file picker (xdg-desktop-portal)')],
+ ['export','Export','Ctrl+E',startExport],
+ ['full','Full-screen viewer','Ctrl+Shift+F',()=>{app.classList.toggle('viewer-full');setTimeout(fitStage,30)}],
+ ['palette','Command palette','Ctrl+K',openPal],
+ ['adj-color','Open adjustment: Color','',()=>openTool('color')],['adj-crop','Open adjustment: Crop','',()=>openTool('crop')],['adj-speed','Open adjustment: Speed','',()=>openTool('speed')],['adj-fx','Open adjustment: Effects','',()=>openTool('effects')],
+ ['speed50','Speed 50% on the selected clip','',()=>quickSpeed(.5)],['speed200','Speed 200% on the selected clip','',()=>quickSpeed(2)],
+ ['title','Add a title at the playhead','',()=>addTitle('lower')],['trans','Add a transition (dissolve)','',()=>applyTransition('dissolve')],
+ ['fmt916','Change project format to 9:16 vertical','',()=>setAspect('9:16')],['fmt169','Change project format to 16:9','',()=>setAspect('16:9')],['fmt11','Change project format to 1:1','',()=>setAspect('1:1')],
+ ['projects','Back to Projects','',()=>go('projects')],
 ];
 const byId=Object.fromEntries(ACTIONS.map(a=>[a[0],a]));
 function act(id){const a=byId[id];if(a)a[3]()}
-function openTool(k){if(!barFor().en.has(k))return toast('Selecione um clip que aceite esse ajuste');S.tool=k;renderAdj();drawViewer()}
-function quickSpeed(f){const o=S.sel&&findAny(S.sel.id);if(!o||S.sel.kind!=='primary')return toast('Selecione um clip da trilha principal');snap();const of=spd(o);o.dur=o.dur*of/f;o.adj.speed={f};renderAll()}
-function setAspect(a){S.aspect=a;const res={'16:9':'1920×1080','9:16':'1080×1920','1:1':'1080×1080'}[a];$('#projMeta').textContent=`${a} · ${res} · 30 fps`;fitStage();toast('Formato: '+a)}
+function openTool(k){if(!barFor().en.has(k))return toast('Select a clip that accepts this adjustment');S.tool=k;renderAdj();drawViewer()}
+function quickSpeed(f){const o=S.sel&&findAny(S.sel.id);if(!o||S.sel.kind!=='primary')return toast('Select a clip on the primary storyline');snap();const of=spd(o);o.dur=o.dur*of/f;o.adj.speed={f};renderAll()}
+function setAspect(a){S.aspect=a;const res={'16:9':'1920×1080','9:16':'1080×1920','1:1':'1080×1080'}[a];$('#projMeta').textContent=`${a} · ${res} · 30 fps`;fitStage();toast('Format: '+a)}
 const KEYMAP={'Space':'play','J':'rev','K':'pause','L':'fwd','/':'playsel','ArrowLeft':'fprev','ArrowRight':'fnext','Shift+ArrowLeft':'tprev','Shift+ArrowRight':'tnext','ArrowUp':'eprev','ArrowDown':'enext','Home':'home','End':'end',
  'Ctrl+B':'split','Delete':'delete','Backspace':'delete','Shift+Delete':'gap','Shift+Backspace':'gap','E':'append','W':'insert','Q':'connect','D':'overwrite','M':'marker','Ctrl+D':'duration','Ctrl+Z':'undo','Ctrl+Shift+Z':'redo','Ctrl+Y':'redo',
  'A':'tool-A','B':'tool-B','T':'tool-T','P':'tool-P','R':'tool-R','N':'snap','S':'skim','F':'fav','U':'unrate','Ctrl+F':'search','Ctrl+1':'lib','Ctrl+=':'zin','Ctrl++':'zin','Ctrl+-':'zout','Shift+Z':'fit','Tab':'focus','Ctrl+I':'import','Ctrl+E':'export','Ctrl+Shift+F':'full','Ctrl+K':'palette'};
@@ -1076,41 +1076,41 @@ let palIdx=0,palItems=[];
 function openPal(){$('#palScrim').hidden=false;$('#palIn').value='';palIdx=0;renderPal();$('#palIn').focus()}
 function closePal(){$('#palScrim').hidden=true;app.focus()}
 function renderPal(){const q=$('#palIn').value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');palItems=ACTIONS.filter(a=>a[0]!=='palette'&&(a[1].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').includes(q)));palIdx=clamp(palIdx,0,Math.max(0,palItems.length-1));
- $('#palList').innerHTML=palItems.map((a,i)=>`<li role="option" data-i="${i}" aria-selected="${i===palIdx}"><span>${a[1]}</span>${a[2]?`<kbd>${a[2]}</kbd>`:''}</li>`).join('')||'<li class="off"><span>Nenhum comando encontrado</span></li>';
+ $('#palList').innerHTML=palItems.map((a,i)=>`<li role="option" data-i="${i}" aria-selected="${i===palIdx}"><span>${a[1]}</span>${a[2]?`<kbd>${a[2]}</kbd>`:''}</li>`).join('')||'<li class="off"><span>No command found</span></li>';
  const s=$('#palList [aria-selected="true"]');s&&s.scrollIntoView({block:'nearest'})}
 $('#palIn').addEventListener('input',()=>{palIdx=0;renderPal()});
 $('#palIn').addEventListener('keydown',e=>{if(e.key==='ArrowDown'){palIdx++;renderPal();e.preventDefault()}else if(e.key==='ArrowUp'){palIdx--;renderPal();e.preventDefault()}else if(e.key==='Enter'){const a=palItems[palIdx];closePal();a&&a[3]()}else if(e.key==='Escape'){closePal()}e.stopPropagation()});
 $('#palList').addEventListener('click',e=>{const li=e.target.closest('li[data-i]');if(!li)return;const a=palItems[+li.dataset.i];closePal();a&&a[3]()});
 $('#palScrim').addEventListener('pointerdown',e=>{if(e.target.id==='palScrim')closePal()});
 
-/* ---------- export, toast, status, foco ---------- */
+/* ---------- export, toast, status, focus ---------- */
 let toastT;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),2200)}
 function status(m){$('#status').textContent=m||''}
 function renderFocus(){app.dataset.focus=S.focus}
-function startExport(){const p=$('#exportProg');if(p.classList.contains('on'))return;p.classList.add('on');const bar=p.querySelector('i');let v=0;toast('Exportação em segundo plano · H.264 por hardware (VA-API) · você pode continuar editando');const iv=setInterval(()=>{v+=4+Math.random()*6;bar.style.width=Math.min(100,v)+'%';if(v>=100){clearInterval(iv);setTimeout(()=>{p.classList.remove('on');bar.style.width='0';toast('Exportado: ~/Videos/OmaMovie/'+$('#projName').textContent+'.mp4 · notificação enviada')},300)}},180)}
+function startExport(){const p=$('#exportProg');if(p.classList.contains('on'))return;p.classList.add('on');const bar=p.querySelector('i');let v=0;toast('Exporting in the background · hardware H.264 (VA-API) · you can keep editing');const iv=setInterval(()=>{v+=4+Math.random()*6;bar.style.width=Math.min(100,v)+'%';if(v>=100){clearInterval(iv);setTimeout(()=>{p.classList.remove('on');bar.style.width='0';toast('Exported: ~/Videos/OmaMovie/'+$('#projName').textContent+'.mp4 · notification sent')},300)}},180)}
 
-/* ---------- tela de projetos ---------- */
-const RECENT=[{name:'Hyprland em 5 minutos',meta:'16:9 · 0:51 · editado há 2 h',fmt:'16:9',m:'r1'},{name:'Trilha no fim de semana',meta:'16:9 · 3:12 · editado ontem',fmt:'16:9',m:'v2'},{name:'Short #12',meta:'9:16 · 0:28 · editado há 3 dias',fmt:'9:16',m:'v1'}];
+/* ---------- projects screen ---------- */
+const RECENT=[{name:'Hyprland in 5 minutes',meta:'16:9 · 0:51 · edited 2 h ago',fmt:'16:9',m:'r1'},{name:'Weekend trail',meta:'16:9 · 3:12 · edited yesterday',fmt:'16:9',m:'v2'},{name:'Short #12',meta:'9:16 · 0:28 · edited 3 days ago',fmt:'9:16',m:'v1'}];
 function renderProjects(){
- $('#recentGrid').innerHTML=`<button class="newcard" id="newCard">${ico('plus',22)}<span>Novo projeto</span></button>`+RECENT.map((r,i)=>`<button class="pj" data-rp="${i}"><div class="th"><canvas width="320" height="180"></canvas><span class="fmt">${r.fmt}</span></div><b>${r.name}</b><small>${r.meta}</small></button>`).join('');
- $('#recGrid').innerHTML=M.filter(m=>m.src==='recordings').map(m=>`<div class="pj" data-rec="${m.id}"><div class="th"><canvas width="320" height="180"></canvas><span class="fmt">${mmss(m.dur)}</span></div><b>${m.when}</b><small>${m.codec.split(' · ').slice(0,2).join(' · ')}</small><button class="act" data-edit="${m.id}">Editar</button></div>`).join('');
+ $('#recentGrid').innerHTML=`<button class="newcard" id="newCard">${ico('plus',22)}<span>New project</span></button>`+RECENT.map((r,i)=>`<button class="pj" data-rp="${i}"><div class="th"><canvas width="320" height="180"></canvas><span class="fmt">${r.fmt}</span></div><b>${r.name}</b><small>${r.meta}</small></button>`).join('');
+ $('#recGrid').innerHTML=M.filter(m=>m.src==='recordings').map(m=>`<div class="pj" data-rec="${m.id}"><div class="th"><canvas width="320" height="180"></canvas><span class="fmt">${mmss(m.dur)}</span></div><b>${m.when}</b><small>${m.codec.split(' · ').slice(0,2).join(' · ')}</small><button class="act" data-edit="${m.id}">Edit</button></div>`).join('');
  $$('#recentGrid .pj').forEach(el=>{const r=RECENT[+el.dataset.rp];const c=el.querySelector('canvas');drawMedia(c.getContext('2d'),c.width,c.height,mediaById(r.m),20)});
  $$('#recGrid .pj').forEach(el=>{const c=el.querySelector('canvas');drawMedia(c.getContext('2d'),c.width,c.height,mediaById(el.dataset.rec),30)});
 }
 $('#scrProjects').addEventListener('click',e=>{
  if(e.target.closest('#newCard')||e.target.closest('#btnNew'))return openFmt();
- if(e.target.closest('#btnImportP'))return toast('Importar: seletor de arquivos do sistema (xdg-desktop-portal)');
- const ed=e.target.closest('[data-edit]');if(ed){const m=mediaById(ed.dataset.edit);S.tl=recordingTimeline(m.id);S.hist=[];S.fut=[];S.aspect='16:9';$('#projName').textContent='Gravação '+m.when.toLowerCase();m.isNew=false;S.source='recordings';go('edit');toast('Projeto criado com a gravação na timeline');return}
+ if(e.target.closest('#btnImportP'))return toast('Import: system file picker (xdg-desktop-portal)');
+ const ed=e.target.closest('[data-edit]');if(ed){const m=mediaById(ed.dataset.edit);S.tl=recordingTimeline(m.id);S.hist=[];S.fut=[];S.aspect='16:9';$('#projName').textContent='Recording '+m.when.toLowerCase();m.isNew=false;S.source='recordings';go('edit');toast('Project created with the recording on the timeline');return}
  const rp=e.target.closest('[data-rp]');if(rp){const r=RECENT[+rp.dataset.rp];S.tl=demoTimeline();S.hist=[];S.fut=[];S.aspect=r.fmt;$('#projName').textContent=r.name;go('edit')}
 });
 let fmtSel='16:9';
 function openFmt(){fmtSel='16:9';$('#fmtScrim').hidden=false;renderFmt()}
-function renderFmt(){$('#fmtOpts').innerHTML=[['16:9','Horizontal','YouTube, tutoriais',64,36],['9:16','Vertical','Shorts, Reels, TikTok',27,48],['1:1','Quadrado','Feeds',42,42]].map(([v,l,d,w,h])=>`<button class="fmt-opt" data-f="${v}" aria-pressed="${fmtSel===v}"><span class="shape" style="width:${w}px;height:${h}px"></span><b>${v} · ${l}</b><small>${d}</small></button>`).join('')}
+function renderFmt(){$('#fmtOpts').innerHTML=[['16:9','Horizontal','YouTube, tutorials',64,36],['9:16','Vertical','Shorts, Reels, TikTok',27,48],['1:1','Square','Feeds',42,42]].map(([v,l,d,w,h])=>`<button class="fmt-opt" data-f="${v}" aria-pressed="${fmtSel===v}"><span class="shape" style="width:${w}px;height:${h}px"></span><b>${v} · ${l}</b><small>${d}</small></button>`).join('')}
 $('#fmtOpts').addEventListener('click',e=>{const b=e.target.closest('.fmt-opt');if(b){fmtSel=b.dataset.f;renderFmt()}});
 $('#fmtCancel').onclick=()=>{$('#fmtScrim').hidden=true};
-$('#fmtOk').onclick=()=>{$('#fmtScrim').hidden=true;S.tl={primary:[],overlays:[],audio:[],markers:[]};S.hist=[];S.fut=[];S.aspect=fmtSel;$('#projName').textContent='Projeto sem título';S.source='recordings';go('edit');toast('Projeto vazio · selecione na biblioteca e use E para adicionar')};
+$('#fmtOk').onclick=()=>{$('#fmtScrim').hidden=true;S.tl={primary:[],overlays:[],audio:[],markers:[]};S.hist=[];S.fut=[];S.aspect=fmtSel;$('#projName').textContent='Untitled project';S.source='recordings';go('edit');toast('Empty project · select in the library and press E to add')};
 
-/* ---------- navegação e render ---------- */
+/* ---------- navigation and render ---------- */
 function go(scr){
  S.screen=scr;$('#scrProjects').hidden=scr!=='projects';$('#scrEdit').hidden=scr!=='edit';
  $$('#segScreen button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===scr));
@@ -1122,20 +1122,20 @@ function renderAll(){if(!T)return;if(S.screen==='projects'){renderProjects();ret
 /* splitter */
 $('#splitter').addEventListener('pointerdown',e=>{const body=$('#editBody').getBoundingClientRect();const mv=ev=>{const f=clamp((ev.clientY-body.top)/body.height,.3,.78);$('#editBody').style.setProperty('--upper',f*100+'fr');$('#editBody').style.setProperty('--lower',(1-f)*100+'fr');fitStage()};const up=()=>{removeEventListener('pointermove',mv);removeEventListener('pointerup',up);renderMinimap()};addEventListener('pointermove',mv);addEventListener('pointerup',up)});
 
-/* botões */
+/* buttons */
 $('#btnBack').onclick=()=>go('projects');$('#btnUndo').onclick=undo;$('#btnRedo').onclick=redo;$('#btnPal').onclick=openPal;$('#btnImport').onclick=()=>act('import');$('#btnExport').onclick=startExport;
 $('#btnPlay').onclick=()=>act('play');$('#btnRew').onclick=()=>jkl('J');$('#btnFf').onclick=()=>jkl('L');$('#btnFull').onclick=()=>act('full');$('#btnFit').onclick=()=>act('fit');
 $('#tglSnap').onclick=()=>act('snap');$('#tglSkim').onclick=()=>act('skim');
-$('#viewer').addEventListener('pointerdown',e=>{S.focus='viewer';renderFocus();if(S.tool==='color'&&e.target.tagName==='CANVAS'){const o=barFor().obj;if(o){snap();o.adj.color={...(o.adj.color||{}),temp:0};renderAll();toast('Conta-gotas: balanço de branco neutralizado')}}});
+$('#viewer').addEventListener('pointerdown',e=>{S.focus='viewer';renderFocus();if(S.tool==='color'&&e.target.tagName==='CANVAS'){const o=barFor().obj;if(o){snap();o.adj.color={...(o.adj.color||{}),temp:0};renderAll();toast('Eyedropper: white balance neutralized')}}});
 $('#lib').addEventListener('pointerdown',()=>{S.focus='lib';renderFocus()});
 
-/* controles da página */
+/* page controls */
 $('#segScreen').addEventListener('click',e=>{const b=e.target.closest('button');if(b)go(b.dataset.v)});
 $('#segWidth').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;$$('#segWidth button').forEach(x=>x.setAttribute('aria-pressed',x===b));$('#frameWrap').dataset.w=b.dataset.v;app.classList.remove('lib-open','lib-hidden');setTimeout(()=>{fitStage();renderTimeline()},280)});
-const ts=$('#themeSel');ts.innerHTML=Object.keys(TH).map(k=>`<option value="${k}">${k}${TH[k].mode==='light'?' (claro)':''}</option>`).join('');
+const ts=$('#themeSel');ts.innerHTML=Object.keys(TH).map(k=>`<option value="${k}">${k}${TH[k].mode==='light'?' (light)':''}</option>`).join('');
 ts.addEventListener('change',()=>{try{localStorage.setItem('omamovie-mock-theme',ts.value)}catch(_){}applyTheme(ts.value)});
 $('#notesChk').addEventListener('change',e=>app.classList.toggle('notes-on',e.target.checked));
-const NOTES=[['1','§3.1 Aberto pelo launcher: começa em Projetos. Aberto com um arquivo: vai direto para a Edição.'],['2','§3 Gravações do Omarchy (ALT+PRINT) aparecem na tela de Projetos; "Editar" cria um projeto com a gravação.'],['3','§2 Três áreas fixas: biblioteca, viewer e timeline. Um único divisor ajusta a altura.'],['4','§4 Skimming na biblioteca: passe o mouse para percorrer o clip sem dar play.'],['5','§6 Barra de ajustes contextual; o ponto marca ajustes aplicados; controles numa gaveta que empurra o viewer.'],['6','§5 e §10 Viewer com fundo neutro fixo; o tema nunca tinge a imagem.'],['7','§7.2 Minimapa com o projeto inteiro e a região visível.'],['8','§7.1 Trilha principal magnética, camadas acima, áudio abaixo, sem cabeçalhos de trilha por padrão.']];
+const NOTES=[['1','§3.1 Opened from the launcher: starts on Projects. Opened with a file: goes straight to Edit.'],['2','§3 Omarchy recordings (ALT+PRINT) appear on the Projects screen; "Edit" creates a project with the recording.'],['3','§2 Three fixed areas: library, viewer and timeline. A single divider sets the height.'],['4','§4 Library skimming: hover to scrub through a clip without playing it.'],['5','§6 Contextual adjustments bar; the dot marks applied adjustments; controls open in a drawer that pushes the viewer down.'],['6','§5 and §10 Viewer with a fixed neutral background; the theme never tints the image.'],['7','§7.2 Minimap with the whole project and the visible region.'],['8','§7.1 Magnetic primary storyline, layers above, audio below, no track headers by default.']];
 $('#legend').innerHTML=NOTES.map(([n,t])=>`<li>${t}</li>`).join('');
 
 /* init */
