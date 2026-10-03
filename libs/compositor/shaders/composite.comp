@@ -1,0 +1,111 @@
+#version 460
+// Composites one layer into the working image (linear BT.709, premultiplied RGBA16F).
+// The CPU reference in src/cpu_compositor.cpp performs the same steps; keep them in sync,
+// and the uniform block in sync with LayerParams (src/layer_params.hpp).
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform image2D target;
+layout(set = 0, binding = 1) uniform sampler2D plane0; // luma
+layout(set = 0, binding = 2) uniform sampler2D plane1; // Cb (planar) or CbCr (interleaved)
+layout(set = 0, binding = 3) uniform sampler2D plane2; // Cr (planar), unused otherwise
+
+layout(std140, set = 0, binding = 4) uniform Layer {
+    vec4 inv0;    // output -> source: a, b, tx
+    vec4 inv1;    // c, d, ty
+    vec4 crop;    // x0, y0, x1, y1 in source pixels
+    vec4 yuv_r;   // R' = dot(yuv_r.xyz, yuv) + yuv_r.w
+    vec4 yuv_g;
+    vec4 yuv_b;
+    vec4 gamut_r; // linear source primaries -> BT.709
+    vec4 gamut_g;
+    vec4 gamut_b;
+    vec4 misc;    // opacity, sample scale
+    ivec4 mode;   // chroma mode (1 interleaved, 2 planar), chroma shift x, chroma shift y, transfer
+    ivec4 extra;  // blend, source width, source height
+    ivec4 region; // output pixels x0, y0, x1, y1
+} L;
+
+const int kTransferLinear = 0;
+const int kTransferSrgb = 1;
+
+const int kBlendAdd = 1;
+const int kBlendMultiply = 2;
+const int kBlendScreen = 3;
+
+float to_linear(float v) {
+    v = clamp(v, 0.0, 1.0);
+    if (L.mode.w == kTransferLinear) {
+        return v;
+    }
+    if (L.mode.w == kTransferSrgb) {
+        return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4);
+    }
+    return pow(v, 2.4); // BT.1886
+}
+
+// Linear BT.709 RGB of one source pixel.
+vec3 texel(ivec2 p) {
+    float scale = L.misc.y;
+    float y = texelFetch(plane0, p, 0).r * scale;
+    ivec2 c = ivec2(p.x >> L.mode.y, p.y >> L.mode.z);
+    float cb;
+    float cr;
+    if (L.mode.x == 1) {
+        vec2 v = texelFetch(plane1, c, 0).rg;
+        cb = v.x * scale;
+        cr = v.y * scale;
+    } else {
+        cb = texelFetch(plane1, c, 0).r * scale;
+        cr = texelFetch(plane2, c, 0).r * scale;
+    }
+    vec3 yuv = vec3(y, cb, cr);
+    vec3 nonlinear = vec3(dot(L.yuv_r.xyz, yuv) + L.yuv_r.w,
+                          dot(L.yuv_g.xyz, yuv) + L.yuv_g.w,
+                          dot(L.yuv_b.xyz, yuv) + L.yuv_b.w);
+    vec3 lin = vec3(to_linear(nonlinear.r), to_linear(nonlinear.g), to_linear(nonlinear.b));
+    return vec3(dot(L.gamut_r.xyz, lin), dot(L.gamut_g.xyz, lin), dot(L.gamut_b.xyz, lin));
+}
+
+void main() {
+    ivec2 out_px = L.region.xy + ivec2(gl_GlobalInvocationID.xy);
+    if (out_px.x >= L.region.z || out_px.y >= L.region.w) {
+        return;
+    }
+    vec2 o = vec2(out_px) + 0.5;
+    vec2 s = vec2(L.inv0.x * o.x + L.inv0.y * o.y + L.inv0.z,
+                  L.inv1.x * o.x + L.inv1.y * o.y + L.inv1.z);
+    if (s.x < L.crop.x || s.y < L.crop.y || s.x >= L.crop.z || s.y >= L.crop.w) {
+        return;
+    }
+
+    // Bilinear filtering in linear light, taps clamped to the cropped area.
+    ivec2 lo = clamp(ivec2(floor(L.crop.xy)), ivec2(0), L.extra.yz - 1);
+    ivec2 hi = clamp(ivec2(ceil(L.crop.zw)) - 1, ivec2(0), L.extra.yz - 1);
+    vec2 f = s - 0.5;
+    vec2 base = floor(f);
+    vec2 t = f - base;
+    ivec2 p0 = clamp(ivec2(base), lo, hi);
+    ivec2 p1 = clamp(ivec2(base) + 1, lo, hi);
+    vec3 c00 = texel(ivec2(p0.x, p0.y));
+    vec3 c10 = texel(ivec2(p1.x, p0.y));
+    vec3 c01 = texel(ivec2(p0.x, p1.y));
+    vec3 c11 = texel(ivec2(p1.x, p1.y));
+    vec3 color = mix(mix(c00, c10, t.x), mix(c01, c11, t.x), t.y);
+
+    float alpha = L.misc.x;
+    vec4 src = vec4(color * alpha, alpha);
+    vec4 dst = imageLoad(target, out_px);
+    vec4 result;
+    if (L.extra.x == kBlendAdd) {
+        result = vec4(src.rgb + dst.rgb, src.a + dst.a * (1.0 - src.a));
+    } else if (L.extra.x == kBlendMultiply) {
+        result = vec4(src.rgb * dst.rgb + src.rgb * (1.0 - dst.a) + dst.rgb * (1.0 - src.a),
+                      src.a + dst.a * (1.0 - src.a));
+    } else if (L.extra.x == kBlendScreen) {
+        result = vec4(src.rgb + dst.rgb - src.rgb * dst.rgb, src.a + dst.a * (1.0 - src.a));
+    } else {
+        result = src + dst * (1.0 - src.a);
+    }
+    imageStore(target, out_px, result);
+}
