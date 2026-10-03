@@ -1,0 +1,48 @@
+name: Release
+
+# Tag vX.Y.Z (ou vX.Y.Z-rc.N) → build release + testes → GitHub Release com notas geradas
+# dos Conventional Commits e o tarball dos fontes. Binários do app entram quando o app
+# existir (M6/M7), no formato <app>-<versão>-<arch>-linux.tar.gz usado pela OmaStore.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build e testes (release)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
+            pacman -Syu --noconfirm --needed base-devel >/dev/null
+            make -j"$(nproc)" BUILD=release test
+          '
+
+      - name: Notas e tarball dos fontes
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          scripts/changelog.sh "$tag" > release-notes.md
+          git archive --format=tar.gz --prefix="oma-movie-${version}/" -o "oma-movie-${version}-src.tar.gz" "$tag"
+          sha256sum "oma-movie-${version}-src.tar.gz" > "oma-movie-${version}-src.tar.gz.sha256"
+          cat release-notes.md
+
+      - name: Publicar release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          prerelease=""
+          if [[ $tag == *-* ]]; then prerelease="--prerelease"; fi
+          gh release create "$tag" $prerelease \
+            --title "OmaMovie ${version}" \
+            --notes-file release-notes.md \
+            "oma-movie-${version}-src.tar.gz" "oma-movie-${version}-src.tar.gz.sha256"
