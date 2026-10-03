@@ -10,9 +10,8 @@ rules, architectural invariants, priorities and conventions. It is not user docu
 
 ## 0. Repository status
 
-- **M0 done** (2026-10-02): GNU Make build, `libs/base` (rational time, `Result`/`Error`,
-  logging, job system), tests with Cest, CI and ADRs 0001–0003. The other libs, the app
-  and the tools do not exist yet.
+- **M0 done** (2026-10-02); `base`, `gpu`, `media` and `compositor` now exist. M2/M3 are partial, S1/S2 have prior experiment reports; `audio` (PipeWire/null output, master clock) and the M5 `timeline` core (model, commands, undo/redo, evaluation) exist and are tested; the GUI storyline edits through the timeline `Editor`, and playback follows the audio clock (timeline audio mixed in the app). The final app and several target tools remain pending. See the plan for deliverables.
+- **Evidence review** (2026-10-03): `Docs/Research/skeptical-review.md`. Research recommendations are provisional; accepted decisions remain in their ADRs. S4's same-device compositor-image import is verified by the offscreen diagnostic (`Docs/spikes/S4-qt-shared-device.md`, ADR-0005). `make run-gui` now runs a Qt Quick editor shell (timeline edits with undo/redo, audio-clock playback) whose viewer composites on the GPU and hands the image to Qt without readback (ADR-0005); hardware-decoded frames and swapchain admission for other threads remain M4. Independent color validation remains S6/ADR-0006.
 - The structure, commands and decisions below are the **target**. When creating something
   this document describes, follow it. When diverging, record why in an ADR (§20) and
   update this file in the same commit.
@@ -355,9 +354,7 @@ class ComputeBackend;      // interface
   tolerance).
 - **Vulkan Compute is the generic backend**: every effect has a Vulkan implementation.
 - CUDA only where there is a measured gain on NVIDIA.
-- **OpenCL is not used.** Reasons: Omarchy installs no OpenCL runtime, and rusticl (Mesa) has
-  no zero-copy interop with Vulkan, which would force frame copies (violates §7). See
-  `Docs/Research/opencl.md`. Do not add OpenCL without an explicit decision and an ADR.
+- **OpenCL is not used.** This is a scope/maintenance decision: the initial compositor effects have no demonstrated need for an additional backend. Generic OpenCL/Vulkan interop exists; target-runtime support remains unverified. See `Docs/Research/opencl.md`. Do not add OpenCL without an explicit decision and an ADR.
 - Do not implement the three backends at once. Interface first, one real backend, CPU for
   tests; the others when there is a reason.
 
@@ -495,8 +492,7 @@ Rules:
   version. Never edit a published migration.
 - Opening a project newer than supported: refuse with a clear message (or read-only mode),
   never corrupt it.
-- Atomic save: write to a temporary file → `fsync` → `rename`. Backup/autosave separate from
-  the main file.
+- Atomic/durable save on supported local filesystems: same-filesystem temporary file → file `fsync` → `rename` → parent-directory `fsync`, checking errors at each step. Backup/autosave separate from the main file. Validate recovery with failure injection before claiming crash durability.
 - Must represent: media references, timelines, tracks, clips, transitions, effects,
   keyframes, metadata, and unsupported external objects (§16.3).
 - A media reference stores: path relative to the project, absolute path and a fingerprint

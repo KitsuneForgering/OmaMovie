@@ -1,11 +1,60 @@
 # UI design — OmaMovie
 
-> Version of 2026-10-02, with the decisions in §12. Based on `Docs/Research/imovie.md`
-> (principles), `movie-maker.md`, `capcut.md`, `davinci-resolve.md` §4 and
+> Product choices from 2026-10-02; evidence reviewed on 2026-10-03, with the decisions in §12. Based on `Docs/Research/imovie.md`
+> (principles), `movie-maker.md`, `capcut.md`, `davinci-resolve.md` and
 > `omarchy-integration.md`. Implementation rules remain in `CLAUDE.md` §11.
 >
 > Inspired by iMovie **in its principles**, without copying Apple's visual identity, icons,
 > feature names or trade dress.
+
+The choices below remain product preferences. Competitor manuals establish interaction
+examples, not effectiveness for Omarchy users. [Research audit](Research/skeptical-review.md)
+sets M6 comparison criteria. Width thresholds, default proportions, storyboard projection
+and font density are prototype hypotheses; test different fonts, scaling and keyboard focus.
+Engine performance, color and platform integration are not validated by the HTML mockup.
+
+The current `make run-gui` window is an S4/M4 editor-shell prototype. It opens on
+Projects, enters Edit for an imported video, and implements the library/viewer/
+timeline layout below with a responsive library overlay at half width. The
+storyline is the M5 timeline model (`Session` in `apps/omamovie/src/` owns an
+`oma::timeline::Editor`): append, insert and overwrite from the library, split at
+the playhead, ripple delete or replace with a gap, ripple trim by dragging clip
+edges, and undo/redo, each one history entry. The viewer shows the sequence at the
+playhead, composited on the GPU by the Vulkan compositor with each clip's fit,
+crop, transform and opacity and handed to Qt without a readback (decoding is
+still software), and the sequence's audio plays through PipeWire;
+the frame shown follows the audio actually heard (frames are dropped, never the
+audio stretched). The Volume drawer (§6) sets volume, fades and mute per clip, one
+command per committed change, and fades show as ramps on the clip. There is no
+project persistence, second track, snapping or audio waveform yet. The Omarchy palette and font are read at startup; live
+theme updates remain M6 work.
+
+Shell state (2026-10-03), aligned with this document:
+- Top bar per §2.1 (back, name, undo/redo, import, export); undo/redo name the
+  command they revert ("Undo Split"); export stays disabled until M7.
+- Adjustments bar per §6 with all seven entries; Volume (clips with audio) and Info
+  are enabled, the others show their release in the tooltip. A dot marks a clip
+  whose audio was adjusted. Labels collapse to icons below 1500 px (§2.2).
+- Transport per §5 (timecode `HH:MM:SS:FF`, start/end, previous/next frame,
+  reverse, stop/reset, play, forward, full-screen viewer); `K` still pauses in place.
+  Failures appear over the viewer,
+  routine status does not.
+- Timeline per §7.2/§7.3: a visible edit bar for append, insert, overwrite, split,
+  ripple delete and lift; minimap with the visible region and playhead, clips at
+  their sequence time (gaps show), a playhead that clicks and drags scrub, edge
+  drags that ripple-trim, wheel scrolling, Ctrl+wheel/keyboard zoom, fit; no track
+  headers or edit buttons.
+- Commands are `OmaAction`s in one registry in `Main.qml` with the §8.1 keys
+  (Space, K, L, arrows, Shift+arrows, Home/End, E, W, D, Ctrl+B, Delete,
+  Shift+Delete, Ctrl+Z, Ctrl+Shift+Z, Ctrl+I, Ctrl+1, Ctrl+Shift+F, Escape,
+  Ctrl+=/−, Shift+Z). Ctrl+Shift+I toggles Info; J (reverse) waits for reverse
+  playback and Q (connect above) for a second video track. `make run-gui
+  RUN_GUI_SMOKE=1` drives import, every edit with undo/redo, playback and the plain
+  keys (through Qt's shortcut map) when the window gets focus.
+- Icons follow §10.2 (24 px grid, 1.5 px stroke, tinted at runtime) but are drawn
+  as SVG path data with Qt Quick Shapes (`apps/omamovie/qml/Icon.qml`): shipping
+  `.svg` files through the Qt Resource System needs `qt6-svg`, a dependency not
+  yet approved.
 
 ---
 
@@ -16,11 +65,11 @@
 | 1 | **Three fixed areas**: library, viewer, timeline. No floating panels or workspaces | iMovie |
 | 2 | **Controls appear in context**: the selection decides what can be adjusted | iMovie (adjustments bar), Clipchamp |
 | 3 | **Manipulate in the preview**: position, scale and crop by dragging on the image; numbers are for precision | iMovie |
-| 4 | **Magnetic timeline by default**: no accidental gaps; the underlying model stays generic multitrack | iMovie / FCP |
+| 4 | **Magnetic timeline by default**: gaps close under the defined ripple policy; the underlying model stays generic multitrack | iMovie / FCP |
 | 5 | **Intent presets**: "Picture-in-picture", not "layer + transform + mask"; once applied, everything stays editable | iMovie, CapCut |
-| 6 | **Hide, never remove**: advanced features are one click or shortcut away, but do not take up the screen | The iMovie '08 lesson |
+| 6 | **Hide, never remove**: advanced features are one click or shortcut away, but do not take up the screen | OmaMovie capability-preservation preference |
 | 7 | **Keyboard first**: everything reachable by shortcut and through the command palette | Omarchy culture, Premiere |
-| 8 | **The interface follows the Omarchy theme; the image never does** | `omarchy-integration.md` §3–4 |
+| 8 | **The interface follows the Omarchy theme; the image never does** | `omarchy-integration.md` |
 | 9 | **Works at half width**: in Hyprland the window lives in a tiling layout | Omarchy |
 
 ---
@@ -135,7 +184,7 @@ On the Edit screen, "◂ Projects" always returns to the list.
 - **Direct manipulation** when an adjustment is active: position/scale/rotation handles (Transform), crop rectangle (Crop), eyedropper (Color).
 - **Optional guides**: safe area, thirds, format outline (useful when reframing 16:9 → 9:16).
 - **Transport**: current/total timecode, back, play, forward, full screen. Large buttons only in full screen; minimal in the window.
-- **Real-time indicator**: a small notice appears only when a section will not play in real time (effect without a GPU path, weak machine), offering to pre-render. Nothing appears when all is well.
+- **Playback status**: use measured missed deadlines or a labeled estimate to offer pre-render/proxy options. An effect's GPU flag or a hardware label alone cannot predict real-time performance. Nothing appears when all is well.
 - **Timeline skimming** also shows the frame in the viewer (ghost playhead).
 
 ---
@@ -171,6 +220,8 @@ The bar sits above the viewer. **Only the adjustments that apply to the selectio
 - The model is generic multitrack (`CLAUDE.md` §10); "primary + connected" is how the UI presents and edits it.
 
 ### 7.2 Elements
+- **Edit bar** above the minimap: append, insert, overwrite, split, ripple delete and lift.
+  It calls the same actions as the keyboard shortcuts; labels collapse to icons below 1500 px.
 - **Minimap** at the top: the whole project in miniature, with the visible region highlighted (the answer to Resolve's dual timeline). Click or drag to navigate.
 - **Transitions** as a small ⋈ icon **between** two clips (like Movie Maker), clickable to edit.
 - **Waveform** at the bottom of every clip with audio.
@@ -255,8 +306,7 @@ Translation rule: **macOS `Cmd` becomes `Ctrl`**, `Option` becomes `Alt`. OmaMov
 | `Ctrl+K` | **Command palette** |
 
 - Every shortcut comes from the central action system and will be remappable.
-- **Check** each shortcut against the official iMovie and Final Cut Pro documentation before
-  implementing it; this table was compiled from memory of the convention.
+- These are **OmaMovie assignments**, originally compiled from memory of the convention. Check action meaning, focus conflicts, accessibility and compositor shortcuts before implementation; do not advertise exact Apple compatibility.
 - `Ctrl+K` is the keyword editor in Final Cut; OmaMovie has no keywords, so the palette takes
   the shortcut.
 
@@ -297,12 +347,11 @@ There are no separate "simple" and "pro" modes: a mode hides capability and forc
 - **Viewer, thumbnails and scopes are untinted**: they show the real image on a neutral background.
 - **Light mode**: follows the theme's `mode` (there are light themes such as `catppuccin-latte` and `flexoki-light`).
 - **Density**: flat, few borders, separation by background tone and spacing; slightly rounded corners.
-- **Opaque window** (documented Hyprland rule; `omarchy-integration.md` §4).
+- **Opaque window** (documented Hyprland rule; `omarchy-integration.md`).
 
 ### 10.1 Typography (decided)
 
-- **The Omarchy font across the whole UI**, read with `omarchy-font-current` and updated live
-  by the font-change hook/watcher. Fallback outside Omarchy: the system's default monospace
+- **The Omarchy font across the whole UI**, read by the platform adapter when available and updated live by a verified watcher. Retain the last valid font during incomplete updates. Fallback outside Omarchy: the system's default monospace
   font (`fontconfig`).
 - Consequences of a usually monospaced font:
   - labels take more width: prefer short labels and icons with tooltips in the adjustments bar;
@@ -334,7 +383,7 @@ There are no separate "simple" and "pro" modes: a mode hides capability and forc
 |---|---|---|
 | Limited layers, no general keyframes | Full multitrack, keyframes (v0.2), hidden until needed | Hide, do not remove |
 | Mouse-oriented | Full keyboard + command palette | Omarchy's audience |
-| No timeline overview | Minimap | Resolve research (dual timeline) |
+| No timeline overview | Minimap | OmaMovie navigation hypothesis |
 | Library tied to the Photos app | Local folders + Omarchy recordings | Platform |
 | A single fixed look | Omarchy theme, light/dark | Integration |
 | A separate editor (FCP) for those who grow | The same app, progressive disclosure | The project's thesis |
@@ -352,7 +401,7 @@ There are no separate "simple" and "pro" modes: a mode hides capability and forc
 | 4 | Shortcuts | **iMovie/Final Cut convention**, `Cmd`→`Ctrl` (§8.1) |
 | 5 | Start screen | **Depends on the origin**: the launcher opens Projects; a project or media file opens Edit (§3.1) |
 
-Still open: nothing blocking. Fine-tuning will come from the prototype.
+Product choices are recorded; engineering gates remain open: Q1/S4 queue integration, ADR-0006 SDR/display handling, responsive-layout/task comparisons, and version-sensitive theme/font adapters. See the research audit. Prototype behavior can revise preferences; it does not certify these gates.
 
 ## 13. Next step
 
