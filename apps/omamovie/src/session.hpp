@@ -48,6 +48,8 @@ class Session final : public QObject {
     Q_PROPERTY(QVariantList media READ media NOTIFY libraryChanged)
     Q_PROPERTY(int selectedMedia READ selectedMedia NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList clips READ clips NOTIFY sequenceChanged)
+    // Audio lanes below the storyline, top first: {id, name, clips}.
+    Q_PROPERTY(QVariantList audioTracks READ audioTracks NOTIFY sequenceChanged)
     Q_PROPERTY(double selectedClip READ selectedClip NOTIFY selectionChanged)
     Q_PROPERTY(QVariantMap info READ info NOTIFY selectionChanged)
     Q_PROPERTY(bool hasMedia READ hasMedia NOTIFY sequenceChanged)
@@ -88,6 +90,7 @@ public:
     [[nodiscard]] QVariantList media() const;
     [[nodiscard]] int selectedMedia() const { return selected_media_; }
     [[nodiscard]] QVariantList clips() const;
+    [[nodiscard]] QVariantList audioTracks() const;
     [[nodiscard]] double selectedClip() const { return static_cast<double>(selected_clip_.value()); }
     [[nodiscard]] QVariantMap info() const;
     [[nodiscard]] bool hasMedia() const;
@@ -124,6 +127,9 @@ public:
     Q_INVOKABLE void deleteSelected(bool ripple);
     // Drags an edge by whole frames; the storyline stays magnetic (ripple, ui-design §7.3).
     Q_INVOKABLE void trimClip(double id, bool head, int frames);
+    // Moves a clip on the lanes below the storyline by whole lanes (a new lane past the last)
+    // and frames; the storyline reorders by editing instead.
+    Q_INVOKABLE void moveClip(double id, int lanes, int frames);
     // Volume drawer (ui-design §6): one command per committed change. Fades are snapped to
     // whole frames and clamped so both fit in the clip.
     Q_INVOKABLE void setClipAudio(double gain, double fadeIn, double fadeOut, bool muted);
@@ -154,6 +160,7 @@ private:
         oma::timeline::MediaInfo media;
         QString path;
         QString name;
+        bool audio_only = false; // music, voiceover, sound effects: placed on the audio lanes
         QString thumbnail;
         double seconds = 0; // display only
         std::optional<oma::FrameRate> rate;
@@ -170,6 +177,9 @@ private:
     bool run(std::unique_ptr<oma::timeline::Command> command);
     void afterEdit();
     void placeSelected(int how);
+    bool placeAudio(int how, oma::timeline::ClipId id, const oma::timeline::edit::ClipSource& clip);
+    [[nodiscard]] std::vector<oma::timeline::TrackId> audioLanes() const;
+    [[nodiscard]] QVariantMap clipMap(const oma::timeline::Clip& c) const;
     void setNotice(const QString& text);
     void fail(const QString& message);
 

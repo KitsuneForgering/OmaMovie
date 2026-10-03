@@ -184,7 +184,8 @@ ApplicationWindow {
         id: fileDialog
         title: "Import"
         fileMode: FileDialog.OpenFiles
-        nameFilters: ["Videos and pictures (*.mp4 *.mkv *.mov *.webm *.avi *.m4v *.y4m *.png *.jpg *.jpeg)", "All files (*)"]
+        nameFilters: ["Videos, pictures and sound (*.mp4 *.mkv *.mov *.webm *.avi *.m4v *.y4m *.png *.jpg *.jpeg *.wav *.mp3 *.flac *.ogg *.opus *.m4a *.aac)",
+                      "Sound (*.wav *.mp3 *.flac *.ogg *.opus *.m4a *.aac)", "All files (*)"]
         onAccepted: {
             for (const file of selectedFiles) session.importUrl(file)
             root.libraryOverlay = false
@@ -390,6 +391,13 @@ ApplicationWindow {
                                                 fillMode: Image.PreserveAspectFit
                                                 source: modelData.thumbnail
                                                 asynchronous: true
+                                            }
+                                            Icon { // sound has no picture
+                                                anchors.centerIn: parent
+                                                visible: modelData.audioOnly
+                                                name: "music"
+                                                size: 28
+                                                color: colors.green || root.fg
                                             }
                                         }
                                         Text { Layout.fillWidth: true; text: modelData.name; color: root.fg; font.pixelSize: 10; elide: Text.ElideMiddle }
@@ -676,6 +684,75 @@ ApplicationWindow {
                 readonly property real scale: root.fitTimeline && total > 0
                     ? Math.min(2400, Math.max(4, (timelineScroll.width - 48) / total)) : root.pixelsPerSecond
                 readonly property real origin: 24 // left margin of time zero, in content pixels
+                // The storyline on top, audio lanes below it (ui-design §7.1).
+                readonly property real laneHeight: 34
+                readonly property real laneGap: 4
+                readonly property int lanes: session.audioTracks.length
+                readonly property real storylineHeight:
+                    Math.min(86, Math.max(44, timelineScroll.height - 12 - lanes * (laneHeight + laneGap)))
+                function laneY(index) { return 4 + storylineHeight + 8 + index * (laneHeight + laneGap) }
+
+                // Drag a clip edge to trim; committed as one command on release. The storyline is
+                // magnetic (ripple trim, ui-design §7.3); lanes are not.
+                component TrimEdge: MouseArea {
+                    required property Item owner
+                    required property double clipId
+                    property bool head
+                    property real pressX: 0
+                    width: 8
+                    height: parent.height
+                    cursorShape: Qt.SizeHorCursor
+                    hoverEnabled: true
+                    preventStealing: true
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 1
+                        radius: 3
+                        color: root.accent
+                        opacity: parent.containsMouse || parent.pressed ? 0.9 : 0
+                    }
+                    onPressed: (mouse) => { pressX = mapToItem(timelineScroll.contentItem, mouse.x, 0).x }
+                    onPositionChanged: (mouse) => {
+                        if (!pressed) return
+                        const dx = mapToItem(timelineScroll.contentItem, mouse.x, 0).x - pressX
+                        if (head) owner.headDrag = dx
+                        else owner.tailDrag = dx
+                    }
+                    onReleased: {
+                        const dx = head ? owner.headDrag : owner.tailDrag
+                        owner.headDrag = 0
+                        owner.tailDrag = 0
+                        const frames = Math.round(dx / timelinePanel.scale * session.frameRate)
+                        if (frames !== 0) session.trimClip(clipId, head, frames)
+                    }
+                }
+
+                // A fade ramp over each end of a clip, as long as the fade.
+                component FadeRamps: Shape {
+                    id: ramps
+                    required property var clip
+                    anchors.fill: parent
+                    visible: clip.fadeIn > 0 || clip.fadeOut > 0
+                    preferredRendererType: Shape.CurveRenderer
+                    readonly property real fadeInWidth: clip.fadeIn * timelinePanel.scale
+                    readonly property real fadeOutWidth: clip.fadeOut * timelinePanel.scale
+                    ShapePath {
+                        strokeColor: "transparent"
+                        fillColor: Qt.rgba(0, 0, 0, 0.45)
+                        startX: 0; startY: 0
+                        PathLine { x: ramps.fadeInWidth; y: 0 }
+                        PathLine { x: 0; y: ramps.height }
+                        PathLine { x: 0; y: 0 }
+                    }
+                    ShapePath {
+                        strokeColor: "transparent"
+                        fillColor: Qt.rgba(0, 0, 0, 0.45)
+                        startX: ramps.width; startY: 0
+                        PathLine { x: ramps.width - ramps.fadeOutWidth; y: 0 }
+                        PathLine { x: ramps.width; y: ramps.height }
+                        PathLine { x: ramps.width; y: 0 }
+                    }
+                }
 
                 Rectangle {
                     id: editBar
@@ -710,7 +787,7 @@ ApplicationWindow {
                     anchors.leftMargin: 24
                     anchors.rightMargin: 24
                     height: 14
-                    visible: session.clips.length > 0
+                    visible: session.hasMedia
                     Repeater {
                         model: session.clips
                         delegate: Rectangle {
@@ -793,7 +870,7 @@ ApplicationWindow {
                             x: timelinePanel.origin + modelData.start * timelinePanel.scale
                             y: 4
                             width: Math.max(6, modelData.duration * timelinePanel.scale - 2 - headDrag + tailDrag)
-                            height: Math.min(86, Math.max(44, timelineScroll.height - 12))
+                            height: timelinePanel.storylineHeight
                             radius: 5
                             clip: true
                             color: Qt.tint(colors.lighter_background, Qt.rgba(0.31, 0.55, 1, 0.18))
@@ -809,31 +886,7 @@ ApplicationWindow {
                                 asynchronous: true
                                 sourceSize.height: height
                             }
-                            // Fades: a ramp over the clip's ends, as long as the fade.
-                            Shape {
-                                id: fades
-                                anchors.fill: parent
-                                visible: modelData.fadeIn > 0 || modelData.fadeOut > 0
-                                preferredRendererType: Shape.CurveRenderer
-                                readonly property real fadeInWidth: modelData.fadeIn * timelinePanel.scale
-                                readonly property real fadeOutWidth: modelData.fadeOut * timelinePanel.scale
-                                ShapePath {
-                                    strokeColor: "transparent"
-                                    fillColor: Qt.rgba(0, 0, 0, 0.45)
-                                    startX: 0; startY: 0
-                                    PathLine { x: fades.fadeInWidth; y: 0 }
-                                    PathLine { x: 0; y: clipItem.height }
-                                    PathLine { x: 0; y: 0 }
-                                }
-                                ShapePath {
-                                    strokeColor: "transparent"
-                                    fillColor: Qt.rgba(0, 0, 0, 0.45)
-                                    startX: clipItem.width; startY: 0
-                                    PathLine { x: clipItem.width - fades.fadeOutWidth; y: 0 }
-                                    PathLine { x: clipItem.width; y: clipItem.height }
-                                    PathLine { x: clipItem.width; y: 0 }
-                                }
-                            }
+                            FadeRamps { clip: modelData }
                             Text {
                                 anchors.left: parent.left
                                 anchors.right: parent.right
@@ -853,40 +906,100 @@ ApplicationWindow {
                                     session.seek(modelData.start + mouse.x / timelinePanel.scale)
                                 }
                             }
-                            // Edges: drag to trim. The storyline is magnetic, so later clips follow
-                            // (ripple trim, ui-design §7.3).
-                            component Edge: MouseArea {
-                                property bool head
-                                property real pressX: 0
-                                width: 8
+                            TrimEdge { owner: clipItem; clipId: modelData.id; head: true; anchors.left: parent.left }
+                            TrimEdge { owner: clipItem; clipId: modelData.id; head: false; anchors.right: parent.right }
+                        }
+                    }
+                    // Audio lanes below the storyline: music, voiceover, sound effects.
+                    Repeater {
+                        model: session.audioTracks
+                        delegate: Item {
+                            id: lane
+                            required property var modelData
+                            required property int index
+                            x: 0
+                            y: timelinePanel.laneY(index)
+                            width: timelineScroll.contentWidth
+                            height: timelinePanel.laneHeight
+                            Rectangle { // the lane's band
+                                x: timelinePanel.origin
+                                width: parent.width - timelinePanel.origin
                                 height: parent.height
-                                cursorShape: Qt.SizeHorCursor
-                                hoverEnabled: true
-                                preventStealing: true
-                                Rectangle {
-                                    anchors.fill: parent
-                                    anchors.margins: 1
-                                    radius: 3
-                                    color: root.accent
-                                    opacity: parent.containsMouse || parent.pressed ? 0.9 : 0
-                                }
-                                onPressed: (mouse) => { pressX = mapToItem(timelineScroll.contentItem, mouse.x, 0).x }
-                                onPositionChanged: (mouse) => {
-                                    if (!pressed) return
-                                    const dx = mapToItem(timelineScroll.contentItem, mouse.x, 0).x - pressX
-                                    if (head) clipItem.headDrag = dx
-                                    else clipItem.tailDrag = dx
-                                }
-                                onReleased: {
-                                    const dx = head ? clipItem.headDrag : clipItem.tailDrag
-                                    clipItem.headDrag = 0
-                                    clipItem.tailDrag = 0
-                                    const frames = Math.round(dx / timelinePanel.scale * session.frameRate)
-                                    if (frames !== 0) session.trimClip(modelData.id, head, frames)
+                                radius: 4
+                                color: Qt.rgba(1, 1, 1, 0.025)
+                            }
+                            Repeater {
+                                model: lane.modelData.clips
+                                delegate: Rectangle {
+                                    id: soundItem
+                                    required property var modelData
+                                    readonly property bool chosen: modelData.id === session.selectedClip
+                                    property real headDrag: 0
+                                    property real tailDrag: 0
+                                    // Live feedback while the clip is moved; committed on release.
+                                    property real moveX: 0
+                                    property real moveY: 0
+                                    x: timelinePanel.origin + modelData.start * timelinePanel.scale + headDrag + moveX
+                                    y: moveY
+                                    z: moveX !== 0 || moveY !== 0 ? 2 : 0
+                                    width: Math.max(6, modelData.duration * timelinePanel.scale - 2 - headDrag + tailDrag)
+                                    height: lane.height
+                                    radius: 4
+                                    clip: true
+                                    color: Qt.tint(colors.lighter_background, Qt.rgba(0.35, 0.8, 0.45, 0.22))
+                                    border.width: chosen ? 2 : 0
+                                    border.color: root.accent
+                                    FadeRamps { clip: soundItem.modelData }
+                                    Row {
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        anchors.leftMargin: 8
+                                        spacing: 5
+                                        Icon { name: "music"; size: 13; color: root.fg; anchors.verticalCenter: parent.verticalCenter }
+                                        Text {
+                                            width: parent.width - 30
+                                            text: soundItem.modelData.name
+                                            color: root.fg
+                                            font.pixelSize: 10
+                                            elide: Text.ElideRight
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        property point pressAt
+                                        property bool moving: false
+                                        preventStealing: true
+                                        cursorShape: moving ? Qt.ClosedHandCursor : Qt.ArrowCursor
+                                        onPressed: (mouse) => {
+                                            pressAt = mapToItem(timelineScroll.contentItem, mouse.x, mouse.y)
+                                            moving = false
+                                            session.selectClip(soundItem.modelData.id)
+                                            session.seek(soundItem.modelData.start + mouse.x / timelinePanel.scale)
+                                        }
+                                        onPositionChanged: (mouse) => {
+                                            if (!pressed) return
+                                            const p = mapToItem(timelineScroll.contentItem, mouse.x, mouse.y)
+                                            if (!moving && Math.abs(p.x - pressAt.x) < 4 && Math.abs(p.y - pressAt.y) < 6) return
+                                            moving = true
+                                            soundItem.moveX = p.x - pressAt.x
+                                            soundItem.moveY = p.y - pressAt.y
+                                        }
+                                        onReleased: {
+                                            const lanes = Math.round(soundItem.moveY / (timelinePanel.laneHeight + timelinePanel.laneGap))
+                                            const frames = Math.round(soundItem.moveX / timelinePanel.scale * session.frameRate)
+                                            soundItem.moveX = 0
+                                            soundItem.moveY = 0
+                                            if (moving && (lanes !== 0 || frames !== 0))
+                                                session.moveClip(soundItem.modelData.id, lanes, frames)
+                                            moving = false
+                                        }
+                                    }
+                                    TrimEdge { owner: soundItem; clipId: soundItem.modelData.id; head: true; anchors.left: parent.left }
+                                    TrimEdge { owner: soundItem; clipId: soundItem.modelData.id; head: false; anchors.right: parent.right }
                                 }
                             }
-                            Edge { head: true; anchors.left: parent.left }
-                            Edge { head: false; anchors.right: parent.right }
                         }
                     }
                     // The playhead across the timeline.

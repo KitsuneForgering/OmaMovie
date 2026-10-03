@@ -298,10 +298,18 @@ int main(int argc, char** argv) {
         bool inserted = false, overwritten = false, trimmed = false, audio = false;
         bool volume = false, muted = false, gpu_viewer = false, shuttle = false;
         bool played = false, space = false, escape = false, stepped = false, keys_focused = true;
-        bool controls = false;
+        bool controls = false, lanes = false;
         double after_steps = 0;
     } r;
     const auto clip_count = [&] { return session.clips().size(); };
+    const auto lane_count = [&] { return session.audioTracks().size(); };
+    // The first clip of an audio lane, as QML sees it.
+    const auto lane_clip = [&](qsizetype lane) {
+        const QVariantList lanes = session.audioTracks();
+        if (lane >= lanes.size()) return QVariantMap{};
+        const QVariantList clips = lanes[lane].toMap().value("clips").toList();
+        return clips.isEmpty() ? QVariantMap{} : clips.front().toMap();
+    };
     // Keys count only while the window keeps the focus: Qt fires window shortcuts in the
     // active window, and the desktop may move the focus during the run. Synthetic modifier
     // chords are unreliable on Wayland (resolved against the real keyboard), so only plain
@@ -426,6 +434,35 @@ int main(int argc, char** argv) {
              session.seek(0);
              window->requestActivate();
          }},
+        {"sound import", after(100), [&] {
+             session.open(QStringLiteral("tests/fixtures/generated/tone_44100.wav"));
+         }},
+        {"audio lanes", [&] { return lane_count() == 1; }, [&] {
+             // Appended sound lands on the first lane; a connected sound at an occupied time gets a
+             // new lane, and deleting the lane's only clip removes the lane again.
+             bool ok = std::abs(lane_clip(0).value("start").toDouble()) < 1e-9 &&
+                       std::abs(lane_clip(0).value("duration").toDouble() - 2.0) < 1e-6;
+             session.seek(0);
+             session.insertSelected();
+             ok = ok && lane_count() == 2 && session.undoText() == QStringLiteral("Connect Audio");
+             session.deleteSelected(true);
+             ok = ok && lane_count() == 1 && clip_count() == 2;
+             const double id = lane_clip(0).value("id").toDouble();
+             session.moveClip(id, 0, 6);
+             ok = ok && std::abs(lane_clip(0).value("start").toDouble() - 0.2) < 1e-9;
+             session.trimClip(id, true, 3); // lanes are not magnetic: the start moves
+             ok = ok && std::abs(lane_clip(0).value("start").toDouble() - 0.3) < 1e-9 &&
+                  std::abs(session.duration() - 2.2) < 1e-6;
+             session.undo();
+             session.undo();
+             ok = ok && std::abs(lane_clip(0).value("start").toDouble()) < 1e-9;
+             session.moveClip(id, 1, 0); // to a new lane; the emptied one goes away
+             ok = ok && lane_count() == 1 && session.undoText() == QStringLiteral("Move");
+             session.undo();
+             r.lanes = ok;
+             screenshot(window, "OMA_GUI_SMOKE_LANES_SCREENSHOT");
+             window->requestActivate();
+         }},
         {"space", after(300), [&] { press(Qt::Key_Space); }},
         {"space again", after(250), [&] {
              r.space = session.playing();
@@ -447,6 +484,8 @@ int main(int argc, char** argv) {
              window->resize(820, 620);
          }},
         {"classic controls", after(400), [&] {
+             // Split acts on the selected clip under the playhead: pick the storyline's first.
+             session.selectClip(session.clips().front().toMap().value("id").toDouble());
              session.seek(0.25);
              const int before = clip_count();
              const bool split_clicked = click_button("editSplit");
@@ -470,14 +509,14 @@ int main(int argc, char** argv) {
              screenshot(window, "OMA_GUI_SMOKE_SCREENSHOT");
              const bool edits = r.imported && r.split && r.undone && r.redone && r.rippled && r.inserted &&
                                 r.overwritten && r.trimmed && r.played && r.audio && r.volume && r.muted &&
-                                r.gpu_viewer && r.shuttle;
+                                r.gpu_viewer && r.shuttle && r.lanes;
              const bool keys = r.space && r.escape && r.stepped;
              std::printf("GUI smoke: edits %s (import %d, split %d, undo %d, redo %d, ripple delete %d, "
                          "insert %d, overwrite %d, trim %d, play %d, audio %d, volume %d, mute %d, "
-                         "GPU viewer %d, J/K/L %d)\n",
+                         "GPU viewer %d, J/K/L %d, audio lanes %d)\n",
                          edits ? "PASS" : "FAIL", r.imported, r.split, r.undone, r.redone, r.rippled,
                          r.inserted, r.overwritten, r.trimmed, r.played, r.audio, r.volume, r.muted,
-                         r.gpu_viewer, r.shuttle);
+                         r.gpu_viewer, r.shuttle, r.lanes);
              if (r.keys_focused) {
                  std::printf("GUI smoke: keyboard %s (Space %d, Escape %d, Right x3 -> %.4fs)\n",
                              keys ? "PASS" : "FAIL", r.space, r.escape, r.after_steps);

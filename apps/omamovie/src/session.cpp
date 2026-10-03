@@ -114,19 +114,23 @@ void Session::importFile(const QString& path, bool append) {
     imports_.push_back(workers_.submit("import", [this, generation, id, path, thumbnail_path, append](oma::JobContext&) {
         const std::string file = path.toStdString();
         auto probed = importer_->inspect_input(std::filesystem::path(file));
-        if (!probed || !probed->best_video) {
-            const QString why = probed ? QStringLiteral("no video stream") : message(probed.error());
+        if (!probed || (!probed->best_video && !probed->best_audio)) {
+            const QString why = probed ? QStringLiteral("no video or audio stream") : message(probed.error());
             QMetaObject::invokeMethod(this, [this, generation, path, why] {
                 if (generation == generation_)
                     fail(QStringLiteral("Cannot import %1: %2").arg(QFileInfo(path).fileName(), why));
             }, Qt::QueuedConnection);
             return oma::Result<void>{};
         }
-        const auto& stream = probed->streams[static_cast<std::size_t>(*probed->best_video)];
+        // Music, voiceover and sound effects are audio-only media; they go on the audio lanes.
+        const bool audio_only = !probed->best_video;
+        const auto& stream =
+            probed->streams[static_cast<std::size_t>(audio_only ? *probed->best_audio : *probed->best_video)];
         const oma::Rational tb = stream.timebase;
         LibraryItem item;
         item.path = path;
         item.name = QFileInfo(path).fileName();
+        item.audio_only = audio_only;
         item.media.id = id;
         item.media.start = stream.start.value_or(*oma::RationalTime::make(0, tb));
         const auto length = stream.duration ? stream.duration : probed->duration;
@@ -137,11 +141,16 @@ void Session::importFile(const QString& path, bool append) {
         } else {
             item.media.duration = *oma::RationalTime::make(0, item.media.start.timebase());
         }
-        item.media.has_video = true;
+        item.media.has_video = !audio_only;
         item.media.has_audio = probed->best_audio.has_value();
         item.media.still = stream.video && stream.video->still_image;
         if (item.media.still) item.seconds = static_cast<double>(kStillSeconds);
         item.details.insert("codec", QString::fromStdString(stream.codec));
+        if (stream.audio && audio_only) {
+            if (stream.audio->sample_rate)
+                item.details.insert("resolution", QStringLiteral("%1 Hz").arg(stream.audio->sample_rate->hz()));
+            item.details.insert("frameRate", QString::fromStdString(stream.audio->channel_layout));
+        }
         if (stream.video) {
             item.rate = stream.video->frame_rate;
             const bool sideways = stream.video->rotation % 180 != 0;
@@ -157,10 +166,14 @@ void Session::importFile(const QString& path, bool append) {
                                                                            : QStringLiteral(" fps")));
             }
         }
-        item.details.insert("decodePath", QStringLiteral("software (preview prototype)"));
-        if (auto first = frames_.image_at(file, item.media.start)) {
-            if (first->scaled(256, 144, Qt::KeepAspectRatio, Qt::SmoothTransformation).save(thumbnail_path))
-                item.thumbnail = QUrl::fromLocalFile(thumbnail_path).toString();
+        item.details.insert("decodePath", audio_only ? QStringLiteral("software (audio)")
+                                                     : QStringLiteral("software (preview prototype)"));
+        // Audio-only media has no picture: the library and the lanes show the sound itself.
+        if (!audio_only) {
+            if (auto first = frames_.image_at(file, item.media.start)) {
+                if (first->scaled(256, 144, Qt::KeepAspectRatio, Qt::SmoothTransformation).save(thumbnail_path))
+                    item.thumbnail = QUrl::fromLocalFile(thumbnail_path).toString();
+            }
         }
         QMetaObject::invokeMethod(this, [this, generation, item = std::move(item), append]() mutable {
             if (generation == generation_) addToLibrary(std::move(item), append);
@@ -234,7 +247,8 @@ std::optional<tl::edit::ClipSource> Session::sourceFor(const LibraryItem& item) 
         // Whole frames of the sequence that fit in the media (rounded down: never past its end).
         auto exact = oma::rescale(item.media.duration.value(), item.media.duration.timebase(), t.timebase(),
                                   oma::Rounding::Floor);
-        if (exact) ticks = *exact / ticksPerFrame() * ticksPerFrame();
+        // Audio is not quantized to the frame grid (CLAUDE.md §6): sound keeps every sample.
+        if (exact) ticks = item.audio_only ? *exact : *exact / ticksPerFrame() * ticksPerFrame();
     }
     if (!ticks || *ticks <= 0) return std::nullopt;
     return tl::edit::ClipSource{.media = item.media.id,
@@ -300,13 +314,56 @@ void Session::placeSelected(int how) {
     }
     const tl::ClipId id = editor_->new_clip_id();
     const auto at = editor_->timeline().at(playhead_);
-    const bool done = how == 0   ? run(tl::edit::append(primary_, id, *clip))
-                      : how == 1 ? run(tl::edit::insert(primary_, id, at, *clip))
-                                 : run(tl::edit::overwrite(primary_, id, at, *clip));
+    const bool done = source.audio_only ? placeAudio(how, id, *clip)
+                      : how == 0        ? run(tl::edit::append(primary_, id, *clip))
+                      : how == 1        ? run(tl::edit::insert(primary_, id, at, *clip))
+                                        : run(tl::edit::overwrite(primary_, id, at, *clip));
     if (done) {
         selected_clip_ = id;
         emit selectionChanged();
     }
+}
+
+// Sound goes below the storyline (ui-design §7.1): append after the first lane's last clip,
+// insert as a new connected clip at the playhead on the first lane with room (a new lane if
+// none has), overwrite on the first lane. Lanes appear as needed, in the same history entry.
+bool Session::placeAudio(int how, tl::ClipId id, const tl::edit::ClipSource& clip) {
+    const tl::Timeline& t = editor_->timeline();
+    const auto lanes = audioLanes();
+    const std::int64_t start = playhead_;
+    const std::int64_t end = start + clip.duration.value();
+    std::optional<tl::TrackId> lane;
+    if (how == 1) {
+        for (const tl::TrackId l : lanes) {
+            const auto& clips = t.find_track(l)->clips;
+            if (std::ranges::none_of(clips, [&](const tl::Clip& c) {
+                    return c.start_ticks() < end && start < c.end_ticks();
+                })) {
+                lane = l;
+                break;
+            }
+        }
+    } else if (!lanes.empty()) {
+        lane = lanes.front();
+    }
+    std::vector<std::unique_ptr<tl::Command>> steps;
+    if (!lane) {
+        lane = editor_->new_track_id();
+        steps.push_back(tl::edit::add_track(*lane, tl::TrackKind::Audio,
+                                            "Audio " + std::to_string(lanes.size() + 1)));
+    }
+    steps.push_back(how == 0 ? tl::edit::append(*lane, id, clip) : tl::edit::overwrite(*lane, id, t.at(start), clip));
+    return run(tl::edit::transaction(how == 0 ? "Append Audio" : how == 1 ? "Connect Audio" : "Overwrite Audio",
+                                     std::move(steps)));
+}
+
+std::vector<tl::TrackId> Session::audioLanes() const {
+    std::vector<tl::TrackId> lanes;
+    if (!editor_) return lanes;
+    for (const tl::Track& track : editor_->timeline().tracks()) {
+        if (track.kind == tl::TrackKind::Audio) lanes.push_back(track.id);
+    }
+    return lanes;
 }
 
 void Session::appendSelected() {
@@ -323,7 +380,14 @@ void Session::overwriteSelected() {
 
 void Session::splitAtPlayhead() {
     if (!editor_) return;
-    const tl::Clip* c = editor_->timeline().clip_at(primary_, playhead_);
+    const tl::Timeline& t = editor_->timeline();
+    const tl::Clip* c = nullptr;
+    if (const tl::Clip* selected = t.find_clip(selected_clip_);
+        selected != nullptr && selected->start_ticks() <= playhead_ && playhead_ < selected->end_ticks()) {
+        c = selected;
+    } else {
+        c = t.clip_at(primary_, playhead_);
+    }
     if (c == nullptr || c->start_ticks() == playhead_) {
         setNotice(QStringLiteral("Move the playhead inside a clip to split it"));
         return;
@@ -343,7 +407,17 @@ void Session::deleteSelected(bool ripple) {
         if (c == nullptr) return;
         id = c->id;
     }
-    run(ripple ? tl::edit::ripple_delete(id) : tl::edit::remove_clip(id));
+    const tl::Track* track = editor_->timeline().track_of(id);
+    if (track == nullptr) return;
+    if (track->id == primary_) {
+        run(ripple ? tl::edit::ripple_delete(id) : tl::edit::remove_clip(id));
+        return;
+    }
+    // Lanes below and above the storyline are not magnetic: deleting leaves the time free.
+    std::vector<std::unique_ptr<tl::Command>> steps;
+    steps.push_back(tl::edit::remove_clip(id));
+    if (track->clips.size() == 1) steps.push_back(tl::edit::remove_track(track->id));
+    run(tl::edit::transaction("Delete", std::move(steps)));
 }
 
 void Session::trimClip(double id, bool head, int frames) {
@@ -353,8 +427,37 @@ void Session::trimClip(double id, bool head, int frames) {
     if (c == nullptr) return;
     const std::int64_t delta = static_cast<std::int64_t>(frames) * ticksPerFrame();
     const tl::Timeline& t = editor_->timeline();
-    if (run(head ? tl::edit::trim_start(clip, t.at(c->start_ticks() + delta), true)
-                 : tl::edit::trim_end(clip, t.at(c->end_ticks() + delta), true))) {
+    const bool magnetic = t.track_of(clip) != nullptr && t.track_of(clip)->id == primary_;
+    if (run(head ? tl::edit::trim_start(clip, t.at(c->start_ticks() + delta), magnetic)
+                 : tl::edit::trim_end(clip, t.at(c->end_ticks() + delta), magnetic))) {
+        selected_clip_ = clip;
+        emit selectionChanged();
+    }
+}
+
+void Session::moveClip(double id, int lanes, int frames) {
+    if (!editor_ || (lanes == 0 && frames == 0)) return;
+    const tl::ClipId clip(static_cast<std::uint64_t>(id));
+    const tl::Timeline& t = editor_->timeline();
+    const tl::Clip* c = t.find_clip(clip);
+    const tl::Track* from = t.track_of(clip);
+    if (c == nullptr || from == nullptr || from->id == primary_) return; // the storyline reorders by editing
+    const auto all = audioLanes();
+    const auto index = std::ranges::find(all, from->id) - all.begin();
+    const auto target = std::max<std::ptrdiff_t>(0, index + lanes);
+    const std::int64_t start = std::max<std::int64_t>(0, c->start_ticks() + (static_cast<std::int64_t>(frames) * ticksPerFrame()));
+    std::vector<std::unique_ptr<tl::Command>> steps;
+    tl::TrackId to;
+    if (target < static_cast<std::ptrdiff_t>(all.size())) {
+        to = all[static_cast<std::size_t>(target)];
+    } else {
+        to = editor_->new_track_id();
+        steps.push_back(tl::edit::add_track(to, tl::TrackKind::Audio, "Audio " + std::to_string(all.size() + 1)));
+    }
+    if (to == from->id && start == c->start_ticks()) return;
+    steps.push_back(tl::edit::move_clip(clip, to, t.at(start)));
+    if (to != from->id && from->clips.size() == 1) steps.push_back(tl::edit::remove_track(from->id));
+    if (run(tl::edit::transaction("Move", std::move(steps)))) {
         selected_clip_ = clip;
         emit selectionChanged();
     }
@@ -397,6 +500,7 @@ QVariantList Session::media() const {
     QVariantList list;
     for (const LibraryItem& i : library_) {
         list.push_back(QVariantMap{{"id", static_cast<double>(i.media.id.value())},
+                                   {"audioOnly", i.audio_only},
                                    {"name", i.name},
                                    {"duration", i.seconds},
                                    {"thumbnail", i.thumbnail}});
@@ -404,25 +508,39 @@ QVariantList Session::media() const {
     return list;
 }
 
+QVariantMap Session::clipMap(const tl::Clip& c) const {
+    const LibraryItem* source = item(c.media);
+    return QVariantMap{{"id", static_cast<double>(c.id.value())},
+                       {"start", c.start.seconds_approx()},
+                       {"duration", c.duration.seconds_approx()},
+                       {"name", source != nullptr ? source->name : QString()},
+                       {"thumbnail", source != nullptr ? source->thumbnail : QString()},
+                       {"fadeIn", c.audio.fade_in.seconds_approx()},
+                       {"fadeOut", c.audio.fade_out.seconds_approx()},
+                       {"audioAdjusted", c.audio.muted || c.audio.gain != 1.0F || c.audio.fade_in.value() != 0 ||
+                                             c.audio.fade_out.value() != 0}};
+}
+
 QVariantList Session::clips() const {
     QVariantList list;
     if (!editor_) return list;
-    const tl::Timeline& t = editor_->timeline();
-    const tl::Track* track = t.find_track(primary_);
+    const tl::Track* track = editor_->timeline().find_track(primary_);
     if (track == nullptr) return list;
-    for (const tl::Clip& c : track->clips) {
-        const LibraryItem* source = item(c.media);
-        list.push_back(QVariantMap{{"id", static_cast<double>(c.id.value())},
-                                   {"start", c.start.seconds_approx()},
-                                   {"duration", c.duration.seconds_approx()},
-                                   {"name", source != nullptr ? source->name : QString()},
-                                   {"thumbnail", source != nullptr ? source->thumbnail : QString()},
-                                   {"fadeIn", c.audio.fade_in.seconds_approx()},
-                                   {"fadeOut", c.audio.fade_out.seconds_approx()},
-                                   {"audioAdjusted", c.audio.muted || c.audio.gain != 1.0F ||
-                                                         c.audio.fade_in.value() != 0 || c.audio.fade_out.value() != 0}});
-    }
+    for (const tl::Clip& c : track->clips) list.push_back(clipMap(c));
     return list;
+}
+
+QVariantList Session::audioTracks() const {
+    QVariantList lanes;
+    for (const tl::TrackId id : audioLanes()) {
+        const tl::Track* track = editor_->timeline().find_track(id);
+        QVariantList clips;
+        for (const tl::Clip& c : track->clips) clips.push_back(clipMap(c));
+        lanes.push_back(QVariantMap{{"id", static_cast<double>(id.value())},
+                                    {"name", QString::fromStdString(track->name)},
+                                    {"clips", clips}});
+    }
+    return lanes;
 }
 
 QVariantMap Session::info() const {
