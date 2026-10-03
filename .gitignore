@@ -2,3 +2,8 @@
 /compile_commands.json
 /.cache/
 /tests/fixtures/generated/
+# makepkg artifacts (PKGBUILD at the root)
+/src/
+/pkg/
+/omamovie-git/
+/*.pkg.tar.*

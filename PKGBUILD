@@ -1,0 +1,72 @@
+# Maintainer: KitsuneSemCalda <59454155+KitsuneSemCalda@users.noreply.github.com>
+#
+# PKGBUILD for OmaMovie, and the single source of truth for the project's dependencies
+# (CLAUDE.md §4). scripts/deps.sh reads the arrays below to install them for development and CI.
+#
+#   depends       what the shipped code needs at runtime
+#   makedepends   what building the package needs
+#   checkdepends  what `make test` needs inside check()
+#   _devdepends   development-only tools (spikes, lint, diagnostics); never part of the package
+#
+# Move a package from _devdepends to depends/makedepends when shipped code starts using it
+# (e.g. ffmpeg and vulkan-icd-loader when libs/media and libs/gpu land in M2).
+
+pkgname=omamovie-git
+pkgver=r0
+pkgrel=1
+pkgdesc='Native video editor for Omarchy: simple UI, serious GPU pipeline'
+arch=('x86_64' 'aarch64')
+url='https://github.com/KitsuneForgering/OmaMovie'
+license=('MIT')
+provides=('omamovie')
+conflicts=('omamovie')
+
+depends=(
+    'gcc-libs'                  # libstdc++ (libs/base)
+    'glibc'
+)
+makedepends=(
+    'git'
+)
+checkdepends=()
+
+_devdepends=(
+    'clang'                     # second compiler in CI, clang-format, clang-tidy
+    'llvm'                      # llvm-ar: LTO-aware archiver for Clang builds
+    'ffmpeg'                    # spikes, fixture generator (Arch ships headers with the package)
+    'vulkan-headers'            # vulkan.hpp / vulkan_raii.hpp for the spikes
+    'vulkan-icd-loader'         # libvulkan + vulkan.pc
+    'vulkan-tools'              # vulkaninfo (S1)
+    'vulkan-validation-layers'  # validate synchronization in spikes and libs/gpu
+    'libva-utils'               # vainfo (S1)
+)
+
+source=("${pkgname}::git+${url}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "${pkgname}"
+    if git describe --long --tags >/dev/null 2>&1; then
+        git describe --long --tags | sed 's/^v//; s/\([^-]*-g\)/r\1/; s/-/./g'
+    else
+        printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+    fi
+}
+
+build() {
+    cd "${pkgname}"
+    # The Makefile appends makepkg's CXXFLAGS/LDFLAGS. Warnings from distribution flags must not
+    # fail a user's build, so -Werror stays a developer/CI setting.
+    make BUILD=release WERROR=0 libs tests
+}
+
+check() {
+    cd "${pkgname}"
+    make BUILD=release WERROR=0 test
+}
+
+package() {
+    cd "${pkgname}"
+    install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+    # The omamovie executable, desktop entry and icon are installed here once the app exists (M6/M7).
+}
