@@ -1,0 +1,11 @@
+# OmaStore manifest (https://github.com/KitsuneSemCalda — OmaStore). Read from the default branch.
+# System dependencies come from the PKGBUILD (`omastore deps`).
+kind = "app"
+name = "OmaMovie"
+summary = "Native video editor for Omarchy: a simple, iMovie-inspired interface on a GPU-first Vulkan pipeline."
+categories = ["AudioVideo", "Video", "AudioVideoEditing"]
+icon = "packaging/icons/omamovie.svg"
+
+# No [linux.<arch>] table yet: there is no app binary to install until M6/M7. Releases will ship
+# omamovie-<version>-<arch>-linux.tar.gz (the pattern the store infers), so the table is only
+# needed if the layout ends up different (see .github/workflows/release.yml).
