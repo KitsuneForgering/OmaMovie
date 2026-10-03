@@ -24,6 +24,7 @@ depends=(
     'gcc-libs'                  # libstdc++ (libs/base)
     'glibc'
     'vulkan-icd-loader'         # libvulkan (libs/gpu)
+    'ffmpeg'                    # libavformat/libavcodec/libavutil/libswresample (libs/media)
 )
 makedepends=(
     'git'
@@ -32,11 +33,11 @@ makedepends=(
 checkdepends=(
     'vulkan-swrast'             # lavapipe: GPU tests run on machines without a Vulkan driver
 )
+# Note: ffmpeg also generates the test fixtures in check() (tests/fixtures/generate.sh).
 
 _devdepends=(
     'clang'                     # second compiler in CI, clang-format, clang-tidy
     'llvm'                      # llvm-ar: LTO-aware archiver for Clang builds
-    'ffmpeg'                    # spikes, fixture generator (Arch ships headers with the package)
     'vulkan-tools'              # vulkaninfo (S1)
     'vulkan-validation-layers'  # validate synchronization in spikes and libs/gpu
     'libva-utils'               # vainfo (S1)
