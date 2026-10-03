@@ -53,6 +53,23 @@ void run_timeline_audio_tests() {
             expect(peak(out, 24000, 48000)).toEqual(0.0F);
         });
 
+        it("plays a split clip exactly like the unsplit clip", {
+            if (!have_fixture("tone_44100.wav")) {
+                return;
+            }
+            Sequence whole = make_sequence();
+            expect(place(whole, 0, 0, 48000).valid()).toBeTruthy();
+            Sequence split = make_sequence();
+            // Sequence sample 20000 is media sample 18375 at 44.1 kHz: the halves are contiguous.
+            expect(place(split, 0, 0, 20000).valid()).toBeTruthy();
+            expect(place(split, 20000, 18375, 28000).valid()).toBeTruthy();
+            const auto a = render(whole.editor.timeline(), 0, 48000);
+            const auto b = render(split.editor.timeline(), 0, 48000);
+            expect(a.size() == b.size() && !a.empty()).toBeTruthy();
+            // The decoder continues across the cut, so nothing is re-decoded or resampled anew.
+            expect(a == b).toBeTruthy();
+        });
+
         it("renders the same samples from a later start as in one pass", {
             if (!have_fixture("tone_44100.wav")) {
                 return;

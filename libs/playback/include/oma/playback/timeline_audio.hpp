@@ -36,6 +36,7 @@ public:
 
 private:
     struct Stream {
+        std::uint64_t media = 0; // media ID
         std::unique_ptr<oma::media::AudioDecoder> decoder;
         std::optional<oma::media::AudioBuffer> buffer;
         std::int64_t offset = 0;      // frames of `buffer` already used
@@ -43,11 +44,17 @@ private:
         bool ended = false;
         bool failed = false;
         std::uint64_t used_in = 0; // last render pass that touched it
+        // Its clip has played through its last sample: a clip continuing the same media at
+        // `next_sample` (the right part of a split) takes the decoder over without a seek.
+        bool finished = false;
     };
 
     [[nodiscard]] oma::Result<void> mix_clip(const oma::timeline::Clip& clip, std::span<float> out,
                                              std::int64_t first);
-    [[nodiscard]] oma::Result<Stream*> stream(const oma::timeline::Clip& clip);
+    // The clip's stream: its own, one handed over by a finished clip of the same media that
+    // stopped at `media_sample`, or a newly opened decoder.
+    [[nodiscard]] oma::Result<Stream*> stream(const oma::timeline::Clip& clip,
+                                              std::int64_t media_sample);
 
     oma::timeline::Timeline timeline_;
     std::unordered_map<std::uint64_t, std::string> paths_; // media ID -> file

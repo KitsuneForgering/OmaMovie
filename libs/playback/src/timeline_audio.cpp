@@ -74,13 +74,28 @@ oma::Result<void> TimelineAudio::render(std::span<float> out, std::int64_t first
     return result;
 }
 
-oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip) {
-    auto [it, created] = streams_.try_emplace(clip.id.value());
-    Stream& s = it->second;
-    s.used_in = pass_;
-    if (!created) {
+oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip,
+                                                          std::int64_t media_sample) {
+    if (const auto own = streams_.find(clip.id.value()); own != streams_.end()) {
+        own->second.used_in = pass_;
+        return &own->second;
+    }
+    const auto continued = std::ranges::find_if(streams_, [&](const auto& entry) {
+        const Stream& s = entry.second;
+        return s.finished && !s.failed && s.media == clip.media.value() &&
+               s.next_sample == media_sample;
+    });
+    if (continued != streams_.end()) {
+        auto node = streams_.extract(continued);
+        node.key() = clip.id.value();
+        Stream& s = streams_.insert(std::move(node)).position->second;
+        s.finished = false;
+        s.used_in = pass_;
         return &s;
     }
+    Stream& s = streams_[clip.id.value()];
+    s.media = clip.media.value();
+    s.used_in = pass_;
     s.next_sample = -1; // forces the first seek
     const auto path = paths_.find(clip.media.value());
     if (path == paths_.end()) {
@@ -105,14 +120,6 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, std::span<float>
     if (clip.time_map.speed() != oma::Rational::literal(1, 1)) {
         return {}; // needs time-stretching (v0.2 speed work)
     }
-    auto opened = stream(clip);
-    if (!opened) {
-        return std::unexpected(opened.error());
-    }
-    Stream& s = **opened;
-    if (s.failed) {
-        return {};
-    }
     const auto frames = static_cast<std::int64_t>(out.size() / static_cast<std::size_t>(channels_));
     const std::int64_t a = ceil_div(clip.start_ticks(), ticks_per_sample_);
     const std::int64_t b = ceil_div(clip.end_ticks(), ticks_per_sample_);
@@ -121,6 +128,14 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, std::span<float>
     const std::int64_t media_sample =
         sample_at(clip.source_in, (from * ticks_per_sample_) - clip.start_ticks(),
                   timeline_.timebase(), rate_.hz());
+    auto opened = stream(clip, media_sample);
+    if (!opened) {
+        return std::unexpected(opened.error());
+    }
+    Stream& s = **opened;
+    if (s.failed) {
+        return {};
+    }
     if (s.next_sample != media_sample) {
         // A jump (first block, a seek, or a cut back into this media): reposition exactly.
         auto t = oma::RationalTime::make(media_sample, rate_.timebase());
@@ -169,6 +184,7 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, std::span<float>
         s.next_sample += n;
         pos += n;
     }
+    s.finished = to == b;
     return {};
 }
 
