@@ -19,9 +19,12 @@ namespace {
 const gpu::Device& device_of(const AVHWDeviceContext* ctx) {
     return *static_cast<const gpu::Device*>(ctx->user_opaque);
 }
+// The signatures are FFmpeg's callback types, so the context cannot be const.
+// NOLINTNEXTLINE(misc-const-correctness)
 void lock_queue(AVHWDeviceContext* ctx, uint32_t family, uint32_t index) {
     device_of(ctx).lock_queue(family, index);
 }
+// NOLINTNEXTLINE(misc-const-correctness)
 void unlock_queue(AVHWDeviceContext* ctx, uint32_t family, uint32_t index) {
     device_of(ctx).unlock_queue(family, index);
 }
