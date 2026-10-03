@@ -1,133 +1,137 @@
-# CUDA e o caminho NVIDIA no OmaMovie
+# CUDA and the NVIDIA path in OmaMovie
 
-> Pesquisa feita em 2026-10-02. Fatos com fonte estão linkados na seção
-> [Fontes](#fontes). Itens marcados **(verificar)** precisam de confirmação.
+> Research done on 2026-10-02. Sourced facts are linked in the [Sources](#sources) section.
+> Items marked **(verify)** need confirmation.
 >
-> Verificado localmente: `nvidia-utils` 610.57 fornece `libcuda.so`,
-> `libnvcuvid.so` (NVDEC) e `libnvidia-encode.so` (NVENC). O FFmpeg do sistema
-> foi compilado com `--enable-nvdec --enable-nvenc --enable-cuda-llvm`. O
-> pacote `cuda` (toolkit) do Arch tem **4,71 GiB** e não vem instalado.
+> Verified locally: `nvidia-utils` 610.57 provides `libcuda.so`, `libnvcuvid.so` (NVDEC) and
+> `libnvidia-encode.so` (NVENC). The system FFmpeg was built with
+> `--enable-nvdec --enable-nvenc --enable-cuda-llvm`. Arch's `cuda` package (toolkit) is
+> **4.71 GiB** and is not installed.
 
 ---
 
-## 1. Resumo
+## 1. Summary
 
-"Usar CUDA" no contexto do OmaMovie são **três coisas diferentes**, com custos muito diferentes:
+"Using CUDA" in OmaMovie means **three different things**, with very different costs:
 
-| O quê | Precisa do CUDA toolkit? | Ganho | Recomendação |
+| What | Needs the CUDA toolkit? | Gain | Recommendation |
 |---|---|---|---|
-| **NVDEC/NVENC** (decode/encode por hardware) | **Não**. O FFmpeg carrega as bibliotecas do driver em runtime | Alto: NVENC é cerca de 5x mais rápido que Vulkan Video encode na NVIDIA | **Sim, desde cedo** |
-| **Interop CUDA ↔ Vulkan** (levar o frame do NVDEC ao compositor Vulkan) | Não, usa a driver API (`libcuda`) | Necessário para manter o frame na VRAM | **Sim**, junto com NVDEC |
-| **Kernels CUDA próprios** (efeitos) | Só no build (headers/libdevice); em runtime basta o driver | Depende do efeito; Vulkan Compute cobre a maioria | **Só com ganho medido** |
+| **NVDEC/NVENC** (hardware decode/encode) | **No**. FFmpeg loads the driver libraries at runtime | High: NVENC is about 5x faster than Vulkan Video encode on NVIDIA | **Yes, early** |
+| **CUDA ↔ Vulkan interop** (bringing NVDEC frames to the Vulkan compositor) | No, it uses the driver API (`libcuda`) | Needed to keep frames in VRAM | **Yes**, together with NVDEC |
+| **Our own CUDA kernels** (effects) | Only at build time (headers/libdevice); at runtime the driver is enough | Depends on the effect; Vulkan Compute covers most | **Only with a measured gain** |
 
-Conclusão: na NVIDIA, o maior ganho vem do NVDEC/NVENC, que **não exige
-distribuir nem compilar com o toolkit**. Kernels CUDA são uma especialização posterior.
-
----
-
-## 2. NVDEC e NVENC
-
-- Parte do NVIDIA Video Codec SDK. O FFmpeg acessa via `ffnvcodec-headers`, que
-  **carrega `libcuda`/`libnvcuvid`/`libnvidia-encode` dinamicamente**. Não há link
-  em tempo de build contra bibliotecas da NVIDIA **(verificar: comportamento conhecido do ffnvcodec)**.
-- O frame decodificado pelo NVDEC fica em **memória CUDA** (hwaccel `cuda` do FFmpeg).
-- NVENC aceita frames CUDA diretamente.
-- Comparação relatada no fórum da NVIDIA: encode via Vulkan Video ~194 fps contra NVENC ~910 fps.
-
-### Omarchy e NVIDIA
-O Omarchy instala `nvidia-open-dkms`, `nvidia-utils` e `libva-nvidia-driver`
-(GPUs com GSP) e define `LIBVA_DRIVER_NAME=nvidia` e `NVD_BACKEND=direct`. Ou
-seja, existe VA-API na NVIDIA, mas via uma camada de tradução sobre o NVDEC.
-
-**Para o OmaMovie:** na NVIDIA, usar NVDEC/NVENC diretamente (hwaccel `cuda` do
-FFmpeg), não a camada VA-API, que acrescenta uma tradução e tem limitações
-conhecidas de DMA-BUF/NV12 na importação pelo Vulkan (ver `vulkan.md` §4).
+Conclusion: on NVIDIA the biggest gain comes from NVDEC/NVENC, which **requires neither
+distributing nor building with the toolkit**. CUDA kernels are a later specialization.
 
 ---
 
-## 3. Interop CUDA ↔ Vulkan
+## 2. NVDEC and NVENC
 
-O compositor é Vulkan, mas o frame do NVDEC está em memória CUDA. Para não passar pela RAM:
+- Part of the NVIDIA Video Codec SDK. FFmpeg accesses them through `ffnvcodec-headers`, which
+  **load `libcuda`/`libnvcuvid`/`libnvidia-encode` dynamically**. There is no build-time link
+  against NVIDIA libraries **(verify: known ffnvcodec behavior)**.
+- A frame decoded by NVDEC lives in **CUDA memory** (FFmpeg's `cuda` hwaccel).
+- NVENC accepts CUDA frames directly.
+- Comparison reported on the NVIDIA forum: Vulkan Video encode ~194 fps vs. NVENC ~910 fps.
 
-1. O OmaMovie cria no Vulkan uma imagem/buffer **exportável** (`VK_KHR_external_memory_fd`, handle opaque fd).
-2. A CUDA importa essa memória: `cuImportExternalMemory` (driver API) ou `cudaImportExternalMemory` (runtime API).
-3. Copia-se a superfície do NVDEC para essa memória com uma **cópia device-to-device** (fica na VRAM; não é zero-copy, mas não há download).
-4. Sincronização via **timeline semaphore** exportado do Vulkan e importado na CUDA
+### Omarchy and NVIDIA
+Omarchy installs `nvidia-open-dkms`, `nvidia-utils` and `libva-nvidia-driver` (GPUs with GSP)
+and sets `LIBVA_DRIVER_NAME=nvidia` and `NVD_BACKEND=direct`. So VA-API exists on NVIDIA, but
+through a translation layer on top of NVDEC.
+
+**For OmaMovie:** on NVIDIA, use NVDEC/NVENC directly (FFmpeg's `cuda` hwaccel), not the VA-API
+layer, which adds a translation step and has known DMA-BUF/NV12 limitations when imported by
+Vulkan (see `vulkan.md` §4).
+
+---
+
+## 3. CUDA ↔ Vulkan interop
+
+The compositor is Vulkan, but the NVDEC frame is in CUDA memory. To avoid going through RAM:
+
+1. OmaMovie creates an **exportable** Vulkan image/buffer (`VK_KHR_external_memory_fd`, opaque fd handle).
+2. CUDA imports that memory: `cuImportExternalMemory` (driver API) or `cudaImportExternalMemory` (runtime API).
+3. The NVDEC surface is copied into it with a **device-to-device copy** (it stays in VRAM; not
+   zero-copy, but no download).
+4. Synchronization through a **timeline semaphore** exported from Vulkan and imported into CUDA
    (`cudaImportExternalSemaphore`, `cudaSignalExternalSemaphoresAsync`, `cudaWaitExternalSemaphoresAsync`).
 
-**Restrição importante:** na CUDA é **ilegal esperar antes que o sinal
-correspondente tenha sido emitido**. O "wait-before-signal" dos timeline
-semaphores do Vulkan não vale do lado CUDA. O agendador do OmaMovie precisa
-garantir a ordem (sinal submetido antes da espera ser submetida na CUDA).
+**Important restriction:** in CUDA it is **illegal to wait before the corresponding signal has
+been issued**. Vulkan timeline semaphores' wait-before-signal does not hold on the CUDA side.
+OmaMovie's scheduler must guarantee the order (signal submitted before the wait is submitted in CUDA).
 
-Alternativas a avaliar:
-- **Mapeamento de frames do FFmpeg** entre os contextos `cuda` e `vulkan`
-  **(verificar se o FFmpeg 9 suporta `av_hwframe_map`/transfer CUDA→Vulkan sem passar pela CPU)**. Se suportar, evita escrever o interop à mão.
-- **Vulkan Video decode direto na NVIDIA**: elimina o interop. O desempenho de
-  decode (não o de encode) precisa ser medido antes de descartar.
-
----
-
-## 4. Kernels CUDA próprios
-
-### Quando valeria
-- Efeitos pesados em que CUDA tenha vantagem **medida** sobre Vulkan Compute na
-  mesma GPU (ex.: bibliotecas maduras como NPP, ou kernels que dependem de recursos específicos).
-- O `CLAUDE.md` já diz: CUDA só onde houver ganho real, e efeitos não dependem diretamente de CUDA.
-
-### Como compilar sem `nvcc` e sem exigir o toolkit em runtime
-O FFmpeg do sistema usa `--enable-cuda-llvm`: os kernels CUDA dele são
-compilados pelo **clang para PTX**. O mesmo padrão serve ao OmaMovie:
-
-1. Kernels `.cu` compilados com **clang** para PTX (o LLVM suporta CUDA desde a
-   3.9). O build precisa dos headers/libdevice do CUDA (`--cuda-path`).
-2. O PTX é **embutido no binário**.
-3. Em runtime, carrega-se `libcuda.so` via `dlopen` (vem com `nvidia-utils`) e o
-   PTX via driver API (`cuModuleLoadData` / `cuLinkAddData`). O driver faz o JIT para a GPU presente.
-
-Consequências:
-- Usuário final **não precisa** instalar o toolkit (4,7 GiB).
-- Máquinas sem NVIDIA não carregam nada; o backend CUDA simplesmente não aparece.
-- O build com CUDA fica **opcional** (opção CMake), para não exigir o toolkit de todos os desenvolvedores.
+Alternatives to evaluate:
+- **FFmpeg frame mapping** between the `cuda` and `vulkan` contexts **(verify whether FFmpeg 9
+  supports `av_hwframe_map`/transfer CUDA→Vulkan without the CPU)**. If it does, it avoids
+  writing the interop by hand.
+- **Vulkan Video decode directly on NVIDIA**: removes the interop. Decode performance (not
+  encode) must be measured before ruling it out.
 
 ---
 
-## 5. Notebooks híbridos (Intel/AMD + NVIDIA)
+## 4. Our own CUDA kernels
 
-O Omarchy detecta GPUs híbridas e evita acordar a dGPU à toa (os detectores
-leem sysfs em vez de `lspci`, porque acordar a GPU estoura o tempo de reload do Hyprland).
+### When it would be worth it
+- Heavy effects where CUDA has a **measured** advantage over Vulkan Compute on the same GPU
+  (e.g. mature libraries such as NPP, or kernels relying on specific features).
+- `CLAUDE.md` already says: CUDA only where there is a real gain, and effects do not depend
+  directly on CUDA.
 
-**Implicações para o OmaMovie:**
-- Escolha de device é uma decisão de primeira classe: decode na dGPU e
-  composição/apresentação na iGPU implica **cópia entre GPUs** pelo barramento.
-- Regra inicial proposta: **um device primário para todo o pipeline** (decode,
-  composição, preview), escolhido pelo usuário ou por heurística (dGPU quando ligada à tomada?), registrado em log.
-- Não acordar a dGPU só para enumerar capacidades; usar informações do sysfs/Vulkan sem criar device quando possível **(verificar)**.
+### Building without `nvcc` and without requiring the toolkit at runtime
+The system FFmpeg uses `--enable-cuda-llvm`: its CUDA kernels are compiled by **clang to PTX**.
+The same pattern works for OmaMovie:
 
----
+1. `.cu` kernels compiled with **clang** to PTX (LLVM has supported CUDA since 3.9). The build
+   needs the CUDA headers/libdevice (`--cuda-path`).
+2. The PTX is **embedded in the binary**.
+3. At runtime, `libcuda.so` is loaded with `dlopen` (it ships with `nvidia-utils`) and the PTX
+   through the driver API (`cuModuleLoadData` / `cuLinkAddData`). The driver JITs it for the GPU present.
 
-## 6. Licenciamento
-
-- Carregar `libcuda`/`libnvcuvid`/`libnvidia-encode` dinamicamente a partir do
-  driver instalado é o modelo usado pelo FFmpeg e outros projetos livres.
-- O toolkit CUDA tem EULA própria. Não redistribuir partes do toolkit; o PTX
-  gerado pelo OmaMovie é código do projeto **(verificar a EULA para libdevice embutida no PTX)**.
-
----
-
-## 7. Recomendações
-
-1. **Fase de decode/encode (M1–M6)**: NVDEC/NVENC via FFmpeg na NVIDIA, sem toolkit.
-2. **Interop**: tentar primeiro o mapeamento de frames do FFmpeg; se não houver
-   caminho sem CPU, implementar o interop de memória externa + timeline semaphore em `libs/gpu`.
-3. **Benchmark**: NVDEC + interop vs. Vulkan Video decode direto na NVIDIA. Escolher por medição.
-4. **`CudaBackend` de compute**: só depois que o `ComputeBackend` com Vulkan existir e houver um efeito com ganho medido. PTX via clang, `dlopen` em runtime, build opcional.
-5. **Hardware de teste**: a máquina atual não tem GPU NVIDIA (`nvidia-utils` está
-   instalado, mas o `lspci` só mostra a Iris Xe). Validar o caminho NVIDIA exige outra máquina.
+Consequences:
+- End users **do not** need to install the toolkit (4.7 GiB).
+- Machines without NVIDIA load nothing; the CUDA backend simply does not appear.
+- The CUDA build is **optional** (a Make option), so not every developer needs the toolkit.
 
 ---
 
-## Fontes
+## 5. Hybrid laptops (Intel/AMD + NVIDIA)
+
+Omarchy detects hybrid GPUs and avoids waking the dGPU needlessly (its detectors read sysfs
+instead of `lspci`, because waking the GPU exceeds Hyprland's reload time budget).
+
+**Implications for OmaMovie:**
+- Device choice is a first-class decision: decoding on the dGPU and compositing/presenting on
+  the iGPU implies **a copy between GPUs** over the bus.
+- Proposed initial rule: **one primary device for the whole pipeline** (decode, compositing,
+  preview), chosen by the user or by a heuristic (dGPU when plugged in?), and logged.
+- Do not wake the dGPU just to enumerate capabilities; use sysfs/Vulkan information without
+  creating a device when possible **(verify)**.
+
+---
+
+## 6. Licensing
+
+- Loading `libcuda`/`libnvcuvid`/`libnvidia-encode` dynamically from the installed driver is the
+  model used by FFmpeg and other free projects.
+- The CUDA toolkit has its own EULA. Do not redistribute parts of the toolkit; the PTX OmaMovie
+  generates is project code **(verify the EULA regarding libdevice embedded in the PTX)**.
+
+---
+
+## 7. Recommendations
+
+1. **Decode/encode phase (M1–M7)**: NVDEC/NVENC through FFmpeg on NVIDIA, no toolkit.
+2. **Interop**: try FFmpeg's frame mapping first; if there is no CPU-free path, implement
+   external memory + timeline semaphore interop in `libs/gpu`.
+3. **Benchmark**: NVDEC + interop vs. direct Vulkan Video decode on NVIDIA. Choose by measurement.
+4. **Compute `CudaBackend`**: only after the Vulkan `ComputeBackend` exists and an effect has a
+   measured gain. PTX through clang, `dlopen` at runtime, optional build.
+5. **Test hardware**: the current machine has no NVIDIA GPU (`nvidia-utils` is installed, but
+   `lspci` only shows the Iris Xe). Validating the NVIDIA path needs another machine.
+
+---
+
+## Sources
 
 - [NVIDIA: CUDA Runtime API — External Resource Interoperability](https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__EXTRES__INTEROP.html)
 - [NVIDIA: CUDA Driver API — Module Management](https://docs.nvidia.com/cuda/archive/13.2.2/cuda-driver-api/group__CUDA__MODULE.html)
@@ -142,4 +146,4 @@ leem sysfs em vez de `lspci`, porque acordar a GPU estoura o tempo de reload do 
 - [Phoronix: FFmpeg NVDEC-accelerated H.264 decoding](https://www.phoronix.com/news/FFmpeg-NVDEC-H264-Acceleration)
 - [Phoronix: NVIDIA VA-API driver 0.0.18](https://phoronix.com/news/NVIDIA-VA-API-Driver-0.0.18)
 - [NVIDIA Forums: Vulkan Video is 5x slower than NVENC](https://forums.developer.nvidia.com/t/vulkan-video-is-5x-slower-than-nvenc/373916)
-- Arquivos locais do Omarchy 4.0.4: `/usr/share/omarchy/install/hardware/nvidia.sh`, `/usr/share/omarchy/default/hypr/nvidia.lua`
+- Local Omarchy 4.0.4 files: `/usr/share/omarchy/install/hardware/nvidia.sh`, `/usr/share/omarchy/default/hypr/nvidia.lua`

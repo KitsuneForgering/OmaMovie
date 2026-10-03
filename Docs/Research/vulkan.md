@@ -1,217 +1,211 @@
-# Vulkan e Vulkan-Hpp no OmaMovie
+# Vulkan and Vulkan-Hpp in OmaMovie
 
-> Pesquisa feita em 2026-10-02. Fatos com fonte estão linkados na seção
-> [Fontes](#fontes). Itens marcados **(verificar)** são inferências ou
-> conhecimento geral que precisam ser confirmados em código ou documentação
-> antes de virar decisão.
+> Research done on 2026-10-02. Sourced facts are linked in the [Sources](#sources) section.
+> Items marked **(verify)** are inferences or general knowledge that must be confirmed in code
+> or documentation before becoming a decision.
 >
-> Ambiente verificado localmente: Mesa 26.2.2 (`vulkan-intel`), Vulkan loader
-> 1.4.357, FFmpeg 9.0.1 (com `--enable-vulkan --enable-libplacebo`), Qt 6.11.2,
-> GPU Intel Iris Xe (TigerLake). Não instalados: `vulkan-headers` (onde está o
-> `vulkan.hpp`), `vulkan-tools`.
+> Environment verified locally: Mesa 26.2.2 (`vulkan-intel`), Vulkan loader 1.4.357, FFmpeg
+> 9.0.1 (with `--enable-vulkan --enable-libplacebo`), Qt 6.11.2, Intel Iris Xe GPU (TigerLake).
+> Not installed: `vulkan-headers` (which contains `vulkan.hpp`), `vulkan-tools`.
 
 ---
 
-## 1. Resumo
+## 1. Summary
 
-O Vulkan é a **espinha dorsal** do OmaMovie. Ele serve a quatro papéis
-diferentes, e para dois deles o ecossistema amadureceu bastante em 2025–2026:
+Vulkan is OmaMovie's **backbone**. It serves four different roles, and for two of them the
+ecosystem matured a lot in 2025–2026:
 
-| Papel | Situação |
+| Role | Status |
 |---|---|
-| **Composição e preview** | Maduro. Qt Quick roda sobre Vulkan e aceita um `VkDevice` externo |
-| **Compute de efeitos** | Maduro. Vulkan Compute funciona em todos os drivers do Omarchy |
-| **Decode de vídeo (Vulkan Video)** | Maduro em AMD e Intel (H.264, H.265, AV1, VP9). FFmpeg 9 trata o Vulkan como backend completo |
-| **Encode de vídeo (Vulkan Video)** | Funciona em AMD/Intel; **na NVIDIA o NVENC é muito mais rápido** |
+| **Compositing and preview** | Mature. Qt Quick runs on Vulkan and accepts an external `VkDevice` |
+| **Effect compute** | Mature. Vulkan Compute works on every Omarchy driver |
+| **Video decode (Vulkan Video)** | Mature on AMD and Intel (H.264, H.265, AV1, VP9). FFmpeg 9 treats Vulkan as a complete backend |
+| **Video encode (Vulkan Video)** | Works on AMD/Intel; **on NVIDIA, NVENC is much faster** |
 
-A peça central do desenho é **um único `VkDevice` compartilhado** entre FFmpeg
-(decode/encode), o compositor do OmaMovie e o Qt Quick (preview). Assim o
-frame nasce, é composto e é exibido sem sair da VRAM.
+The centerpiece of the design is **a single `VkDevice` shared** by FFmpeg (decode/encode),
+OmaMovie's compositor and Qt Quick (preview). That way a frame is born, composited and displayed
+without leaving VRAM.
 
 ---
 
 ## 2. Vulkan-Hpp
 
-Bindings C++ oficiais da Khronos para Vulkan, distribuídos junto com os headers (`vulkan-headers` no Arch).
+Khronos's official C++ bindings for Vulkan, shipped with the headers (`vulkan-headers` on Arch).
 
-### 2.1 O que oferece
-- Tipos fortes, `enum class`, flags tipadas, integração com STL, sem overhead de CPU em runtime.
-- **`vk::raii`**: wrappers RAII para todos os objetos Vulkan (destruição automática na ordem certa).
-- Dispatcher dinâmico (`VULKAN_HPP_DISPATCH_LOADER_DYNAMIC`) para carregar funções de extensões em runtime.
-- **Módulo C++20** chamado `vulkan` (renomeado de `vulkan_hpp` na versão 1.4.334), com suporte a `import std` via `VULKAN_HPP_ENABLE_STD_MODULE`.
+### 2.1 What it offers
+- Strong types, `enum class`, typed flags, STL integration, no runtime CPU overhead.
+- **`vk::raii`**: RAII wrappers for every Vulkan object (automatic destruction in the right order).
+- A dynamic dispatcher (`VULKAN_HPP_DISPATCH_LOADER_DYNAMIC`) to load extension functions at runtime.
+- A **C++20 module** named `vulkan` (renamed from `vulkan_hpp` in version 1.4.334), with
+  `import std` support through `VULKAN_HPP_ENABLE_STD_MODULE`.
 
-### 2.2 Exceções vs. `std::expected`
-- Por padrão o Vulkan-Hpp **lança exceções**.
-- `VULKAN_HPP_NO_EXCEPTIONS`: as funções retornam `ResultValue<T>` (resultado + valor).
-- `VULKAN_HPP_RAII_NO_EXCEPTIONS`: as funções de `vk::raii` retornam
-  `VULKAN_HPP_EXPECTED<T, vk::Result>`, que pode ser configurado como `std::expected`.
+### 2.2 Exceptions vs. `std::expected`
+- By default Vulkan-Hpp **throws exceptions**.
+- `VULKAN_HPP_NO_EXCEPTIONS`: functions return `ResultValue<T>` (result + value).
+- `VULKAN_HPP_RAII_NO_EXCEPTIONS`: `vk::raii` functions return `VULKAN_HPP_EXPECTED<T, vk::Result>`,
+  which can be configured as `std::expected`.
 
-**Para o OmaMovie:** o `CLAUDE.md` §19 proíbe exceções atravessando fronteiras
-de libs e adota `std::expected`. Configuração recomendada:
-`VULKAN_HPP_NO_EXCEPTIONS` + `VULKAN_HPP_RAII_NO_EXCEPTIONS`, com `VULKAN_HPP_EXPECTED` = `std::expected`.
-Erros de Vulkan são convertidos em `oma::Error` na borda de `libs/gpu`.
+**For OmaMovie:** `CLAUDE.md` §19 forbids exceptions crossing library boundaries and adopts
+`std::expected`. Recommended configuration: `VULKAN_HPP_NO_EXCEPTIONS` +
+`VULKAN_HPP_RAII_NO_EXCEPTIONS`, with `VULKAN_HPP_EXPECTED` = `std::expected`. Vulkan errors are
+converted to `oma::Error` at the `libs/gpu` boundary.
 
-### 2.3 Custo de compilação
-- `vulkan.hpp` e `vulkan_raii.hpp` são headers enormes; o parse e a codegen de templates pesam no build.
-- Mitigações, em ordem de preferência:
-  1. **Confinar o include** a arquivos `.cpp` de `libs/gpu` e `libs/compositor`.
-     Headers públicos dessas libs expõem tipos próprios do OmaMovie (ou forward
-     declarations), nunca `vulkan.hpp`. Isso já é exigido pela regra de dependências do `CLAUDE.md` §5.2.
-  2. **Precompiled header** (`target_precompile_headers`) nessas duas libs.
-  3. **Módulo C++20 `vulkan`**: viável com CMake 4.4 + Clang 22/GCC 16, mas
-     módulos ainda têm atrito com headers externos. Avaliar num spike antes de adotar.
+### 2.3 Compile cost
+- `vulkan.hpp` and `vulkan_raii.hpp` are huge headers; parsing and template codegen weigh on the build.
+- Mitigations, in order of preference:
+  1. **Confine the include** to `.cpp` files in `libs/gpu` and `libs/compositor`. The public
+     headers of those libs expose OmaMovie's own types (or forward declarations), never
+     `vulkan.hpp`. The dependency rule in `CLAUDE.md` §5.2 already requires that.
+  2. **Precompiled header** in those two libs.
+  3. **C++20 module `vulkan`**: viable with Clang 22/GCC 16, but modules still have friction
+     with external headers. Evaluate in a spike before adopting.
 
-### 2.4 Convivência com FFmpeg e Qt
-FFmpeg e Qt usam a API C (`VkDevice`, `VkImage`, ...). Os handles do Vulkan-Hpp
-são compatíveis por conversão explícita (`static_cast<VkImage>(image)` e
-vice-versa). Regra: **ownership fica com quem criou**. Objetos recebidos do
-FFmpeg ou do Qt não são embrulhados em `vk::raii` (que destruiria o objeto);
-usar handles não-RAII (`vk::Image`) para objetos emprestados.
+### 2.4 Living with FFmpeg and Qt
+FFmpeg and Qt use the C API (`VkDevice`, `VkImage`, ...). Vulkan-Hpp handles are compatible
+through explicit conversion (`static_cast<VkImage>(image)` and back). Rule: **ownership stays with
+the creator**. Objects received from FFmpeg or Qt are not wrapped in `vk::raii` (which would
+destroy the object); use non-RAII handles (`vk::Image`) for borrowed objects.
 
-### 2.5 Memória: Vulkan Memory Allocator (VMA)
-- VMA (AMD GPUOpen) é o padrão de mercado para alocação de memória Vulkan;
-  é header-only, mas a implementação deve ser compilada num `.cpp`. Existe um binding C++ (`VulkanMemoryAllocator-Hpp`).
-- **Memória importada (DMA-BUF, CUDA) não passa pelo VMA.** O `libs/gpu`
-  precisa de dois caminhos: alocações próprias via VMA e importações externas com lifetime próprio (`CLAUDE.md` §8.1).
+### 2.5 Memory: Vulkan Memory Allocator (VMA)
+- VMA (AMD GPUOpen) is the market standard for Vulkan memory allocation; it is header-only, but
+  the implementation must be compiled in a `.cpp`. A C++ binding exists (`VulkanMemoryAllocator-Hpp`).
+- **Imported memory (DMA-BUF, CUDA) does not go through VMA.** `libs/gpu` needs two paths: our
+  own allocations through VMA and external imports with their own lifetime (`CLAUDE.md` §8.1).
 
 ---
 
-## 3. Vulkan Video (decode e encode)
+## 3. Vulkan Video (decode and encode)
 
-### 3.1 Suporte nos drivers do Mesa
+### 3.1 Support in the Mesa drivers
 
 | Driver | Decode | Encode |
 |---|---|---|
-| **RADV** (AMD) | H.264, H.265 (desde Mesa 23.1), AV1 (24.1), VP9 | H.264, H.265 (24.1), AV1 (25.2) |
-| **ANV** (Intel) | H.264, H.265 (desde 23.1), **AV1 (25.0, TigerLake em diante, inclusive 10-bit)**, VP9 (junho de 2025) | H.264, H.265 (24.3), AV1 em Arc/DG2 |
+| **RADV** (AMD) | H.264, H.265 (since Mesa 23.1), AV1 (24.1), VP9 | H.264, H.265 (24.1), AV1 (25.2) |
+| **ANV** (Intel) | H.264, H.265 (since 23.1), **AV1 (25.0, TigerLake onward, including 10-bit)**, VP9 (June 2025) | H.264, H.265 (24.3), AV1 on Arc/DG2 |
 
-Mesa 26.0 trouxe melhorias gerais de Vulkan Video para H.264/H.265/AV1. A
-máquina de desenvolvimento (Iris Xe, TigerLake) deve suportar decode de AV1 via Vulkan **(verificar com `vulkaninfo`)**.
+Mesa 26.0 brought general Vulkan Video improvements for H.264/H.265/AV1. The development
+machine (Iris Xe, TigerLake) should support AV1 decode through Vulkan **(verify with `vulkaninfo`)**.
 
-### 3.2 FFmpeg e Vulkan
-- **FFmpeg 7.1**: encoders `h264_vulkan` e `hevc_vulkan`; pipelines inteiros decode → filtro → encode em Vulkan.
-- **FFmpeg 8.0**: `av1_vulkan`, decode VP9 em Vulkan e **codecs em compute
-  shader** que rodam em qualquer driver Vulkan 1.3: FFv1 (encode/decode),
-  ProRes RAW (decode); ProRes e VC-2 a caminho. O anúncio cita explicitamente editores não lineares como beneficiados.
-- **FFmpeg 9.0** (agosto de 2026, é a versão instalada): Vulkan como backend
-  completo para encode, decode e filtros, nos três fabricantes, por uma API única.
+### 3.2 FFmpeg and Vulkan
+- **FFmpeg 7.1**: `h264_vulkan` and `hevc_vulkan` encoders; full decode → filter → encode pipelines in Vulkan.
+- **FFmpeg 8.0**: `av1_vulkan`, VP9 decode in Vulkan and **compute-shader codecs** that run on
+  any Vulkan 1.3 driver: FFv1 (encode/decode), ProRes RAW (decode); ProRes and VC-2 on the way.
+  The announcement explicitly mentions non-linear editors as beneficiaries.
+- **FFmpeg 9.0** (August 2026, the installed version): Vulkan as a complete backend for encode,
+  decode and filters on all three vendors, through a single API.
 
 ### 3.3 NVIDIA
-Há relato no fórum da NVIDIA de encode via Vulkan Video **cerca de 5x mais
-lento que NVENC** (~194 fps contra ~910 fps). Na NVIDIA, preferir NVDEC/NVENC (ver `cuda.md`).
+A report on the NVIDIA forum shows Vulkan Video encode **about 5x slower than NVENC** (~194 fps
+vs. ~910 fps). On NVIDIA, prefer NVDEC/NVENC (see `cuda.md`).
 
-### 3.4 Implicações para o OmaMovie
-- **ProRes e FFv1 em compute shader** permitem decode GPU de codecs
-  intermediários profissionais em qualquer GPU, sem bloco de hardware dedicado.
-  Isso é diretamente útil para proxies e intermediários (`CLAUDE.md` §15): um
-  proxy FFv1 ou ProRes decodificado na GPU mantém o pipeline todo na VRAM.
-- Vulkan Video e VA-API coexistem. A escolha deve ser **por codec e por
-  driver, em runtime**, com benchmark. Não fixar um caminho único.
+### 3.4 Implications for OmaMovie
+- **ProRes and FFv1 in compute shaders** enable GPU decode of professional intermediate codecs
+  on any GPU, without a dedicated hardware block. Directly useful for proxies and intermediates
+  (`CLAUDE.md` §15): an FFv1 or ProRes proxy decoded on the GPU keeps the whole pipeline in VRAM.
+- Vulkan Video and VA-API coexist. The choice must be made **per codec and per driver, at
+  runtime**, with benchmarks. Do not hardcode a single path.
 
 ---
 
 ## 4. VA-API → Vulkan (DMA-BUF)
 
-Caminho clássico de decode por hardware em Intel/AMD, e o mais maduro.
+The classic hardware decode path on Intel/AMD, and the most mature.
 
-- O VA-API exporta a superfície decodificada como **DMA-BUF**.
-- O Vulkan importa com `VK_EXT_external_memory_dma_buf` +
-  `VK_EXT_image_drm_format_modifier`, que descrevem stride e tiling exatos (o
-  modificador DRM é um inteiro de 64 bits definido em `drm_fourcc.h`).
-- NV12 é multi-planar (`VK_FORMAT_G8_B8R8_2PLANE_420_UNORM`). A superfície VA-API
-  costuma ser uma única alocação com dois planos; a importação precisa respeitar os offsets de cada plano.
-- Há incompatibilidades conhecidas entre drivers: a NVIDIA rejeita certos
-  layouts NV12 no caminho explícito de modificadores que aceita no caminho por lista.
-- **O FFmpeg já implementa esse mapeamento** (`av_hwframe_map` de VA-API para
-  Vulkan, usando as mesmas extensões, habilitadas por padrão no `hwcontext_vulkan`). libplacebo e Dawn (Chrome) também.
+- VA-API exports the decoded surface as a **DMA-BUF**.
+- Vulkan imports it with `VK_EXT_external_memory_dma_buf` + `VK_EXT_image_drm_format_modifier`,
+  which describe the exact stride and tiling (a DRM modifier is a 64-bit integer defined in `drm_fourcc.h`).
+- NV12 is multi-planar (`VK_FORMAT_G8_B8R8_2PLANE_420_UNORM`). A VA-API surface is usually a
+  single allocation with two planes; the import must honor each plane's offsets.
+- There are known incompatibilities between drivers: NVIDIA rejects certain NV12 layouts in the
+  explicit-modifier path that it accepts in the list-based path.
+- **FFmpeg already implements this mapping** (`av_hwframe_map` from VA-API to Vulkan, using the
+  same extensions, enabled by default in `hwcontext_vulkan`). libplacebo and Dawn (Chrome) do too.
 
-**Implicação:** não reescrever a importação de DMA-BUF. Usar o mapeamento de
-frames do FFmpeg sobre o `VkDevice` do OmaMovie, e só descer ao nível do
-DMA-BUF se um benchmark mostrar problema.
+**Implication:** do not rewrite DMA-BUF import. Use FFmpeg's frame mapping on OmaMovie's
+`VkDevice`, and only go down to the DMA-BUF level if a benchmark shows a problem.
 
 ---
 
 ## 5. FFmpeg `hwcontext_vulkan`
 
-- `AVVulkanDeviceContext` descreve o device. **A aplicação pode fornecer o
-  próprio `VkInstance`/`VkDevice`/filas** em vez de deixar o FFmpeg criar
-  **(verificar os campos exatos na versão 9)**. É isso que permite o device único.
-- Extensões de interop habilitadas por padrão quando disponíveis:
-  `VK_KHR_external_memory_fd`, `VK_EXT_external_memory_dma_buf`,
-  `VK_EXT_image_drm_format_modifier`, `VK_KHR_external_semaphore_fd`, `VK_EXT_external_memory_host`.
-- Há um campo de família de fila para decode de vídeo.
-- **`AVVkFrame`** carrega **um timeline semaphore por `VkImage`** e o valor atual
-  (`sem_value`). Contrato: **esperar** nesse valor em toda submissão que usa a
-  imagem e **sinalizar** o valor incrementado ao terminar. O semáforo pertence ao FFmpeg e não deve ser liberado manualmente.
-- Fila compartilhada: Vulkan exige sincronização externa de `VkQueue`. O
-  `AVVulkanDeviceContext` tem callbacks para travar/destravar filas **(verificar
-  nomes e disponibilidade no FFmpeg 9)**. O OmaMovie precisa de um único mecanismo
-  de lock de fila usado por FFmpeg, compositor e Qt.
+- `AVVulkanDeviceContext` describes the device. **The application can supply its own
+  `VkInstance`/`VkDevice`/queues** instead of letting FFmpeg create them **(verify the exact
+  fields in version 9)**. That is what makes the single device possible.
+- Interop extensions enabled by default when available: `VK_KHR_external_memory_fd`,
+  `VK_EXT_external_memory_dma_buf`, `VK_EXT_image_drm_format_modifier`,
+  `VK_KHR_external_semaphore_fd`, `VK_EXT_external_memory_host`.
+- There is a queue family field for video decode.
+- **`AVVkFrame`** carries **one timeline semaphore per `VkImage`** and its current value
+  (`sem_value`). Contract: **wait** on that value in every submission that uses the image and
+  **signal** the incremented value when done. The semaphore belongs to FFmpeg and must not be freed manually.
+- Shared queues: Vulkan requires external synchronization of a `VkQueue`. `AVVulkanDeviceContext`
+  has callbacks to lock/unlock queues **(verify names and availability in FFmpeg 9)**. OmaMovie
+  needs one queue lock mechanism used by FFmpeg, the compositor and Qt.
 
-**Implicação:** o contrato de sincronização do `AVVkFrame` (timeline semaphore
-por imagem) é o mesmo modelo do `CLAUDE.md` §8.1. O `Frame` do OmaMovie pode
-embrulhar o `AVVkFrame` respeitando esse contrato, sem cópia.
+**Implication:** the `AVVkFrame` synchronization contract (one timeline semaphore per image) is
+the same model as `CLAUDE.md` §8.1. OmaMovie's `Frame` can wrap `AVVkFrame` while honoring that
+contract, without copies.
 
 ---
 
-## 6. Qt Quick sobre o mesmo `VkDevice`
+## 6. Qt Quick on the same `VkDevice`
 
-| API | Para quê |
+| API | Purpose |
 |---|---|
-| `QQuickGraphicsDevice::fromDeviceObjects(physicalDevice, device, queueFamilyIndex, queueIndex)` | Fazer o Qt Quick **usar o device do OmaMovie**. Não assume ownership: o OmaMovie garante que o device vive mais que a janela |
-| `QNativeInterface::QSGVulkanTexture::fromNative(VkImage, VkImageLayout, window, size)` | Embrulhar a imagem final do compositor como textura do scene graph, sem cópia. **Só 2D RGBA**, chamada **na thread de render do scene graph**, sem ownership |
-| `QQuickRenderControl` | Alternativa: renderizar a cena Qt num alvo offscreen controlado pela aplicação |
-| Exemplo "Scene Graph – Vulkan Texture Import" | Referência oficial |
+| `QQuickGraphicsDevice::fromDeviceObjects(physicalDevice, device, queueFamilyIndex, queueIndex)` | Make Qt Quick **use OmaMovie's device**. It takes no ownership: OmaMovie guarantees the device outlives the window |
+| `QNativeInterface::QSGVulkanTexture::fromNative(VkImage, VkImageLayout, window, size)` | Wrap the compositor's final image as a scene graph texture without a copy. **2D RGBA only**, called **on the scene graph render thread**, no ownership |
+| `QQuickRenderControl` | Alternative: render the Qt scene into an offscreen target controlled by the application |
+| "Scene Graph – Vulkan Texture Import" example | Official reference |
 
-### Implicações para o OmaMovie
-- A saída do compositor para o preview deve ser uma **imagem RGBA** (ex.:
-  RGBA16F ou RGBA8 sRGB). A conversão YUV → RGB acontece no compositor, não no Qt.
-- Há três atores na mesma fila (Qt render thread, compositor, FFmpeg). A
-  sincronização (semáforos, lock de fila, transição de layout da imagem
-  entregue ao Qt) é o **maior risco técnico** do projeto. É o tema do ADR-0005 e deve ser validado num spike antes da UI.
+### Implications for OmaMovie
+- The compositor output for the preview must be an **RGBA image** (e.g. RGBA16F or RGBA8 sRGB).
+  YUV → RGB conversion happens in the compositor, not in Qt.
+- Three actors share the same queue (Qt render thread, compositor, FFmpeg). Synchronization
+  (semaphores, queue lock, layout transition of the image handed to Qt) is the project's
+  **biggest technical risk**. It is the subject of ADR-0005 and must be validated in a spike before the UI.
 
 ---
 
 ## 7. libplacebo
 
-Biblioteca de renderização de vídeo sobre Vulkan, nascida no mpv e mantida pela VideoLAN. O FFmpeg do sistema já linka com ela.
+A video rendering library on top of Vulkan, born in mpv and maintained by VideoLAN. The system
+FFmpeg already links against it.
 
-- Escala de alta qualidade (filtros polares/Jinc, anti-ringing, escala em luz linear).
-- **Tone mapping HDR dinâmico** (histograma de cena, detecção de troca de cena, controle de exposição).
-- **Gerenciamento de cor colorimetricamente preciso**: gamut mapping, perfis ICC, BT.1886, **LUTs 3D `.cube`**.
-- Importação de DMA-BUF (usada pelo mpv para interop com VA-API).
+- High-quality scaling (polar/Jinc filters, anti-ringing, linear-light scaling).
+- **Dynamic HDR tone mapping** (scene histogram, scene change detection, exposure control).
+- **Colorimetrically accurate color management**: gamut mapping, ICC profiles, BT.1886, **3D `.cube` LUTs**.
+- DMA-BUF import (used by mpv for VA-API interop).
 - Backends: Vulkan, OpenGL, D3D11.
 
-### Implicações para o OmaMovie
-- libplacebo cobre exatamente as partes do compositor mais difíceis de acertar:
-  conversão de cor, tone mapping, escala de qualidade e LUTs (`CLAUDE.md` §7.4, ADR-0006).
-- Pergunta para o ADR do compositor: **usar libplacebo como biblioteca de
-  "estágios de cor/escala" dentro do render graph** (operando sobre o `VkDevice` do
-  OmaMovie), ou implementar shaders próprios? Ponto a favor: qualidade
-  comprovada e já é dependência transitiva do FFmpeg. Ponto contra: controle do
-  render graph e da sincronização; é preciso verificar se aceita device e
-  imagens externas sem cópia **(verificar a API `pl_vulkan_import`)**. Licença LGPL-2.1 **(verificar)**.
+### Implications for OmaMovie
+- libplacebo covers exactly the hardest parts of the compositor to get right: color
+  conversion, tone mapping, quality scaling and LUTs (`CLAUDE.md` §7.4, ADR-0006).
+- Question for the compositor ADR: **use libplacebo as a library of "color/scaling stages"
+  inside the render graph** (operating on OmaMovie's `VkDevice`), or write our own shaders? For:
+  proven quality and it is already a transitive FFmpeg dependency. Against: control of the render
+  graph and of synchronization; we need to verify it accepts external devices and images without
+  copies **(verify the `pl_vulkan_import` API)**. LGPL-2.1 license **(verify)**.
 
 ---
 
-## 8. Recomendações
+## 8. Recommendations
 
-1. **`libs/gpu` é dono do `VkInstance`/`VkDevice`**, criados com as extensões de
-   interop, vídeo e as exigidas pelo Qt. FFmpeg e Qt recebem esse device.
-2. **Vulkan-Hpp com `vk::raii` e sem exceções**, incluído só em `.cpp` de `libs/gpu`/`libs/compositor`, com PCH.
-3. **VMA** para alocações próprias; caminho separado para memória importada.
-4. **Decode**: FFmpeg com hwaccel Vulkan ou VA-API, escolhido por codec/driver em
-   runtime; frames VA-API mapeados para Vulkan pelo próprio FFmpeg.
-5. **Encode**: Vulkan ou VA-API em AMD/Intel; NVENC na NVIDIA.
-6. **Efeitos**: Vulkan Compute como backend genérico (OpenCL removido; ver `opencl.md`).
-7. **Spikes obrigatórios antes de fixar o desenho**:
-   - device único compartilhado por FFmpeg + Qt + compositor, com lock de fila;
-   - decode Vulkan Video vs. VA-API na Iris Xe (H.264, HEVC, AV1), medindo frame time e uso de CPU;
-   - libplacebo operando sobre imagens do OmaMovie sem cópia.
+1. **`libs/gpu` owns the `VkInstance`/`VkDevice`**, created with the interop and video
+   extensions and those Qt requires. FFmpeg and Qt receive that device.
+2. **Vulkan-Hpp with `vk::raii` and no exceptions**, included only in `.cpp` files of `libs/gpu`/`libs/compositor`, with a PCH.
+3. **VMA** for our allocations; a separate path for imported memory.
+4. **Decode**: FFmpeg with the Vulkan or VA-API hwaccel, chosen per codec/driver at runtime; VA-API
+   frames mapped to Vulkan by FFmpeg itself.
+5. **Encode**: Vulkan or VA-API on AMD/Intel; NVENC on NVIDIA.
+6. **Effects**: Vulkan Compute as the generic backend (OpenCL removed; see `opencl.md`).
+7. **Mandatory spikes before committing to the design**:
+   - a single device shared by FFmpeg + Qt + compositor, with a queue lock;
+   - Vulkan Video vs. VA-API decode on the Iris Xe (H.264, HEVC, AV1), measuring frame time and CPU use;
+   - libplacebo operating on OmaMovie's images without copies.
 
 ---
 
-## Fontes
+## Sources
 
 - [Khronos: Vulkan-Hpp README](https://cdn.jsdelivr.net/gh/khronosgroup/vulkan-hpp@main/README.md)
 - [NVIDIA: Vulkan C++ bindings reloaded](https://developer.nvidia.com/vulkan-c-bindings-reloaded)

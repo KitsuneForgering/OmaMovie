@@ -1,114 +1,118 @@
-# OpenCL no OmaMovie: avaliação
+# OpenCL in OmaMovie: evaluation
 
-> **Decisão (2026-10-02): OpenCL removido do projeto.** O Vulkan Compute é o
-> backend genérico; CUDA continua como especialização NVIDIA. Este documento fica
-> como registro da análise que motivou a decisão (`CLAUDE.md` §9.3).
+> **Decision (2026-10-02): OpenCL removed from the project.** Vulkan Compute is the generic
+> backend; CUDA remains an NVIDIA specialization. This document stays as the record of the
+> analysis behind the decision (`CLAUDE.md` §9.3).
 
-> Pesquisa feita em 2026-10-02. Fatos com fonte estão linkados na seção
-> [Fontes](#fontes). Itens marcados **(verificar)** precisam de confirmação.
+> Research done on 2026-10-02. Sourced facts are linked in the [Sources](#sources) section.
+> Items marked **(verify)** need confirmation.
 >
-> Verificado localmente: `ocl-icd` (loader) instalado, mas **nenhum ICD
-> registrado** (`/etc/OpenCL/vendors` não existe). O instalador do Omarchy 4.0.4
-> **não instala runtime OpenCL** para nenhum fabricante. Pacotes disponíveis no
-> Arch: `opencl-mesa` (rusticl), `intel-compute-runtime`, `rocm-opencl-runtime`, `opencl-nvidia`.
+> Verified locally: `ocl-icd` (the loader) is installed, but **no ICD is registered**
+> (`/etc/OpenCL/vendors` does not exist). The Omarchy 4.0.4 installer **does not install an
+> OpenCL runtime** for any vendor. Packages available on Arch: `opencl-mesa` (rusticl),
+> `intel-compute-runtime`, `rocm-opencl-runtime`, `opencl-nvidia`.
 
 ---
 
-## 1. Resumo
+## 1. Summary
 
-O `CLAUDE.md` descreve o OpenCL como "backend genérico de computação". A
-pesquisa indica que, **no Omarchy e para um pipeline GPU-first, o Vulkan Compute
-cumpre melhor esse papel**, e o OpenCL deveria ser um backend **opcional e
-posterior**, condicionado a dois fatores:
+`CLAUDE.md` described OpenCL as the "generic compute backend". The research indicates that,
+**on Omarchy and for a GPU-first pipeline, Vulkan Compute fills that role better**, and OpenCL
+should be an **optional, later** backend, subject to two factors:
 
-1. **Interop sem cópia com Vulkan.** É o ponto decisivo. Em rusticl (Mesa) o
-   `cl_khr_external_memory` ainda estava em desenvolvimento no fim de 2025. Sem
-   ele, um efeito OpenCL obriga a copiar o frame, o que viola o princípio central do `CLAUDE.md` §7.
-2. **Disponibilidade.** O runtime OpenCL não vem instalado no Omarchy. O Vulkan vem sempre.
+1. **Zero-copy interop with Vulkan.** The decisive point. In rusticl (Mesa)
+   `cl_khr_external_memory` was still in development at the end of 2025. Without it, an OpenCL
+   effect forces a frame copy, which violates the core principle of `CLAUDE.md` §7.
+2. **Availability.** The OpenCL runtime is not installed on Omarchy. Vulkan always is.
 
-Isso **diverge do `CLAUDE.md` atual** e precisa de decisão sua (ver §6).
+This **diverged from `CLAUDE.md` at the time** and was decided by the maintainer (see §6).
 
 ---
 
-## 2. Estado do OpenCL no Linux (2026)
+## 2. State of OpenCL on Linux (2026)
 
-| Runtime | Hardware | Situação |
+| Runtime | Hardware | Status |
 |---|---|---|
-| **rusticl** (Mesa, `opencl-mesa`) | Intel (iris), AMD (radeonsi), Zink (qualquer Vulkan), Asahi, llvmpipe | **OpenCL 3.1** no Mesa 26.2. Habilitado por padrão em alguns drivers (radeonsi, asahi, freedreno, zink); em outros exige `RUSTICL_ENABLE` |
-| **intel-compute-runtime** (NEO) | Intel | Runtime oficial da Intel (OpenCL + Level Zero) |
-| **ROCm** (`rocm-opencl-runtime`) | AMD | Runtime oficial da AMD |
-| **NVIDIA** (`opencl-nvidia`, ~103 MiB) | NVIDIA | Suporta as extensões de interop com Vulkan |
+| **rusticl** (Mesa, `opencl-mesa`) | Intel (iris), AMD (radeonsi), Zink (any Vulkan), Asahi, llvmpipe | **OpenCL 3.1** in Mesa 26.2. Enabled by default on some drivers (radeonsi, asahi, freedreno, zink); others need `RUSTICL_ENABLE` |
+| **intel-compute-runtime** (NEO) | Intel | Intel's official runtime (OpenCL + Level Zero) |
+| **ROCm** (`rocm-opencl-runtime`) | AMD | AMD's official runtime |
+| **NVIDIA** (`opencl-nvidia`, ~103 MiB) | NVIDIA | Supports the Vulkan interop extensions |
 
-### Interop com Vulkan
-- Extensões Khronos: `cl_khr_external_memory` (+ `_opaque_fd`, `_dma_buf`),
-  `cl_khr_semaphore`, `cl_khr_external_semaphore` (+ `_opaque_fd`). Elas
-  permitem compartilhar memória e sincronizar com Vulkan.
-- **NVIDIA** documenta o uso dessas extensões com o próprio OpenCL.
-- **rusticl**: `cl_khr_external_memory` listado como trabalho em andamento na
-  apresentação da XDC 2025. **(verificar o estado no Mesa 26.2)**.
-- **intel-compute-runtime**: suporte às extensões externas não confirmado nesta pesquisa **(verificar)**.
-- Há um sample oficial de Vulkan "Cross vendor OpenCL and Vulkan interoperability".
+### Interop with Vulkan
+- Khronos extensions: `cl_khr_external_memory` (+ `_opaque_fd`, `_dma_buf`), `cl_khr_semaphore`,
+  `cl_khr_external_semaphore` (+ `_opaque_fd`). They allow sharing memory and synchronizing with Vulkan.
+- **NVIDIA** documents using these extensions with its OpenCL.
+- **rusticl**: `cl_khr_external_memory` listed as work in progress at XDC 2025. **(verify the state in Mesa 26.2)**.
+- **intel-compute-runtime**: support for the external extensions not confirmed in this research **(verify)**.
+- There is an official Vulkan sample, "Cross vendor OpenCL and Vulkan interoperability".
 
 ---
 
-## 3. A lição do Blender
+## 3. The Blender lesson
 
-O Blender **removeu o OpenCL do Cycles na versão 3.0** (reescrita Cycles-X). Motivos citados:
-- implementação limitada do kernel em OpenCL;
-- **bugs de driver** de certos fabricantes;
-- **padrão estagnado**;
-- manutenção difícil de um código separado do caminho C++/CUDA.
+Blender **removed OpenCL from Cycles in version 3.0** (the Cycles-X rewrite). Reasons given:
+- a limited kernel implementation in OpenCL;
+- **driver bugs** from certain vendors;
+- a **stalled standard**;
+- hard maintenance of code separate from the C++/CUDA path.
 
-Depois disso, AMD, Apple e Intel contribuíram backends **HIP, Metal e oneAPI**.
+Afterwards AMD, Apple and Intel contributed **HIP, Metal and oneAPI** backends.
 
-**Lição para o OmaMovie:** manter um backend de compute a mais custa caro e
-depende da qualidade dos drivers. O Blender preferiu backends nativos por
-fabricante a um backend "genérico" que funcionava mal em todos.
+**Lesson for OmaMovie:** maintaining an extra compute backend is expensive and depends on driver
+quality. Blender preferred native per-vendor backends over a "generic" backend that worked
+poorly everywhere.
 
-Contraponto: o OpenCL evoluiu desde 2021 (OpenCL 3.0/3.1, rusticl
-maduro), e o Darktable continua usando OpenCL com sucesso **(conhecimento geral)**.
+Counterpoint: OpenCL has evolved since 2021 (OpenCL 3.0/3.1, a mature rusticl), and Darktable
+still uses OpenCL successfully **(general knowledge)**.
 
 ---
 
-## 4. Comparação: Vulkan Compute vs. OpenCL para o OmaMovie
+## 4. Comparison: Vulkan Compute vs. OpenCL for OmaMovie
 
-| Critério | Vulkan Compute | OpenCL |
+| Criterion | Vulkan Compute | OpenCL |
 |---|---|---|
-| Disponível no Omarchy por padrão | **Sim** (drivers Vulkan sempre instalados) | Não |
-| Acesso direto às imagens do compositor | **Sim, mesmo device e memória** | Só com extensões de interop |
-| Interop sem cópia em Mesa | Não se aplica (nativo) | Em desenvolvimento (rusticl) |
-| Linguagem de kernel | GLSL/HLSL/Slang → SPIR-V | OpenCL C / C++ for OpenCL → SPIR-V |
-| Conveniência para computação geral | Menor (mais verboso, descriptors) | **Maior** (modelo de buffers e kernels mais simples) |
-| Precisão e recursos numéricos | Depende de extensões | Bom suporte a precisão e builtins matemáticos |
-| Ecossistema de kernels prontos | Shaders de vídeo (libplacebo, FFmpeg) | Bibliotecas científicas, Darktable, filtros OpenCL do FFmpeg |
-| Uso no FFmpeg | Filtros Vulkan + decode/encode | Filtros OpenCL (`hwcontext_opencl`, com interop VA-API na Intel) |
+| Available on Omarchy by default | **Yes** (Vulkan drivers always installed) | No |
+| Direct access to compositor images | **Yes, same device and memory** | Only with interop extensions |
+| Zero-copy interop on Mesa | Not applicable (native) | In development (rusticl) |
+| Kernel language | GLSL/HLSL/Slang → SPIR-V | OpenCL C / C++ for OpenCL → SPIR-V |
+| Convenience for general compute | Lower (more verbose, descriptors) | **Higher** (simpler buffer and kernel model) |
+| Precision and numeric features | Depends on extensions | Good precision support and math builtins |
+| Ecosystem of ready kernels | Video shaders (libplacebo, FFmpeg) | Scientific libraries, Darktable, FFmpeg OpenCL filters |
+| Use in FFmpeg | Vulkan filters + decode/encode | OpenCL filters (`hwcontext_opencl`, with VA-API interop on Intel) |
 
 ---
 
-## 5. Onde o OpenCL ainda pode fazer sentido
+## 5. Where OpenCL could still make sense
 
-- **Reaproveitar kernels ou bibliotecas existentes** escritos em OpenCL, quando reescrever em Vulkan não compensar.
-- **Computação não visual** (análise de áudio, detecção de cena, estatísticas)
-  em que a simplicidade do modelo OpenCL ajuda e o dado não precisa estar numa imagem Vulkan.
-- **NVIDIA**, se um efeito for mais simples em OpenCL do que em CUDA e o interop estiver disponível.
+- **Reusing existing kernels or libraries** written in OpenCL, when rewriting them in Vulkan is not worth it.
+- **Non-visual computation** (audio analysis, scene detection, statistics) where OpenCL's
+  simpler model helps and the data does not need to live in a Vulkan image.
+- **NVIDIA**, if an effect is simpler in OpenCL than in CUDA and interop is available.
 
-Nenhum desses casos existe no OmaMovie hoje.
-
----
-
-## 6. Recomendação (para decisão)
-
-1. **Vulkan Compute é o backend genérico padrão** de `ComputeBackend`. Todo efeito tem implementação Vulkan.
-2. `CpuBackend` continua como referência de corretude e para testes.
-3. **OpenCL vira backend opcional**, implementado só quando:
-   - existir um caso concreto (um dos itens do §5); e
-   - o interop sem cópia com Vulkan estiver verificado no runtime alvo (testar `cl_khr_external_memory_dma_buf`/`_opaque_fd` em rusticl e NEO).
-4. A interface `ComputeBackend` continua permitindo OpenCL (não fechar a porta), e o runtime OpenCL é **detectado em runtime** (`dlopen` do ICD loader), nunca obrigatório.
-5. Se essa direção for aceita, atualizar o `CLAUDE.md` §4 e §9.3 e registrar no ADR de compute.
+None of these cases exists in OmaMovie today.
 
 ---
 
-## Fontes
+## 6. Recommendation and decision
+
+Recommendation presented to the maintainer:
+
+1. **Vulkan Compute is the default generic backend** of `ComputeBackend`. Every effect has a Vulkan implementation.
+2. `CpuBackend` stays as the correctness reference and for tests.
+3. **OpenCL becomes an optional backend**, implemented only when:
+   - there is a concrete case (one of the items in §5); and
+   - zero-copy interop with Vulkan has been verified on the target runtime (test
+     `cl_khr_external_memory_dma_buf`/`_opaque_fd` on rusticl and NEO).
+4. The `ComputeBackend` interface keeps allowing OpenCL (the door stays open), and the OpenCL
+   runtime is **detected at runtime** (`dlopen` of the ICD loader), never required.
+
+**Decision (2026-10-02):** the maintainer chose to **remove OpenCL entirely**. `CLAUDE.md` §4
+and §9.3 were updated: Vulkan Compute is the generic backend, and adding OpenCL back requires an
+explicit decision and an ADR.
+
+---
+
+## Sources
 
 - [Phoronix: Rusticl ready with OpenCL 3.1 on Radeon, Intel Iris & Zink](https://phoronix.com/news/OpenCL-3.1-Same-Day-Rusticl)
 - [Comss: Mesa 26.2.0 with OpenCL 3.1](https://www.comss.ru/page.php?id=21518)
@@ -124,4 +128,4 @@ Nenhum desses casos existe no OmaMovie hoje.
 - [Blender 3.0 release notes: Cycles](https://wiki.blender.org/release_notes/3.0/cycles/)
 - [Blender: Next level support for AMD GPUs](https://code.blender.org/2021/11/next-level-support-for-amd-gpus/)
 - [GPUOpen: Blender Cycles AMD GPU](https://gpuopen.com/blender-cycles-amd-gpu/)
-- Arquivos locais do Omarchy 4.0.4: `/usr/share/omarchy/install/hardware/`
+- Local Omarchy 4.0.4 files: `/usr/share/omarchy/install/hardware/`

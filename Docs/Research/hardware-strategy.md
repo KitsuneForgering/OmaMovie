@@ -1,126 +1,129 @@
-# Estratégia de hardware: síntese
+# Hardware strategy: synthesis
 
-> Síntese de [`vulkan.md`](vulkan.md), [`cuda.md`](cuda.md), [`opencl.md`](opencl.md) (OpenCL removido)
-> e [`omarchy-integration.md`](omarchy-integration.md). É uma proposta para
-> discussão: vira regra só depois de entrar no `CLAUDE.md` ou num ADR.
+> Synthesis of [`vulkan.md`](vulkan.md), [`cuda.md`](cuda.md), [`opencl.md`](opencl.md) (OpenCL
+> removed) and [`omarchy-integration.md`](omarchy-integration.md). It is a proposal for
+> discussion: it becomes a rule only after it enters `CLAUDE.md` or an ADR.
 
-Objetivo: **usar todo o hardware disponível** (decode, encode e compute em
-Intel, AMD e NVIDIA) **sem tirar o frame da VRAM** e sem obrigar o usuário a instalar nada além do que o Omarchy já instala.
+Goal: **use all available hardware** (decode, encode and compute on Intel, AMD and NVIDIA)
+**without taking frames out of VRAM** and without requiring users to install anything beyond
+what Omarchy already installs.
 
 ---
 
-## 1. Arquitetura proposta
+## 1. Proposed architecture
 
 ```
-                         ┌──────────────── libs/gpu ────────────────┐
-                         │  VkInstance / VkDevice únicos (Vulkan-Hpp) │
-                         │  lock de fila · VMA · memória importada    │
+                         ┌──────────────── libs/gpu ─────────────────┐
+                         │  single VkInstance / VkDevice (Vulkan-Hpp) │
+                         │  queue lock · VMA · imported memory        │
                          └───────┬──────────────┬──────────────┬──────┘
                                  │              │              │
         ┌────────────────────────▼──┐   ┌───────▼────────┐  ┌──▼──────────────────┐
         │ libs/media (FFmpeg 9)      │   │ libs/compositor│  │ apps/omamovie (Qt)   │
-        │ hwcontext_vulkan sobre o   │   │ render graph → │  │ QQuickGraphicsDevice │
-        │ device do OmaMovie         │   │ Vulkan (+ libplacebo?)│ ::fromDeviceObjects│
+        │ hwcontext_vulkan on        │   │ render graph → │  │ QQuickGraphicsDevice │
+        │ OmaMovie's device          │   │ Vulkan (+ libplacebo?)│ ::fromDeviceObjects│
         │                            │   │ ComputeBackend │  │ QSGVulkanTexture     │
-        │ Decode:                    │   │  ├ Vulkan (padrão)│ ::fromNative        │
-        │  Intel/AMD: Vulkan Video   │   │  ├ CPU (referência)                     │
-        │             ou VA-API→map  │   │  └ CUDA (opcional, PTX)                 │
+        │ Decode:                    │   │  ├ Vulkan (default)│ ::fromNative       │
+        │  Intel/AMD: Vulkan Video   │   │  ├ CPU (reference)                      │
+        │             or VA-API→map  │   │  └ CUDA (optional, PTX)                 │
         │  NVIDIA: NVDEC→interop     │   │                                         │
-        │          ou Vulkan Video   │   └────────────────┘  └─────────────────────┘
+        │          or Vulkan Video   │   └────────────────┘  └─────────────────────┘
         │ Encode:                    │
-        │  Intel/AMD: Vulkan/VA-API  │        AVVkFrame (timeline semaphore por imagem)
-        │  NVIDIA: NVENC             │        = Frame do OmaMovie, sem cópia
-        │ Intermediários: ProRes/FFv1│
-        │  em compute shader         │
+        │  Intel/AMD: Vulkan/VA-API  │        AVVkFrame (one timeline semaphore per image)
+        │  NVIDIA: NVENC             │        = OmaMovie's Frame, without copies
+        │ Intermediates: ProRes/FFv1 │
+        │  in compute shaders        │
         └────────────────────────────┘
 ```
 
 ---
 
-## 2. Papel de cada API
+## 2. Role of each API
 
-| API | Papel | Obrigatória? |
+| API | Role | Required? |
 |---|---|---|
-| **Vulkan (Vulkan-Hpp)** | Device único; composição; preview; compute padrão de efeitos; decode/encode de vídeo em AMD/Intel; codecs em compute (ProRes, FFv1) | **Sim** |
-| **VA-API** | Decode/encode maduro em Intel/AMD; mapeado para Vulkan pelo FFmpeg | Sim (via FFmpeg), escolhida em runtime |
-| **NVDEC/NVENC** | Decode/encode na NVIDIA; NVENC é muito mais rápido que Vulkan encode | Sim na NVIDIA (via FFmpeg, sem toolkit) |
-| **CUDA (driver API)** | Interop NVDEC → Vulkan; kernels opcionais | Carregada em runtime, só na NVIDIA |
-| **CUDA (kernels)** | Efeitos com ganho medido na NVIDIA | Opcional, build opcional |
-| ~~OpenCL~~ | **Removido** (decisão de 2026-10-02, ver `opencl.md`) | Não |
-| **libplacebo** | Candidata para cor, tone mapping, escala, LUTs | A decidir (ADR) |
+| **Vulkan (Vulkan-Hpp)** | Single device; compositing; preview; default compute for effects; video decode/encode on AMD/Intel; compute codecs (ProRes, FFv1) | **Yes** |
+| **VA-API** | Mature decode/encode on Intel/AMD; mapped to Vulkan by FFmpeg | Yes (through FFmpeg), chosen at runtime |
+| **NVDEC/NVENC** | Decode/encode on NVIDIA; NVENC is much faster than Vulkan encode | Yes on NVIDIA (through FFmpeg, no toolkit) |
+| **CUDA (driver API)** | NVDEC → Vulkan interop; optional kernels | Loaded at runtime, NVIDIA only |
+| **CUDA (kernels)** | Effects with a measured gain on NVIDIA | Optional, optional build |
+| ~~OpenCL~~ | **Removed** (decision of 2026-10-02, see `opencl.md`) | No |
+| **libplacebo** | Candidate for color, tone mapping, scaling, LUTs | To be decided (ADR) |
 
 ---
 
-## 3. Seleção em runtime
+## 3. Runtime selection
 
-Na inicialização, `libs/gpu` + `libs/media` montam uma **tabela de capacidades**
-(registrada em log, categoria `gpu`, e exposta numa tela de diagnóstico):
+At startup, `libs/gpu` + `libs/media` build a **capability table** (logged in the `gpu`
+category and shown on a diagnostics screen):
 
-| Pergunta | Fonte |
+| Question | Source |
 |---|---|
-| Que codecs/perfis/profundidade de bits o Vulkan Video decodifica e codifica? | `vkGetPhysicalDeviceVideoCapabilitiesKHR` |
-| O que o VA-API oferece? | `vaQueryConfigProfiles` / FFmpeg |
-| Há NVDEC/NVENC? | Presença de `libnvcuvid`/`libnvidia-encode`, FFmpeg |
-| Há CUDA? | `dlopen` de `libcuda` |
-| Qual GPU é a primária (híbridos)? | Escolha do usuário ou heurística, sem acordar a dGPU à toa |
+| Which codecs/profiles/bit depths does Vulkan Video decode and encode? | `vkGetPhysicalDeviceVideoCapabilitiesKHR` |
+| What does VA-API offer? | `vaQueryConfigProfiles` / FFmpeg |
+| Is NVDEC/NVENC present? | Presence of `libnvcuvid`/`libnvidia-encode`, FFmpeg |
+| Is CUDA present? | `dlopen` of `libcuda` |
+| Which GPU is primary (hybrids)? | User choice or a heuristic, without waking the dGPU needlessly |
 
-Para cada stream, o caminho de decode é escolhido por uma **política ordenada e
-testável** (ex.: Intel H.264 → VA-API se benchmark favorecer, senão Vulkan
-Video → software). Fallback para software é sempre possível, e toda degradação vai para o log (`CLAUDE.md` §19).
-
----
-
-## 4. O que muda em relação ao `CLAUDE.md` atual
-
-Propostas (dependem da sua aprovação):
-
-1. ~~OpenCL como backend genérico~~ **Aplicado em 2026-10-02**: OpenCL removido;
-   Vulkan Compute é o backend genérico (`CLAUDE.md` §4 e §9.3).
-2. **Vulkan-Hpp explícito** na stack: `vk::raii`, sem exceções
-   (`VULKAN_HPP_NO_EXCEPTIONS` + `VULKAN_HPP_RAII_NO_EXCEPTIONS` com `std::expected`), include confinado a `libs/gpu`/`libs/compositor`. Afeta §4 e §22.
-3. **Device Vulkan único compartilhado com FFmpeg e Qt** como invariante. Afeta §7 e §9.4.
-4. **Política de CUDA**: NVDEC/NVENC via FFmpeg sem toolkit; kernels só via PTX
-   (clang) + `dlopen`; build CUDA opcional. Afeta §4 e §9.3.
-5. **Notebooks híbridos**: um device primário por pipeline. Afeta §7.
-6. **Integração Omarchy**: app_id `omamovie`, regra de opacidade, tema via
-   `omarchy-theme-color`, módulo de plataforma isolado. Afeta §11.
-7. **Pacote `vulkan-headers`** (e `vulkan-tools` para diagnóstico) nas dependências de build.
+For each stream, the decode path is chosen by an **ordered, testable policy** (e.g. Intel H.264
+→ VA-API if the benchmark favors it, else Vulkan Video → software). A software fallback is
+always possible, and every degradation is logged (`CLAUDE.md` §19).
 
 ---
 
-## 5. Spikes de validação (antes do código definitivo)
+## 4. Changes relative to the current `CLAUDE.md`
 
-Cada spike tem um critério mensurável. Eles substituem a parte técnica do "primeiro experimento" do `CLAUDE.md` §24.
+Proposals (pending the maintainer's approval):
 
-| # | Spike | Critério de sucesso | Hardware |
+1. ~~OpenCL as the generic backend~~ **Applied on 2026-10-02**: OpenCL removed; Vulkan Compute
+   is the generic backend (`CLAUDE.md` §4 and §9.3).
+2. **Explicit Vulkan-Hpp** in the stack: `vk::raii`, no exceptions (`VULKAN_HPP_NO_EXCEPTIONS` +
+   `VULKAN_HPP_RAII_NO_EXCEPTIONS` with `std::expected`), include confined to
+   `libs/gpu`/`libs/compositor`. Affects §4 and §22.
+3. **A single Vulkan device shared with FFmpeg and Qt** as an invariant. Affects §7 and §9.4.
+4. **CUDA policy**: NVDEC/NVENC through FFmpeg without the toolkit; kernels only through PTX
+   (clang) + `dlopen`; optional CUDA build. Affects §4 and §9.3.
+5. **Hybrid laptops**: one primary device per pipeline. Affects §7.
+6. **Omarchy integration**: app_id `omamovie`, opacity rule, theme through
+   `omarchy-theme-color`, an isolated platform module. Affects §11.
+7. **The `vulkan-headers` package** (and `vulkan-tools` for diagnostics) in the build dependencies.
+
+---
+
+## 5. Validation spikes (before the definitive code)
+
+Each spike has a measurable criterion. They replace the technical part of the "first
+experiment" in `CLAUDE.md` §24.
+
+| # | Spike | Success criterion | Hardware |
 |---|---|---|---|
-| S1 | `vulkaninfo` + `vainfo`: inventário de capacidades na Iris Xe | Tabela de codecs × API documentada | Iris Xe |
-| S2 | FFmpeg 9 usando um `VkDevice` criado pelo OmaMovie (Vulkan-Hpp) | Decode H.264/HEVC/AV1 em `AVVkFrame` sem readback | Iris Xe |
-| S3 | Vulkan Video vs. VA-API→map: frame time, CPU, potência | Números por codec; política de seleção definida | Iris Xe |
-| S4 | Qt Quick sobre o mesmo device exibindo a imagem do compositor | Preview a 60 fps sem cópia para CPU; lock de fila sem deadlock | Iris Xe |
-| S5 | Composição de 2 vídeos + 1 imagem (transform, crop, opacity, YUV→RGB) | Frame time medido em 1080p60 | Iris Xe |
-| S6 | libplacebo sobre imagens do OmaMovie | Conversão de cor/escala sem cópia; decisão para o ADR | Iris Xe |
-| S7 | NVDEC → Vulkan (interop) vs. Vulkan Video na NVIDIA | Escolha do caminho NVIDIA por medição | **Precisa de máquina NVIDIA** |
-| S8 | AMD (RADV) | Mesmas medições de S3 | **Precisa de máquina AMD** |
+| S1 | `vulkaninfo` + `vainfo`: capability inventory on the Iris Xe | Documented codec × API table | Iris Xe |
+| S2 | FFmpeg 9 using a `VkDevice` created by OmaMovie (Vulkan-Hpp) | H.264/HEVC/AV1 decoded into `AVVkFrame` without readback | Iris Xe |
+| S3 | Vulkan Video vs. VA-API→map: frame time, CPU, power | Numbers per codec; selection policy defined | Iris Xe |
+| S4 | Qt Quick on the same device showing the compositor image | 60 fps preview without a CPU copy; queue lock without deadlock | Iris Xe |
+| S5 | Compositing 2 videos + 1 image (transform, crop, opacity, YUV→RGB) | Frame time measured at 1080p60 | Iris Xe |
+| S6 | libplacebo on OmaMovie's images | Color conversion/scaling without copies; decision for the ADR | Iris Xe |
+| S7 | NVDEC → Vulkan (interop) vs. Vulkan Video on NVIDIA | NVIDIA path chosen by measurement | **Needs an NVIDIA machine** |
+| S8 | AMD (RADV) | Same measurements as S3 | **Needs an AMD machine** |
 
 ---
 
-## 6. Riscos principais
+## 6. Main risks
 
-| Risco | Mitigação |
+| Risk | Mitigation |
 |---|---|
-| Sincronização de fila entre Qt, FFmpeg e compositor | S4 cedo; um único mecanismo de lock; ADR-0005 |
-| Diferenças de driver em DMA-BUF/modificadores | Usar o mapeamento do FFmpeg; fallback com cópia GPU→GPU registrada em log |
-| CUDA não aceita wait-before-signal | Agendador garante a ordem; testes específicos |
-| Sem hardware AMD/NVIDIA para testar | Planejar máquinas de teste ou contribuidores; CI só cobre caminhos de software |
-| Custo de compilação do Vulkan-Hpp | Include confinado + PCH; avaliar módulo `vulkan` |
-| libplacebo não aceitar imagens externas como esperado | S6 antes de decidir |
+| Queue synchronization between Qt, FFmpeg and the compositor | S4 early; a single lock mechanism; ADR-0005 |
+| Driver differences in DMA-BUF/modifiers | Use FFmpeg's mapping; fallback with a logged GPU→GPU copy |
+| CUDA does not accept wait-before-signal | The scheduler guarantees the order; specific tests |
+| No AMD/NVIDIA hardware for testing | Plan test machines or contributors; CI only covers software paths |
+| Vulkan-Hpp compile cost | Confined include + PCH; evaluate the `vulkan` module |
+| libplacebo not accepting external images as expected | S6 before deciding |
 
 ---
 
-## Próximos passos sugeridos
+## Suggested next steps
 
-1. Você decide os pontos restantes do §4 (principalmente libplacebo).
-2. Atualizar o `CLAUDE.md` com o que for aprovado.
-3. Instalar `vulkan-headers vulkan-tools libva-utils` e rodar S1.
-4. M0 (build system + `libs/base`) em paralelo com S2–S4.
+1. The maintainer decides the remaining points of §4 (mainly libplacebo).
+2. Update `CLAUDE.md` with whatever is approved.
+3. Install `vulkan-headers vulkan-tools libva-utils` and run S1.
+4. Continue with S2–S4 (M1 in `Docs/implementation-plan.md`).
