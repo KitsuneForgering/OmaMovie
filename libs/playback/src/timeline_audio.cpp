@@ -1,10 +1,12 @@
-#include "timeline_audio.hpp"
+#include "oma/playback/timeline_audio.hpp"
 
 #include "oma/audio/mix.hpp"
 
 #include <algorithm>
 #include <filesystem>
 #include <utility>
+
+namespace oma::playback {
 
 namespace tl = oma::timeline;
 
@@ -22,7 +24,8 @@ std::int64_t ceil_div(std::int64_t a, std::int64_t b) {
 }
 
 // floor((t + ticks * unit) * rate): the media sample at a time offset, exact (128-bit).
-std::int64_t sample_at(const oma::RationalTime& t, std::int64_t ticks, oma::Rational unit, std::int32_t rate) {
+std::int64_t sample_at(const oma::RationalTime& t, std::int64_t ticks, oma::Rational unit,
+                       std::int32_t rate) {
     const oma::Rational tb = t.timebase();
     const Int128 den = static_cast<Int128>(tb.den()) * unit.den();
     const Int128 num = (static_cast<Int128>(t.value()) * tb.num() * unit.den() +
@@ -33,11 +36,13 @@ std::int64_t sample_at(const oma::RationalTime& t, std::int64_t ticks, oma::Rati
 
 } // namespace
 
-TimelineAudio::TimelineAudio(tl::Timeline timeline, std::unordered_map<std::uint64_t, std::string> paths,
+TimelineAudio::TimelineAudio(tl::Timeline timeline,
+                             std::unordered_map<std::uint64_t, std::string> paths,
                              oma::SampleRate rate, int channels)
     : timeline_(std::move(timeline)), paths_(std::move(paths)), rate_(rate), channels_(channels) {
     // The sequence timebase holds whole samples (Timeline::default_timebase).
-    ticks_per_sample_ = std::max<std::int64_t>(1, timeline_.to_ticks(rate_.sample_to_time(1)).value_or(1));
+    ticks_per_sample_ =
+        std::max<std::int64_t>(1, timeline_.to_ticks(rate_.sample_to_time(1)).value_or(1));
 }
 
 oma::Result<void> TimelineAudio::render(std::span<float> out, std::int64_t first) {
@@ -80,7 +85,8 @@ oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip) 
     const auto path = paths_.find(clip.media.value());
     if (path == paths_.end()) {
         s.failed = true;
-        return oma::make_error(oma::ErrorCode::InvalidArgument, oma::Category::Audio, "clip media has no file");
+        return oma::make_error(oma::ErrorCode::InvalidArgument, oma::Category::Audio,
+                               "clip media has no file");
     }
     oma::media::AudioDecoderOptions options;
     options.sample_rate = rate_;
@@ -94,7 +100,8 @@ oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip) 
     return &s;
 }
 
-oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, std::span<float> out, std::int64_t first) {
+oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, std::span<float> out,
+                                          std::int64_t first) {
     if (clip.time_map.speed() != oma::Rational::literal(1, 1)) {
         return {}; // needs time-stretching (v0.2 speed work)
     }
@@ -112,7 +119,8 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, std::span<float>
     const std::int64_t from = std::max(a, first);
     const std::int64_t to = std::min(b, first + frames);
     const std::int64_t media_sample =
-        sample_at(clip.source_in, (from * ticks_per_sample_) - clip.start_ticks(), timeline_.timebase(), rate_.hz());
+        sample_at(clip.source_in, (from * ticks_per_sample_) - clip.start_ticks(),
+                  timeline_.timebase(), rate_.hz());
     if (s.next_sample != media_sample) {
         // A jump (first block, a seek, or a cut back into this media): reposition exactly.
         auto t = oma::RationalTime::make(media_sample, rate_.timebase());
@@ -153,12 +161,15 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, std::span<float>
         }
         const std::int64_t n = std::min(to - pos, s.buffer->frames - s.offset);
         const auto at = static_cast<std::size_t>((pos - first) * channels_);
-        oma::audio::mix_planar(out.subspan(at), channels_,
-                               std::span<const float>(s.buffer->samples).subspan(static_cast<std::size_t>(s.offset)),
-                               s.buffer->channels, s.buffer->frames, n, gain, pos - a);
+        oma::audio::mix_planar(
+            out.subspan(at), channels_,
+            std::span<const float>(s.buffer->samples).subspan(static_cast<std::size_t>(s.offset)),
+            s.buffer->channels, s.buffer->frames, n, gain, pos - a);
         s.offset += n;
         s.next_sample += n;
         pos += n;
     }
     return {};
 }
+
+} // namespace oma::playback

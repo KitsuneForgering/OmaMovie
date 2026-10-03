@@ -163,6 +163,7 @@ oma-movie/
     audio/               # Mixer, resampling, clock, PipeWire output.
     compositor/          # Render graph + Vulkan compositor + effects.
     timeline/            # Timeline model, editing operations, undo/redo.
+    playback/            # What playback renders from a timeline snapshot (audio mix). No Qt.
     project/             # Native format, serialization, migration.
     project-ir/          # ProjectIR: neutral intermediate representation.
     importers/           # One subdirectory per external format -> ProjectIR.
@@ -196,6 +197,7 @@ base  <-  timeline           (timeline does NOT depend on gpu, concrete media, c
 base  <-  project-ir         (project-ir does NOT depend on timeline, project or importers)
 project-ir <- importers      (importers do NOT depend on OmaMovie's internal model)
 timeline, project-ir <- project
+timeline, media, audio <- playback (no Qt: the app drives it)
 everything  <-  apps/omamovie, tools/*
 ```
 

@@ -18,10 +18,14 @@
 //
 // Threading: owned by the playback audio pipeline thread; never the real-time callback (it
 // decodes, allocates and does I/O).
+
+namespace oma::playback {
+
 class TimelineAudio {
 public:
-    TimelineAudio(oma::timeline::Timeline timeline, std::unordered_map<std::uint64_t, std::string> paths,
-                  oma::SampleRate rate, int channels);
+    TimelineAudio(oma::timeline::Timeline timeline,
+                  std::unordered_map<std::uint64_t, std::string> paths, oma::SampleRate rate,
+                  int channels);
 
     // Fills `out` (interleaved) with sequence samples [first, first + out.size() / channels).
     // Clips at speeds other than 1 stay silent until time-stretching exists. Media that cannot
@@ -53,3 +57,5 @@ private:
     std::unordered_map<std::uint64_t, Stream> streams_; // per clip ID
     std::uint64_t pass_ = 0;
 };
+
+} // namespace oma::playback

@@ -87,6 +87,7 @@ ALLOWED_DEPS_media      := base gpu
 ALLOWED_DEPS_compositor := base gpu media
 ALLOWED_DEPS_audio      := base
 ALLOWED_DEPS_timeline   := base
+ALLOWED_DEPS_playback   := base gpu media audio timeline
 ALLOWED_DEPS_project-ir := base
 ALLOWED_DEPS_importers  := base project-ir
 ALLOWED_DEPS_project    := base timeline project-ir
@@ -131,12 +132,14 @@ include libs/media/module.mk
 include libs/compositor/module.mk
 include libs/audio/module.mk
 include libs/timeline/module.mk
+include libs/playback/module.mk
 include tests/base/module.mk
 include tests/gpu/module.mk
 include tests/media/module.mk
 include tests/compositor/module.mk
 include tests/audio/module.mk
 include tests/timeline/module.mk
+include tests/playback/module.mk
 
 # -------------------------------------------------------------------------- rules
 
@@ -187,13 +190,13 @@ $(BUILD_DIR)/gen/omamovie/moc_%.cpp: apps/omamovie/src/%.hpp $(MAKEFILE_LIST)
 	$(Q)/usr/lib/qt6/moc $< -o $@
 
 # The viewer wraps compositor images with Qt's RHI (limited compatibility API, versioned headers).
-$(BUILD_DIR)/omamovie: $(APP_SOURCES) $(APP_HEADERS) $(APP_MOCS) $(wildcard apps/omamovie/qml/*.qml) $(LIB_timeline) $(LIB_audio) $(LIB_compositor) $(LIB_media) $(LIB_gpu) $(LIB_base) $(MAKEFILE_LIST)
+$(BUILD_DIR)/omamovie: $(APP_SOURCES) $(APP_HEADERS) $(APP_MOCS) $(wildcard apps/omamovie/qml/*.qml) $(LIB_playback) $(LIB_timeline) $(LIB_audio) $(LIB_compositor) $(LIB_media) $(LIB_gpu) $(LIB_base) $(MAKEFILE_LIST)
 	$(call say,GUI,$@)
 	@mkdir -p $(@D)
-	$(Q)$(CXX) $(CXXFLAGS_BASE) -fPIC $(TEST_WARNINGS) $(INC_timeline) $(INC_audio) $(INC_compositor) -Iapps/omamovie/src \
+	$(Q)$(CXX) $(CXXFLAGS_BASE) -fPIC $(TEST_WARNINGS) $(INC_playback) $(INC_compositor) -Iapps/omamovie/src \
 		$$(pkg-config --cflags Qt6Quick Qt6Test) \
 		-isystem $$(pkg-config --variable=includedir Qt6Gui)/QtGui/$$(pkg-config --modversion Qt6Gui)/QtGui \
-		$(APP_SOURCES) $(APP_MOCS) -o $@ $(LINK_timeline) $(LINK_audio) $(LINK_compositor) \
+		$(APP_SOURCES) $(APP_MOCS) -o $@ $(LINK_playback) $(LINK_compositor) \
 		$$(pkg-config --libs Qt6Quick Qt6Test) $(LDFLAGS_BASE)
 
 run-gui: $(BUILD_DIR)/omamovie

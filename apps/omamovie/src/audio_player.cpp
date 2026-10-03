@@ -1,6 +1,6 @@
 #include "audio_player.hpp"
 
-#include "timeline_audio.hpp"
+#include "oma/playback/timeline_audio.hpp"
 
 #include "oma/base/log.hpp"
 
@@ -75,7 +75,7 @@ oma::Result<void> AudioPlayer::start(oma::timeline::Timeline timeline,
     live_output_.store(output_.get(), std::memory_order_release);
     render_failed_.store(false, std::memory_order_relaxed);
     render_error_.clear();
-    auto renderer = std::make_shared<TimelineAudio>(std::move(timeline), std::move(paths), rate_, kChannels);
+    auto renderer = std::make_shared<oma::playback::TimelineAudio>(std::move(timeline), std::move(paths), rate_, kChannels);
     oma::audio::SampleRing& ring = output_->ring();
     const auto ahead = static_cast<std::size_t>(kAheadSeconds * rate_.hz());
     producer_ = pipeline_.submit("playback-audio", [this, renderer, &ring, ahead, from](oma::JobContext& ctx) {
