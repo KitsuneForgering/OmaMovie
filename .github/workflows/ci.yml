@@ -9,9 +9,9 @@ permissions:
   contents: read
 
 jobs:
-  # Arch Linux em container: mesma toolchain do Omarchy (GCC/Clang atuais).
-  # O container roda via `docker run` para permitir ajustar o kernel do host antes:
-  # o ThreadSanitizer falha com a entropia de mmap padrão dos runners recentes.
+  # Arch Linux container: same toolchain as Omarchy (current GCC/Clang).
+  # The container runs through `docker run` so the host kernel can be tuned first:
+  # ThreadSanitizer fails with the default mmap entropy of recent runners.
   test:
     name: ${{ matrix.compiler }} / ${{ matrix.build }}
     runs-on: ubuntu-latest
@@ -23,10 +23,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Ajustar mmap_rnd_bits para o TSan
+      - name: Lower mmap_rnd_bits for TSan
         run: sudo sysctl -w vm.mmap_rnd_bits=28
 
-      - name: Build e testes
+      - name: Build and test
         run: |
           docker run --rm --cap-add SYS_PTRACE \
             -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
@@ -35,7 +35,7 @@ jobs:
                 test JUNIT_DIR=build/junit
             '
 
-      - name: Relatórios JUnit
+      - name: JUnit reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -44,11 +44,11 @@ jobs:
           if-no-files-found: ignore
 
   lint:
-    name: formato e clang-tidy
+    name: format and clang-tidy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: clang-format e clang-tidy
+      - name: clang-format and clang-tidy
         run: |
           docker run --rm -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
             pacman -Syu --noconfirm --needed base-devel clang >/dev/null

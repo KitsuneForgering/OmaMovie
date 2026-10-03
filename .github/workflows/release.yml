@@ -1,8 +1,8 @@
 name: Release
 
-# Tag vX.Y.Z (ou vX.Y.Z-rc.N) → build release + testes → GitHub Release com notas geradas
-# dos Conventional Commits e o tarball dos fontes. Binários do app entram quando o app
-# existir (M6/M7), no formato <app>-<versão>-<arch>-linux.tar.gz usado pela OmaStore.
+# Tag vX.Y.Z (or vX.Y.Z-rc.N) → release build + tests → GitHub Release with notes generated
+# from Conventional Commits and the source tarball. App binaries are added once the app
+# exists (M6/M7), as <app>-<version>-<arch>-linux.tar.gz, the layout OmaStore expects.
 on:
   push:
     tags: ['v*.*.*']
@@ -18,14 +18,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Build e testes (release)
+      - name: Build and test (release)
         run: |
           docker run --rm -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
             pacman -Syu --noconfirm --needed base-devel >/dev/null
             make -j"$(nproc)" BUILD=release test
           '
 
-      - name: Notas e tarball dos fontes
+      - name: Release notes and source tarball
         run: |
           tag="${GITHUB_REF_NAME}"
           version="${tag#v}"
@@ -34,7 +34,7 @@ jobs:
           sha256sum "oma-movie-${version}-src.tar.gz" > "oma-movie-${version}-src.tar.gz.sha256"
           cat release-notes.md
 
-      - name: Publicar release
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
