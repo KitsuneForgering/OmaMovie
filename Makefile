@@ -126,7 +126,21 @@ $(BUILD_DIR)/obj/%.o: %.cpp $(MAKEFILE_LIST)
 
 -include $(patsubst %.cpp,$(BUILD_DIR)/obj/%.d,$(ALL_SOURCES))
 
-.PHONY: all libs tests test clean distclean compdb format format-check tidy fixtures help
+.PHONY: all libs tests test clean distclean compdb format format-check tidy fixtures spikes help
+
+# Spikes (tools/spikes/*.cpp): disposable single-file experiments (Docs/spikes/), built only on
+# request because they need the Vulkan and FFmpeg development files. pkg-config runs inside the
+# recipe so a missing package never affects other targets.
+SPIKE_PKGS := vulkan libavformat libavcodec libavutil
+SPIKE_BINS := $(patsubst tools/spikes/%.cpp,$(BUILD_DIR)/spikes/%,$(wildcard tools/spikes/*.cpp))
+
+$(BUILD_DIR)/spikes/%: tools/spikes/%.cpp $(MAKEFILE_LIST)
+	$(call say,SPIKE,$@)
+	@mkdir -p $(@D)
+	$(Q)$(CXX) $(CXXFLAGS_BASE) -Wall -Wextra $$(pkg-config --cflags $(SPIKE_PKGS)) $< -o $@ \
+		$$(pkg-config --libs $(SPIKE_PKGS)) $(LDFLAGS_BASE)
+
+spikes: $(SPIKE_BINS)
 
 all: libs tests compdb
 
@@ -186,5 +200,6 @@ help:
 	@echo '  format        apply clang-format     | format-check  check without changing'
 	@echo '  tidy          run clang-tidy on the libs'
 	@echo '  fixtures      generate test media in tests/fixtures/generated (needs ffmpeg)'
+	@echo '  spikes        build the M1 spikes in tools/spikes (needs Vulkan + FFmpeg headers)'
 	@echo '  clean         remove build/$$BUILD   | distclean     remove all of build/'
 	@echo 'Variables: BUILD=debug|release|asan|tsan  CXX=g++|clang++  WERROR=1|0  V=1 (verbose)'
