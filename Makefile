@@ -115,6 +115,7 @@ ALL_TESTS   += $$(TEST_BIN_$(1))
 endef
 
 include libs/base/module.mk
+include tests/base/module.mk
 
 # ----------------------------------------------------------------------- regras
 
