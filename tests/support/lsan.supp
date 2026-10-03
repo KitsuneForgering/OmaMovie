@@ -21,3 +21,9 @@ leak:oma::media::ff::wrap_vulkan_device
 leak:iHD_drv_video.so
 leak:libigdgmm.so
 leak:libva.so
+
+# PipeWire 1.x: client modules loaded while creating a stream's context (pw_context_load_module,
+# e.g. module-rt talking to RTKit over D-Bus) keep allocations after pw_stream_destroy; the module
+# is unloaded by then, so the frames are unsymbolized. Only reachable where a PipeWire daemon
+# answers (not in CI).
+leak:pw_context_load_module

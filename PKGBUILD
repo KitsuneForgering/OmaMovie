@@ -24,7 +24,8 @@ depends=(
     'gcc-libs'                  # libstdc++ (libs/base)
     'glibc'
     'vulkan-icd-loader'         # libvulkan (libs/gpu)
-    'ffmpeg'                    # libavformat/libavcodec/libavutil/libswresample (libs/media)
+    'ffmpeg'                    # libavformat/libavcodec/libavutil/libswresample/libswscale (libs/media)
+    'libpipewire'               # PipeWire client (libs/audio)
 )
 makedepends=(
     'git'
