@@ -54,7 +54,9 @@ bool codec_supports(const AVCodec& codec, AVHWDeviceType type) {
         if (cfg == nullptr) {
             return false;
         }
-        if (cfg->device_type == type && (cfg->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX)) {
+        if (cfg->device_type == type &&
+            (static_cast<unsigned>(cfg->methods) &
+             static_cast<unsigned>(AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX)) != 0) {
             return true;
         }
     }
@@ -378,7 +380,7 @@ Result<std::unique_ptr<VideoDecoder>> VideoDecoder::open(const std::filesystem::
         impl->fmt->streams[i]->discard =
             std::cmp_equal(i, index) ? AVDISCARD_DEFAULT : AVDISCARD_ALL;
     }
-    auto tb = ff::to_timebase(impl->st->time_base);
+    const auto tb = ff::to_timebase(impl->st->time_base);
     if (!tb) {
         return make_error(ErrorCode::InvalidData, Category::Decode, "stream has no timebase",
                           path.string());

@@ -197,7 +197,7 @@ Result<std::unique_ptr<AudioDecoder>> AudioDecoder::open(const std::filesystem::
         impl->fmt->streams[i]->discard =
             std::cmp_equal(i, index) ? AVDISCARD_DEFAULT : AVDISCARD_ALL;
     }
-    auto tb = ff::to_timebase(impl->st->time_base);
+    const auto tb = ff::to_timebase(impl->st->time_base);
     if (!tb) {
         return make_error(ErrorCode::InvalidData, Category::Audio, "stream has no timebase",
                           path.string());

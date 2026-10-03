@@ -60,7 +60,7 @@ void GpuAccess::commit(VkImageLayout layout, VkAccessFlags2 access) noexcept {
     if (frame_ == nullptr) {
         return;
     }
-    auto* f = static_cast<AVFrame*>(frame_);
+    const auto* f = static_cast<const AVFrame*>(frame_);
     auto* vkf = reinterpret_cast<AVVkFrame*>(f->data[0]);
     for (std::uint32_t i = 0; i < images_.image_count; ++i) {
         vkf->sem_value[i] = images_.signal_values[i];
@@ -76,9 +76,9 @@ void GpuAccess::release() noexcept {
     if (frame_ == nullptr) {
         return;
     }
-    auto* f = static_cast<AVFrame*>(std::exchange(frame_, nullptr));
+    const auto* f = static_cast<const AVFrame*>(std::exchange(frame_, nullptr));
     AVHWFramesContext* fc = frames_of(*f);
-    auto* vk_fc = static_cast<AVVulkanFramesContext*>(fc->hwctx);
+    const auto* vk_fc = static_cast<const AVVulkanFramesContext*>(fc->hwctx);
     if (vk_fc->unlock_frame != nullptr) {
         vk_fc->unlock_frame(fc, reinterpret_cast<AVVkFrame*>(f->data[0]));
     }
@@ -155,7 +155,7 @@ Result<GpuAccess> VideoFrame::acquire_gpu() {
     }
     AVFrame* f = impl_->frame.get();
     AVHWFramesContext* fc = frames_of(*f);
-    auto* vk_fc = static_cast<AVVulkanFramesContext*>(fc->hwctx);
+    const auto* vk_fc = static_cast<const AVVulkanFramesContext*>(fc->hwctx);
     auto* vkf = reinterpret_cast<AVVkFrame*>(f->data[0]);
     if (vk_fc->lock_frame != nullptr) {
         vk_fc->lock_frame(fc, vkf);

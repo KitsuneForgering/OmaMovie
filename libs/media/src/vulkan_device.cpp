@@ -16,7 +16,7 @@ namespace oma::media::ff {
 namespace {
 
 #if FF_API_VULKAN_SYNC_QUEUES
-const gpu::Device& device_of(AVHWDeviceContext* ctx) {
+const gpu::Device& device_of(const AVHWDeviceContext* ctx) {
     return *static_cast<const gpu::Device*>(ctx->user_opaque);
 }
 void lock_queue(AVHWDeviceContext* ctx, uint32_t family, uint32_t index) {

@@ -108,8 +108,9 @@ VideoInfo video_info(const AVStream& st, std::string_view demuxer) {
             }
         }
     }
-    v.still_image =
-        (st.disposition & AV_DISPOSITION_ATTACHED_PIC) != 0 || is_image_demuxer(demuxer);
+    v.still_image = (static_cast<unsigned>(st.disposition) &
+                     static_cast<unsigned>(AV_DISPOSITION_ATTACHED_PIC)) != 0 ||
+                    is_image_demuxer(demuxer);
     return v;
 }
 
