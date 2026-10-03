@@ -29,6 +29,7 @@ depends=(
 makedepends=(
     'git'
     'vulkan-headers'            # vulkan.hpp / vulkan_raii.hpp (libs/gpu)
+    'shaderc'                   # glslc: GLSL compute shaders to SPIR-V (libs/compositor)
 )
 checkdepends=(
     'vulkan-swrast'             # lavapipe: GPU tests run on machines without a Vulkan driver
