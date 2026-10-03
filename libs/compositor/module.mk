@@ -14,3 +14,4 @@ $(COMPOSITOR_GEN)/%.inc: libs/compositor/shaders/% $(MAKEFILE_LIST)
 	$(Q)$(GLSLC) --target-env=vulkan1.3 -O -Werror -mfmt=num -o $@ $<
 
 $(call obj_of,libs/compositor/src/vulkan_compositor.cpp): $(COMPOSITOR_SPV)
+TIDY_PREREQS += $(COMPOSITOR_SPV)

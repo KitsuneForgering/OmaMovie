@@ -202,7 +202,8 @@ format:
 format-check:
 	clang-format --dry-run --Werror $(FORMAT_FILES)
 
-tidy: compdb
+# Generated sources (SPIR-V includes) must exist before clang-tidy parses the files using them.
+tidy: compdb $(TIDY_PREREQS)
 	clang-tidy -p . --quiet $(filter libs/%,$(ALL_SOURCES))
 
 fixtures:
