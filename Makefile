@@ -130,6 +130,7 @@ include libs/gpu/module.mk
 include libs/media/module.mk
 include tests/base/module.mk
 include tests/gpu/module.mk
+include tests/media/module.mk
 
 # -------------------------------------------------------------------------- rules
 
@@ -164,7 +165,7 @@ tests: $(ALL_TESTS)
 
 # FILTER=<pattern> runs only tests whose name contains the pattern (Cest filter).
 # JUNIT_DIR=<dir> writes one JUnit report per test binary (used by CI).
-test: $(ALL_TESTS)
+test: $(ALL_TESTS) $(TEST_PREREQS)
 	@failed=0; \
 	for t in $(ALL_TESTS); do \
 	  printf '\n== %s (%s)\n' "$${t##*/}" "$(BUILD)"; \
