@@ -1,0 +1,10 @@
+# ThreadSanitizer suppressions for third-party code (BUILD=tsan). Only libraries built without
+# TSan belong here; never suppress a frame from libs/ or tests/.
+
+# FFmpeg's frame and slice threads hand buffers to the caller through atomics that an
+# uninstrumented FFmpeg hides from TSan, so a buffer allocated by a decoder thread and released
+# by the caller looks like a race.
+race:libavcodec.so
+race:libavutil.so
+race:libavformat.so
+race:libswresample.so

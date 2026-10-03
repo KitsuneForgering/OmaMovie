@@ -47,14 +47,15 @@ else ifeq ($(BUILD),release)
   MODE_FLAGS := -O2 -g -DNDEBUG
 else ifeq ($(BUILD),asan)
   MODE_FLAGS := -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all
-  # Drivers stay loaded so LeakSanitizer can name (and the suppressions match) their frames.
-  TEST_ENV   := ASAN_OPTIONS=detect_leaks=1:abort_on_error=1:strict_string_checks=1 \
+  # Drivers stay loaded and stacks are fully unwound, so the suppressions match their frames.
+  TEST_ENV   := ASAN_OPTIONS=detect_leaks=1:abort_on_error=1:strict_string_checks=1:fast_unwind_on_malloc=0 \
                 LSAN_OPTIONS=suppressions=$(CURDIR)/tests/support/lsan.supp:print_suppressions=0 \
                 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
                 VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1
 else ifeq ($(BUILD),tsan)
   MODE_FLAGS := -O1 -g -fno-omit-frame-pointer -fsanitize=thread
-  TEST_ENV   := TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1
+  TEST_ENV   := TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1:suppressions=$(CURDIR)/tests/support/tsan.supp \
+                VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1
 else
   $(error invalid BUILD='$(BUILD)'. Use: debug, release, asan or tsan)
 endif

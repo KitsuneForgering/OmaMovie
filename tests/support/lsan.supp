@@ -6,3 +6,18 @@ leak:libvulkan_lvp.so
 leak:libvulkan_intel.so
 leak:libvulkan_radeon.so
 leak:libLLVM
+
+# FFmpeg 9.0.1: mapping VA-API frames into Vulkan (av_hwframe_map, direct or through DRM) leaves a
+# reference cycle that keeps the VA-API device, its surface pool and the derived Vulkan frames
+# context alive (~200 KB per decoder, constant per session). Reproduced with plain FFmpeg and an
+# FFmpeg-created Vulkan device, no OmaMovie code involved (Docs/spikes/S2-ffmpeg-own-device.md).
+# Only reachable on machines with VA-API (not in CI). Remove once FFmpeg fixes the cycle.
+leak:av_hwframe_map
+leak:av_hwframe_ctx_create_derived
+leak:av_hwframe_ctx_init
+leak:av_hwframe_get_buffer
+leak:av_hwdevice_ctx_create
+leak:oma::media::ff::wrap_vulkan_device
+leak:iHD_drv_video.so
+leak:libigdgmm.so
+leak:libva.so
