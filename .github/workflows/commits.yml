@@ -1,0 +1,39 @@
+name: Commits
+
+# Conventional Commits in English for every commit and pull request title.
+on:
+  push:
+    branches: [master]
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  conventional:
+    name: conventional commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Commits do pull request
+        if: github.event_name == 'pull_request'
+        run: scripts/check-commits.sh "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+
+      - name: Título do pull request
+        if: github.event_name == 'pull_request'
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?!?: [^ ].{0,98}[^.]$'
+          if [[ ! $TITLE =~ $pattern ]]; then
+            echo "Título fora do padrão Conventional Commits: $TITLE"
+            exit 1
+          fi
+
+      - name: Commits do push
+        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+        run: scripts/check-commits.sh "${{ github.event.before }}..${{ github.sha }}"
