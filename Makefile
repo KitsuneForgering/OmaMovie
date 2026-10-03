@@ -114,6 +114,7 @@ ALL_SOURCES += $(2)
 ALL_TESTS   += $$(TEST_BIN_$(1))
 endef
 
+include libs/base/module.mk
 
 # ----------------------------------------------------------------------- regras
 
