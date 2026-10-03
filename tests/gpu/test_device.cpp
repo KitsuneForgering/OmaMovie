@@ -29,6 +29,14 @@ Device* device() {
     return g_device.get();
 }
 
+} // namespace
+
+oma::gpu::Device* gpu_test_device() {
+    return device();
+}
+
+namespace {
+
 bool family_has(const Device& d, uint32_t family, VkQueueFlags flag) {
     for (const auto& f : d.queue_families()) {
         if (f.index == family) {
