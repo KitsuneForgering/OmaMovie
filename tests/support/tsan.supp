@@ -8,3 +8,6 @@ race:libavcodec.so
 race:libavutil.so
 race:libavformat.so
 race:libswresample.so
+
+# Codec libraries FFmpeg drives with their own worker threads (dav1d decodes AV1 in software).
+race:libdav1d.so
