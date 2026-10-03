@@ -16,12 +16,17 @@ MAKEFLAGS += --no-builtin-rules
 
 BUILD     ?= debug
 BUILD_DIR := build/$(BUILD)
-# Honor CXX/AR from the command line or environment; default to g++/ar.
+# Honor CXX/AR from the command line or environment. The default archiver understands LTO
+# objects (makepkg builds with -flto=auto): gcc-ar for GCC, llvm-ar for Clang.
 ifeq ($(origin CXX),default)
   CXX := g++
 endif
 ifeq ($(origin AR),default)
-  AR := ar
+  ifneq ($(findstring clang,$(CXX)),)
+    AR := llvm-ar
+  else
+    AR := gcc-ar
+  endif
 endif
 WERROR    ?= 1
 V         ?= 0
@@ -51,9 +56,11 @@ else
   $(error invalid BUILD='$(BUILD)'. Use: debug, release, asan or tsan)
 endif
 
-CXXFLAGS_BASE := -std=c++23 -pthread $(MODE_FLAGS)
+# CPPFLAGS/CXXFLAGS/LDFLAGS from the environment (e.g. makepkg's distribution flags) are
+# appended, so packagers can add hardening and LTO without editing this file.
+CXXFLAGS_BASE := -std=c++23 -pthread $(MODE_FLAGS) $(CPPFLAGS) $(CXXFLAGS)
 DEPFLAGS      := -MMD -MP
-LDFLAGS_BASE  := -pthread $(filter -fsanitize=%,$(MODE_FLAGS))
+LDFLAGS_BASE  := -pthread $(filter -fsanitize=%,$(MODE_FLAGS)) $(LDFLAGS)
 
 # Project libraries (CLAUDE.md §22).
 LIB_WARNINGS := -Wall -Wextra -Wpedantic -Wshadow -Wnon-virtual-dtor -Wold-style-cast \
@@ -126,7 +133,7 @@ $(BUILD_DIR)/obj/%.o: %.cpp $(MAKEFILE_LIST)
 
 -include $(patsubst %.cpp,$(BUILD_DIR)/obj/%.d,$(ALL_SOURCES))
 
-.PHONY: all libs tests test clean distclean compdb format format-check tidy fixtures spikes help
+.PHONY: all libs tests test clean distclean compdb format format-check tidy fixtures spikes deps help
 
 # Spikes (tools/spikes/*.cpp): disposable single-file experiments (Docs/spikes/), built only on
 # request because they need the Vulkan and FFmpeg development files. pkg-config runs inside the
@@ -191,6 +198,10 @@ tidy: compdb
 fixtures:
 	tests/fixtures/generate.sh
 
+# Installs every dependency declared in the PKGBUILD (runtime, build, check and dev tools).
+deps:
+	scripts/deps.sh --install
+
 help:
 	@echo 'Targets:'
 	@echo '  all           libs + tests + compile_commands.json (default)'
@@ -201,5 +212,6 @@ help:
 	@echo '  tidy          run clang-tidy on the libs'
 	@echo '  fixtures      generate test media in tests/fixtures/generated (needs ffmpeg)'
 	@echo '  spikes        build the M1 spikes in tools/spikes (needs Vulkan + FFmpeg headers)'
+	@echo '  deps          install the dependencies declared in the PKGBUILD (uses sudo pacman)'
 	@echo '  clean         remove build/$$BUILD   | distclean     remove all of build/'
 	@echo 'Variables: BUILD=debug|release|asan|tsan  CXX=g++|clang++  WERROR=1|0  V=1 (verbose)'
