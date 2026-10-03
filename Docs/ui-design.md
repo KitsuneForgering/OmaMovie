@@ -1,359 +1,362 @@
-# Design da UI — OmaMovie
+# UI design — OmaMovie
 
-> Versão de 2026-10-02, com as decisões do §12. Base: `Docs/Research/imovie.md`
-> (princípios), `movie-maker.md`, `capcut.md`, `davinci-resolve.md` §4 e
-> `omarchy-integration.md`. Regras de implementação continuam no `CLAUDE.md` §11.
+> Version of 2026-10-02, with the decisions in §12. Based on `Docs/Research/imovie.md`
+> (principles), `movie-maker.md`, `capcut.md`, `davinci-resolve.md` §4 and
+> `omarchy-integration.md`. Implementation rules remain in `CLAUDE.md` §11.
 >
-> Inspirado no iMovie **nos princípios**, sem copiar identidade visual, ícones,
-> nomes de recursos ou trade dress da Apple.
+> Inspired by iMovie **in its principles**, without copying Apple's visual identity, icons,
+> feature names or trade dress.
 
 ---
 
-## 1. Princípios
+## 1. Principles
 
-| # | Princípio | De onde vem |
+| # | Principle | Origin |
 |---|---|---|
-| 1 | **Três áreas fixas**: biblioteca, viewer, timeline. Nada de painéis flutuantes ou workspaces | iMovie |
-| 2 | **Controles aparecem por contexto**: a seleção decide o que se pode ajustar | iMovie (barra de ajustes), Clipchamp |
-| 3 | **Manipular no preview**: posição, escala e crop arrastando na imagem; números ficam para precisão | iMovie |
-| 4 | **Timeline magnética por padrão**: sem buracos acidentais; o modelo por baixo continua multitrack genérico | iMovie / FCP |
-| 5 | **Presets por intenção**: "Picture-in-picture", não "camada + transform + máscara"; depois de aplicado, tudo continua editável | iMovie, CapCut |
-| 6 | **Esconder, nunca remover**: o avançado está a um clique ou atalho, mas não ocupa a tela | Lição do iMovie '08 |
-| 7 | **Teclado primeiro**: tudo acessível por atalho e por paleta de comandos | Cultura do Omarchy, Premiere |
-| 8 | **A interface segue o tema do Omarchy; a imagem, nunca** | `omarchy-integration.md` §3–4 |
-| 9 | **Funciona em meia tela**: no Hyprland a janela vive em tiling | Omarchy |
+| 1 | **Three fixed areas**: library, viewer, timeline. No floating panels or workspaces | iMovie |
+| 2 | **Controls appear in context**: the selection decides what can be adjusted | iMovie (adjustments bar), Clipchamp |
+| 3 | **Manipulate in the preview**: position, scale and crop by dragging on the image; numbers are for precision | iMovie |
+| 4 | **Magnetic timeline by default**: no accidental gaps; the underlying model stays generic multitrack | iMovie / FCP |
+| 5 | **Intent presets**: "Picture-in-picture", not "layer + transform + mask"; once applied, everything stays editable | iMovie, CapCut |
+| 6 | **Hide, never remove**: advanced features are one click or shortcut away, but do not take up the screen | The iMovie '08 lesson |
+| 7 | **Keyboard first**: everything reachable by shortcut and through the command palette | Omarchy culture, Premiere |
+| 8 | **The interface follows the Omarchy theme; the image never does** | `omarchy-integration.md` §3–4 |
+| 9 | **Works at half width**: in Hyprland the window lives in a tiling layout | Omarchy |
 
 ---
 
 ## 2. Layout
 
-### 2.1 Janela larga (padrão, ≥ ~1500 px)
+### 2.1 Wide window (default, ≥ ~1500 px)
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ ◂ Projetos   Meu vlog ▾                       ⟲ ⟳     ⤓ Importar   ⇪ Exportar │  barra superior
+│ ◂ Projects   My vlog ▾                        ⟲ ⟳     ⤓ Import     ⇪ Export   │  top bar
 ├───────────────────────────────┬──────────────────────────────────────────────┤
-│ BIBLIOTECA                    │  ◐ Cor  ⬚ Recorte  ♪ Volume  ⏱ Velocidade  ✦ Efeitos  ⧉ Sobrepor  ⓘ │  barra de ajustes
+│ LIBRARY                       │  ◐ Color  ⬚ Crop  ♪ Volume  ⏱ Speed  ✦ Effects  ⧉ Overlay  ⓘ │  adjustments bar
 │ ┌───────────┐                 ├──────────────────────────────────────────────┤
-│ │ Projeto   │ Mídia Títulos   │  [gaveta de controles do ajuste ativo]       │  (só quando há ajuste aberto)
-│ │ Gravações●│ Transições Áudio├──────────────────────────────────────────────┤
-│ │ Vídeos    │                 │                                              │
-│ │ Favoritos │ ▢▢▢▢  ▢▢▢▢      │                 VIEWER                       │
-│ │ + Pasta   │ ▢▢▢▢  ▢▢▢▢      │          (fundo neutro, sem tema)            │
+│ │ Project   │ Media  Titles   │  [drawer with the active adjustment]         │  (only when one is open)
+│ │ Recordings●│ Transitions Audio├────────────────────────────────────────────┤
+│ │ Videos    │                 │                                              │
+│ │ Favorites │ ▢▢▢▢  ▢▢▢▢      │                 VIEWER                       │
+│ │ + Folder  │ ▢▢▢▢  ▢▢▢▢      │          (neutral background, no theme)      │
 │ └───────────┘ ▢▢▢▢  ▢▢▢▢      │                                              │
-│               (skimming)      │   00:01:12:08 / 00:04:30:00     ◂◂  ▶  ▸▸   ⤢ │  transporte
+│               (skimming)      │   00:01:12:08 / 00:04:30:00     ◂◂  ▶  ▸▸   ⤢ │  transport
 ├───────────────────────────────┴──────────────────────────────────────────────┤
-│ ▁▂▃▅▇▅▃▂▁▁▂▃▅▃▂▁▁▂▃▅▇▅▃▂▁  ← minimapa (projeto inteiro, região visível)        │
-│ ┊   T  [ Título "Bem-vindo" ]                                                │  camadas acima
+│ ▁▂▃▅▇▅▃▂▁▁▂▃▅▃▂▁▁▂▃▅▇▅▃▂▁  ← minimap (whole project, visible region)          │
+│ ┊   T  [ Title "Welcome" ]                                                   │  layers above
 │ ┊   V      [ PiP webcam ]                                                     │
-│ ┊ ▶ [ clip 1 ][⋈][ clip 2      ][⋈][ clip 3 ][ clip 4  ]   ← trilha principal │  (magnética)
-│ ┊ ♪ ~~~~~~~~~~ música ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                           │  áudio abaixo
-│ ┊ 🎙   ~~ narração ~~                                                          │
+│ ┊ ▶ [ clip 1 ][⋈][ clip 2      ][⋈][ clip 3 ][ clip 4  ]   ← primary storyline│  (magnetic)
+│ ┊ ♪ ~~~~~~~~~~ music ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                           │  audio below
+│ ┊ 🎙   ~~ voiceover ~~                                                         │
 │ ┊                                     🔍 ──●──   ⌁ snap                       │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Proporção padrão**: topo ~55%, timeline ~45%. **Um único divisor** horizontal ajusta tudo (iMovie).
-- **Biblioteca** à esquerda, ~30% da largura; **viewer** à direita, o maior possível.
-- A barra superior tem só: voltar para Projetos, nome do projeto, undo/redo, importar, exportar.
+- **Default split**: top ~55%, timeline ~45%. **A single** horizontal divider resizes everything (iMovie).
+- **Library** on the left, ~30% of the width; **viewer** on the right, as large as possible.
+- The top bar only has: back to Projects, project name, undo/redo, import, export.
 
-### 2.2 Meia tela (tiling, ~900–1500 px)
+### 2.2 Half width (tiling, ~900–1500 px)
 
 ```
 ┌────────────────────────────────────────────┐
-│ ◂  Meu vlog ▾                ⤓   ⇪          │
+│ ◂  My vlog ▾                 ⤓   ⇪          │
 ├────────────────────────────────────────────┤
-│ ◐ ⬚ ♪ ⏱ ✦ ⧉ ⓘ                    ▤ Biblioteca│  ← biblioteca vira painel sobreposto (Ctrl+1)
+│ ◐ ⬚ ♪ ⏱ ✦ ⧉ ⓘ                       ▤ Library│  ← the library becomes an overlay panel (Ctrl+1)
 ├────────────────────────────────────────────┤
 │                 VIEWER                     │
 ├────────────────────────────────────────────┤
-│ minimapa                                   │
+│ minimap                                    │
 │ timeline                                   │
 └────────────────────────────────────────────┘
 ```
 
-- A biblioteca vira um **painel deslizante** sobre o viewer (atalho `Ctrl+1`), fechando ao adicionar o clip.
-- Rótulos da barra de ajustes viram só ícones (com tooltip e atalho).
+- The library becomes a **sliding panel** over the viewer (shortcut `Ctrl+1`), closing once a clip is added.
+- Adjustments bar labels become icons only (with a tooltip and shortcut).
 
-### 2.3 Janela estreita (< ~900 px)
+### 2.3 Narrow window (< ~900 px)
 
-Viewer em cima, timeline embaixo, biblioteca e controles como painéis sobrepostos. Utilizável, não otimizado.
+Viewer on top, timeline below, library and controls as overlay panels. Usable, not optimized.
 
 ---
 
-## 3. Duas telas: Projetos e Edição
+## 3. Two screens: Projects and Edit
 
-Como no iMovie, há uma tela de **Projetos** e a tela de **Edição**.
+As in iMovie, there is a **Projects** screen and the **Edit** screen.
 
-### 3.1 Qual tela abre (decidido)
+### 3.1 Which screen opens (decided)
 
-Depende de **como** o app foi aberto:
+It depends on **how** the app was opened:
 
-| Origem | Abre em |
+| Origin | Opens in |
 |---|---|
-| Launcher, menu do Omarchy, `omamovie` sem argumentos | **Projetos** |
-| Arquivo de projeto (duplo clique, "Abrir com", `omamovie projeto.<ext>`) | **Edição** desse projeto |
-| Um ou mais vídeos ("Abrir com OmaMovie", `omamovie video.mp4`) | **Edição** de um projeto novo com os vídeos na timeline (formato pelo primeiro clip) |
-| "Editar" numa gravação (tela de Projetos ou, no futuro, notificação do Omarchy) | **Edição** de um projeto novo com a gravação |
-| App já aberto e recebe um arquivo | Mesma regra, na janela existente (instância única) |
+| Launcher, Omarchy menu, `omamovie` without arguments | **Projects** |
+| A project file (double click, "Open with", `omamovie project.<ext>`) | **Edit** for that project |
+| One or more videos ("Open with OmaMovie", `omamovie video.mp4`) | **Edit** for a new project with the videos on the timeline (format from the first clip) |
+| "Edit" on a recording (Projects screen or, later, an Omarchy notification) | **Edit** for a new project with the recording |
+| App already open and receiving a file | Same rule, in the existing window (single instance) |
 
-Na tela de Edição, "◂ Projetos" sempre volta para a lista.
+On the Edit screen, "◂ Projects" always returns to the list.
 
-**Projetos**
+**Projects**
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  OmaMovie                                   + Novo projeto     │
+│  OmaMovie                                     + New project    │
 │                                                              │
-│  Recentes                                                    │
-│  ▢ Meu vlog        ▢ Tutorial Hyprland    ▢ Short #12 (9:16)  │
+│  Recent                                                      │
+│  ▢ My vlog         ▢ Hyprland tutorial    ▢ Short #12 (9:16)  │
 │                                                              │
-│  Gravações recentes do Omarchy                     ver todas ›│
-│  ▢ 10:42 hoje      ▢ ontem 21:03          ▢ ontem 18:10      │
-│     [ Editar ]                                               │
+│  Recent Omarchy recordings                          see all ›│
+│  ▢ today 10:42     ▢ yesterday 21:03      ▢ yesterday 18:10  │
+│     [ Edit ]                                                 │
 └──────────────────────────────────────────────────────────────┘
 ```
-- **"Editar" numa gravação** cria um projeto já com ela na timeline: o atalho do fluxo gravar (ALT+PRINT) → editar.
-- **Novo projeto** pergunta só uma coisa: formato (16:9 horizontal, 9:16 vertical, 1:1 quadrado), com padrão 16:9. Resolução e taxa de quadros vêm do primeiro clip (editável depois).
+- **"Edit" on a recording** creates a project with it already on the timeline: the shortcut for the record (ALT+PRINT) → edit flow.
+- **New project** asks one thing only: the format (16:9 horizontal, 9:16 vertical, 1:1 square), defaulting to 16:9. Resolution and frame rate come from the first clip (editable later).
 
 ---
 
-## 4. Biblioteca
+## 4. Library
 
-- **Fontes** (lista à esquerda, recolhível): Projeto (mídia já usada), **Gravações** (pasta de vídeos do Omarchy, com indicador de novas), Vídeos, Favoritos, pastas adicionadas pelo usuário.
-- **Abas de conteúdo**: Mídia, Títulos, Transições, Áudio (efeitos sonoros e músicas locais do usuário). Sem conteúdo de stock/nuvem.
-- **Grade de miniaturas** com tamanho ajustável (`Ctrl+scroll`).
-- **Skimming**: passar o mouse percorre o clip no viewer sem dar play. Com teclado: setas movem a seleção, `Espaço` toca.
-- **Selecionar um trecho**: arrastar sobre a miniatura marca In/Out (ou `I`/`O`); a faixa marcada é o que vai para a timeline.
-- Marcadores visuais: trecho já usado no projeto (barra fina), favorito, rejeitado.
-- `F` favorita, `Delete` rejeita (não apaga o arquivo), `U` remove avaliação, `Ctrl+F` busca.
+- **Sources** (collapsible list on the left): Project (media already used), **Recordings** (Omarchy's video folder, with a new-items indicator), Videos, Favorites, folders added by the user.
+- **Content tabs**: Media, Titles, Transitions, Audio (the user's local sound effects and music). No stock/cloud content.
+- **Thumbnail grid** with adjustable size (`Ctrl+scroll`).
+- **Skimming**: hovering scrubs through the clip in the viewer without playing. With the keyboard: arrows move the selection, `Space` plays.
+- **Selecting a range**: dragging over a thumbnail marks In/Out (or `I`/`O`); the marked range is what goes to the timeline.
+- Visual markers: range already used in the project (thin bar), favorite, rejected.
+- `F` favorites, `Delete` rejects (does not delete the file), `U` clears the rating, `Ctrl+F` searches.
 
 ---
 
 ## 5. Viewer
 
-- **Fundo neutro fixo** (cinza escuro), independente do tema do Omarchy.
-- **Manipulação direta** quando um ajuste está ativo: alças de posição/escala/rotação (Transformar), retângulo de recorte (Recorte), conta-gotas (Cor).
-- **Guias opcionais**: área segura, terços, contorno do formato (útil ao reenquadrar 16:9 → 9:16).
-- **Transporte**: timecode atual/total, voltar, play, avançar, tela cheia. Botões grandes só na tela cheia; na janela, mínimos.
-- **Indicador de tempo real**: um pequeno aviso aparece só quando o trecho não vai tocar em tempo real (efeito sem GPU, máquina fraca), com opção de pré-renderizar. Nada aparece quando está tudo bem.
-- **Skimming na timeline** também mostra o frame no viewer (cabeça de leitura fantasma).
+- **Fixed neutral background** (dark gray), independent of the Omarchy theme.
+- **Direct manipulation** when an adjustment is active: position/scale/rotation handles (Transform), crop rectangle (Crop), eyedropper (Color).
+- **Optional guides**: safe area, thirds, format outline (useful when reframing 16:9 → 9:16).
+- **Transport**: current/total timecode, back, play, forward, full screen. Large buttons only in full screen; minimal in the window.
+- **Real-time indicator**: a small notice appears only when a section will not play in real time (effect without a GPU path, weak machine), offering to pre-render. Nothing appears when all is well.
+- **Timeline skimming** also shows the frame in the viewer (ghost playhead).
 
 ---
 
-## 6. Barra de ajustes e gaveta de controles
+## 6. Adjustments bar and control drawer
 
-A barra fica acima do viewer. **Só os ajustes que se aplicam à seleção ficam habilitados.** Um ponto (•) marca os ajustes já ativos no clip selecionado.
+The bar sits above the viewer. **Only the adjustments that apply to the selection are enabled.** A dot (•) marks adjustments already active on the selected clip.
 
-| Ícone | Ajuste | Controles na gaveta (nível 1) | "Mais" (nível 2) | Release |
+| Icon | Adjustment | Drawer controls (level 1) | "More" (level 2) | Release |
 |---|---|---|---|---|
-| ◐ | **Cor** | Automático, exposição, contraste, saturação, temperatura | Rodas de cor, curvas, LUT | v0.1 básico, v0.3 avançado |
-| ⬚ | **Recorte e enquadramento** | Ajustar / Preencher / Recortar; pan & zoom (Ken Burns) | Rotação livre, posição numérica | v0.1 |
-| ♪ | **Volume** | Volume, fade in/out, silenciar | Equalizador, redução de ruído, normalizar | v0.1 básico |
-| ⏱ | **Velocidade** | Lenta / Normal / Rápida, inverter | **Speed ramps com presets**, congelar quadro | v0.2 |
-| ✦ | **Efeitos** | Filtros com miniatura de prévia | Parâmetros, keyframes | v0.2 |
-| ⧉ | **Sobrepor** (só em camadas acima da principal) | Picture-in-picture, Lado a lado, Cutaway, Chroma key | Borda, sombra, máscara, blend | v0.2 |
-| ⓘ | **Info** | Nome, duração, arquivo de origem, codec, caminho de decode | — | v0.1 |
+| ◐ | **Color** | Auto, exposure, contrast, saturation, temperature | Color wheels, curves, LUT | v0.1 basic, v0.3 advanced |
+| ⬚ | **Crop and framing** | Fit / Fill / Crop; pan & zoom (Ken Burns) | Free rotation, numeric position | v0.1 |
+| ♪ | **Volume** | Volume, fade in/out, mute | Equalizer, noise reduction, normalize | v0.1 basic |
+| ⏱ | **Speed** | Slow / Normal / Fast, reverse | **Speed ramps with presets**, freeze frame | v0.2 |
+| ✦ | **Effects** | Filters with preview thumbnails | Parameters, keyframes | v0.2 |
+| ⧉ | **Overlay** (only on layers above the primary storyline) | Picture-in-picture, Side by side, Cutaway, Chroma key | Border, shadow, mask, blend | v0.2 |
+| ⓘ | **Info** | Name, duration, source file, codec, decode path | — | v0.1 |
 
-- A **gaveta** abre entre a barra e o viewer, empurrando o viewer um pouco para baixo (o viewer encolhe, não é coberto).
-- **"Mais"** expande a gaveta. Se o conteúdo for grande (curvas, keyframes), abre um **painel lateral** no lugar da biblioteca, com "◂ Voltar à biblioteca".
-- Para títulos, a barra muda: **Texto** (fonte, tamanho, cor, alinhamento), **Estilo** (presets), **Animação**.
-- Para transições: **Tipo** e **Duração**.
+- The **drawer** opens between the bar and the viewer, pushing the viewer down slightly (the viewer shrinks instead of being covered).
+- **"More"** expands the drawer. If the content is large (curves, keyframes), a **side panel** opens in place of the library, with "◂ Back to library".
+- For titles the bar changes: **Text** (font, size, color, alignment), **Style** (presets), **Animation**.
+- For transitions: **Type** and **Duration**.
 
 ---
 
 ## 7. Timeline
 
-### 7.1 Estrutura visível
-- **Trilha principal** (magnética): a sequência do filme. Remover um clip fecha o espaço; arrastar empurra os vizinhos.
-- **Camadas acima** (vídeo, títulos): aparecem quando se arrasta algo para cima da trilha principal. Ficam **ligadas** ao clip da principal que está embaixo e se movem com ele.
-- **Áudio abaixo** (música, narração, efeitos): também aparecem conforme necessário.
-- **Sem cabeçalhos de track por padrão.** Uma preferência "Mostrar controles de trilha" exibe cabeçalhos com mute/solo/lock/ocultar (nível 3).
-- O modelo é multitrack genérico (`CLAUDE.md` §10); "principal + ligadas" é como a UI apresenta e edita.
+### 7.1 Visible structure
+- **Primary storyline** (magnetic): the film's sequence. Removing a clip closes the gap; dragging pushes the neighbors.
+- **Layers above** (video, titles): appear when something is dragged above the primary storyline. They stay **connected** to the primary clip underneath and move with it.
+- **Audio below** (music, voiceover, effects): also appears as needed.
+- **No track headers by default.** A "Show track controls" preference displays headers with mute/solo/lock/hide (level 3).
+- The model is generic multitrack (`CLAUDE.md` §10); "primary + connected" is how the UI presents and edits it.
 
-### 7.2 Elementos
-- **Minimapa** no topo: o projeto inteiro em miniatura, com a região visível destacada (resposta à timeline dupla do Resolve). Clicar ou arrastar navega.
-- **Transições** como um pequeno ícone ⋈ **entre** dois clips (como o Movie Maker), clicável para editar.
-- **Waveform** na parte de baixo de cada clip com áudio.
-- **Zoom centrado no mouse** (`Ctrl+scroll`, `Ctrl+=`/`Ctrl+-`), `Shift+Z` ajusta o projeto à largura. No zoom mínimo, os clips viram miniaturas de tamanho igual (**storyboard**, v0.2).
-- **Snapping** ligado por padrão (`N` alterna).
+### 7.2 Elements
+- **Minimap** at the top: the whole project in miniature, with the visible region highlighted (the answer to Resolve's dual timeline). Click or drag to navigate.
+- **Transitions** as a small ⋈ icon **between** two clips (like Movie Maker), clickable to edit.
+- **Waveform** at the bottom of every clip with audio.
+- **Mouse-centered zoom** (`Ctrl+scroll`, `Ctrl+=`/`Ctrl+-`), `Shift+Z` fits the project to the width. At minimum zoom clips become equal-size thumbnails (**storyboard**, v0.2).
+- **Snapping** on by default (`N` toggles).
 
-### 7.3 Edição
+### 7.3 Editing
 
-Com o mouse, a edição funciona sem trocar de ferramenta (como no iMovie).
-Para quem vem do Final Cut, as **ferramentas** existem e trocam por tecla (§8.1).
+With the mouse, editing works without switching tools (as in iMovie). For people coming
+from Final Cut, **tools** exist and are switched by key (§8.1).
 
-| Gesto (ferramenta Seleção) | Resultado |
+| Gesture (Select tool) | Result |
 |---|---|
-| Arrastar borda do clip | Trim com ripple (magnético) |
-| Duplo clique na junção | **Editor de corte**: os dois lados com o material não usado esmaecido; ajusta o corte e o split de áudio (J/L-cut) |
-| Arrastar borda com a ferramenta Trim (`T`) | Roll entre vizinhos |
-| Arrastar o meio com a ferramenta Trim | Slip (muda o conteúdo, mantém posição e duração) |
-| Clicar com a ferramenta Lâmina (`B`) | Divide naquele ponto |
-| Ferramenta Posição (`P`) | Move sem magnetismo (sobrescreve, pode deixar espaço) |
+| Drag a clip edge | Ripple trim (magnetic) |
+| Double click a junction | **Cut editor**: both sides with the unused material dimmed; adjusts the cut and the audio split (J/L-cut) |
+| Drag an edge with the Trim tool (`T`) | Roll between neighbors |
+| Drag the middle with the Trim tool | Slip (changes the content, keeps position and duration) |
+| Click with the Blade tool (`B`) | Splits at that point |
+| Position tool (`P`) | Moves without magnetism (overwrites, may leave a gap) |
 
-Os atalhos de edição estão no §8.1.
+The editing shortcuts are in §8.1.
 
 ---
 
-## 8. Teclado e paleta de comandos
+## 8. Keyboard and command palette
 
-### 8.1 Atalhos (decidido: convenção iMovie/Final Cut)
+### 8.1 Shortcuts (decided: iMovie/Final Cut convention)
 
-Regra de tradução: **`Cmd` do macOS vira `Ctrl`**, `Option` vira `Alt`. O
-OmaMovie não usa `SUPER` (reservado ao Hyprland/Omarchy).
+Translation rule: **macOS `Cmd` becomes `Ctrl`**, `Option` becomes `Alt`. OmaMovie never uses
+`SUPER` (reserved for Hyprland/Omarchy).
 
-**Reprodução e navegação**
-| Atalho | Ação |
+**Playback and navigation**
+| Shortcut | Action |
 |---|---|
-| `Espaço` | Play/pausa |
-| `J` `K` `L` | Trás / pausa / frente (repetir acelera) |
-| `/` | Tocar a seleção |
-| `←` `→` | Quadro anterior/próximo |
-| `Shift+←` `→` | 10 quadros |
-| `↑` `↓` | Corte anterior/próximo |
-| `Home` / `End` | Início / fim do projeto |
-| `S` | Liga/desliga skimming |
-| `N` | Liga/desliga snapping |
+| `Space` | Play/pause |
+| `J` `K` `L` | Backward / pause / forward (repeat to speed up) |
+| `/` | Play the selection |
+| `←` `→` | Previous/next frame |
+| `Shift+←` `→` | 10 frames |
+| `↑` `↓` | Previous/next edit |
+| `Home` / `End` | Project start / end |
+| `S` | Toggle skimming |
+| `N` | Toggle snapping |
 
-**Edição**
-| Atalho | Ação |
+**Editing**
+| Shortcut | Action |
 |---|---|
-| `I` / `O` | Marcar entrada/saída |
-| `X` | Selecionar o clip inteiro sob o skimmer como intervalo |
-| `E` | Adicionar a seleção da biblioteca ao fim |
-| `W` | Inserir na cabeça de leitura |
-| `Q` | Conectar como camada acima, na cabeça de leitura |
-| `D` | Sobrescrever na cabeça de leitura |
-| `Ctrl+B` | Dividir na cabeça de leitura |
-| `Delete` | Remover fechando o espaço |
-| `Shift+Delete` | Substituir por espaço vazio |
-| `Ctrl+D` | Mudar duração |
-| `M` | Adicionar marcador |
-| `Ctrl+Z` / `Ctrl+Shift+Z` | Desfazer / refazer |
+| `I` / `O` | Mark in/out |
+| `X` | Select the whole clip under the skimmer as a range |
+| `E` | Append the library selection to the end |
+| `W` | Insert at the playhead |
+| `Q` | Connect as a layer above, at the playhead |
+| `D` | Overwrite at the playhead |
+| `Ctrl+B` | Split at the playhead |
+| `Delete` | Remove and close the gap |
+| `Shift+Delete` | Replace with a gap |
+| `Ctrl+D` | Change duration |
+| `M` | Add marker |
+| `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
 
-**Ferramentas**
-| `A` Seleção | `B` Lâmina | `T` Trim | `P` Posição | `R` Intervalo |
+**Tools**
+| `A` Select | `B` Blade | `T` Trim | `P` Position | `R` Range |
 |---|---|---|---|---|
 
-**Biblioteca**
-| Atalho | Ação |
+**Library**
+| Shortcut | Action |
 |---|---|
-| `F` | Favoritar |
-| `Delete` (na biblioteca) | Rejeitar (não apaga o arquivo) |
-| `U` | Remover avaliação |
-| `Ctrl+F` | Buscar |
+| `F` | Favorite |
+| `Delete` (in the library) | Reject (does not delete the file) |
+| `U` | Clear rating |
+| `Ctrl+F` | Search |
 
-**Janela e projeto**
-| Atalho | Ação |
+**Window and project**
+| Shortcut | Action |
 |---|---|
-| `Ctrl+=` / `Ctrl+-` / `Shift+Z` | Zoom da timeline / ajustar ao projeto |
-| `Ctrl+1` | Mostrar/ocultar biblioteca |
-| `Tab` | Alterna foco: biblioteca → viewer → timeline |
-| `Ctrl+I` | Importar |
-| `Ctrl+E` | Exportar |
-| `Ctrl+Shift+F` | Viewer em tela cheia |
-| `Ctrl+K` | **Paleta de comandos** |
+| `Ctrl+=` / `Ctrl+-` / `Shift+Z` | Timeline zoom / fit the project |
+| `Ctrl+1` | Show/hide the library |
+| `Tab` | Cycle focus: library → viewer → timeline |
+| `Ctrl+I` | Import |
+| `Ctrl+E` | Export |
+| `Ctrl+Shift+F` | Full-screen viewer |
+| `Ctrl+K` | **Command palette** |
 
-- Todos os atalhos vêm do sistema central de ações e serão remapeáveis.
-- **Verificar** cada atalho contra a documentação oficial do iMovie e do Final
-  Cut Pro antes de implementar; esta tabela foi montada de memória da convenção.
-- `Ctrl+K` é o editor de palavras-chave no Final Cut; o OmaMovie não tem palavras-chave, então a paleta ocupa o atalho.
+- Every shortcut comes from the central action system and will be remappable.
+- **Check** each shortcut against the official iMovie and Final Cut Pro documentation before
+  implementing it; this table was compiled from memory of the convention.
+- `Ctrl+K` is the keyword editor in Final Cut; OmaMovie has no keywords, so the palette takes
+  the shortcut.
 
-### 8.2 Paleta de comandos (`Ctrl+K`)
-- Lista **todas** as ações do app, buscáveis por nome ("velocidade 50%", "exportar 1080p", "adicionar marcador").
-- É o "nível 3" de revelação: qualquer capacidade é alcançável sem botão na tela.
-- Combina com o estilo do Omarchy (launcher e menus por busca).
+### 8.2 Command palette (`Ctrl+K`)
+- Lists **every** app action, searchable by name ("speed 50%", "export 1080p", "add marker").
+- It is disclosure "level 3": any capability is reachable without an on-screen button.
+- Matches Omarchy's style (search-driven launcher and menus).
 
 ---
 
-## 9. Revelação progressiva
+## 9. Progressive disclosure
 
-| Nível | Onde | Exemplo |
+| Level | Where | Example |
 |---|---|---|
-| **1 — sempre visível** | Barra de ajustes, gaveta, gestos na timeline | Recorte, volume, fade, split |
-| **2 — um clique** | "Mais" na gaveta, painel lateral, editor de corte | Curvas, equalizador, speed ramps, keyframes |
-| **3 — sob demanda** | Paleta de comandos, preferências, cabeçalhos de trilha | Roll/slide numéricos, edição de 3 pontos, mute/solo/lock |
+| **1 — always visible** | Adjustments bar, drawer, timeline gestures | Crop, volume, fade, split |
+| **2 — one click** | "More" in the drawer, side panel, cut editor | Curves, equalizer, speed ramps, keyframes |
+| **3 — on demand** | Command palette, preferences, track headers | Numeric roll/slide, three-point editing, mute/solo/lock |
 
-Não há "modo simples" e "modo pro" separados: um modo esconde capacidade e obriga a trocar de contexto.
+There are no separate "simple" and "pro" modes: a mode hides capability and forces a context switch.
 
 ---
 
-## 10. Linguagem visual
+## 10. Visual language
 
-- **Cores**: tokens semânticos alimentados pelo `colors.toml` do Omarchy.
+- **Colors**: semantic tokens fed by Omarchy's `colors.toml`.
 
-  | Token da UI | Cor do Omarchy |
+  | UI token | Omarchy color |
   |---|---|
-  | Fundo da janela | `background` |
-  | Painéis (biblioteca, gaveta) | `dark_background` |
-  | Fundo da timeline | `darker_background` |
-  | Elementos elevados (clips, botões) | `lighter_background` |
-  | Seleção, cabeça de leitura, foco | `accent` |
-  | Texto / texto secundário | `foreground` / `dark_foreground` |
-  | Clips por tipo (vídeo, áudio, título) | `blue` / `green` / `magenta` (misturados com o fundo) |
-  | Avisos / erros | `yellow` / `red` |
+  | Window background | `background` |
+  | Panels (library, drawer) | `dark_background` |
+  | Timeline background | `darker_background` |
+  | Raised elements (clips, buttons) | `lighter_background` |
+  | Selection, playhead, focus | `accent` |
+  | Text / secondary text | `foreground` / `dark_foreground` |
+  | Clips by kind (video, audio, title) | `blue` / `green` / `magenta` (mixed with the background) |
+  | Warnings / errors | `yellow` / `red` |
 
-- **Viewer, miniaturas e scopes sem tema**: mostram a imagem real em fundo neutro.
-- **Modo claro**: segue `mode` do tema (há temas claros como `catppuccin-latte` e `flexoki-light`).
-- **Densidade**: plana, poucas bordas, separação por tom de fundo e espaçamento; cantos levemente arredondados.
+- **Viewer, thumbnails and scopes are untinted**: they show the real image on a neutral background.
+- **Light mode**: follows the theme's `mode` (there are light themes such as `catppuccin-latte` and `flexoki-light`).
+- **Density**: flat, few borders, separation by background tone and spacing; slightly rounded corners.
+- **Opaque window** (documented Hyprland rule; `omarchy-integration.md` §4).
 
-### 10.1 Tipografia (decidido)
+### 10.1 Typography (decided)
 
-- **Fonte do Omarchy em toda a UI**, lida com `omarchy-font-current` e atualizada
-  ao vivo pelo hook/watcher de troca de fonte. Fallback fora do Omarchy: a fonte monoespaçada padrão do sistema (`fontconfig`).
-- Consequências de usar uma fonte geralmente monoespaçada:
-  - rótulos ocupam mais largura: preferir rótulos curtos e ícones com tooltip na barra de ajustes;
-  - timecodes e números alinham naturalmente (vantagem);
-  - hierarquia por **tamanho, peso e cor** (`foreground` / `dark_foreground`), não por troca de família;
-  - testar com fontes de larguras diferentes (as que o Omarchy oferece) para não quebrar layouts.
-- Tamanho base derivado do `base-size` do Omarchy (`~/.config/omarchy/shell.toml`, `[font]`) quando existir **(verificar se é a fonte certa para apps)**.
+- **The Omarchy font across the whole UI**, read with `omarchy-font-current` and updated live
+  by the font-change hook/watcher. Fallback outside Omarchy: the system's default monospace
+  font (`fontconfig`).
+- Consequences of a usually monospaced font:
+  - labels take more width: prefer short labels and icons with tooltips in the adjustments bar;
+  - timecodes and numbers align naturally (an advantage);
+  - hierarchy through **size, weight and color** (`foreground` / `dark_foreground`), not by changing family;
+  - test with fonts of different widths (the ones Omarchy offers) so layouts do not break.
+- Base size derived from Omarchy's `base-size` (`~/.config/omarchy/shell.toml`, `[font]`) when
+  present **(verify that it is the right source for apps)**.
 
-### 10.2 Ícones (decidido)
+### 10.2 Icons (decided)
 
-- **Conjunto próprio em SVG**, desenhado para o OmaMovie (sem copiar ícones da Apple ou de outros editores).
-- Regras do conjunto:
-  - grade de 24×24 px, traço único (ex.: 1,5 px), cantos e terminações consistentes;
-  - **monocromáticos**: uma única cor, aplicada em runtime a partir do tema (cor normal, `accent` quando ativo, `dark_foreground` quando desabilitado);
-  - variante preenchida só para estados ativos (ex.: favorito);
-  - legíveis em 16 px.
-- Implementação: SVGs em `apps/omamovie/resources/icons/`, carregados via Qt Resource System; colorização
-  pelo mecanismo de ícones do Qt Quick Controls (`icon.source` + `icon.color`) **(verificar comportamento com SVG monocromático no Qt 6.11)**.
-- Licença: própria do projeto (MIT), arquivo de créditos se algum ícone derivar de outro conjunto livre.
-- Os glyphs usados nos wireframes deste documento (◐ ⬚ ♪ ...) são **apenas marcadores**.
-- **Janela opaca** (regra do Hyprland documentada; `omarchy-integration.md` §4).
-
----
-
-## 11. O que é diferente do iMovie (de propósito)
-
-| iMovie | OmaMovie | Por quê |
-|---|---|---|
-| Camadas limitadas, sem keyframes gerais | Multitrack completo, keyframes (v0.2), escondidos até serem necessários | Esconder, não remover |
-| Orientado ao mouse | Teclado completo + paleta de comandos | Público do Omarchy |
-| Sem visão geral da timeline | Minimapa | Pesquisa do Resolve (timeline dupla) |
-| Biblioteca ligada ao app Fotos | Pastas locais + Gravações do Omarchy | Plataforma |
-| Um visual fixo | Tema do Omarchy, claro/escuro | Integração |
-| Editor separado (FCP) para quem cresce | O mesmo app, revelação progressiva | Tese do projeto |
-| Formatos horizontais | 16:9, 9:16, 1:1 desde o novo projeto | Criadores de vídeo curto (CapCut) |
+- **Our own SVG set**, drawn for OmaMovie (no copying icons from Apple or other editors).
+- Set rules:
+  - 24×24 px grid, single stroke (e.g. 1.5 px), consistent corners and terminals;
+  - **monochrome**: a single color applied at runtime from the theme (normal color, `accent` when active, `dark_foreground` when disabled);
+  - filled variant only for active states (e.g. favorite);
+  - legible at 16 px.
+- Implementation: SVGs in `apps/omamovie/resources/icons/`, loaded through the Qt Resource
+  System; tinted through the Qt Quick Controls icon mechanism (`icon.source` + `icon.color`)
+  **(verify the behavior with monochrome SVGs in Qt 6.11)**.
+- License: the project's own (MIT), with a credits file if any icon derives from another free set.
+- The glyphs used in this document's wireframes (◐ ⬚ ♪ ...) are **placeholders only**.
 
 ---
 
-## 12. Decisões tomadas (2026-10-02)
+## 11. What differs from iMovie (on purpose)
 
-| # | Tema | Decisão |
+| iMovie | OmaMovie | Why |
 |---|---|---|
-| 1 | Controles de ajuste | **Gaveta acima do viewer** (§6) |
-| 2 | Tipografia | **Fonte do Omarchy** em toda a UI (§10.1) |
-| 3 | Ícones | **Conjunto vetorial próprio em SVG** (§10.2) |
-| 4 | Atalhos | **Convenção iMovie/Final Cut**, `Cmd`→`Ctrl` (§8.1) |
-| 5 | Tela inicial | **Depende da origem**: launcher abre Projetos; arquivo de projeto ou mídia abre a Edição (§3.1) |
+| Limited layers, no general keyframes | Full multitrack, keyframes (v0.2), hidden until needed | Hide, do not remove |
+| Mouse-oriented | Full keyboard + command palette | Omarchy's audience |
+| No timeline overview | Minimap | Resolve research (dual timeline) |
+| Library tied to the Photos app | Local folders + Omarchy recordings | Platform |
+| A single fixed look | Omarchy theme, light/dark | Integration |
+| A separate editor (FCP) for those who grow | The same app, progressive disclosure | The project's thesis |
+| Horizontal formats | 16:9, 9:16, 1:1 from the new project dialog | Short-form creators (CapCut) |
 
-Ainda em aberto: nenhum ponto bloqueante. Ajustes finos virão do protótipo.
+---
 
-## 13. Próximo passo
+## 12. Decisions taken (2026-10-02)
 
-Mockup navegável (HTML, dados fictícios): `Docs/mockups/ui-mockup.html`.
+| # | Topic | Decision |
+|---|---|---|
+| 1 | Adjustment controls | **Drawer above the viewer** (§6) |
+| 2 | Typography | **The Omarchy font** across the UI (§10.1) |
+| 3 | Icons | **Our own SVG vector set** (§10.2) |
+| 4 | Shortcuts | **iMovie/Final Cut convention**, `Cmd`→`Ctrl` (§8.1) |
+| 5 | Start screen | **Depends on the origin**: the launcher opens Projects; a project or media file opens Edit (§3.1) |
 
-Depois das respostas: um **protótipo visual** do layout (mockup navegável) e,
-em seguida, um protótipo em QML dentro do M6, com dados falsos, para validar
-tamanhos, densidade e o comportamento em meia tela antes de ligar o motor.
+Still open: nothing blocking. Fine-tuning will come from the prototype.
+
+## 13. Next step
+
+Interactive mockup (HTML, fictitious data): `Docs/mockups/ui-mockup.html`.
+
+Next, a QML prototype within M6, with fake data, to validate sizes, density and the
+half-width behavior before wiring the engine.
