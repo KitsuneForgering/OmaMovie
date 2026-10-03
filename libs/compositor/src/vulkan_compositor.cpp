@@ -64,9 +64,10 @@ std::uint32_t texel_bytes(const media::SampleLayout& layout, int plane) {
 }
 
 float half_to_float(std::uint16_t h) {
-    const std::uint32_t sign = (h & 0x8000U) << 16U;
-    std::uint32_t exponent = (h >> 10U) & 0x1FU;
-    std::uint32_t mantissa = h & 0x3FFU;
+    const std::uint32_t v = h; // no promotion to signed int below
+    const std::uint32_t sign = (v & 0x8000U) << 16U;
+    std::uint32_t exponent = (v >> 10U) & 0x1FU;
+    std::uint32_t mantissa = v & 0x3FFU;
     std::uint32_t bits = 0;
     if (exponent == 0) {
         if (mantissa == 0) {
@@ -215,8 +216,9 @@ Result<void> VulkanCompositor::Impl::ensure_output(std::uint32_t width, std::uin
         *device, {.width = width,
                   .height = height,
                   .format = kOutputFormat,
-                  .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
-                           VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT});
+                  .usage = static_cast<VkImageUsageFlags>(VK_IMAGE_USAGE_STORAGE_BIT) |
+                           VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                           VK_IMAGE_USAGE_TRANSFER_DST_BIT});
     if (!img) {
         return std::unexpected(img.error());
     }

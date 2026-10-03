@@ -58,8 +58,8 @@ struct Rgb {
 Rgb texel(const LayerParams& p, const Planes& planes, int x, int y) {
     const float scale = p.misc[1];
     const float luma = planes.fetch(0, x, y, 0, 1) * scale;
-    const int cx = x >> p.mode[1];
-    const int cy = y >> p.mode[2];
+    const int cx = static_cast<int>(static_cast<unsigned>(x) >> static_cast<unsigned>(p.mode[1]));
+    const int cy = static_cast<int>(static_cast<unsigned>(y) >> static_cast<unsigned>(p.mode[2]));
     float cb = 0.0F;
     float cr = 0.0F;
     if (p.mode[0] == static_cast<std::int32_t>(ChromaMode::Interleaved)) {
