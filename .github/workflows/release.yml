@@ -21,7 +21,8 @@ jobs:
       - name: Build and test (release)
         run: |
           docker run --rm -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
-            pacman -Syu --noconfirm --needed base-devel >/dev/null
+            pacman -Syu --noconfirm >/dev/null
+            scripts/deps.sh --install --no-dev --noconfirm >/dev/null
             make -j"$(nproc)" BUILD=release test
           '
 

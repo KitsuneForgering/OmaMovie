@@ -30,7 +30,8 @@ jobs:
         run: |
           docker run --rm --cap-add SYS_PTRACE \
             -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
-              pacman -Syu --noconfirm --needed base-devel clang >/dev/null
+              pacman -Syu --noconfirm >/dev/null
+              scripts/deps.sh --install --noconfirm >/dev/null
               make -j"$(nproc)" BUILD=${{ matrix.build }} CXX=${{ matrix.compiler }} \
                 test JUNIT_DIR=build/junit
             '
@@ -51,7 +52,8 @@ jobs:
       - name: clang-format and clang-tidy
         run: |
           docker run --rm -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
-            pacman -Syu --noconfirm --needed base-devel clang >/dev/null
+            pacman -Syu --noconfirm >/dev/null
+            scripts/deps.sh --install --noconfirm >/dev/null
             make format-check
             make compdb
             make tidy
