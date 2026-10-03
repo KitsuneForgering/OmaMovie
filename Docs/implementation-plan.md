@@ -157,15 +157,23 @@ measured with `oma-bench`; seek tests pass on VFR.
 
 ### M3 — Compositor and render graph
 
-- [ ] Render graph as plain data (testable without a GPU).
-- [ ] Vulkan compositor: YUV→RGB reading matrix/range/primaries/transfer; transform, crop, opacity, basic blend modes; layer stack.
-- [ ] Working space per ADR-0006 (linear float16 proposed); RGBA output for the preview.
+- [x] Render graph as plain data (testable without a GPU).
+- [x] Vulkan compositor: YUV→RGB reading matrix/range/primaries/transfer; transform, crop, opacity, basic blend modes; layer stack.
+- [x] Working space per the ADR-0006 proposal (linear BT.709, premultiplied, RGBA16F output for the preview).
 - [ ] If S6 approves: libplacebo as a color/scaling stage.
-- [ ] GLSL/Slang shaders → SPIR-V at build time; persisted pipeline cache.
-- [ ] `ComputeBackend` with `VulkanComputeBackend` and `CpuBackend` (reference); effects declare GPU capability; non-real-time sections are reported.
+- [x] GLSL shaders → SPIR-V at build time (glslc, embedded).
+- [ ] Persisted pipeline cache (`$XDG_CACHE_HOME/omamovie`).
+- [x] CPU reference compositor (`CpuCompositor`), compared with the GPU output in tests.
+- [ ] `ComputeBackend` interface for effects (`VulkanComputeBackend` + `CpuBackend`), with the first effect; non-real-time sections are reported.
+- [ ] Edge anti-aliasing for rotated layers; chroma siting from the stream (center-sited for now).
 
 **Done when**: the S5 scenario runs on library code; GPU × CPU comparison within tolerance;
 1080p60 frame time with 3 layers measured and recorded.
+
+**Measured (2026-10-03, Iris Xe, `tests/compositor`)**: GPU vs CPU reference within 0.002
+(linear, half-float output) on uploaded, VA-API and Vulkan Video frames. Three 1080p layers,
+submit to completion: 3.3 ms with VA-API frames, 2.9 ms with Vulkan Video frames, 3.7 ms with
+uploaded software frames — well inside the 16.7 ms budget of 60 fps.
 
 **Research**: `CLAUDE.md` §9, `premiere-pro.md` §2 (render bar), `davinci-resolve.md` §5 (graph inside, stack outside).
 
