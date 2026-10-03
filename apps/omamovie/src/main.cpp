@@ -15,6 +15,7 @@
 
 #include "preview_item.hpp"
 #include "session.hpp"
+#include "waveform_item.hpp"
 
 #include "oma/gpu/device.hpp"
 
@@ -161,6 +162,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     qmlRegisterType<PreviewItem>("OmaMovie", 1, 0, "PreviewItem");
+    qmlRegisterType<WaveformItem>("OmaMovie", 1, 0, "WaveformItem");
     Session session;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("session", &session);

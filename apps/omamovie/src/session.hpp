@@ -4,6 +4,7 @@
 #include "frame_source.hpp"
 #include "video_scheduler.hpp"
 #include "viewer_frame.hpp"
+#include "waveform_store.hpp"
 
 #include "oma/base/jobs.hpp"
 #include "oma/base/time.hpp"
@@ -50,6 +51,8 @@ class Session final : public QObject {
     Q_PROPERTY(QVariantList clips READ clips NOTIFY sequenceChanged)
     // Audio lanes below the storyline, top first: {id, name, clips}.
     Q_PROPERTY(QVariantList audioTracks READ audioTracks NOTIFY sequenceChanged)
+    // Waveforms of the library's media, for the timeline's WaveformItems.
+    Q_PROPERTY(QObject* waveforms READ waveforms CONSTANT)
     Q_PROPERTY(double selectedClip READ selectedClip NOTIFY selectionChanged)
     Q_PROPERTY(QVariantMap info READ info NOTIFY selectionChanged)
     Q_PROPERTY(bool hasMedia READ hasMedia NOTIFY sequenceChanged)
@@ -91,6 +94,7 @@ public:
     [[nodiscard]] int selectedMedia() const { return selected_media_; }
     [[nodiscard]] QVariantList clips() const;
     [[nodiscard]] QVariantList audioTracks() const;
+    [[nodiscard]] QObject* waveforms() { return &waveforms_; }
     [[nodiscard]] double selectedClip() const { return static_cast<double>(selected_clip_.value()); }
     [[nodiscard]] QVariantMap info() const;
     [[nodiscard]] bool hasMedia() const;
@@ -242,6 +246,7 @@ private:
     std::unique_ptr<oma::media::MediaImporter> importer_;
     FrameSource frames_;      // job worker only
     AudioPlayer audio_;
+    WaveformStore waveforms_;
     bool warned_silent_ = false;
     oma::JobPool workers_{1}; // destroyed first: no job outlives what it touches
 };

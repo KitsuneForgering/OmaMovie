@@ -727,6 +727,16 @@ ApplicationWindow {
                     }
                 }
 
+                // The sound of a clip: the media range it shows, scaled by its volume.
+                component ClipWaveform: WaveformItem {
+                    required property var clip
+                    store: session.waveforms
+                    media: clip.media
+                    from: clip.sourceIn
+                    length: clip.duration * clip.speed
+                    gain: clip.gain
+                }
+
                 // A fade ramp over each end of a clip, as long as the fade.
                 component FadeRamps: Shape {
                     id: ramps
@@ -886,6 +896,15 @@ ApplicationWindow {
                                 asynchronous: true
                                 sourceSize.height: height
                             }
+                            ClipWaveform {
+                                clip: modelData
+                                visible: modelData.hasAudio
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                height: 18
+                                color: Qt.rgba(0.55, 0.75, 1, 0.45)
+                            }
                             FadeRamps { clip: modelData }
                             Text {
                                 anchors.left: parent.left
@@ -949,6 +968,13 @@ ApplicationWindow {
                                     color: Qt.tint(colors.lighter_background, Qt.rgba(0.35, 0.8, 0.45, 0.22))
                                     border.width: chosen ? 2 : 0
                                     border.color: root.accent
+                                    ClipWaveform {
+                                        clip: soundItem.modelData
+                                        anchors.fill: parent
+                                        anchors.topMargin: 2
+                                        anchors.bottomMargin: 2
+                                        color: Qt.rgba(0.55, 0.95, 0.6, 0.55)
+                                    }
                                     FadeRamps { clip: soundItem.modelData }
                                     Row {
                                         anchors.left: parent.left

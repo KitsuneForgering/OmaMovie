@@ -58,6 +58,7 @@ void Session::newProject() {
     for (oma::JobHandle& h : imports_) h.cancel();
     imports_.clear();
     library_.clear();
+    waveforms_.clear();
     editor_.reset();
     snapshot_.reset();
     refreshPaths();
@@ -189,6 +190,7 @@ void Session::addToLibrary(LibraryItem item, bool append) {
             return;
         }
     }
+    if (item.media.has_audio) waveforms_.request(item.media.id.value(), item.path.toStdString());
     library_.push_back(std::move(item));
     refreshPaths();
     selected_media_ = static_cast<int>(library_.size()) - 1;
@@ -511,6 +513,11 @@ QVariantList Session::media() const {
 QVariantMap Session::clipMap(const tl::Clip& c) const {
     const LibraryItem* source = item(c.media);
     return QVariantMap{{"id", static_cast<double>(c.id.value())},
+                       {"media", static_cast<double>(c.media.value())},
+                       {"hasAudio", source != nullptr && source->media.has_audio},
+                       {"sourceIn", c.source_in.seconds_approx()},
+                       {"speed", c.time_map.speed().to_double_approx()},
+                       {"gain", c.audio.muted ? 0.0 : static_cast<double>(c.audio.gain)},
                        {"start", c.start.seconds_approx()},
                        {"duration", c.duration.seconds_approx()},
                        {"name", source != nullptr ? source->name : QString()},
