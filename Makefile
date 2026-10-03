@@ -128,6 +128,7 @@ endef
 include libs/base/module.mk
 include libs/gpu/module.mk
 include libs/media/module.mk
+include libs/compositor/module.mk
 include tests/base/module.mk
 include tests/gpu/module.mk
 include tests/media/module.mk
