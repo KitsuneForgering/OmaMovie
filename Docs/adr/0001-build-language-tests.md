@@ -3,6 +3,14 @@
 - **Status:** Accepted (2026-10-02)
 - **Milestone:** M0
 
+## Evidence review (2026-10-03)
+
+This records maintainer/build choices, not a measured superiority of Make/Cest. Package
+and compiler versions are scoped to the recorded environment. Distribution depends on the
+actual linked FFmpeg/Qt configuration; [FFmpeg's licensing guidance](https://ffmpeg.org/legal.html)
+distinguishes GPL-enabled and nonfree builds. Keep the source MIT preference; perform the
+concrete binary/source/license packaging check in M7 rather than treating this as legal clearance.
+
 ## Context
 
 The project needs a reproducible build, sanitizers, tests and linting from the first

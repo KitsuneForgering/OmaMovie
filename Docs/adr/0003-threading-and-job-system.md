@@ -3,12 +3,25 @@
 - **Status:** Accepted (2026-10-02)
 - **Milestone:** M0 (job system); M2–M4 (decode, playback and audio threads)
 
+## Evidence review (2026-10-03)
+
+The dedicated-pipeline/background-pool distinction remains accepted. Skimming requires
+bounded/cancelable work as a design inference, not proven usability. The current JobPool
+queue is explicitly unbounded as recorded below; it is not compliant with the future
+bounded-background-work target merely because pipeline queues are bounded. Before M6,
+measure cancellation latency/stale work and introduce a bound/admission policy if required.
+
+[PipeWire Streams](https://docs.pipewire.org/page_streams.html) specifies that RT-process
+callbacks must use RT-safe functions. TSan detects classes of data races/lock issues; it does
+not prove callback timing, allocation freedom or audio/video synchronization. M4 must
+measure presentation/latency and recovery separately. No thread model is changed here.
+
 ## Context
 
 The UI thread must never block on decode, encode, thumbnails, waveforms, probing, cache,
 proxies or imports (CLAUDE.md §13). Threads created ad hoc inside components make
 cancellation, progress and shutdown unpredictable. Research showed that skimming and the
-storyboard zoom depend on cancelling thumbnail work quickly (`Docs/Research/imovie.md` §6).
+storyboard zoom depend on cancelling thumbnail work quickly (`Docs/Research/imovie.md` (historical research reference; see the dated review note)).
 
 ## Decision
 
