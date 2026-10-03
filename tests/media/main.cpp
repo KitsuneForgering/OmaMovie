@@ -10,6 +10,7 @@
 #include "oma_test.hpp"
 
 void run_probe_tests();
+void run_format_tests();
 void run_video_decoder_tests();
 void run_gpu_decode_tests();
 void run_audio_decoder_tests();
@@ -62,6 +63,7 @@ int main(int argc, char* argv[]) {
     oma::set_log_level(oma::Category::Media, oma::LogLevel::Off);
     cest_init(argc, argv);
     run_probe_tests();
+    run_format_tests();
     run_video_decoder_tests();
     run_gpu_decode_tests();
     run_audio_decoder_tests();
