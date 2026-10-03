@@ -32,6 +32,7 @@ Error vk_error(vk::Result r, std::string what) {
 // Extensions OmaMovie enables when the device has them. Interop and synchronization come first;
 // video extensions are only present on drivers that expose Vulkan Video (Docs/spikes/S1-*.md).
 constexpr std::array kFeaturelessExtensions = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
     VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
     VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
@@ -79,7 +80,9 @@ struct Device::Impl {
     std::vector<const char*> extensions;
     bool internally_synchronized = false;
     // One mutex per queue, indexed [family][index]; only used without internal synchronization.
-    mutable std::vector<std::vector<std::mutex>> queue_mutexes;
+    // Recursive: the Qt bridge holds the graphics queue for a whole frame (ADR-0005), and work
+    // recorded on the render thread inside that frame (the viewer's compositor) submits again.
+    mutable std::vector<std::vector<std::recursive_mutex>> queue_mutexes;
 
     // Enabled feature chain; FFmpeg keeps pointers into it, so Impl never moves (unique_ptr).
     vk::PhysicalDeviceFeatures2 features2{};
@@ -126,7 +129,22 @@ Result<std::unique_ptr<Device>> Device::create(const DeviceOptions& options) {
                                   .pEngineName = "OmaMovie",
                                   .engineVersion = 1,
                                   .apiVersion = VK_API_VERSION_1_4};
-    auto instance = impl->context.createInstance({.pApplicationInfo = &app});
+    std::vector<const char*> instance_extensions;
+    std::vector<const char*> instance_layers;
+    instance_extensions.reserve(options.instance_extensions.size());
+    instance_layers.reserve(options.instance_layers.size());
+    for (const auto& extension : options.instance_extensions) {
+        instance_extensions.push_back(extension.c_str());
+    }
+    for (const auto& layer : options.instance_layers) {
+        instance_layers.push_back(layer.c_str());
+    }
+    auto instance = impl->context.createInstance(
+        {.pApplicationInfo = &app,
+         .enabledLayerCount = static_cast<uint32_t>(instance_layers.size()),
+         .ppEnabledLayerNames = instance_layers.data(),
+         .enabledExtensionCount = static_cast<uint32_t>(instance_extensions.size()),
+         .ppEnabledExtensionNames = instance_extensions.data()});
     if (!instance) {
         return std::unexpected(vk_error(instance.error(), "cannot create a Vulkan instance"));
     }
@@ -210,13 +228,14 @@ Result<std::unique_ptr<Device>> Device::create(const DeviceOptions& options) {
     }
     vkGetPhysicalDeviceFeatures2(static_cast<VkPhysicalDevice>(*impl->physical),
                                  &static_cast<VkPhysicalDeviceFeatures2&>(impl->features2));
-    impl->internally_synchronized = impl->isq.internallySynchronizedQueues == vk::True;
+    impl->internally_synchronized = options.internally_synchronized_queues &&
+                                    impl->isq.internallySynchronizedQueues == vk::True;
     if (impl->v12.timelineSemaphore != vk::True || impl->v13.synchronization2 != vk::True) {
         return make_error(ErrorCode::Unsupported, Category::Gpu,
                           "timeline semaphores and synchronization2 are required", impl->info.name);
     }
 
-    // ---- queues: every queue of every family, internally synchronized when supported
+    // ---- queues: every queue of every family; flag them when supported and requested
     using QueueChain =
         vk::StructureChain<vk::QueueFamilyProperties2, vk::QueueFamilyVideoPropertiesKHR>;
     std::vector<QueueChain> qprops;

@@ -1,8 +1,11 @@
 #include "oma/gpu/device.hpp"
 
+#include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <thread>
 
 #include "oma_test.hpp"
 
@@ -36,6 +39,28 @@ oma::gpu::Device* gpu_test_device() {
 }
 
 namespace {
+
+// The Qt bridge holds the graphics queue for a frame and the render thread submits inside it;
+// any other thread must still wait.
+bool queue_lock_is_recursive_and_exclusive(const Device& d) {
+    const uint32_t family = d.graphics_family();
+    d.lock_queue(family, 0);
+    d.lock_queue(family, 0); // re-entry on the same thread
+    std::atomic<bool> other_got_it{false};
+    std::thread other([&] {
+        d.lock_queue(family, 0);
+        other_got_it.store(true);
+        d.unlock_queue(family, 0);
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    const bool excluded_while_held = !other_got_it.load();
+    d.unlock_queue(family, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    const bool still_excluded = !other_got_it.load(); // one level is still held
+    d.unlock_queue(family, 0);
+    other.join();
+    return excluded_while_held && still_excluded && other_got_it.load();
+}
 
 bool family_has(const Device& d, uint32_t family, VkQueueFlags flag) {
     for (const auto& f : d.queue_families()) {
@@ -115,6 +140,24 @@ void run_device_tests() {
                 }
             }
             expect(true).toBeTruthy();
+        });
+
+        it("can create zero-flag queues for consumers using vkGetDeviceQueue", {
+            auto compatible = Device::create({.internally_synchronized_queues = false});
+            expect(compatible.has_value()).toBeTruthy();
+            if (!compatible) {
+                return;
+            }
+            const auto& c = **compatible;
+            expect(c.internally_synchronized_queues()).toBeFalsy();
+            expect(c.queue_create_flags()).toEqual(VkDeviceQueueCreateFlags{0});
+            VkQueue retrieved = VK_NULL_HANDLE;
+            vkGetDeviceQueue(c.device(), c.graphics_family(), 0, &retrieved);
+            expect(retrieved != VK_NULL_HANDLE).toBeTruthy();
+            expect(retrieved == c.queue(c.graphics_family(), 0)).toBeTruthy();
+            c.lock_queue(c.graphics_family(), 0);
+            c.unlock_queue(c.graphics_family(), 0);
+            expect(queue_lock_is_recursive_and_exclusive(c)).toBeTruthy();
         });
     });
 
