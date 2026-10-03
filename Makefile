@@ -124,6 +124,7 @@ endef
 include libs/base/module.mk
 include libs/gpu/module.mk
 include tests/base/module.mk
+include tests/gpu/module.mk
 
 # -------------------------------------------------------------------------- rules
 
