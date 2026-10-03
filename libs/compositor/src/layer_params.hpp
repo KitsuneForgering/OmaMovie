@@ -1,0 +1,50 @@
+#pragma once
+
+// Per-layer parameters shared by the CPU reference and the compute shader. The struct mirrors
+// the std140 uniform block in shaders/composite.comp; change both together.
+
+#include "oma/compositor/compositor.hpp"
+#include "oma/media/video_frame.hpp"
+
+#include <array>
+#include <cstdint>
+
+namespace oma::compositor {
+
+enum class ChromaMode : std::uint8_t {
+    Interleaved = 1, // plane 1 holds Cb and Cr (NV12, P010)
+    Planar = 2,      // planes 1 and 2 hold Cb and Cr
+};
+
+struct alignas(16) LayerParams {
+    std::array<float, 4> inv0{};  // output -> source: a, b, tx (x' = a x + b y + tx)
+    std::array<float, 4> inv1{};  // c, d, ty
+    std::array<float, 4> crop{};  // source pixels: x0, y0, x1, y1 (half-open)
+    std::array<float, 4> yuv_r{}; // R' = dot(yuv_r.xyz, yuv) + yuv_r.w
+    std::array<float, 4> yuv_g{};
+    std::array<float, 4> yuv_b{};
+    std::array<float, 4> gamut_r{}; // linear source primaries -> BT.709 rows
+    std::array<float, 4> gamut_g{};
+    std::array<float, 4> gamut_b{};
+    std::array<float, 4> misc{};          // opacity, sample scale
+    std::array<std::int32_t, 4> mode{};   // chroma mode, chroma shift x, chroma shift y, transfer
+    std::array<std::int32_t, 4> extra{};  // blend mode, source width, source height
+    std::array<std::int32_t, 4> region{}; // output pixels to process: x0, y0, x1, y1
+};
+static_assert(sizeof(LayerParams) == 13U * 16U, "LayerParams must match the std140 block");
+
+struct PreparedLayer {
+    LayerParams params;
+    bool visible = false; // false when the layer covers no output pixel
+};
+
+// Resolves geometry, color and sampling for one layer. Errors for unsupported sample layouts.
+[[nodiscard]] Result<PreparedLayer>
+prepare_layer(const Layer& layer, const LayerInput& input, const media::SampleLayout& layout,
+              std::uint32_t source_width, std::uint32_t source_height, std::uint32_t out_width,
+              std::uint32_t out_height);
+
+// Premultiplied linear background from the graph's straight-alpha color.
+[[nodiscard]] std::array<float, 4> premultiplied_background(const RenderGraph& graph) noexcept;
+
+} // namespace oma::compositor
