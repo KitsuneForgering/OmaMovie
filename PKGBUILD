@@ -8,8 +8,7 @@
 #   checkdepends  what `make test` needs inside check()
 #   _devdepends   development-only tools (spikes, lint, diagnostics); never part of the package
 #
-# Move a package from _devdepends to depends/makedepends when shipped code starts using it
-# (e.g. ffmpeg and vulkan-icd-loader when libs/media and libs/gpu land in M2).
+# Move a package from _devdepends to depends/makedepends when shipped code starts using it.
 
 pkgname=omamovie-git
 pkgver=r0
@@ -24,18 +23,20 @@ conflicts=('omamovie')
 depends=(
     'gcc-libs'                  # libstdc++ (libs/base)
     'glibc'
+    'vulkan-icd-loader'         # libvulkan (libs/gpu)
 )
 makedepends=(
     'git'
+    'vulkan-headers'            # vulkan.hpp / vulkan_raii.hpp (libs/gpu)
 )
-checkdepends=()
+checkdepends=(
+    'vulkan-swrast'             # lavapipe: GPU tests run on machines without a Vulkan driver
+)
 
 _devdepends=(
     'clang'                     # second compiler in CI, clang-format, clang-tidy
     'llvm'                      # llvm-ar: LTO-aware archiver for Clang builds
     'ffmpeg'                    # spikes, fixture generator (Arch ships headers with the package)
-    'vulkan-headers'            # vulkan.hpp / vulkan_raii.hpp for the spikes
-    'vulkan-icd-loader'         # libvulkan + vulkan.pc
     'vulkan-tools'              # vulkaninfo (S1)
     'vulkan-validation-layers'  # validate synchronization in spikes and libs/gpu
     'libva-utils'               # vainfo (S1)
