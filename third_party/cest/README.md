@@ -1,16 +1,16 @@
 # Cest (vendored)
 
-Framework de testes do OmaMovie (ADR-0001).
+OmaMovie test framework (ADR-0001).
 
-| Campo | Valor |
+| Field | Value |
 |---|---|
-| Origem | https://github.com/KitsuneSemCalda/Cest |
+| Upstream | https://github.com/KitsuneSemCalda/Cest |
 | Commit | `3457ffcbc45deed4095ffe1151ef7d67dc135fc9` (v1.1.2 + 2 commits) |
-| Arquivo | `cest.h` (sha256 `1c0d9a282b56429b679e8a1e8f9488ad97c4c805cffa7f362d010a6222ecdaba`) |
-| Licença | BSD-3-Clause (`LICENSE`) |
+| File | `cest.h` (sha256 `1c0d9a282b56429b679e8a1e8f9488ad97c4c805cffa7f362d010a6222ecdaba`) |
+| License | BSD-3-Clause (`LICENSE`) |
 
-Não edite `cest.h` aqui. Para atualizar: copie o `cest.h` de um commit/tag novo,
-atualize esta tabela e rode todos os testes nos presets `debug`, `asan` e `tsan`.
+Do not edit `cest.h` here. To update: copy `cest.h` from a newer commit or tag, update this
+table and run every test in the `debug`, `asan` and `tsan` builds.
 
-Os testes não incluem este arquivo diretamente: usam `tests/support/oma_test.hpp`,
-que configura o Cest e acrescenta overloads para os tipos do OmaMovie.
+Tests never include this file directly: they use `tests/support/oma_test.hpp`, which
+configures Cest and adds overloads for OmaMovie types.
