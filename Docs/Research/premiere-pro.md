@@ -1,256 +1,251 @@
-# Adobe Premiere Pro: por que é um editor poderoso
+# Adobe Premiere Pro: why it is a powerful editor
 
-> Pesquisa feita em 2026-10-02. Fatos com fonte estão linkados na seção
-> [Fontes](#fontes). Itens marcados **(conhecimento geral)** são comportamento
-> amplamente documentado do produto, mas sem fonte específica nesta pesquisa;
-> verificar antes de usar como requisito.
+> Research done on 2026-10-02. Sourced facts are linked in the [Sources](#sources) section.
+> Items marked **(general knowledge)** are widely documented product behavior without a
+> specific source in this research; verify before using them as requirements.
 
-Desde 2025 a Adobe chama o produto de "Adobe Premiere" (as notas de versão
-atuais usam "Adobe Premiere desktop", versão 26.x). Este documento usa
-"Premiere Pro" porque é o nome consagrado.
-
----
-
-## 1. Resumo
-
-O poder do Premiere não vem de um recurso isolado. Vem da combinação de:
-
-1. um **motor de playback GPU** que edita formatos nativos em tempo real, sem renderizar antes;
-2. um **modelo de edição profissional completo** (monitores Source/Program, edição de três pontos, ferramentas de trim);
-3. **amplitude de formatos** e **workflows de proxy** para mídia pesada;
-4. **gerenciamento de cor** e ferramentas de cor/áudio integradas;
-5. um **ecossistema** (After Effects, Frame.io, projetos compartilhados) e **interoperabilidade** com o resto da indústria;
-6. uma UI **altamente configurável** baseada em painéis e workspaces.
-
-O item 6 é ao mesmo tempo força e fraqueza: o Premiere é o exemplo de
-"cockpit" que o OmaMovie quer evitar na superfície, mas não na capacidade.
+Since 2025 Adobe calls the product "Adobe Premiere" (the current release notes say "Adobe
+Premiere desktop", version 26.x). This document uses "Premiere Pro" because it is the
+established name.
 
 ---
 
-## 2. Motor de playback: Mercury Playback Engine
+## 1. Summary
 
-Lançado no Premiere Pro CS5 (2010). Pontos documentados:
+Premiere's power does not come from a single feature. It comes from the combination of:
 
-- Código **64-bit nativo e multithread**, com aceleração por GPU. Começou com
-  CUDA (NVIDIA). Depois ganhou OpenCL e, no macOS, Metal **(conhecimento geral para Metal)**.
-- **Pipeline de cor em ponto flutuante de 32 bits** na GPU.
-- Os efeitos mais usados foram reescritos para a GPU: correção de cor, keyer,
-  Gaussian blur, sharpen, motion, além de transições básicas (cross dissolve, dip to black/white).
-- **A aceleração não cobre o programa inteiro.** Efeitos não portados rodam na
-  CPU. Na timeline isso aparece como trechos que precisam ser renderizados
-  (barra de render vermelha/amarela/verde) **(conhecimento geral)**.
-- A Adobe anunciou ganhos de até 10x em projetos grandes. É número de
-  marketing, não benchmark independente.
+1. a **GPU playback engine** that edits native formats in real time, without rendering first;
+2. a **complete professional editing model** (Source/Program monitors, three-point editing, trim tools);
+3. **format breadth** and **proxy workflows** for heavy media;
+4. **color management** and integrated color/audio tools;
+5. an **ecosystem** (After Effects, Frame.io, shared projects) and **interoperability** with the rest of the industry;
+6. a **highly configurable** UI based on panels and workspaces.
 
-### Decode e encode por hardware
-
-- Inicialmente só havia decode por hardware via **Intel Quick Sync**. Depois
-  foi adicionado decode H.264/HEVC em GPUs **NVIDIA e AMD**.
-- Decode por GPU permite playback de 4K em tempo real na timeline, liberando a CPU.
-- A Puget Systems testou se o decode por GPU realmente acelera; o ganho depende
-  do codec, do perfil e do hardware. Lição: medir em vez de presumir.
-- Encode por GPU (NVENC e equivalentes) foi adicionado depois e reduz muito o tempo de exportação.
-
-### Implicações para o OmaMovie
-
-- Confirma a decisão GPU-first do `CLAUDE.md` (§7): edição em tempo real de
-  formatos nativos é o requisito básico de um editor "sério".
-- **Efeitos sem implementação GPU precisam de um caminho definido.** O
-  compositor deve saber se cada efeito tem implementação GPU e, se não tiver,
-  reportar isso. A UI deve mostrar onde o playback não vai ser em tempo real
-  (equivalente funcional da barra de render).
-- Pipeline em float é o padrão profissional. Reforça o ADR-0006 (espaço de cor de trabalho).
-- Suporte a decode HW varia por codec, perfil e fabricante. A detecção de
-  capacidades em runtime (§7.3 do `CLAUDE.md`) é necessária, não opcional.
+Item 6 is both a strength and a weakness: Premiere is the "cockpit" example OmaMovie wants to
+avoid on the surface, but not in capability.
 
 ---
 
-## 3. Modelo de edição profissional
+## 2. Playback engine: Mercury Playback Engine
 
-**(conhecimento geral, salvo indicação)**
+Introduced in Premiere Pro CS5 (2010). Documented points:
 
-| Conceito | O que faz | Por que importa |
+- **Native 64-bit, multithreaded** code with GPU acceleration. It started with CUDA (NVIDIA),
+  later gained OpenCL and, on macOS, Metal **(general knowledge for Metal)**.
+- A **32-bit floating-point color pipeline** on the GPU.
+- The most used effects were rewritten for the GPU: color correction, keyer, Gaussian blur,
+  sharpen, motion, plus basic transitions (cross dissolve, dip to black/white).
+- **Acceleration does not cover the whole program.** Effects that were not ported run on the
+  CPU. In the timeline this shows up as sections that need rendering (the red/yellow/green
+  render bar) **(general knowledge)**.
+- Adobe announced gains of up to 10x on large projects. That is a marketing number, not an
+  independent benchmark.
+
+### Hardware decode and encode
+
+- Initially hardware decode was only available through **Intel Quick Sync**. H.264/HEVC decode
+  on **NVIDIA and AMD** GPUs was added later.
+- GPU decode allows real-time 4K playback in the timeline, freeing the CPU.
+- Puget Systems tested whether GPU decode really speeds things up; the gain depends on codec,
+  profile and hardware. Lesson: measure instead of assuming.
+- GPU encode (NVENC and equivalents) was added later and cuts export time significantly.
+
+### Implications for OmaMovie
+
+- Confirms the GPU-first decision in `CLAUDE.md` (§7): real-time editing of native formats is
+  the baseline for a "serious" editor.
+- **Effects without a GPU implementation need a defined path.** The compositor must know
+  whether each effect has a GPU implementation and report it when not. The UI must show where
+  playback will not be real time (the functional equivalent of the render bar).
+- A float pipeline is the professional standard. Reinforces ADR-0006 (working color space).
+- HW decode support varies by codec, profile and vendor. Runtime capability detection
+  (`CLAUDE.md` §7.3) is necessary, not optional.
+
+---
+
+## 3. Professional editing model
+
+**(general knowledge, unless stated)**
+
+| Concept | What it does | Why it matters |
 |---|---|---|
-| **Source Monitor / Program Monitor** | Um monitor mostra o clip bruto, onde se marcam In/Out; o outro mostra a sequência editada | Separa "escolher material" de "montar o filme" |
-| **Edição de três pontos** | Com três dos quatro pontos (In/Out na fonte, In/Out na sequência), o quarto é calculado | Edição rápida e precisa pelo teclado |
-| **Source patching vs. track targeting** | Patching define em qual track o clip entra numa edição de três pontos; targeting define quais tracks são afetadas por outras operações | Controle fino do destino das edições |
-| **Insert vs. overwrite** | Insert empurra o conteúdo existente; overwrite substitui | Básico de NLE |
-| **Ripple / Roll / Slip / Slide** | Ripple muda a duração e desloca o resto; roll move o ponto de corte entre dois clips; slip muda o conteúdo sem mudar a posição; slide move o clip ajustando os vizinhos | Ajustes de corte sem refazer a montagem |
-| **Trim mode / dynamic trim** | O Program Monitor mostra os dois lados do corte; o trim pode ser feito durante o playback com J/K/L | Ajuste fino do corte em tempo real |
-| **Sequências aninhadas** | Uma sequência usada como clip dentro de outra | Organização e reuso |
-| **Multicam** | Várias câmeras sincronizadas, com troca de ângulo durante o playback | Eventos, entrevistas |
-| **Keyframes** | Em praticamente todo parâmetro, com interpolação | Animação de transform, áudio, efeitos |
-| **Atalhos remapeáveis** | Editor visual de atalhos | Editores profissionais trabalham pelo teclado |
+| **Source Monitor / Program Monitor** | One monitor shows the raw clip, where In/Out is marked; the other shows the edited sequence | Separates "choosing material" from "assembling the film" |
+| **Three-point editing** | Given three of the four points (source In/Out, sequence In/Out), the fourth is computed | Fast, precise keyboard editing |
+| **Source patching vs. track targeting** | Patching sets which track a clip lands on in a three-point edit; targeting sets which tracks other operations affect | Fine control over where edits go |
+| **Insert vs. overwrite** | Insert pushes existing content; overwrite replaces it | NLE basics |
+| **Ripple / Roll / Slip / Slide** | Ripple changes duration and shifts the rest; roll moves the cut point between two clips; slip changes the content without moving the clip; slide moves the clip adjusting its neighbors | Cut adjustments without redoing the assembly |
+| **Trim mode / dynamic trim** | The Program Monitor shows both sides of the cut; trimming can happen during playback with J/K/L | Real-time fine-tuning of cuts |
+| **Nested sequences** | A sequence used as a clip inside another | Organization and reuse |
+| **Multicam** | Several synchronized cameras, switching angles during playback | Events, interviews |
+| **Keyframes** | On virtually every parameter, with interpolation | Animating transforms, audio, effects |
+| **Remappable shortcuts** | Visual shortcut editor | Professional editors work from the keyboard |
 
-### Implicações para o OmaMovie
+### Implications for OmaMovie
 
-- O modelo da timeline (`libs/timeline`) deve suportar desde o início as
-  operações ripple/roll/slip/slide como comandos, mesmo que a UI inicial só
-  exponha arrastar bordas e split. É mais barato do que adaptar depois.
-- Edição de três pontos e source patching são recursos de usuário avançado.
-  Encaixam no princípio "esconder sem remover": acessíveis por teclado, invisíveis para quem não usa.
-- O trim dinâmico com J/K/L exige que o playback e o modelo de edição convivam
-  (editar enquanto toca). Isso afeta o modelo de threading (ADR-0003).
-- Multicam está nos não objetivos iniciais. Não implementar agora, mas o
-  modelo não deve impedir sua adição (clips com várias fontes sincronizadas).
-
----
-
-## 4. Formatos, proxies e organização de projetos
-
-- **Edição nativa** de uma grande variedade de codecs e câmeras, sem
-  transcodificar antes. A versão 26 adicionou suporte a câmeras Sony FX5, XAVC e
-  XOCN com áudio 32-bit float.
-- **Workflow de proxy**: proxies gerados na importação (ingest settings), e um
-  botão "Enable Proxies" nos monitores alterna entre proxy e original com um clique.
-- **Productions** (2020): permitem usar e referenciar clips entre vários
-  projetos da mesma produção. Pensado para filmes e séries.
-- **Team Projects** e integração com **Frame.io** para colaboração e revisão.
-
-### Implicações para o OmaMovie
-
-- Proxies precisam ser parte do desenho do cache (§15 do `CLAUDE.md`). A
-  alternância proxy/original deve ser transparente para o modelo da timeline: o
-  clip referencia a mídia, e a resolução da fonte (original ou proxy) é decidida pela media engine.
-- Productions e colaboração remota estão fora do escopo, mas o formato de
-  projeto não deve presumir que um projeto é sempre um arquivo isolado sem
-  referências externas.
+- The timeline model (`libs/timeline`) should support ripple/roll/slip/slide as commands from
+  the start, even if the first UI only exposes edge dragging and split. That is cheaper than
+  adapting later.
+- Three-point editing and source patching are advanced-user features. They fit the "hide,
+  do not remove" principle: reachable by keyboard, invisible to those who do not use them.
+- Dynamic trim with J/K/L requires playback and the editing model to coexist (editing while
+  playing). This affects the threading model (ADR-0003).
+- Multicam is an initial non-goal. Do not implement it now, but the model should not prevent
+  adding it (clips with several synchronized sources).
 
 ---
 
-## 5. Cor
+## 4. Formats, proxies and project organization
 
-- **Lumetri Color**: painel de correção e grading integrado (balanço, curvas, rodas de cor, LUTs).
-- **Novo gerenciamento de cor (versão 25.2, 2025)**:
-  - atribui automaticamente o espaço de cor da sequência (SDR, HDR PQ, HLG) com base na mídia importada;
-  - transforma automaticamente mídia RAW e log de quase todas as câmeras para SDR/HDR, reduzindo o uso manual de LUTs;
-  - espaço de trabalho de gamut amplo baseado em **ACEScct**, com tone mapping;
-  - seis presets "configure e esqueça" nas configurações de sequência;
-  - os efeitos mais usados (incluindo Lumetri) passaram a considerar o espaço de cor.
+- **Native editing** of a wide range of codecs and cameras without transcoding first. Version
+  26 added support for Sony FX5 cameras, XAVC and XOCN with 32-bit float audio.
+- **Proxy workflow**: proxies generated at ingest (ingest settings), and an "Enable Proxies"
+  button in the monitors switches between proxy and original in one click.
+- **Productions** (2020): let several projects of the same production use and reference
+  clips. Aimed at films and series.
+- **Team Projects** and **Frame.io** integration for collaboration and review.
 
-### Implicações para o OmaMovie
+### Implications for OmaMovie
 
-- Gerenciamento de cor automático é uma forma de "UI simples, pipeline sério":
-  o usuário escolhe um preset e o pipeline faz a conversão correta.
-- Efeitos precisam conhecer o espaço de cor em que operam. Isso deve fazer
-  parte da interface de efeitos desde o início (ADR-0006).
-- Ler os metadados de cor de cada stream (§7.4 do `CLAUDE.md`) é pré-requisito para esse tipo de automação.
-
----
-
-## 6. Áudio
-
-- **Essential Sound**: painel que classifica o clip (diálogo, música, efeito,
-  ambiente) e oferece controles específicos para cada tipo **(conhecimento geral)**.
-- **Enhance Speech**: remoção de ruído e melhoria de diálogo por IA.
-- Mixer de tracks, keyframes de volume, efeitos de áudio por clip e por track **(conhecimento geral)**.
-
-### Implicações para o OmaMovie
-
-- O padrão "classifique o clip e mostre só os controles relevantes" é um bom
-  modelo para o inspector contextual de áudio (`CLAUDE.md` §11).
+- Proxies must be part of the cache design (`CLAUDE.md` §15). Switching proxy/original must be
+  transparent to the timeline model: the clip references the media, and the media engine
+  decides which source (original or proxy) to use.
+- Productions and remote collaboration are out of scope, but the project format must not
+  assume a project is always an isolated file without external references.
 
 ---
 
-## 7. Recursos assistidos por IA (2023–2026)
+## 5. Color
 
-| Recurso | Função |
+- **Lumetri Color**: an integrated correction and grading panel (balance, curves, color wheels, LUTs).
+- **New color management (version 25.2, 2025)**:
+  - automatically assigns the sequence color space (SDR, HDR PQ, HLG) from the imported media;
+  - automatically transforms RAW and log media from almost every camera to SDR/HDR, reducing manual LUT use;
+  - a wide-gamut working space based on **ACEScct**, with tone mapping;
+  - six "set it and forget it" presets in the sequence settings;
+  - the most used effects (including Lumetri) became color-space aware.
+
+### Implications for OmaMovie
+
+- Automatic color management is a form of "simple UI, serious pipeline": the user picks a
+  preset and the pipeline performs the correct conversion.
+- Effects need to know the color space they operate in. This should be part of the effect
+  interface from the start (ADR-0006).
+- Reading each stream's color metadata (`CLAUDE.md` §7.4) is a prerequisite for that kind of automation.
+
+---
+
+## 6. Audio
+
+- **Essential Sound**: a panel that classifies the clip (dialogue, music, effect, ambience) and
+  offers controls specific to each type **(general knowledge)**.
+- **Enhance Speech**: AI noise removal and dialogue enhancement.
+- Track mixer, volume keyframes, per-clip and per-track audio effects **(general knowledge)**.
+
+### Implications for OmaMovie
+
+- The "classify the clip and show only the relevant controls" pattern is a good model for the
+  contextual audio inspector (`CLAUDE.md` §11).
+
+---
+
+## 7. AI-assisted features (2023–2026)
+
+| Feature | Function |
 |---|---|
-| Text-Based Editing | Transcrição automática; montar o rough cut copiando trechos do texto |
-| Paper Edit (26.0) | Criar sequências selecionando linhas no painel de texto |
-| Media Intelligence / Search | Busca de clips por descrição em linguagem natural |
-| Generative Extend | Gera frames e som ambiente para estender um clip |
-| Object Mask (26.0) | Máscara de objeto em movimento com hover e clique; máscaras de forma com tracking até 20x mais rápido |
-| Captions | Legendas automáticas, inclusive palavra por palavra |
+| Text-Based Editing | Automatic transcription; build the rough cut by copying text passages |
+| Paper Edit (26.0) | Create sequences by selecting lines in the text panel |
+| Media Intelligence / Search | Find clips by natural-language description |
+| Generative Extend | Generates frames and ambient sound to extend a clip |
+| Object Mask (26.0) | Masks a moving object with hover and click; shape masks with tracking up to 20x faster |
+| Captions | Automatic captions, including word by word |
 
-### Implicações para o OmaMovie
+### Implications for OmaMovie
 
-- IA está nos não objetivos iniciais. Transcrição/edição por texto é o recurso
-  com função mais concreta para um editor simples. Se um dia entrar, deve
-  operar sobre o modelo da timeline via comandos normais (com undo).
-- Não é prioridade e não deve influenciar a arquitetura agora.
+- AI is an initial non-goal. Transcription/text editing is the feature with the most concrete
+  function for a simple editor. If it ever lands, it must operate on the timeline model through
+  normal commands (with undo).
+- It is not a priority and should not influence the architecture now.
 
 ---
 
-## 8. Ecossistema e interoperabilidade
+## 8. Ecosystem and interoperability
 
-- **Dynamic Link** com After Effects: composições do AE aparecem na timeline do
-  Premiere sem renderização intermediária; alternativas são "Render and Replace" e render direto.
-- Interchange: exporta/importa XML (estilo Final Cut Pro 7), EDL, AAF e OMF **(conhecimento geral)**.
-- **Formato `.prproj`**: é **XML comprimido com GZIP**. Arquivos descomprimidos
-  em XML puro são lidos e re-comprimidos ao salvar.
-- Plugins: SDK nativo de efeitos e extensões de painel (UXP) **(conhecimento geral)**.
+- **Dynamic Link** with After Effects: AE compositions appear in the Premiere timeline without
+  intermediate rendering; the alternatives are "Render and Replace" and a direct render.
+- Interchange: exports/imports XML (Final Cut Pro 7 style), EDL, AAF and OMF **(general knowledge)**.
+- **The `.prproj` format** is **GZIP-compressed XML**. Uncompressed plain-XML files are read and
+  re-compressed on save.
+- Plugins: a native effects SDK and panel extensions (UXP) **(general knowledge)**.
 
-### Implicações para o OmaMovie
+### Implications for OmaMovie
 
-- `.prproj` é XML dentro de gzip: categoria 2/4 na ordem de prioridade de
-  reverse engineering do `CLAUDE.md` (§16.6). É um alvo relativamente acessível
-  para validar o pipeline `Importer → ProjectIR`, **depois** de OTIO/FCPXML/EDL.
-- O XML do Premiere provavelmente é grande e cheio de referências internas por
-  ID. O `oma-project dump`/`diff` será essencial. Gerar pares de projetos com
-  uma diferença mínima é viável com uma licença legítima do Premiere.
-- O Dynamic Link mostra o valor de componentes externos aparecerem na timeline
-  sem render. Fora do escopo, mas reforça a necessidade de `OpaqueExternalObject` (§16.3).
+- `.prproj` is XML inside gzip: category 2/4 in the reverse engineering priority order of
+  `CLAUDE.md` (§16.6). It is a relatively accessible target to validate the
+  `Importer → ProjectIR` pipeline, **after** OTIO/FCPXML/EDL.
+- Premiere's XML is probably large and full of internal ID references. `oma-project dump`/`diff`
+  will be essential. Generating project pairs with one minimal difference is feasible with a
+  legitimate Premiere license.
+- Dynamic Link shows the value of external components appearing in the timeline without a
+  render. Out of scope, but it reinforces the need for `OpaqueExternalObject` (§16.3).
 
 ---
 
 ## 9. Interface
 
-- Painéis acopláveis organizados em **workspaces**. São **16 workspaces
-  padrão** por tarefa (edição, cor, áudio, gráficos, etc.). O workspace
-  "Essentials" é pensado para um monitor só.
-- Flexível, mas o padrão é a tela cheia de painéis, ou seja, a "interface de cockpit".
+- Dockable panels organized into **workspaces**. There are **16 default workspaces** per task
+  (editing, color, audio, graphics, etc.). The "Essentials" workspace targets a single monitor.
+- Flexible, but the default is a screen full of panels, the "cockpit interface".
 
-### Implicações para o OmaMovie
+### Implications for OmaMovie
 
-- **Não copiar o modelo de painéis livres.** Workspaces por tarefa mostram que
-  a mesma capacidade precisa de superfícies diferentes conforme o contexto.
-  O OmaMovie resolve isso com o inspector contextual e ferramentas reveladas
-  por seleção, não com 16 layouts.
+- **Do not copy the free-panel model.** Per-task workspaces show that the same capability
+  needs different surfaces depending on context. OmaMovie solves that with the contextual
+  inspector and tools revealed by selection, not with 16 layouts.
 
 ---
 
-## 10. Fraquezas e críticas
+## 10. Weaknesses and criticism
 
-- **Estabilidade**: há reclamações frequentes, em fóruns e na imprensa, de
-  crashes, bugs novos a cada versão, playback lento e projetos corrompidos.
-  Parte dos usuários migrou para o DaVinci Resolve citando estabilidade e desempenho.
-- **Fragmentação**: edição, motion (After Effects) e áudio (Audition) em apps
-  separados. O Resolve integra os três em um programa.
-- **Assinatura**: o modelo de preço é motivo citado de migração.
-- **Complexidade de UI** para iniciantes.
+- **Stability**: frequent complaints in forums and the press about crashes, new bugs in every
+  version, slow playback and corrupted projects. Some users moved to DaVinci Resolve citing
+  stability and performance.
+- **Fragmentation**: editing, motion (After Effects) and audio (Audition) in separate apps.
+  Resolve integrates the three in one program.
+- **Subscription**: the pricing model is a stated reason for switching.
+- **UI complexity** for beginners.
 
-### Implicações para o OmaMovie
+### Implications for OmaMovie
 
-- **Projeto corrompido é a falha mais grave possível num NLE.** Reforça:
-  salvamento atômico, autosave separado, migrações testadas, parser robusto (§14 e §18 do `CLAUDE.md`).
-- Estabilidade é parte da percepção de "poder". Um editor rápido que trava não é poderoso.
-- Testes e fuzzing não são burocracia; são o diferencial em relação a um concorrente com reputação de instabilidade.
+- **A corrupted project is the worst possible failure in an NLE.** Reinforces: atomic save,
+  separate autosave, tested migrations, robust parser (`CLAUDE.md` §14 and §18).
+- Stability is part of the perception of "power". A fast editor that crashes is not powerful.
+- Tests and fuzzing are not bureaucracy; they are the differentiator against a competitor with
+  a reputation for instability.
 
 ---
 
-## 11. Tabela de priorização para o OmaMovie
+## 11. Prioritization table for OmaMovie
 
-| Capacidade do Premiere | Adotar? | Quando (fase do `CLAUDE.md` §24) | Módulo |
+| Premiere capability | Adopt? | When (`CLAUDE.md` §24 phase) | Module |
 |---|---|---|---|
-| Playback GPU em tempo real de mídia nativa | Sim, fundamental | 3–7 | `media`, `gpu`, `compositor` |
-| Decode/encode por hardware com fallback | Sim | 3–4, export em 12 | `media` |
-| Indicação de trechos que não tocam em tempo real | Sim | Após compositor | `compositor`, UI |
-| Ripple/roll/slip/slide como comandos | Sim (modelo cedo, UI depois) | 9–10 | `timeline` |
-| Edição de três pontos, source patching | Sim, via teclado | Após 10 | `timeline`, UI |
-| Proxies alternáveis | Sim | Junto com cache | `media`, cache |
-| Gerenciamento de cor automático | Sim (versão simples primeiro) | 5 e efeitos | `compositor` |
-| Keyframes gerais | Sim | Após timeline | `timeline` |
-| Sequências aninhadas | Quando justificado | Futuro | `timeline` |
-| Multicam | Não agora | Não objetivo | — |
-| Workspaces/painéis livres | Não | — | — |
-| Dynamic Link / ecossistema | Não | — | — |
-| IA generativa | Não agora | Não objetivo | — |
-| Importar `.prproj` | Sim, read-only | 12–14, após OTIO/FCPXML | `importers` |
+| Real-time GPU playback of native media | Yes, fundamental | 3–7 | `media`, `gpu`, `compositor` |
+| Hardware decode/encode with fallback | Yes | 3–4, export in 12 | `media` |
+| Indication of sections that do not play in real time | Yes | After the compositor | `compositor`, UI |
+| Ripple/roll/slip/slide as commands | Yes (model early, UI later) | 9–10 | `timeline` |
+| Three-point editing, source patching | Yes, by keyboard | After 10 | `timeline`, UI |
+| Switchable proxies | Yes | With the cache | `media`, cache |
+| Automatic color management | Yes (simple version first) | 5 and effects | `compositor` |
+| General keyframes | Yes | After the timeline | `timeline` |
+| Nested sequences | When justified | Future | `timeline` |
+| Multicam | Not now | Non-goal | — |
+| Free workspaces/panels | No | — | — |
+| Dynamic Link / ecosystem | No | — | — |
+| Generative AI | Not now | Non-goal | — |
+| `.prproj` import | Yes, read-only | 12–14, after OTIO/FCPXML | `importers` |
 
 ---
 
-## Fontes
+## Sources
 
 - [Pro Video Coalition: Sneak peek Adobe Mercury Playback Engine](https://www.provideocoalition.com/sneak_peek_adobe_mercury_playback_engine/)
 - [Puget Systems: Adobe Premiere Pro CS5 – Mercury Playback Engine](https://www.pugetsystems.com/?p=10612)

@@ -1,151 +1,150 @@
-# Pesquisa: referências de produto
+# Research
 
-Pesquisa de mercado e de UX para orientar o OmaMovie. Não é especificação:
-recomendações daqui só viram regra quando forem para o `CLAUDE.md` ou para um ADR.
+Market, UX and technology research that guides OmaMovie. It is not a specification:
+recommendations here only become rules once they reach `CLAUDE.md` or an ADR.
 
-**Produto e UX**
+**Product and UX**
 
-| Documento | Assunto |
+| Document | Topic |
 |---|---|
-| [premiere-pro.md](premiere-pro.md) | Por que o Adobe Premiere Pro é um editor poderoso (motor, modelo de edição, cor, interop, fraquezas) |
-| [imovie.md](imovie.md) | UI/UX do Apple iMovie (layout, inspector contextual, timeline magnética, templates) |
-| [movie-maker.md](movie-maker.md) | UI/UX do Windows Movie Maker e sucessores (storyboard/timeline, Clipchamp) |
-| [davinci-resolve.md](davinci-resolve.md) | Por que o DaVinci Resolve é poderoso (páginas, Cut page, cor por nós, projetos em banco, OTIO, situação no Linux) |
-| [capcut.md](capcut.md) | O que as pessoas gostam e não gostam no CapCut (templates, legendas, speed ramps, paywall, termos de uso) |
-| [other-editors.md](other-editors.md) | Final Cut Pro, Descript, Kdenlive, Shotcut e padrões comuns entre editores |
+| [premiere-pro.md](premiere-pro.md) | Why Adobe Premiere Pro is a powerful editor (engine, editing model, color, interop, weaknesses) |
+| [imovie.md](imovie.md) | Apple iMovie UI/UX (layout, contextual inspector, magnetic timeline, templates) |
+| [movie-maker.md](movie-maker.md) | Windows Movie Maker and its successors UI/UX (storyboard/timeline, Clipchamp) |
+| [davinci-resolve.md](davinci-resolve.md) | Why DaVinci Resolve is powerful (pages, Cut page, node color, database projects, OTIO, the Linux situation) |
+| [capcut.md](capcut.md) | What people like and dislike about CapCut (templates, captions, speed ramps, paywall, terms of service) |
+| [other-editors.md](other-editors.md) | Final Cut Pro, Descript, Kdenlive, Shotcut and patterns shared across editors |
 
-**Tecnologia e plataforma**
+**Technology and platform**
 
-| Documento | Assunto |
+| Document | Topic |
 |---|---|
-| [hardware-strategy.md](hardware-strategy.md) | **Síntese**: papel de cada API, device Vulkan único, seleção em runtime, mudanças propostas ao `CLAUDE.md`, spikes |
-| [vulkan.md](vulkan.md) | Vulkan-Hpp, Vulkan Video, VA-API→Vulkan, FFmpeg `hwcontext_vulkan`, Qt Quick sobre device externo, libplacebo |
-| [cuda.md](cuda.md) | NVDEC/NVENC sem toolkit, interop CUDA↔Vulkan, kernels via PTX (clang), notebooks híbridos |
-| [opencl.md](opencl.md) | Análise que levou à **remoção do OpenCL** (rusticl, NEO, ROCm, interop com Vulkan, lição do Blender) |
-| [omarchy-integration.md](omarchy-integration.md) | Tema, opacidade de janela, gravações de tela, shell Quickshell, menu, drivers instalados, distribuição |
+| [hardware-strategy.md](hardware-strategy.md) | **Synthesis**: role of each API, single Vulkan device, runtime selection, proposed `CLAUDE.md` changes, spikes |
+| [vulkan.md](vulkan.md) | Vulkan-Hpp, Vulkan Video, VA-API→Vulkan, FFmpeg `hwcontext_vulkan`, Qt Quick on an external device, libplacebo |
+| [cuda.md](cuda.md) | NVDEC/NVENC without the toolkit, CUDA↔Vulkan interop, kernels through PTX (clang), hybrid laptops |
+| [opencl.md](opencl.md) | The analysis that led to **removing OpenCL** (rusticl, NEO, ROCm, Vulkan interop, the Blender lesson) |
+| [omarchy-integration.md](omarchy-integration.md) | Theme, window opacity, screen recordings, Quickshell shell, menu, installed drivers, distribution |
 
-## Método
+## Method
 
-- Fontes: documentação oficial (Adobe Help, Apple Support, Blackmagic, Kdenlive), Wikipedia,
-  imprensa especializada, benchmarks independentes (Puget Systems) e agregadores de reviews
-  (G2, Capterra; tratados como indício de opinião, não como medição). Links em cada documento.
-- Afirmações sem fonte específica estão marcadas como **(conhecimento geral)** ou **(observação geral)**.
-- Cada seção termina com **Implicações para o OmaMovie**, ligando o achado às seções do `CLAUDE.md`.
-- Objetivo: extrair princípios. Copiar identidade visual ou comportamento proprietário é proibido (`CLAUDE.md` §11).
+- Sources: official documentation (Adobe Help, Apple Support, Blackmagic, Kdenlive), Wikipedia,
+  trade press, independent benchmarks (Puget Systems) and review aggregators (G2, Capterra;
+  treated as a signal of opinion, not as measurement). Links in each document.
+- Claims without a specific source are marked **(general knowledge)** or **(general observation)**.
+- Each section ends with **Implications for OmaMovie**, linking the finding to `CLAUDE.md` sections.
+- Goal: extract principles. Copying visual identity or proprietary behavior is forbidden (`CLAUDE.md` §11).
 
 ---
 
-## Síntese
+## Synthesis
 
-### Onde cada produto se posiciona
+### Where each product sits
 
 ```
-simples ◄──────────────────────────────────────────────────────────────► poderoso
-Movie Maker/Fotos   iMovie    CapCut/Clipchamp   Shotcut/Kdenlive   FCP   Premiere/Resolve
-(storyboard)    (motor FCP X) (presets, social)   (livres, MLT)          (cockpit/páginas)
+simple ◄───────────────────────────────────────────────────────────────► powerful
+Movie Maker/Photos   iMovie    CapCut/Clipchamp   Shotcut/Kdenlive   FCP   Premiere/Resolve
+(storyboard)    (FCP X engine) (presets, social)   (free, MLT)            (cockpit/pages)
 
-OmaMovie: superfície próxima do iMovie/CapCut, motor próximo do Premiere/Resolve.
-No Linux, o espaço entre Kdenlive/Shotcut e o Resolve está vazio.
+OmaMovie: a surface close to iMovie/CapCut, an engine close to Premiere/Resolve.
+On Linux, the space between Kdenlive/Shotcut and Resolve is empty.
 ```
 
-### Conclusões
+### Conclusions
 
-1. **Simplicidade vem de revelação contextual, não de remover recursos.**
-   A barra de ajustes do iMovie e o painel de propriedades do Clipchamp mostram
-   só o que se aplica à seleção. O Premiere resolve com 16 workspaces. O
-   inspector contextual do OmaMovie é o caminho certo. Adotar também o
-   **indicador visual de quais ajustes estão ativos** no clip (iMovie).
+1. **Simplicity comes from contextual disclosure, not from removing features.** iMovie's
+   adjustments bar and Clipchamp's properties panel show only what applies to the selection.
+   Premiere solves it with 16 workspaces. OmaMovie's contextual inspector is the right path.
+   Also adopt the **visual indicator of which adjustments are active** on a clip (iMovie).
 
-2. **Redesenho que remove capacidade gera rejeição.** iMovie '08 e Windows Live
-   Movie Maker tiveram que devolver recursos nas versões seguintes. Confirma
-   "esconder, não remover" e "crescer sem reescrever o núcleo".
+2. **A redesign that removes capability causes rejection.** iMovie '08 and Windows Live Movie
+   Maker had to bring features back in the following versions. This confirms "hide, do not
+   remove" and "grow without rewriting the core".
 
-3. **Motor profissional sob UI simples funciona.** O iMovie usa o motor do
-   Final Cut Pro X desde 2013 e exporta para ele. É a tese do OmaMovie, com a
-   diferença de ser um app só: exige mais cuidado com a revelação progressiva.
+3. **A professional engine under a simple UI works.** iMovie has used the Final Cut Pro X
+   engine since 2013 and exports to it. That is OmaMovie's thesis, with the difference of
+   being a single app: progressive disclosure needs more care.
 
-4. **Operações nomeadas sobre um compositor genérico.** PiP, cutaway, split screen
-   e green screen do iMovie são presets. No OmaMovie, devem gerar layers e
-   parâmetros normais no render graph, editáveis depois, sem o teto de camadas do iMovie.
+4. **Named operations over a generic compositor.** iMovie's PiP, cutaway, split screen and
+   green screen are presets. In OmaMovie they must produce normal layers and parameters in the
+   render graph, editable afterwards, without iMovie's layer ceiling.
 
-5. **Zoom semântico storyboard ↔ timeline** (Movie Maker 2012). Uma TimelineView
-   só, em que o zoom mínimo vira storyboard (clips de tamanho igual, foco na
-   ordem). Candidato forte a diferencial de UX. Requer virtualização e cache de thumbnails.
+5. **Semantic storyboard ↔ timeline zoom** (Movie Maker 2012). A single TimelineView whose
+   minimum zoom becomes a storyboard (equal-size clips, focus on order). A strong UX
+   differentiator. Requires virtualization and a thumbnail cache.
 
-6. **"Poderoso" começa no motor**: playback em tempo real de mídia nativa via GPU,
-   decode/encode por hardware com fallback, pipeline em float, proxies. O
-   Premiere mostra também que **efeitos sem GPU precisam de um caminho visível** (barra de render).
+6. **"Powerful" starts in the engine**: real-time GPU playback of native media, hardware
+   decode/encode with a fallback, a float pipeline, proxies. Premiere also shows that
+   **effects without a GPU path need a visible indication** (the render bar).
 
-7. **Modelo de edição completo no núcleo, UI gradual.** Ripple/roll/slip/slide,
-   split edits e três pontos devem existir como comandos da timeline cedo. O
-   iMovie mostra que roll e split edit podem ter UI amigável (Precision Editor,
-   Clip Trimmer). O Premiere mostra o acesso completo por teclado.
+7. **A complete editing model in the core, a gradual UI.** Ripple/roll/slip/slide, split edits
+   and three-point editing should exist as timeline commands early. iMovie shows roll and
+   split edits can have a friendly UI (Precision Editor, Clip Trimmer). Premiere shows full
+   keyboard access.
 
-8. **Gerenciamento de cor automático** (Premiere 25.2: detecção de espaço de cor,
-   presets, efeitos que conhecem o espaço de cor). Alimenta o ADR-0006.
+8. **Automatic color management** (Premiere 25.2: color space detection, presets, effects
+   that know their color space). Feeds ADR-0006.
 
-9. **Estabilidade é parte do poder.** A principal crítica ao Premiere é
-   instabilidade e projetos corrompidos. Salvamento atômico, migrações
-   testadas e fuzzing de parsers são vantagem competitiva, não burocracia.
+9. **Stability is part of power.** The main criticism of Premiere is instability and corrupted
+   projects. Atomic save, tested migrations and parser fuzzing are a competitive advantage,
+   not bureaucracy.
 
-10. **`.prproj` é XML comprimido com gzip.** Alvo de importação relativamente
-    acessível para validar `Importer → ProjectIR`, depois de OTIO/FCPXML/EDL.
+10. **`.prproj` is gzip-compressed XML.** A relatively accessible import target to validate
+    `Importer → ProjectIR`, after OTIO/FCPXML/EDL.
 
-11. **O Resolve no Linux deixa um espaço aberto.** A versão gratuita não decodifica
-    H.264/H.265 nem AAC no Linux, o suporte oficial é só NVIDIA e o áudio documentado é ALSA.
-    Vídeo de celular + GPU AMD/Intel + PipeWire, que é o cenário típico do Omarchy,
-    é mal atendido. Esse é o **posicionamento mais claro** para o OmaMovie.
+11. **Resolve on Linux leaves an opening.** The free version does not decode H.264/H.265 or
+    AAC on Linux, official support is NVIDIA only and the documented audio path is ALSA. Phone
+    video + an AMD/Intel GPU + PipeWire, the typical Omarchy setup, is poorly served. This is
+    OmaMovie's **clearest positioning**.
 
-12. **Simples e rápido não são opostos.** A Blackmagic criou a página Cut
-    (source tape, timeline dupla) para profissionais com prazo. O CapCut vence por
-    velocidade até o resultado. A simplicidade do OmaMovie deve servir também ao usuário avançado.
+12. **Simple and fast are not opposites.** Blackmagic created the Cut page (source tape, dual
+    timeline) for professionals on a deadline. CapCut wins on time to result. OmaMovie's
+    simplicity must also serve advanced users.
 
-13. **Visão geral + detalhe na timeline**: timeline dupla (Resolve) e zoom semântico
-    (Movie Maker) atacam o mesmo problema. Prototipar as duas abordagens (ou um minimapa) na TimelineView.
+13. **Overview + detail in the timeline**: Resolve's dual timeline and Movie Maker's semantic
+    zoom attack the same problem. Prototype both approaches (or a minimap) in the TimelineView.
 
-14. **Grafo por dentro, pilha por fora.** O Resolve 21 adicionou uma visualização em
-    lista de camadas ao grafo de nós de cor. O render graph do OmaMovie é um DAG; a UI mostra a pilha.
+14. **Graph inside, stack outside.** Resolve 21 added a layer-list view to its color node
+    graph. OmaMovie's render graph is a DAG; the UI shows the stack.
 
-15. **Projeto em arquivo, não em banco.** Os projetos do Resolve vivem num banco
-    (local/PostgreSQL/nuvem) e precisam de export `.drp` para virar arquivo.
-    Confirma o `CLAUDE.md` §14/§17: arquivo é a fonte de verdade.
+15. **Projects as files, not in a database.** Resolve projects live in a database
+    (local/PostgreSQL/cloud) and need a `.drp` export to become a file. This confirms
+    `CLAUDE.md` §14/§17: the file is the source of truth.
 
-16. **OTIO é o primeiro alvo de interop.** O Resolve exporta OTIO nativamente
-    desde a 18.5: caminho Resolve → OmaMovie sem reverse engineering.
+16. **OTIO is the first interop target.** Resolve has exported OTIO natively since 18.5: a
+    Resolve → OmaMovie path without reverse engineering.
 
-17. **Operações de resultado, não de mecanismo.** O CapCut vende "hero time",
-    não "keyframes de velocidade". Presets por intenção primeiro, parâmetros depois.
+17. **Outcome operations, not mechanism operations.** CapCut sells "hero time", not "speed
+    keyframes". Intent presets first, parameters later.
 
-18. **Os pontos fracos dos concorrentes são os diferenciais do OmaMovie**:
-    paywall e termos sobre o conteúdo (CapCut), assinatura (Premiere), crashes com
-    perda de trabalho (Premiere, CapCut, Shotcut), preview lento (Shotcut),
-    curva de aprendizado e hardware exigente (Resolve). Offline, sem conta, estável e GPU-first.
+18. **Competitors' weak points are OmaMovie's differentiators**: paywall and content terms
+    (CapCut), subscription (Premiere), crashes with lost work (Premiere, CapCut, Shotcut), slow
+    preview (Shotcut), learning curve and demanding hardware (Resolve). Offline, no account,
+    stable and GPU-first.
 
-### Requisitos de arquitetura que surgiram
+### Architecture requirements that emerged
 
-| Requisito | Origem | Afeta |
+| Requirement | Origin | Affects |
 |---|---|---|
-| Seek rápido e cache de thumbnails em várias densidades, com cancelamento agressivo | Skimming (iMovie), zoom semântico (Movie Maker) | `media`, cache, job system |
-| Overlays interativos no preview que emitem comandos | Crop/posição/conta-gotas no viewer (iMovie) | PreviewPanel, `timeline` |
-| Magnetismo como política de edição da UI, não restrição do modelo | Timeline magnética (iMovie/FCP X) | `timeline` |
-| Capacidade GPU declarada por efeito e indicação de trechos fora do tempo real | Mercury (Premiere) | `compositor`, UI |
-| Templates geram timeline comum e editável | Trailers (iMovie), AutoMovie | `timeline`, `project-ir` |
-| Metadados de cor por stream e efeitos que conhecem o espaço de cor | Color management (Premiere) | `media`, `compositor` |
-| Edição durante o playback (trim dinâmico) | Premiere | Threading (ADR-0003) |
-| **Mapeamento de tempo por curva** (não só velocidade constante), decidido antes de implementar velocidade | Speed ramps (CapCut) | `base` time, `timeline` (ADR-0002) |
-| Track de legenda/texto de primeira classe, import/export SRT/VTT | CapCut, Premiere, Resolve | `timeline`, `project` |
-| Canvas com proporção alterável; decidir coordenadas normalizadas vs. pixels | Vertical/horizontal (CapCut, Clipchamp) | `compositor`, `timeline` |
-| Marcadores no modelo da timeline | Beat sync (CapCut), revisão | `timeline` |
-| Comandos serializáveis e sem dependência de UI (base para scripting/MCP futuros) | Scripting e MCP (Resolve 21.1) | `timeline` |
-| Sistema de ações independente do dispositivo de entrada | Speed Editor (Resolve) | UI |
-| Render em background preenchendo o cache quando o tempo real não é possível | Final Cut Pro | `compositor`, cache, job system |
-| Transcrição como visão da timeline (palavras com `TimeRange`) | Descript, Premiere | `timeline` (futuro) |
-| Benchmarks incluindo GPU integrada Intel/AMD | Resolve exige hardware forte | `tools/bench` |
+| Fast seek and a multi-density thumbnail cache with aggressive cancellation | Skimming (iMovie), semantic zoom (Movie Maker) | `media`, cache, job system |
+| Interactive preview overlays that emit commands | Crop/position/eyedropper in the viewer (iMovie) | PreviewPanel, `timeline` |
+| Magnetism as a UI editing policy, not a model restriction | Magnetic timeline (iMovie/FCP X) | `timeline` |
+| GPU capability declared per effect and indication of non-real-time sections | Mercury (Premiere) | `compositor`, UI |
+| Templates produce a normal, editable timeline | Trailers (iMovie), AutoMovie | `timeline`, `project-ir` |
+| Per-stream color metadata and color-space-aware effects | Color management (Premiere) | `media`, `compositor` |
+| Editing during playback (dynamic trim) | Premiere | Threading (ADR-0003) |
+| **Curve-based time mapping** (not only constant speed), decided before implementing speed | Speed ramps (CapCut) | `base` time, `timeline` (ADR-0002) |
+| A first-class caption/text track, SRT/VTT import/export | CapCut, Premiere, Resolve | `timeline`, `project` |
+| A canvas with changeable aspect ratio; decide normalized coordinates vs. pixels | Vertical/horizontal (CapCut, Clipchamp) | `compositor`, `timeline` |
+| Markers in the timeline model | Beat sync (CapCut), review | `timeline` |
+| Serializable commands with no UI dependency (base for future scripting/MCP) | Scripting and MCP (Resolve 21.1) | `timeline` |
+| An action system independent of the input device | Speed Editor (Resolve) | UI |
+| Background render filling the cache when real time is not possible | Final Cut Pro | `compositor`, cache, job system |
+| Transcript as a view of the timeline (words with a `TimeRange`) | Descript, Premiere | `timeline` (future) |
+| Benchmarks including Intel/AMD integrated GPUs | Resolve needs strong hardware | `tools/bench` |
 
-### Próximas pesquisas sugeridas
+### Suggested next research
 
-- **OpenTimelineIO**: modelo de dados como referência para o ProjectIR (prioridade, dado o suporte nativo do Resolve).
-- **Final Cut Pro em profundidade**: storylines, roles, FCPXML (alvo de interop).
-- **Kdenlive/MLT por dentro**: arquitetura do MLT, por que 10-bit e decode GPU chegaram tarde, formato de projeto (candidato a importer).
-- **Pipeline de hardware no Linux**: estado atual de VA-API, Vulkan Video e interop DMA-BUF em Mesa/NVIDIA (base técnica para §7.3 do `CLAUDE.md`).
-- **Avid Media Composer e Vegas**: modelo de edição e formatos (alvos de interop futuros).
+- **OpenTimelineIO**: data model as a reference for ProjectIR (priority, given Resolve's native support).
+- **Final Cut Pro in depth**: storylines, roles, FCPXML (interop target).
+- **Kdenlive/MLT internals**: MLT architecture, why 10-bit and GPU decode arrived late, project format (importer candidate).
+- **Linux hardware pipeline**: current state of VA-API, Vulkan Video and DMA-BUF interop on Mesa/NVIDIA (technical base for `CLAUDE.md` §7.3).
+- **Avid Media Composer and Vegas**: editing model and formats (future interop targets).
