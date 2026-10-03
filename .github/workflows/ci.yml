@@ -21,7 +21,7 @@ jobs:
         compiler: [g++, clang++]
         build: [debug, asan, tsan, release]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Lower mmap_rnd_bits for TSan
         run: sudo sysctl -w vm.mmap_rnd_bits=28
@@ -47,7 +47,7 @@ jobs:
     name: format and clang-tidy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: clang-format and clang-tidy
         run: |
           docker run --rm -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
