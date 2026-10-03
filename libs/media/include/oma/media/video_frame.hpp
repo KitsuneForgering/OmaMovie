@@ -111,6 +111,11 @@ public:
     [[nodiscard]] std::span<const std::uint8_t> plane(int index) const noexcept;
     [[nodiscard]] int stride(int index) const noexcept;
 
+    // Software preview bridge. Copies a decoded frame into a caller-owned RGBA8 buffer.
+    // The destination has at least `stride * height()` bytes; GPU frames are unsupported.
+    [[nodiscard]] Result<void> copy_rgba(std::span<std::uint8_t> destination,
+                                         int destination_stride) const;
+
     // GPU frames only: locks the frame and returns its images (Unsupported on software frames).
     [[nodiscard]] Result<GpuAccess> acquire_gpu();
 

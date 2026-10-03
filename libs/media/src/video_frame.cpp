@@ -7,9 +7,11 @@ extern "C" {
 #include <libavutil/hwcontext_vulkan.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/pixdesc.h>
+#include <libswscale/swscale.h>
 }
 
 #include <array>
+#include <climits>
 #include <cstddef>
 #include <utility>
 
@@ -167,6 +169,34 @@ int VideoFrame::stride(int index) const noexcept {
         return 0;
     }
     return impl_->frame->linesize[index];
+}
+
+Result<void> VideoFrame::copy_rgba(std::span<std::uint8_t> destination,
+                                   int destination_stride) const {
+    const AVFrame& frame = *impl_->frame;
+    if (on_gpu() || frame.width <= 0 || frame.height <= 0 || frame.width > INT_MAX / 4 ||
+        destination_stride < frame.width * 4 ||
+        destination.size() <
+            static_cast<std::size_t>(destination_stride) * static_cast<std::size_t>(frame.height)) {
+        return make_error(ErrorCode::InvalidArgument, Category::Decode,
+                          "invalid software RGBA preview destination");
+    }
+    auto* scale = sws_getContext(
+        frame.width, frame.height, static_cast<AVPixelFormat>(frame.format), frame.width,
+        frame.height, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
+    if (scale == nullptr) {
+        return make_error(ErrorCode::Unsupported, Category::Decode,
+                          "cannot convert this video pixel format to RGBA");
+    }
+    const std::array<std::uint8_t*, 4> data{destination.data(), nullptr, nullptr, nullptr};
+    const std::array<int, 4> linesize{destination_stride, 0, 0, 0};
+    const int rows =
+        sws_scale(scale, frame.data, frame.linesize, 0, frame.height, data.data(), linesize.data());
+    sws_freeContext(scale);
+    if (rows != frame.height) {
+        return make_error(ErrorCode::Internal, Category::Decode, "RGBA preview conversion failed");
+    }
+    return {};
 }
 
 Result<GpuAccess> VideoFrame::acquire_gpu() {
