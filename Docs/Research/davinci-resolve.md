@@ -1,289 +1,282 @@
-# DaVinci Resolve: por que é um editor poderoso
+# DaVinci Resolve: why it is a powerful editor
 
-> Pesquisa feita em 2026-10-02 (versão atual: Resolve 21.x). Fatos com fonte
-> estão linkados na seção [Fontes](#fontes). Itens marcados **(conhecimento
-> geral)** são amplamente documentados, mas sem fonte específica nesta pesquisa;
-> verificar antes de usar como requisito.
-
----
-
-## 1. Resumo
-
-O Resolve é poderoso por cinco razões:
-
-1. **Cor de nível de cinema.** Nasceu como sistema de correção de cor, e o
-   grading por nós é considerado o padrão da indústria.
-2. **Tudo num programa só.** Edição, composição (Fusion), cor, áudio
-   (Fairlight) e entrega em "páginas" do mesmo app, sobre o mesmo projeto.
-3. **Duas filosofias de edição.** A página **Cut** é rápida e enxuta; a página **Edit** é a NLE tradicional completa.
-4. **Modelo de preço.** Versão gratuita muito capaz, e Studio com **compra única** (cerca de US$ 299).
-5. **Roda nativamente em Linux**, o que nenhum dos grandes concorrentes faz.
-
-Por outro lado: curva de aprendizado íngreme, exige hardware forte, e **no
-Linux a versão gratuita não decodifica H.264/H.265 nem AAC**. Este último ponto
-é muito relevante para o OmaMovie.
+> Research done on 2026-10-02 (current version: Resolve 21.x). Sourced facts are linked in the
+> [Sources](#sources) section. Items marked **(general knowledge)** are widely documented but
+> have no specific source in this research; verify before using them as requirements.
 
 ---
 
-## 2. Histórico
+## 1. Summary
 
-**(conhecimento geral, salvo indicação)**
+Resolve is powerful for five reasons:
 
-| Ano | Marco |
+1. **Cinema-grade color.** It was born as a color correction system, and its node-based grading
+   is considered the industry standard.
+2. **Everything in one program.** Editing, compositing (Fusion), color, audio (Fairlight) and
+   delivery as "pages" of the same app, on the same project.
+3. **Two editing philosophies.** The **Cut** page is fast and lean; the **Edit** page is the full traditional NLE.
+4. **Pricing model.** A very capable free version, and Studio as a **one-time purchase** (about US$ 299).
+5. **It runs natively on Linux**, which none of the big competitors do.
+
+On the other hand: a steep learning curve, demanding hardware, and **on Linux the free version
+does not decode H.264/H.265 or AAC**. That last point is very relevant for OmaMovie.
+
+---
+
+## 2. History
+
+**(general knowledge, unless stated)**
+
+| Year | Milestone |
 |---|---|
-| anos 1980–2000 | da Vinci Systems fabrica sistemas de correção de cor para telecine |
-| 2009 | Blackmagic Design compra a da Vinci |
-| ~2011 | Versão gratuita (Lite) lançada |
-| 2014 (v11) | Vira editor completo (página Edit) |
-| 2017 (v14) | Fairlight (áudio) integrado |
-| 2018 (v15) | Fusion (composição por nós) integrado |
-| 2019 (v16) | Página **Cut** |
-| 2020-11 | **Speed Editor** (teclado de edição dedicado) |
-| v18 | "Databases" renomeados para "Project Libraries"; Blackmagic Cloud |
-| v18.5 | Suporte nativo a **OpenTimelineIO** |
-| 2025-05 (v20) | Mais de 100 recursos novos, incluindo ferramentas de IA |
-| 2026-06 (v21) | Página **Photo**, mais ferramentas de IA |
-| v21.1 | Suporte a **MCP** e 20 novas APIs de scripting |
+| 1980s–2000s | da Vinci Systems builds color correction systems for telecine |
+| 2009 | Blackmagic Design buys da Vinci |
+| ~2011 | Free (Lite) version released |
+| 2014 (v11) | Becomes a full editor (Edit page) |
+| 2017 (v14) | Fairlight (audio) integrated |
+| 2018 (v15) | Fusion (node compositing) integrated |
+| 2019 (v16) | **Cut** page |
+| 2020-11 | **Speed Editor** (dedicated editing keyboard) |
+| v18 | "Databases" renamed "Project Libraries"; Blackmagic Cloud |
+| v18.5 | Native **OpenTimelineIO** support |
+| 2025-05 (v20) | 100+ new features, including AI tools |
+| 2026-06 (v21) | **Photo** page, more AI tools |
+| v21.1 | **MCP** support and 20 new scripting APIs |
 
 ---
 
-## 3. Páginas: um app, vários contextos
+## 3. Pages: one app, several contexts
 
-| Página | Função |
+| Page | Function |
 |---|---|
-| Media | Importação e organização |
-| **Cut** | Montagem rápida |
-| **Edit** | Edição tradicional completa |
-| **Fusion** | Composição e VFX por nós |
-| **Color** | Grading por nós |
-| **Fairlight** | Mixagem e masterização de áudio |
-| Deliver | Exportação |
-| Photo (v21) | Edição de fotos com as ferramentas de cor do Resolve |
+| Media | Import and organization |
+| **Cut** | Fast assembly |
+| **Edit** | Full traditional editing |
+| **Fusion** | Node-based compositing and VFX |
+| **Color** | Node-based grading |
+| **Fairlight** | Audio mixing and mastering |
+| Deliver | Export |
+| Photo (v21) | Photo editing with Resolve's color tools |
 
-Todas as páginas operam sobre a mesma timeline e o mesmo projeto. Não há
-export/import entre apps, ao contrário do Premiere + After Effects + Audition,
-e isso é citado como motivo de migração (ver `premiere-pro.md` §10).
+Every page works on the same timeline and project. There is no export/import between apps,
+unlike Premiere + After Effects + Audition, and that is cited as a reason for switching (see
+`premiere-pro.md` §10).
 
-### Implicações para o OmaMovie
+### Implications for OmaMovie
 
-- Páginas são uma terceira forma de organizar a complexidade, ao lado dos
-  workspaces do Premiere e do inspector contextual do iMovie. Elas funcionam
-  para fluxos profissionais em fases (montar → corrigir cor → mixar), mas
-  significam troca de contexto e uma interface densa em cada página.
-- Para o OmaMovie, o inspector contextual continua sendo o modelo principal.
-  Um "modo de foco" futuro (ex.: cor em tela cheia) pode existir, mas como
-  ampliação do inspector, não como app dentro do app.
-- A lição arquitetural mais forte: **um único modelo de projeto para todas as
-  funções**. Cor, áudio e composição leem e escrevem o mesmo modelo. O OmaMovie
-  já segue isso (`timeline` → render graph); não criar modelos paralelos por função.
+- Pages are a third way to organize complexity, alongside Premiere's workspaces and iMovie's
+  contextual inspector. They work for professional workflows in phases (assemble → grade →
+  mix), but mean context switches and a dense interface on every page.
+- For OmaMovie the contextual inspector stays the main model. A future "focus mode" (e.g.
+  full-screen color) may exist, but as an extension of the inspector, not an app inside the app.
+- The strongest architectural lesson: **a single project model for every function**. Color,
+  audio and compositing read and write the same model. OmaMovie already follows this
+  (`timeline` → render graph); do not create parallel models per function.
 
 ---
 
-## 4. Página Cut: velocidade para profissionais
+## 4. The Cut page: speed for professionals
 
-Introduzida na v16 para montagens rápidas com prazo curto:
+Introduced in v16 for fast assemblies on short deadlines:
 
-- **Source tape**: um botão mostra todos os clips do bin no viewer como **uma
-  única fita contínua**. Dá para fazer scrub por todo o material e editar sem procurar clip por clip.
-- **Timeline dupla**: a timeline de cima mostra **o programa inteiro**; a de
-  baixo mostra **a região de trabalho** em zoom. As duas são editáveis. A
-  Blackmagic justifica dizendo que dar zoom e rolar a timeline é lento.
-- Interface enxuta, com menos ferramentas visíveis.
-- Pensada para o **Speed Editor** (§9).
+- **Source tape**: one button shows every clip in the bin in the viewer as **a single
+  continuous tape**. You can scrub through all the material and edit without hunting clip by clip.
+- **Dual timeline**: the upper timeline shows **the whole program**; the lower one shows **the
+  working region** zoomed in. Both are editable. Blackmagic justifies it by saying that zooming
+  and scrolling the timeline is slow.
+- A lean interface with fewer visible tools.
+- Designed for the **Speed Editor** (§9).
 
-### Implicações para o OmaMovie
+### Implications for OmaMovie
 
-- A própria Blackmagic, dona do editor mais "completo", criou uma página
-  simplificada. Confirma que **simples e rápido não são opostos**: a página
-  Cut é simples e feita para profissionais com prazo.
-- **Timeline dupla** é uma alternativa ao zoom semântico do Movie Maker
-  (`movie-maker.md` §4). Os dois resolvem o mesmo problema (visão geral +
-  detalhe sem dar zoom o tempo todo). Avaliar no protótipo da TimelineView:
-  uma barra de visão geral compacta (estilo minimapa) acima da timeline pode dar o benefício sem duplicar a interface.
-- **Source tape** é uma forma de navegar a biblioteca com o mesmo motor de
-  skimming (`imovie.md` §6). Requisito técnico igual: seek rápido e cache de thumbnails.
-
----
-
-## 5. Cor
-
-- **Grading por nós**: cada nó é uma etapa da correção; os nós são conectados,
-  reordenados e alterados sem afetar o resto do grade. Não destrutivo por construção.
-- Ferramentas: rodas de cor, curvas, **qualifiers** (seleção por cor/luminância), **power windows** (máscaras com tracking).
-- v21: visualização dos nós como **lista de camadas** (layer-list node graph),
-  pilhas de até 8 camadas por nó, workflows ACES melhorados, grading em grupo com versões.
-- Trims de HDR independentes para Dolby Vision, HDR10+ e HDR Vivid (21.1).
-
-### Implicações para o OmaMovie
-
-- **O Resolve v21 adicionou uma visualização em lista de camadas para o grafo
-  de nós.** Mesmo para coloristas, um grafo puro nem sempre é a melhor
-  interface. Para o OmaMovie: **render graph como DAG internamente, lista de camadas/efeitos na UI**.
-  O grafo fica no núcleo; a UI mostra a pilha.
-- Grading por nós completo é não objetivo inicial. Mas a interface de efeitos
-  deve permitir que um efeito de cor tenha várias etapas internas, para não fechar a porta.
-- ACES e HDR reforçam o ADR-0006 (espaço de cor de trabalho), na mesma linha do Premiere 25.2.
+- Blackmagic itself, owner of the most "complete" editor, created a simplified page. This
+  confirms **simple and fast are not opposites**: the Cut page is simple and made for
+  professionals on a deadline.
+- The **dual timeline** is an alternative to Movie Maker's semantic zoom (`movie-maker.md` §4).
+  Both solve the same problem (overview + detail without constant zooming). Evaluate in the
+  TimelineView prototype: a compact overview bar (minimap-style) above the timeline may give
+  the benefit without duplicating the interface.
+- **Source tape** is a way to browse the library with the same skimming engine (`imovie.md` §6).
+  Same technical requirement: fast seek and a thumbnail cache.
 
 ---
 
-## 6. Fusion e Fairlight
+## 5. Color
 
-- **Fusion**: composição por nós, integrada como página. A v20 trouxe
-  composição multi-camada mais avançada; a v21/21.1 adicionou o toolset Krokodove (70+ gráficos, ferramentas 3D e procedurais).
-- **Fairlight**: estação de áudio completa dentro do editor; v20 trouxe
-  IntelliCut (remove silêncio e separa diálogos entre falantes); v21 trouxe folder tracks.
+- **Node-based grading**: each node is one correction step; nodes are connected, reordered and
+  changed without affecting the rest of the grade. Non-destructive by construction.
+- Tools: color wheels, curves, **qualifiers** (selection by color/luminance), **power windows** (tracked masks).
+- v21: viewing nodes as a **layer list** (layer-list node graph), up to 8-layer stacks per node,
+  improved ACES workflows, group grading with versions.
+- Independent HDR trims for Dolby Vision, HDR10+ and HDR Vivid (21.1).
 
-### Implicações para o OmaMovie
+### Implications for OmaMovie
 
-- Composição estilo After Effects/Fusion é **não objetivo**. A existência do
-  Fusion mostra o teto da categoria, não um requisito.
-- Áudio: remoção de silêncio é uma função concreta, útil para conteúdo falado
-  (podcast, tutorial). Pode ser feita com análise de nível de áudio, sem IA.
-  Candidata a recurso futuro de baixo custo.
-
----
-
-## 7. Projetos: banco de dados, não arquivo
-
-- Projetos vivem numa **Project Library** (antes "Database"):
-  - local: estrutura gerenciada pelo Resolve no disco;
-  - rede: **PostgreSQL** (via "DaVinci Resolve Project Server", que é um PostgreSQL empacotado);
-  - **Blackmagic Cloud**: bibliotecas hospedadas para colaboração.
-- Para obter um arquivo móvel é preciso **exportar um `.drp`**, que contém
-  timelines, edições, grades e configurações, **sem mídia**. No destino, o Resolve faz relink.
-- Fóruns registram crashes e falhas ao copiar bibliotecas para PostgreSQL.
-
-### Implicações para o OmaMovie
-
-- O modelo de banco é ótimo para colaboração em estúdio, mas cria atrito para
-  o usuário individual: o projeto não é um arquivo que se copia, versiona ou envia.
-- **Reforça a decisão do `CLAUDE.md` §14/§17**: o arquivo de projeto é a fonte de
-  verdade; SQLite só para índices/cache/metadata. Um projeto do OmaMovie deve
-  poder ser copiado, versionado em git e anexado num e-mail.
-- `.drp` é alvo potencial de importação. Formato a investigar antes de priorizar (`Docs/formats/`).
+- **Resolve v21 added a layer-list view for the node graph.** Even for colorists, a pure graph
+  is not always the best interface. For OmaMovie: **render graph as a DAG internally, a list of
+  layers/effects in the UI**. The graph stays in the core; the UI shows the stack.
+- Full node-based grading is an initial non-goal. But the effect interface should allow a color
+  effect to have several internal stages, so that door stays open.
+- ACES and HDR reinforce ADR-0006 (working color space), in line with Premiere 25.2.
 
 ---
 
-## 8. Interoperabilidade
+## 6. Fusion and Fairlight
 
-- **OpenTimelineIO nativo desde a v18.5**: import/export de `.otio` (só
-  metadados da timeline) e `.otioz` (timeline mais mídia).
-- XML, AAF e EDL **(conhecimento geral)**.
+- **Fusion**: node-based compositing integrated as a page. v20 brought more advanced multi-layer
+  compositing; v21/21.1 added the Krokodove toolset (70+ graphics, 3D and procedural tools).
+- **Fairlight**: a complete audio workstation inside the editor; v20 brought IntelliCut (removes
+  silence and splits dialogue between speakers); v21 brought folder tracks.
 
-### Implicações para o OmaMovie
+### Implications for OmaMovie
 
-- **OTIO é o primeiro alvo de interop.** Resolve (e outros) exportam OTIO
-  nativamente. Isso permite um caminho Resolve → OmaMovie **sem reverse engineering**,
-  validando `Importer → ProjectIR` com um formato aberto e documentado.
-- `.otioz` (timeline + mídia) é um bom modelo para um eventual "exportar projeto empacotado" do OmaMovie.
-
----
-
-## 9. Hardware dedicado: Speed Editor
-
-- Teclado de edição feito para a página Cut (lançado em novembro de 2020).
-- **Search dial** de metal pesado para percorrer a timeline rápido; com um
-  botão de trim pressionado, o dial vira um controle de **trim em tempo real**.
-- Botões de shuttle/jog/scroll mudam o modo do dial; uma tecla por função de edição.
-- USB-C ou Bluetooth.
-
-### Implicações para o OmaMovie
-
-- Mostra o valor da edição sem mouse: o mesmo princípio do J/K/L do `CLAUDE.md` §11.2.
-- O sistema central de ações deve ser **independente do dispositivo de entrada**:
-  teclado hoje, controladores jog/shuttle (USB HID/MIDI) no futuro, mapeados para as mesmas ações. Não implementar agora; só não acoplar ações a eventos de teclado.
+- After Effects/Fusion-style compositing is a **non-goal**. Fusion shows the category's ceiling,
+  not a requirement.
+- Audio: silence removal is a concrete, useful function for spoken content (podcasts,
+  tutorials). It can be done with audio level analysis, without AI. A low-cost future candidate.
 
 ---
 
-## 10. Scripting, IA e MCP
+## 7. Projects: a database, not a file
 
-- API de scripting (Python/Lua) **(conhecimento geral)**. A 21.1 adicionou 20 APIs
-  (render presets, media pool, multicam, propriedades de timeline, normalização de áudio) e **removeu o Python 2**.
-- **MCP (21.1)**: assistentes como Claude e ChatGPT Codex controlam o Resolve
-  por linguagem natural (analisar projetos, organizar mídia, mudar configurações, render em lote, criar highlight reels).
-- IA da v20: IntelliScript (timeline a partir de roteiro), legendas animadas,
-  Multicam SmartSwitch (troca de ângulo por quem está falando), Magic Mask, depth map.
-- IA da v21: IntelliSearch, CineFocus, refinamento facial.
+- Projects live in a **Project Library** (formerly "Database"):
+  - local: a structure managed by Resolve on disk;
+  - network: **PostgreSQL** (through the "DaVinci Resolve Project Server", a bundled PostgreSQL);
+  - **Blackmagic Cloud**: hosted libraries for collaboration.
+- To get a portable file you must **export a `.drp`**, which contains timelines, edits, grades
+  and settings, **without media**. At the destination Resolve relinks.
+- Forums report crashes and failures when copying libraries to PostgreSQL.
 
-### Implicações para o OmaMovie
+### Implications for OmaMovie
 
-- O sistema de comandos da timeline (`CLAUDE.md` §10: toda edição é um comando)
-  é a base natural para scripting e automação. Um comando bem definido serve à
-  UI, à CLI, a scripts e a um eventual servidor MCP.
-- **Não implementar scripting agora.** Só manter os comandos serializáveis e
-  sem dependência de UI, o que já é exigido para undo/redo e testes.
+- The database model is great for studio collaboration but adds friction for individual users:
+  the project is not a file you can copy, version or send.
+- **It reinforces the `CLAUDE.md` §14/§17 decision**: the project file is the source of truth;
+  SQLite only for indexes/cache/metadata. An OmaMovie project should be copyable, versionable
+  in git and attachable to an email.
+- `.drp` is a potential import target. Investigate the format before prioritizing it (`Docs/formats/`).
 
 ---
 
-## 11. Resolve no Linux
+## 8. Interoperability
 
-Muito relevante, porque é o editor profissional que um usuário de Omarchy usaria hoje.
+- **Native OpenTimelineIO since v18.5**: import/export of `.otio` (timeline metadata only) and
+  `.otioz` (timeline plus media).
+- XML, AAF and EDL **(general knowledge)**.
 
-| Aspecto | Situação |
+### Implications for OmaMovie
+
+- **OTIO is the first interop target.** Resolve (and others) export OTIO natively. That enables
+  a Resolve → OmaMovie path **without reverse engineering**, validating `Importer → ProjectIR`
+  with an open, documented format.
+- `.otioz` (timeline + media) is a good model for an eventual "export packaged project" in OmaMovie.
+
+---
+
+## 9. Dedicated hardware: Speed Editor
+
+- An editing keyboard made for the Cut page (released in November 2020).
+- A heavy metal **search dial** to move through the timeline quickly; with a trim button held,
+  the dial becomes a **real-time trim** control.
+- Shuttle/jog/scroll buttons change the dial's mode; one key per editing function.
+- USB-C or Bluetooth.
+
+### Implications for OmaMovie
+
+- Shows the value of mouse-free editing: the same principle as J/K/L in `CLAUDE.md` §11.2.
+- The central action system must be **independent of the input device**: keyboard today,
+  jog/shuttle controllers (USB HID/MIDI) in the future, mapped to the same actions. Do not
+  implement it now; just do not couple actions to keyboard events.
+
+---
+
+## 10. Scripting, AI and MCP
+
+- Scripting API (Python/Lua) **(general knowledge)**. 21.1 added 20 APIs (render presets, media
+  pool, multicam, timeline properties, audio normalization) and **dropped Python 2**.
+- **MCP (21.1)**: assistants such as Claude and ChatGPT Codex drive Resolve in natural language
+  (analyze projects, organize media, change settings, batch render, build highlight reels).
+- v20 AI: IntelliScript (timeline from a script), animated captions, Multicam SmartSwitch
+  (angle switching by who is speaking), Magic Mask, depth map.
+- v21 AI: IntelliSearch, CineFocus, facial refinement.
+
+### Implications for OmaMovie
+
+- The timeline command system (`CLAUDE.md` §10: every edit is a command) is the natural base for
+  scripting and automation. A well-defined command serves the UI, the CLI, scripts and an
+  eventual MCP server.
+- **Do not implement scripting now.** Just keep commands serializable and free of UI
+  dependencies, which undo/redo and tests already require.
+
+---
+
+## 11. Resolve on Linux
+
+Highly relevant, because it is the professional editor an Omarchy user would use today.
+
+| Aspect | Situation |
 |---|---|
-| Distro oficial | Ambiente baseado em **Rocky Linux 8.6**; Ubuntu/Mint funcionam na prática |
-| GPU | **NVIDIA com drivers proprietários** é o único caminho oficialmente suportado (CUDA ≥ 12.8, ≥ 4 GB VRAM). AMD com AMDGPU Pro funciona, mas efeitos exclusivos de CUDA ficam lentos. Intel não é mencionado |
-| H.264/H.265 (Free) | **Decode e encode não suportados** (licenciamento) |
-| H.264/H.265 (Studio) | Decode suportado; **encode só com NVIDIA** |
-| AAC | **Não suportado no Linux**, nem no Studio |
-| Áudio | ALSA documentado; PipeWire não é mencionado |
-| Contorno comum | Transcodificar com FFmpeg para DNxHR e remuxar áudio para PCM antes de importar |
+| Official distro | A **Rocky Linux 8.6**–based environment; Ubuntu/Mint work in practice |
+| GPU | **NVIDIA with proprietary drivers** is the only officially supported path (CUDA ≥ 12.8, ≥ 4 GB VRAM). AMD with AMDGPU Pro works, but CUDA-only effects are slow. Intel is not mentioned |
+| H.264/H.265 (Free) | **Decode and encode not supported** (licensing) |
+| H.264/H.265 (Studio) | Decode supported; **encode only on NVIDIA** |
+| AAC | **Not supported on Linux**, not even in Studio |
+| Audio | ALSA documented; PipeWire not mentioned |
+| Common workaround | Transcode with FFmpeg to DNxHR and remux audio to PCM before importing |
 
-### Implicações para o OmaMovie
+### Implications for OmaMovie
 
-**Esta é a maior oportunidade encontrada na pesquisa.** No Omarchy, o
-usuário típico tem vídeo de celular (H.264/HEVC + AAC), muitas vezes GPU AMD ou
-Intel e PipeWire. O Resolve gratuito não abre esse material sem transcodificar,
-e o suporte fora da NVIDIA é parcial.
+**This is the biggest opportunity found in the research.** On Omarchy the typical user has phone
+video (H.264/HEVC + AAC), often an AMD or Intel GPU, and PipeWire. The free Resolve cannot open
+that material without transcoding, and support outside NVIDIA is partial.
 
-O OmaMovie pode ocupar exatamente esse espaço:
-- H.264/HEVC/AV1 + AAC via FFmpeg e VA-API, **sem transcodificação**;
-- **Intel e AMD como cidadãos de primeira classe** (VA-API/Vulkan Video), não só NVIDIA;
-- PipeWire nativo;
-- empacotamento para Arch, em vez de "suportado em Rocky Linux".
+OmaMovie can take exactly that space:
+- H.264/HEVC/AV1 + AAC through FFmpeg and VA-API, **without transcoding**;
+- **Intel and AMD as first-class citizens** (VA-API/Vulkan Video), not only NVIDIA;
+- native PipeWire;
+- packaging for Arch instead of "supported on Rocky Linux".
 
-Isso reforça as prioridades do `CLAUDE.md` §7.3. Os testes de hardware devem
-cobrir AMD e Intel, não só NVIDIA.
+This reinforces the priorities in `CLAUDE.md` §7.3. Hardware tests must cover AMD and Intel, not only NVIDIA.
 
 ---
 
-## 12. Fraquezas e críticas
+## 12. Weaknesses and criticism
 
-- **Curva de aprendizado íngreme** e interface densa; padrões pensados para profissionais assustam iniciantes.
-- **Exige hardware forte**; reclamações frequentes de desempenho e crashes em máquinas modestas.
-- Limitações da versão gratuita em resolução, efeitos, codecs e uso de GPU.
-- Linux: limitações de codec e de GPU (§11).
+- **A steep learning curve** and a dense interface; professional defaults scare beginners.
+- **Demanding hardware**; frequent complaints about performance and crashes on modest machines.
+- Free version limits on resolution, effects, codecs and GPU use.
+- Linux: codec and GPU limitations (§11).
 
-### Implicações para o OmaMovie
+### Implications for OmaMovie
 
-- O Resolve mostra o teto de capacidade, mas não atende quem quer editar rápido
-  num laptop. O OmaMovie deve **funcionar bem em hardware modesto** (GPU integrada
-  Intel/AMD), com proxies e degradação explícita em vez de travar.
-- Benchmarks (`CLAUDE.md` §23) devem incluir pelo menos uma máquina com GPU integrada.
+- Resolve shows the capability ceiling but does not serve people who want to edit quickly on a
+  laptop. OmaMovie must **work well on modest hardware** (Intel/AMD integrated GPUs), with
+  proxies and explicit degradation instead of freezing.
+- Benchmarks (`CLAUDE.md` §23) must include at least one machine with an integrated GPU.
 
 ---
 
-## 13. Tabela de priorização para o OmaMovie
+## 13. Prioritization table for OmaMovie
 
-| Capacidade do Resolve | Adotar? | Quando | Módulo |
+| Resolve capability | Adopt? | When | Module |
 |---|---|---|---|
-| Modelo único de projeto para todas as funções | Sim (já previsto) | Desde o início | `timeline`, `project` |
-| Visão geral + detalhe da timeline (timeline dupla / minimapa) | Avaliar no protótipo | Fase 10 | UI |
-| Source tape (biblioteca como fita contínua) | Avaliar | Após biblioteca | UI, `media` |
-| Render graph DAG interno, UI em pilha de camadas | Sim | Fase 5 | `compositor` |
-| Import OTIO | Sim, primeiro alvo de interop | Fase 12 | `importers` |
-| Projeto em banco de dados | **Não**; arquivo é a fonte de verdade | — | `project` |
-| Remoção de silêncio | Futuro, sem IA | Após áudio | `audio` |
-| Ações independentes do dispositivo de entrada | Sim (desenho) | Fase 10 | UI |
-| Comandos serializáveis (base para scripting/MCP) | Sim (desenho) | Fase 9 | `timeline` |
-| Scripting/MCP | Não agora | Futuro | — |
-| Fusion/Fairlight completos | Não | Não objetivo | — |
-| Codecs consumidor + AMD/Intel + PipeWire no Linux | **Sim, diferencial** | Fases 2–8 | `media`, `audio` |
-| Import `.drp` | Investigar | Futuro | `importers` |
+| A single project model for every function | Yes (already planned) | From the start | `timeline`, `project` |
+| Overview + detail timeline (dual timeline / minimap) | Evaluate in the prototype | Phase 10 | UI |
+| Source tape (library as a continuous tape) | Evaluate | After the library | UI, `media` |
+| Internal DAG render graph, layer-stack UI | Yes | Phase 5 | `compositor` |
+| OTIO import | Yes, first interop target | Phase 12 | `importers` |
+| Projects in a database | **No**; the file is the source of truth | — | `project` |
+| Silence removal | Future, without AI | After audio | `audio` |
+| Actions independent of the input device | Yes (design) | Phase 10 | UI |
+| Serializable commands (base for scripting/MCP) | Yes (design) | Phase 9 | `timeline` |
+| Scripting/MCP | Not now | Future | — |
+| Full Fusion/Fairlight | No | Non-goal | — |
+| Consumer codecs + AMD/Intel + PipeWire on Linux | **Yes, a differentiator** | Phases 2–8 | `media`, `audio` |
+| `.drp` import | Investigate | Future | `importers` |
 
 ---
 
-## Fontes
+## Sources
 
 - [Blackmagic Design: DaVinci Resolve 20 announcement](https://www.blackmagicdesign.com/media/partial/release/20250404-02)
 - [Post Magazine: Blackmagic Design unveils DaVinci Resolve 20](https://www.postmagazine.com/Press-Center/Daily-News/2025/Blackmagic-Design-unveils-DaVinci-Resolve-20-wit.aspx)

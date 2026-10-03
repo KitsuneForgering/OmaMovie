@@ -1,126 +1,125 @@
-# Outros editores: o que as pessoas gostam
+# Other editors: what people like
 
-> Pesquisa feita em 2026-10-02. Fatos com fonte estão linkados na seção
-> [Fontes](#fontes). Várias fontes são agregadores de reviews (G2, Capterra,
-> comparativos); servem para identificar padrões de opinião, não como medição.
+> Research done on 2026-10-02. Sourced facts are linked in the [Sources](#sources) section.
+> Several sources are review aggregators (G2, Capterra, comparisons); they help identify
+> patterns of opinion, not measurements.
 >
-> Clipchamp está em [`movie-maker.md`](movie-maker.md) §5. iMovie, Premiere,
-> Resolve e CapCut têm documentos próprios.
+> Clipchamp is covered in [`movie-maker.md`](movie-maker.md) §5. iMovie, Premiere, Resolve and
+> CapCut have their own documents.
 
 ---
 
 ## 1. Final Cut Pro (Apple)
 
-### O que as pessoas gostam
-- **Timeline magnética**: fecha buracos automaticamente ao remover clips e
-  evita desalinhamento acidental entre tracks; menos erros comuns de edição.
-- **Desempenho**: feito para Apple Silicon e Metal; playback em tempo real de
-  timelines complexas; tempo de render e resposta da timeline em projetos multi-stream 4K/HDR
-  são motivos citados para escolhê-lo em vez de alternativas multiplataforma.
-- **Background rendering**: o render acontece enquanto o usuário edita.
-- **Compra única** (cerca de US$ 300) com atualizações gratuitas, sem assinatura.
+### What people like
+- **Magnetic timeline**: closes gaps automatically when clips are removed and prevents
+  accidental misalignment between tracks; fewer common editing errors.
+- **Performance**: built for Apple Silicon and Metal; real-time playback of complex timelines;
+  render times and timeline responsiveness on multi-stream 4K/HDR projects are reasons cited
+  for choosing it over cross-platform alternatives.
+- **Background rendering**: rendering happens while the user edits.
+- **One-time purchase** (about US$ 300) with free updates, no subscription.
 
-### Implicações para o OmaMovie
-- O desempenho do FCP vem de **otimização para uma plataforma específica**. É a
-  mesma aposta do OmaMovie (Omarchy, Vulkan, VA-API, PipeWire), em vez de multiplataforma.
-- **Background rendering** = cache de frames renderizados (`CLAUDE.md` §15)
-  preenchido por jobs de baixa prioridade quando o playback em tempo real não é
-  possível. Deve ser invisível: o usuário não clica em "renderizar".
-- Timeline magnética: ver `imovie.md` §5 (política de edição, não restrição do modelo).
-- Formato **FCPXML** é alvo de interop de alta prioridade (XML documentado).
+### Implications for OmaMovie
+- FCP's performance comes from **optimizing for one specific platform**. That is OmaMovie's bet
+  too (Omarchy, Vulkan, VA-API, PipeWire), instead of being cross-platform.
+- **Background rendering** = a rendered-frame cache (`CLAUDE.md` §15) filled by low-priority jobs
+  when real-time playback is not possible. It must be invisible: the user does not click "render".
+- Magnetic timeline: see `imovie.md` §5 (an editing policy, not a model restriction).
+- The **FCPXML** format is a high-priority interop target (documented XML).
 
 ---
 
 ## 2. Descript
 
-### O que as pessoas gostam
-- **Editar vídeo como um documento**: apagar uma frase da transcrição apaga o trecho de áudio/vídeo correspondente.
-- Intuitivo e acessível a quem nunca editou vídeo.
-- Ferramentas de IA para melhorar áudio.
-- Muito usado por podcasters.
+### What people like
+- **Editing video like a document**: deleting a sentence from the transcript deletes the matching audio/video.
+- Intuitive and accessible to people who have never edited video.
+- AI tools to improve audio.
+- Widely used by podcasters.
 
-### Implicações para o OmaMovie
-- Edição por texto também existe no Premiere (`premiere-pro.md` §7). É um
-  padrão que veio para ficar em conteúdo falado.
-- Arquiteturalmente, a transcrição é **mais uma visão sobre a timeline**: cada
-  palavra tem um `TimeRange` na mídia, e apagar texto gera comandos normais de
-  edição (ripple delete) com undo. Não é um modelo paralelo.
-- Depende de transcrição (IA, não objetivo). Se um dia entrar: modelo local, e
-  o modelo de dados (palavras com range de tempo) deve funcionar com qualquer fonte de transcrição, inclusive importada.
+### Implications for OmaMovie
+- Text-based editing also exists in Premiere (`premiere-pro.md` §7). It is a pattern that is here
+  to stay for spoken content.
+- Architecturally, the transcript is **one more view over the timeline**: each word has a
+  `TimeRange` in the media, and deleting text produces normal editing commands (ripple delete)
+  with undo. Not a parallel model.
+- Depends on transcription (AI, a non-goal). If it ever lands: a local model, and the data model
+  (words with time ranges) should work with any transcription source, including imported ones.
 
 ---
 
 ## 3. Kdenlive
 
-Editor livre (KDE) baseado no framework **MLT**. É o concorrente mais direto do OmaMovie no Linux.
+A free editor (KDE) built on the **MLT** framework. OmaMovie's most direct competitor on Linux.
 
-### O que as pessoas gostam
-- Gratuito, código aberto, multitrack, chroma key, correção de cor, render 4K,
-  keyframes, workspaces customizáveis.
-- **Privacidade e uso offline**, sem anúncios nem cadastro.
+### What people like
+- Free, open source, multitrack, chroma key, color correction, 4K rendering, keyframes,
+  customizable workspaces.
+- **Privacy and offline use**, no ads or sign-up.
 
-### Estado atual (2025–2026)
-- 2025 com foco declarado em **estabilidade**, desempenho da timeline, áudio e
-  legendas; colaboração mais próxima com os desenvolvedores do MLT.
-- 25.04: importar clip direto do menu de contexto da timeline; **zoom na
-  direção do mouse** em vez do playhead; waveforms para sequências.
-- 25.08.x: releases de manutenção com correções de crashes e regressões.
-- **Em desenvolvimento**: suporte a cor **10/12 bits**, otimizações de playback
-  (decode), **OpenFX**, refatoração de keyframes com **dopesheet**.
+### Current state (2025–2026)
+- 2025 with a declared focus on **stability**, timeline performance, audio and captions; closer
+  collaboration with the MLT developers.
+- 25.04: import a clip straight from the timeline context menu; **zoom toward the mouse**
+  instead of the playhead; waveforms for sequences.
+- 25.08.x: maintenance releases fixing crashes and regressions.
+- **In development**: **10/12-bit** color support, playback optimizations (decoding),
+  **OpenFX**, keyframe refactoring with a **dopesheet**.
 
-### Implicações para o OmaMovie
-- O Kdenlive ainda está **adicionando** 10/12 bits e otimizações de decode. O
-  OmaMovie pode tratar alta profundidade de cor e decode GPU como base desde o início (`CLAUDE.md` §7).
-- O foco em estabilidade, depois de anos de reclamações, mostra que **estabilidade
-  é o que os usuários de editores livres mais cobram**.
-- Pequenos detalhes de UX que valem adotar: **zoom da timeline centrado no mouse**; importar direto da timeline.
-- **Dopesheet** (ver keyframes de vários efeitos juntos) é uma boa referência para quando o OmaMovie tiver keyframes.
-- Projetos do Kdenlive são XML do MLT: candidato natural a importer (formato aberto e texto).
+### Implications for OmaMovie
+- Kdenlive is still **adding** 10/12-bit and decode optimizations. OmaMovie can treat high bit
+  depth and GPU decode as a foundation from the start (`CLAUDE.md` §7).
+- The focus on stability, after years of complaints, shows that **stability is what free editor
+  users ask for most**.
+- Small UX details worth adopting: **mouse-centered timeline zoom**; importing straight from the timeline.
+- A **dopesheet** (keyframes from several effects together) is a good reference for when OmaMovie has keyframes.
+- Kdenlive projects are MLT XML: a natural importer candidate (open, text-based format).
 
 ---
 
 ## 4. Shotcut
 
-Editor livre, também baseado em MLT.
+A free editor, also built on MLT.
 
-### O que as pessoas gostam
-- Gratuito e de código aberto, com multitrack, filtros e export confiável.
-- 4K com fluidez graças à renderização por GPU.
-- Interface simples e limpa, **comparada ao Windows Movie Maker**, mas com
-  recursos avançados (correção de cor, chroma key) e workspace reorganizável.
+### What people like
+- Free and open source, with multitrack, filters and reliable export.
+- Smooth 4K thanks to GPU rendering.
+- A simple, clean interface, **compared to Windows Movie Maker**, but with advanced features
+  (color correction, chroma key) and a rearrangeable workspace.
 
-### O que as pessoas não gostam
-- Interface considerada **datada**; efeitos avançados são difíceis de fazer.
-- Poucos efeitos.
-- **Lag no preview** com arquivos grandes.
-- Bugs específicos no Linux.
+### What people dislike
+- An interface considered **dated**; advanced effects are hard to achieve.
+- Few effects.
+- **Preview lag** with large files.
+- Linux-specific bugs.
 
-### Implicações para o OmaMovie
-- A comparação com o Movie Maker mostra que **a referência mental de "editor
-  simples" ainda é o Movie Maker**. Há demanda por esse posicionamento no Linux.
-- As reclamações (preview lento, UI datada) são justamente o que o OmaMovie
-  ataca: pipeline GPU-first e UI moderna e contextual.
+### Implications for OmaMovie
+- The comparison with Movie Maker shows that **the mental reference for a "simple editor" is
+  still Movie Maker**. There is demand for that positioning on Linux.
+- The complaints (slow preview, dated UI) are exactly what OmaMovie targets: a GPU-first
+  pipeline and a modern, contextual UI.
 
 ---
 
-## 5. Padrões entre todos os editores
+## 5. Patterns across every editor
 
-O que aparece repetidamente como motivo de gostar (ou largar) um editor:
+What repeatedly shows up as a reason to like (or abandon) an editor:
 
-| Fator | Exemplos positivos | Exemplos negativos | Prioridade para o OmaMovie |
+| Factor | Positive examples | Negative examples | Priority for OmaMovie |
 |---|---|---|---|
-| **Estabilidade / não perder trabalho** | FCP | Premiere, CapCut, Shotcut | Máxima (§14, §18 do `CLAUDE.md`) |
-| **Desempenho de playback** | FCP, Resolve (com hardware forte) | Shotcut com arquivos grandes, Resolve em máquina fraca | Máxima (GPU-first) |
-| **Velocidade até o resultado** | CapCut, iMovie, Descript, página Cut do Resolve | Premiere/Resolve para iniciantes | Alta (presets, inspector contextual) |
-| **Modelo de preço** | Resolve Free, FCP compra única, Kdenlive/Shotcut grátis | Premiere assinatura, CapCut paywall | Projeto livre: vantagem natural |
-| **Privacidade / offline** | Kdenlive, Shotcut | CapCut (termos), Clipchamp (conta) | Natural (sem cloud) |
-| **Legendas** | CapCut, Premiere, Resolve | — | Alta: track de legenda no modelo |
-| **Vertical / redes sociais** | CapCut, Clipchamp | — | Média: troca de proporção do canvas |
-| **Interface moderna e limpa** | CapCut, iMovie, Clipchamp | Shotcut ("datada"), Resolve ("densa") | Alta |
+| **Stability / not losing work** | FCP | Premiere, CapCut, Shotcut | Highest (`CLAUDE.md` §14, §18) |
+| **Playback performance** | FCP, Resolve (on strong hardware) | Shotcut with large files, Resolve on weak machines | Highest (GPU-first) |
+| **Time to result** | CapCut, iMovie, Descript, Resolve's Cut page | Premiere/Resolve for beginners | High (presets, contextual inspector) |
+| **Pricing model** | Resolve Free, FCP one-time purchase, Kdenlive/Shotcut free | Premiere subscription, CapCut paywall | Free project: a natural advantage |
+| **Privacy / offline** | Kdenlive, Shotcut | CapCut (terms), Clipchamp (account) | Natural (no cloud) |
+| **Captions** | CapCut, Premiere, Resolve | — | High: a caption track in the model |
+| **Vertical / social media** | CapCut, Clipchamp | — | Medium: changeable canvas aspect ratio |
+| **Modern, clean interface** | CapCut, iMovie, Clipchamp | Shotcut ("dated"), Resolve ("dense") | High |
 
 ---
 
-## Fontes
+## Sources
 
 - [Fitgap: Final Cut Pro X](https://us.fitgap.com/products/final-cut-pro-x)
 - [Temperstack: Final Cut Pro](https://www.temperstack.com/software/final-cut-pro/)
