@@ -69,6 +69,10 @@ void decodes_every_frame() {
             expect(frame.height()).toEqual(180);
             expect(std::string(frame.pixel_format())).toEqual("yuv420p");
             expect(frame.plane_count()).toEqual(3);
+            expect(frame.layout().chroma_shift_x).toEqual(1);
+            expect(frame.layout().chroma_shift_y).toEqual(1);
+            expect(frame.layout().interleaved_chroma).toBeFalsy();
+            expect(frame.layout().container_bits).toEqual(8);
             expect(frame.stride(0) >= 320).toBeTruthy();
             expect(frame.plane(0).size() >= static_cast<std::size_t>(frame.stride(0)) * 180)
                 .toBeTruthy();
@@ -100,6 +104,8 @@ void ten_bit_software() {
     if (f && *f) {
         expect(std::string((*f)->pixel_format())).toEqual("yuv420p10le");
         expect((*f)->bit_depth()).toEqual(10);
+        expect((*f)->layout().container_bits).toEqual(16);
+        expect((*f)->layout().lsb_shift).toEqual(0);
     }
 }
 

@@ -26,6 +26,20 @@ enum class DecodePath : std::uint8_t {
 
 inline constexpr std::size_t kMaxFrameImages = 4;
 
+// How the samples of a frame are stored: enough to read its planes without FFmpeg formats.
+struct SampleLayout {
+    int planes = 0;                  // memory planes (1 to 4)
+    int bit_depth = 8;               // significant bits per sample
+    int container_bits = 8;          // bits each sample occupies in memory (8 or 16)
+    int lsb_shift = 0;               // samples sit this many bits above the LSB (6 for P010)
+    int chroma_shift_x = 0;          // log2 of the horizontal chroma subsampling (1 for 4:2:0)
+    int chroma_shift_y = 0;          // log2 of the vertical chroma subsampling (1 for 4:2:0)
+    bool interleaved_chroma = false; // Cb and Cr share one plane (NV12, P010)
+    bool yuv = true;                 // false for RGB layouts
+
+    friend bool operator==(const SampleLayout&, const SampleLayout&) = default;
+};
+
 // The Vulkan images of a GPU frame while it is acquired (VideoFrame::acquire_gpu).
 //
 // Synchronization contract (FFmpeg's AVVkFrame): before touching image i, a submission waits on
@@ -91,6 +105,7 @@ public:
     [[nodiscard]] std::string_view pixel_format() const noexcept;
     [[nodiscard]] int bit_depth() const noexcept;
     [[nodiscard]] int plane_count() const noexcept;
+    [[nodiscard]] SampleLayout layout() const noexcept;
 
     // Software frames only (empty on GPU frames): the bytes of a plane and its row stride.
     [[nodiscard]] std::span<const std::uint8_t> plane(int index) const noexcept;

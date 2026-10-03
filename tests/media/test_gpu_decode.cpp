@@ -320,6 +320,9 @@ void decode_on_gpu(const char* name) {
         if (first) {
             gpu_luma = std::move(luma);
             bit_depth = frame.bit_depth();
+            // Hardware layouts interleave chroma (NV12/P010); P010 keeps samples in the high bits.
+            expect(frame.layout().interleaved_chroma).toBeTruthy();
+            expect(frame.layout().lsb_shift).toEqual(bit_depth > 8 ? 16 - bit_depth : 0);
         }
     }
     std::printf("    %s: %s, %d frames, %d on the GPU\n", name,

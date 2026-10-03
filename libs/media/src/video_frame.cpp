@@ -125,6 +125,27 @@ int VideoFrame::plane_count() const noexcept {
     return n > 0 ? n : 0;
 }
 
+SampleLayout VideoFrame::layout() const noexcept {
+    SampleLayout l;
+    const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(impl_->layout);
+    if (desc == nullptr) {
+        return l;
+    }
+    l.planes = plane_count();
+    l.bit_depth = desc->comp[0].depth;
+    l.container_bits = desc->comp[0].step * 8;
+    l.lsb_shift = desc->comp[0].shift;
+    l.chroma_shift_x = desc->log2_chroma_w;
+    l.chroma_shift_y = desc->log2_chroma_h;
+    l.yuv = (desc->flags & AV_PIX_FMT_FLAG_RGB) == 0;
+    l.interleaved_chroma =
+        l.yuv && desc->nb_components >= 3 && desc->comp[1].plane == desc->comp[2].plane;
+    if (l.interleaved_chroma) {
+        l.container_bits = desc->comp[1].step * 4; // two samples per chroma step
+    }
+    return l;
+}
+
 std::span<const std::uint8_t> VideoFrame::plane(int index) const noexcept {
     const AVFrame& f = *impl_->frame;
     if (on_gpu() || index < 0 || index >= plane_count() || f.data[index] == nullptr) {
