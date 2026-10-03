@@ -127,12 +127,12 @@ void JobPool::shutdown() noexcept {
     {
         const std::scoped_lock lock(mutex_);
         accepting_ = false;
-        for (auto& job : queue_) {
+        for (const auto& job : queue_) {
             job->cancel.cancel();
             job->finish_cancelled();
         }
         queue_.clear();
-        for (auto& job : running_) {
+        for (const auto& job : running_) {
             job->cancel.cancel();
         }
     }
