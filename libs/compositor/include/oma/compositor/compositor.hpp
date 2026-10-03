@@ -71,6 +71,17 @@ public:
     // Copies the output back to memory (tests, thumbnails). Slow by design.
     [[nodiscard]] Result<RgbaImage> read_output();
 
+    // Preview display transform: encodes the last render with the sRGB transfer function into
+    // an RGBA8 image (VK_IMAGE_LAYOUT_GENERAL, sampleable, same size as the output) for an SDR
+    // display. Returns when the GPU has finished; the image stays valid until the next call.
+    // Later work on this queue (for example Qt sampling it) is ordered after the encode, and the
+    // next encode waits for earlier work on the queue before overwriting it. The full SDR/HDR
+    // display policy is ADR-0006's.
+    [[nodiscard]] Result<const gpu::Image*> encode_display();
+
+    // RGBA8 pixels of the last encode_display() (tests). Slow by design.
+    [[nodiscard]] Result<std::vector<std::uint8_t>> read_display();
+
 private:
     struct Impl;
     explicit VulkanCompositor(std::unique_ptr<Impl> impl);

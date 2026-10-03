@@ -4,6 +4,7 @@
 
 #include "compositor_test.hpp"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -179,6 +180,55 @@ void gpu_matches_cpu_with_uploads() {
     expect(diff.over_tolerance <= cpu->pixels.size() / 4 / 500).toBeTruthy();
 }
 
+// The sRGB transfer function (IEC 61966-2-1), as the display pass applies it.
+int srgb_level(float linear) {
+    const double x = std::clamp(static_cast<double>(linear), 0.0, 1.0);
+    const double v = x <= 0.0031308 ? 12.92 * x : (1.055 * std::pow(x, 1.0 / 2.4)) - 0.055;
+    return static_cast<int>(std::lround(v * 255.0));
+}
+
+// The display pass encodes the linear output with the sRGB curve, within one 8-bit level, and
+// keeps alpha.
+void display_encodes_srgb() {
+    const oma::gpu::Device* device = compositor_test_device();
+    if (device == nullptr) {
+        return;
+    }
+    auto a = decode_first("h264_30fps_aac.mp4");
+    auto b = decode_first("hevc_10bit.mp4");
+    if (!a.frame || !b.frame) {
+        std::printf("    (skipped: fixtures missing)\n");
+        return;
+    }
+    const std::array<LayerInput, 2> inputs{a.input(), b.input()};
+    auto vk = VulkanCompositor::create(*device);
+    expect(vk.has_value()).toBeTruthy();
+    if (!vk) {
+        return;
+    }
+    const RenderGraph g = busy_graph(320, 180);
+    expect((*vk)->render(g, inputs).has_value()).toBeTruthy();
+    const auto encoded = (*vk)->encode_display();
+    expect(encoded.has_value()).toBeTruthy();
+    const auto linear = (*vk)->read_output();
+    const auto display = (*vk)->read_display();
+    expect(linear && display).toBeTruthy();
+    if (!linear || !display) {
+        return;
+    }
+    expect(display->size() == linear->pixels.size()).toBeTruthy();
+    int worst = 0;
+    for (std::size_t i = 0; i < display->size(); ++i) {
+        const int expected =
+            i % 4 == 3
+                ? static_cast<int>(std::lround(std::clamp(linear->pixels[i], 0.0F, 1.0F) * 255.0F))
+                : srgb_level(linear->pixels[i]);
+        worst = std::max(worst, std::abs(static_cast<int>((*display)[i]) - expected));
+    }
+    std::printf("    worst difference %d of 255\n", worst);
+    expect(worst <= 1).toBeTruthy();
+}
+
 void gpu_frames_match_cpu_reference() {
     const oma::gpu::Device* device = compositor_test_device();
     if (device == nullptr) {
@@ -265,6 +315,7 @@ void run_vulkan_compositor_tests() {
         it("matches the CPU reference on uploaded frames", { gpu_matches_cpu_with_uploads(); });
         it("matches the CPU reference on zero-copy GPU frames",
            { gpu_frames_match_cpu_reference(); });
+        it("encodes the output for an SDR display", { display_encodes_srgb(); });
         it("measures three 1080p layers", { measures_1080p_three_layers(); });
     });
 }

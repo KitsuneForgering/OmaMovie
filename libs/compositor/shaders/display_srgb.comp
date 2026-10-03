@@ -1,0 +1,24 @@
+#version 450
+
+// Preview display transform (M3): the compositor's linear BT.709 RGBA16F image encoded with
+// the sRGB transfer function into RGBA8 for an SDR display. Primaries are passed through
+// (BT.709 = sRGB); the full display policy, including HDR, belongs to ADR-0006.
+// Alpha is copied unchanged: the preview background is opaque.
+
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(rgba16f, set = 0, binding = 0) uniform readonly image2D linear_image;
+layout(rgba8, set = 0, binding = 1) uniform writeonly image2D display_image;
+
+vec3 encode_srgb(vec3 linear_rgb) {
+    vec3 x = clamp(linear_rgb, vec3(0.0), vec3(1.0));
+    vec3 low = 12.92 * x;
+    vec3 high = 1.055 * pow(x, vec3(1.0 / 2.4)) - 0.055;
+    return mix(high, low, lessThanEqual(x, vec3(0.0031308)));
+}
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(pixel, imageSize(display_image)))) return;
+    vec4 linear_pixel = imageLoad(linear_image, pixel);
+    imageStore(display_image, pixel, vec4(encode_srgb(linear_pixel.rgb), linear_pixel.a));
+}

@@ -24,6 +24,11 @@ namespace {
 constexpr auto kCompositeSpv = std::to_array<std::uint32_t>({
 #include "composite.comp.inc"
 });
+// SPIR-V of shaders/display_srgb.comp.
+constexpr auto kDisplaySpv = std::to_array<std::uint32_t>({
+#include "display_srgb.comp.inc"
+});
+constexpr VkFormat kDisplayFormat = VK_FORMAT_R8G8B8A8_UNORM;
 
 constexpr std::uint32_t kGroupSize = 16;
 constexpr VkFormat kOutputFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -146,6 +151,13 @@ struct VulkanCompositor::Impl {
     PFN_vkCmdPushDescriptorSetKHR push_descriptors = nullptr;
     VkDeviceSize params_stride = 0;
 
+    // Display transform pass (encode_display).
+    VkDescriptorSetLayout display_set_layout = VK_NULL_HANDLE;
+    VkPipelineLayout display_pipeline_layout = VK_NULL_HANDLE;
+    VkPipeline display_pipeline = VK_NULL_HANDLE;
+    gpu::Image display;
+    gpu::Buffer display_readback;
+
     gpu::Image output;
     gpu::Buffer params;
     gpu::Buffer readback;
@@ -162,6 +174,9 @@ struct VulkanCompositor::Impl {
             return;
         }
         destroy_transient_views();
+        vkDestroyPipeline(device->device(), display_pipeline, nullptr);
+        vkDestroyPipelineLayout(device->device(), display_pipeline_layout, nullptr);
+        vkDestroyDescriptorSetLayout(device->device(), display_set_layout, nullptr);
         vkDestroySampler(device->device(), sampler, nullptr);
         vkDestroyPipeline(device->device(), pipeline, nullptr);
         vkDestroyPipelineCache(device->device(), cache, nullptr);
@@ -179,6 +194,7 @@ struct VulkanCompositor::Impl {
     [[nodiscard]] Result<VkImageView> make_view(VkImage image, VkFormat format,
                                                 VkImageAspectFlags aspect);
     [[nodiscard]] Result<void> ensure_output(std::uint32_t width, std::uint32_t height);
+    [[nodiscard]] Result<void> create_display_pipeline();
     [[nodiscard]] Result<void> ensure_params(std::size_t layers);
     [[nodiscard]] Result<Upload*> stage_upload(std::size_t index, const media::VideoFrame& frame);
     [[nodiscard]] Result<BoundInput> bind_gpu_frame(media::VideoFrame& frame);
@@ -223,6 +239,73 @@ Result<void> VulkanCompositor::Impl::ensure_output(std::uint32_t width, std::uin
         return std::unexpected(img.error());
     }
     output = std::move(*img);
+    return {};
+}
+
+// Two storage images (linear in, display out), bound with push descriptors like the compositor.
+Result<void> VulkanCompositor::Impl::create_display_pipeline() {
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
+    for (std::uint32_t i = 0; i < bindings.size(); ++i) {
+        bindings[i] = {.binding = i,
+                       .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                       .descriptorCount = 1,
+                       .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                       .pImmutableSamplers = nullptr};
+    }
+    const VkDescriptorSetLayoutCreateInfo set_info{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
+        .bindingCount = static_cast<std::uint32_t>(bindings.size()),
+        .pBindings = bindings.data()};
+    if (const VkResult r =
+            vkCreateDescriptorSetLayout(device->device(), &set_info, nullptr, &display_set_layout);
+        r != VK_SUCCESS) {
+        return std::unexpected(vk_failure(r, "cannot create the display descriptor layout"));
+    }
+    const VkPipelineLayoutCreateInfo layout_info{.sType =
+                                                     VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                                                 .pNext = nullptr,
+                                                 .flags = 0,
+                                                 .setLayoutCount = 1,
+                                                 .pSetLayouts = &display_set_layout,
+                                                 .pushConstantRangeCount = 0,
+                                                 .pPushConstantRanges = nullptr};
+    if (const VkResult r = vkCreatePipelineLayout(device->device(), &layout_info, nullptr,
+                                                  &display_pipeline_layout);
+        r != VK_SUCCESS) {
+        return std::unexpected(vk_failure(r, "cannot create the display pipeline layout"));
+    }
+    const VkShaderModuleCreateInfo module_info{.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                                               .pNext = nullptr,
+                                               .flags = 0,
+                                               .codeSize = sizeof(kDisplaySpv),
+                                               .pCode = kDisplaySpv.data()};
+    VkShaderModule module = VK_NULL_HANDLE;
+    if (const VkResult r = vkCreateShaderModule(device->device(), &module_info, nullptr, &module);
+        r != VK_SUCCESS) {
+        return std::unexpected(vk_failure(r, "cannot load the display shader"));
+    }
+    const VkComputePipelineCreateInfo pipe_info{
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                  .pNext = nullptr,
+                  .flags = 0,
+                  .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+                  .module = module,
+                  .pName = "main",
+                  .pSpecializationInfo = nullptr},
+        .layout = display_pipeline_layout,
+        .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex = -1};
+    const VkResult made = vkCreateComputePipelines(device->device(), cache, 1, &pipe_info, nullptr,
+                                                   &display_pipeline);
+    vkDestroyShaderModule(device->device(), module, nullptr);
+    if (made != VK_SUCCESS) {
+        return std::unexpected(vk_failure(made, "cannot create the display pipeline"));
+    }
     return {};
 }
 
@@ -457,6 +540,9 @@ Result<std::unique_ptr<VulkanCompositor>> VulkanCompositor::create(const gpu::De
     if (const VkResult r = vkCreateSampler(device.device(), &sampler_info, nullptr, &impl->sampler);
         r != VK_SUCCESS) {
         return std::unexpected(vk_failure(r, "cannot create the sampler"));
+    }
+    if (auto r = impl->create_display_pipeline(); !r) {
+        return std::unexpected(r.error());
     }
     return std::unique_ptr<VulkanCompositor>(new VulkanCompositor(std::move(impl)));
 }
@@ -714,6 +800,104 @@ Result<RgbaImage> VulkanCompositor::read_output() {
         out.pixels[i] = half_to_float(halves[i]);
     }
     return out;
+}
+
+Result<const gpu::Image*> VulkanCompositor::encode_display() {
+    Impl& d = *impl_;
+    if (d.output.handle() == VK_NULL_HANDLE) {
+        return make_error(ErrorCode::InvalidArgument, Category::Compositor, "nothing rendered yet");
+    }
+    const std::uint32_t w = d.output.desc().width;
+    const std::uint32_t h = d.output.desc().height;
+    if (d.display.handle() == VK_NULL_HANDLE || d.display.desc().width != w ||
+        d.display.desc().height != h) {
+        auto img = gpu::Image::create(
+            *d.device, {.width = w,
+                        .height = h,
+                        .format = kDisplayFormat,
+                        .usage = static_cast<VkImageUsageFlags>(VK_IMAGE_USAGE_STORAGE_BIT) |
+                                 VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT});
+        if (!img) {
+            return std::unexpected(img.error());
+        }
+        d.display = std::move(*img);
+    }
+    const auto ran = d.runner->run([&](VkCommandBuffer cmd) {
+        // Waits for every earlier command on this queue (a reader of the previous encode) before
+        // the contents are discarded.
+        gpu::transition(cmd, d.display.handle(), VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_GENERAL);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, d.display_pipeline);
+        const VkDescriptorImageInfo source{.sampler = VK_NULL_HANDLE,
+                                           .imageView = d.output.view(),
+                                           .imageLayout = VK_IMAGE_LAYOUT_GENERAL};
+        const VkDescriptorImageInfo target{.sampler = VK_NULL_HANDLE,
+                                           .imageView = d.display.view(),
+                                           .imageLayout = VK_IMAGE_LAYOUT_GENERAL};
+        std::array<VkWriteDescriptorSet, 2> writes{};
+        for (std::uint32_t b = 0; b < writes.size(); ++b) {
+            writes[b] = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                         .pNext = nullptr,
+                         .dstSet = VK_NULL_HANDLE,
+                         .dstBinding = b,
+                         .dstArrayElement = 0,
+                         .descriptorCount = 1,
+                         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                         .pImageInfo = b == 0 ? &source : &target,
+                         .pBufferInfo = nullptr,
+                         .pTexelBufferView = nullptr};
+        }
+        d.push_descriptors(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, d.display_pipeline_layout, 0,
+                           static_cast<std::uint32_t>(writes.size()), writes.data());
+        vkCmdDispatch(cmd, (w + kGroupSize - 1) / kGroupSize, (h + kGroupSize - 1) / kGroupSize, 1);
+        // Visible to any later reader on the queue (Qt's fragment shader, a copy).
+        barrier(cmd,
+                memory_barrier(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT,
+                               VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_READ_BIT));
+    });
+    if (!ran) {
+        return std::unexpected(ran.error());
+    }
+    return &d.display;
+}
+
+Result<std::vector<std::uint8_t>> VulkanCompositor::read_display() {
+    Impl& d = *impl_;
+    if (d.display.handle() == VK_NULL_HANDLE) {
+        return make_error(ErrorCode::InvalidArgument, Category::Compositor, "nothing encoded yet");
+    }
+    const std::uint32_t w = d.display.desc().width;
+    const std::uint32_t h = d.display.desc().height;
+    const VkDeviceSize bytes = static_cast<VkDeviceSize>(w) * h * 4;
+    if (d.display_readback.size() < bytes) {
+        auto buf = gpu::Buffer::create(*d.device, bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                       gpu::MemoryUse::Readback);
+        if (!buf) {
+            return std::unexpected(buf.error());
+        }
+        d.display_readback = std::move(*buf);
+    }
+    const auto ran = d.runner->run([&](VkCommandBuffer cmd) {
+        const VkBufferImageCopy copy{.bufferOffset = 0,
+                                     .bufferRowLength = 0,
+                                     .bufferImageHeight = 0,
+                                     .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                                          .mipLevel = 0,
+                                                          .baseArrayLayer = 0,
+                                                          .layerCount = 1},
+                                     .imageOffset = {.x = 0, .y = 0, .z = 0},
+                                     .imageExtent = {.width = w, .height = h, .depth = 1}};
+        vkCmdCopyImageToBuffer(cmd, d.display.handle(), VK_IMAGE_LAYOUT_GENERAL,
+                               d.display_readback.handle(), 1, &copy);
+        barrier(cmd, memory_barrier(VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                    VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT));
+    });
+    if (!ran) {
+        return std::unexpected(ran.error());
+    }
+    d.display_readback.invalidate();
+    const auto* data = static_cast<const std::uint8_t*>(d.display_readback.mapped());
+    return std::vector<std::uint8_t>(data, data + bytes);
 }
 
 } // namespace oma::compositor
