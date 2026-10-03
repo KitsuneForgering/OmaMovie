@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # Arch Linux em container: mesma toolchain do Omarchy (GCC/Clang atuais).
+  # O container roda via `docker run` para permitir ajustar o kernel do host antes:
+  # o ThreadSanitizer falha com a entropia de mmap padrão dos runners recentes.
+  test:
+    name: ${{ matrix.compiler }} / ${{ matrix.build }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++, clang++]
+        build: [debug, asan, tsan, release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ajustar mmap_rnd_bits para o TSan
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+
+      - name: Build e testes
+        run: |
+          docker run --rm --cap-add SYS_PTRACE \
+            -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
+              pacman -Syu --noconfirm --needed base-devel clang >/dev/null
+              make -j"$(nproc)" BUILD=${{ matrix.build }} CXX=${{ matrix.compiler }} \
+                test JUNIT_DIR=build/junit
+            '
+
+      - name: Relatórios JUnit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-${{ matrix.compiler }}-${{ matrix.build }}
+          path: build/junit/
+          if-no-files-found: ignore
+
+  lint:
+    name: formato e clang-tidy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: clang-format e clang-tidy
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
+            pacman -Syu --noconfirm --needed base-devel clang >/dev/null
+            make format-check
+            make compdb
+            make tidy
+          '
