@@ -147,7 +147,7 @@ $(BUILD_DIR)/obj/%.o: %.cpp $(MAKEFILE_LIST)
 
 -include $(patsubst %.cpp,$(BUILD_DIR)/obj/%.d,$(ALL_SOURCES))
 
-.PHONY: all libs tests test clean distclean compdb format format-check tidy fixtures spikes deps help
+.PHONY: all libs tests test clean distclean compdb format format-check tidy fixtures spikes run-gui deps help
 
 # Spikes (tools/spikes/*.cpp): disposable single-file experiments (Docs/spikes/), built only on
 # request because they need the Vulkan and FFmpeg development files. pkg-config runs inside the
@@ -173,6 +173,32 @@ $(BUILD_DIR)/spikes/s4_qt_shared_device: tools/spikes/s4_qt_shared_device.cpp $(
 		-isystem $$(pkg-config --variable=includedir Qt6Gui)/QtGui/$$(pkg-config --modversion Qt6Gui) \
 		-isystem $$(pkg-config --variable=includedir Qt6Gui)/QtGui/$$(pkg-config --modversion Qt6Gui)/QtGui \
 		$< -o $@ $(LINK_compositor) $$(pkg-config --libs Qt6Quick) $(LDFLAGS_BASE)
+
+# The app: every source in apps/omamovie/src plus moc output for headers declaring Q_OBJECT.
+# Built in one compiler call; QML is loaded from the source tree at run time.
+APP_SOURCES := $(wildcard apps/omamovie/src/*.cpp)
+APP_HEADERS := $(wildcard apps/omamovie/src/*.hpp)
+APP_MOC_HEADERS := $(shell grep -l Q_OBJECT $(APP_HEADERS) 2>/dev/null)
+APP_MOCS := $(patsubst apps/omamovie/src/%.hpp,$(BUILD_DIR)/gen/omamovie/moc_%.cpp,$(APP_MOC_HEADERS))
+
+$(BUILD_DIR)/gen/omamovie/moc_%.cpp: apps/omamovie/src/%.hpp $(MAKEFILE_LIST)
+	$(call say,MOC,$<)
+	@mkdir -p $(@D)
+	$(Q)/usr/lib/qt6/moc $< -o $@
+
+# The viewer wraps compositor images with Qt's RHI (limited compatibility API, versioned headers).
+$(BUILD_DIR)/omamovie: $(APP_SOURCES) $(APP_HEADERS) $(APP_MOCS) $(wildcard apps/omamovie/qml/*.qml) $(LIB_timeline) $(LIB_audio) $(LIB_compositor) $(LIB_media) $(LIB_gpu) $(LIB_base) $(MAKEFILE_LIST)
+	$(call say,GUI,$@)
+	@mkdir -p $(@D)
+	$(Q)$(CXX) $(CXXFLAGS_BASE) -fPIC $(TEST_WARNINGS) $(INC_timeline) $(INC_audio) $(INC_compositor) -Iapps/omamovie/src \
+		$$(pkg-config --cflags Qt6Quick Qt6Test) \
+		-isystem $$(pkg-config --variable=includedir Qt6Gui)/QtGui/$$(pkg-config --modversion Qt6Gui)/QtGui \
+		$(APP_SOURCES) $(APP_MOCS) -o $@ $(LINK_timeline) $(LINK_audio) $(LINK_compositor) \
+		$$(pkg-config --libs Qt6Quick Qt6Test) $(LDFLAGS_BASE)
+
+run-gui: $(BUILD_DIR)/omamovie
+	$(if $(filter 1,$(RUN_GUI_SMOKE)),@test -f tests/fixtures/generated/hevc_10bit.mp4 || $(MAKE) fixtures)
+	$(Q)$(BUILD_DIR)/omamovie $(if $(filter 1,$(RUN_GUI_SMOKE)),--smoke,$(GUI_FILE))
 
 all: libs tests compdb
 
@@ -238,6 +264,7 @@ help:
 	@echo '  tidy          run clang-tidy on the libs'
 	@echo '  fixtures      generate test media in tests/fixtures/generated (needs ffmpeg)'
 	@echo '  spikes        build the M1 spikes in tools/spikes (Vulkan + FFmpeg + Qt Quick/RHI)'
+	@echo '  run-gui       open the Qt editor shell [GUI_FILE=path; RUN_GUI_SMOKE=1]'
 	@echo '  deps          install the dependencies declared in the PKGBUILD (uses sudo pacman)'
 	@echo '  clean         remove build/$$BUILD   | distclean     remove all of build/'
 	@echo 'Variables: BUILD=debug|release|asan|tsan  CXX=g++|clang++  WERROR=1|0  V=1 (verbose)'

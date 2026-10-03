@@ -81,6 +81,7 @@ make format | make format-check
 make tidy                      # clang-tidy on the libs (warnings are errors)
 make fixtures                  # regenerate test media in tests/fixtures/generated/ (ffmpeg)
 make spikes                    # M1 spikes in tools/spikes (Docs/spikes/)
+make run-gui                   # Qt/Vulkan editor shell; GUI_FILE=path or RUN_GUI_SMOKE=1
 makepkg -si                    # build and install the Arch package from the PKGBUILD
 ```
 
