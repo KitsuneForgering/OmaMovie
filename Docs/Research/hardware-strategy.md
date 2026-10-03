@@ -1,129 +1,83 @@
-# Hardware strategy: synthesis
+# Hardware strategy after skeptical review
 
-> Synthesis of [`vulkan.md`](vulkan.md), [`cuda.md`](cuda.md), [`opencl.md`](opencl.md) (OpenCL
-> removed) and [`omarchy-integration.md`](omarchy-integration.md). It is a proposal for
-> discussion: it becomes a rule only after it enters `CLAUDE.md` or an ADR.
+> Reviewed on 2026-10-03 with skeptical-research. This is non-normative research.
+> Source metadata and access limits: [source register](sources.md). Decisions and open
+> validation gates: [audit](skeptical-review.md). Product descriptions are not user studies.
 
-Goal: **use all available hardware** (decode, encode and compute on Intel, AMD and NVIDIA)
-**without taking frames out of VRAM** and without requiring users to install anything beyond
-what Omarchy already installs.
+## 1. Supported direction
 
----
+Use the existing Vulkan compositor with explicit resource ownership, bounded work and a
+logged software-decode fallback. Preserve the ADR-0004 application-owned device design,
+while keeping Qt integration provisional until Q1/S4. No vendor-wide real-time or zero-copy
+promise follows from one Intel report.
 
-## 1. Proposed architecture
+## 2. Roles and alternatives
 
-```
-                         ┌──────────────── libs/gpu ─────────────────┐
-                         │  single VkInstance / VkDevice (Vulkan-Hpp) │
-                         │  queue lock · VMA · imported memory        │
-                         └───────┬──────────────┬──────────────┬──────┘
-                                 │              │              │
-        ┌────────────────────────▼──┐   ┌───────▼────────┐  ┌──▼──────────────────┐
-        │ libs/media (FFmpeg 9)      │   │ libs/compositor│  │ apps/omamovie (Qt)   │
-        │ hwcontext_vulkan on        │   │ render graph → │  │ QQuickGraphicsDevice │
-        │ OmaMovie's device          │   │ Vulkan (+ libplacebo?)│ ::fromDeviceObjects│
-        │                            │   │ ComputeBackend │  │ QSGVulkanTexture     │
-        │ Decode:                    │   │  ├ Vulkan (default)│ ::fromNative       │
-        │  Intel/AMD: Vulkan Video   │   │  ├ CPU (reference)                      │
-        │             or VA-API→map  │   │  └ CUDA (optional, PTX)                 │
-        │  NVIDIA: NVDEC→interop     │   │                                         │
-        │          or Vulkan Video   │   └────────────────┘  └─────────────────────┘
-        │ Encode:                    │
-        │  Intel/AMD: Vulkan/VA-API  │        AVVkFrame (one timeline semaphore per image)
-        │  NVIDIA: NVENC             │        = OmaMovie's Frame, without copies
-        │ Intermediates: ProRes/FFv1 │
-        │  in compute shaders        │
-        └────────────────────────────┘
-```
-
----
-
-## 2. Role of each API
-
-| API | Role | Required? |
+| Component | Current direction | Evidence boundary / alternative |
 |---|---|---|
-| **Vulkan (Vulkan-Hpp)** | Single device; compositing; preview; default compute for effects; video decode/encode on AMD/Intel; compute codecs (ProRes, FFv1) | **Yes** |
-| **VA-API** | Mature decode/encode on Intel/AMD; mapped to Vulkan by FFmpeg | Yes (through FFmpeg), chosen at runtime |
-| **NVDEC/NVENC** | Decode/encode on NVIDIA; NVENC is much faster than Vulkan encode | Yes on NVIDIA (through FFmpeg, no toolkit) |
-| **CUDA (driver API)** | NVDEC → Vulkan interop; optional kernels | Loaded at runtime, NVIDIA only |
-| **CUDA (kernels)** | Effects with a measured gain on NVIDIA | Optional, optional build |
-| ~~OpenCL~~ | **Removed** (decision of 2026-10-02, see `opencl.md`) | No |
-| **libplacebo** | Candidate for color, tone mapping, scaling, LUTs | To be decided (ADR) |
+| Vulkan | Composition, effects, optional video/compute codecs | Query device/profile/features and verify output |
+| VA-API | First decode candidate on the reference Intel setup | Import may fail; software + upload remains baseline |
+| Vulkan Video | Candidate when normally exposed | Debug-flag tests are exploratory, not supported defaults |
+| NVDEC/NVENC | NVIDIA candidates | S7 pending; compare native Vulkan and total interop cost |
+| CUDA effects | Optional specialization | Need an actual effect and same-output measurement |
+| OpenCL | Excluded by project scope | Generic interop exists; no current use case |
+| libplacebo | Color/scaling candidate | S6 and ADR-0006 pending |
+| VMA | Allocation candidate | Existing wrappers first; adopt on demonstrated need |
 
----
+[API/source evidence](sources.md) establishes contracts, not total pipeline performance.
 
-## 3. Runtime selection
+## 3. Runtime policy
 
-At startup, `libs/gpu` + `libs/media` build a **capability table** (logged in the `gpu`
-category and shown on a diagnostics screen):
+Distinguish five states: available API/library, advertised capability, successful open,
+actual negotiated hardware frame, and validated path for this workload. Only the last
+supports a compatibility/performance claim. Log skipped/failed paths and reasons.
 
-| Question | Source |
-|---|---|
-| Which codecs/profiles/bit depths does Vulkan Video decode and encode? | `vkGetPhysicalDeviceVideoCapabilitiesKHR` |
-| What does VA-API offer? | `vaQueryConfigProfiles` / FFmpeg |
-| Is NVDEC/NVENC present? | Presence of `libnvcuvid`/`libnvidia-encode`, FFmpeg |
-| Is CUDA present? | `dlopen` of `libcuda` |
-| Which GPU is primary (hybrids)? | User choice or a heuristic, without waking the dGPU needlessly |
+ADR-0004's VA-API → Vulkan → software order is provisional for the measured Intel setup.
+Do not infer NVDEC availability from `libnvcuvid` presence. Match device identity for imports;
+probe support at codec/profile/chroma/depth/size granularity. Driver-specific policy changes
+need evidence, not a universal vendor ranking. Software fallback is correct behavior and
+still needs a workload budget; it is not guaranteed real time.
 
-For each stream, the decode path is chosen by an **ordered, testable policy** (e.g. Intel H.264
-→ VA-API if the benchmark favors it, else Vulkan Video → software). A software fallback is
-always possible, and every degradation is logged (`CLAUDE.md` §19).
+## 4. Device and synchronization choices
 
----
+A shared device reduces explicit inter-device imports. A device created by FFmpeg could also
+be handed to a consumer; it does not inherently force a second device or copy. The reason
+for OmaMovie ownership is control over creation/features/lifetime (current ADR), not that
+other ownership is impossible.
 
-## 4. Changes relative to the current `CLAUDE.md`
+Queues need host synchronization; images need GPU dependencies, layouts and lifetime.
+Qt's ordinary imported-device path has an identified flagged-queue mismatch (Q1).
+An application mutex protects Qt only if Qt submissions actually participate in that
+protocol. Decide among render-thread submission, controlled rendering, verified native
+queue injection, or separate-device external-memory import in S4/ADR-0005.
 
-Proposals (pending the maintainer's approval):
+## 5. Experiments and gates
 
-1. ~~OpenCL as the generic backend~~ **Applied on 2026-10-02**: OpenCL removed; Vulkan Compute
-   is the generic backend (`CLAUDE.md` §4 and §9.3).
-2. **Explicit Vulkan-Hpp** in the stack: `vk::raii`, no exceptions (`VULKAN_HPP_NO_EXCEPTIONS` +
-   `VULKAN_HPP_RAII_NO_EXCEPTIONS` with `std::expected`), include confined to
-   `libs/gpu`/`libs/compositor`. Affects §4 and §22.
-3. **A single Vulkan device shared with FFmpeg and Qt** as an invariant. Affects §7 and §9.4.
-4. **CUDA policy**: NVDEC/NVENC through FFmpeg without the toolkit; kernels only through PTX
-   (clang) + `dlopen`; optional CUDA build. Affects §4 and §9.3.
-5. **Hybrid laptops**: one primary device per pipeline. Affects §7.
-6. **Omarchy integration**: app_id `omamovie`, opacity rule, theme through
-   `omarchy-theme-color`, an isolated platform module. Affects §11.
-7. **The `vulkan-headers` package** (and `vulkan-tools` for diagnostics) in the build dependencies.
+| Spike | Review status | Required additional evidence |
+|---|---|---|
+| S1 | Prior Intel report, not rerun | Retain capability vs executed-codec distinction; raw output/provenance |
+| S2 | Prior single-submitter report, not rerun | Validation layers, chroma/multiple frames, lifetime/cancellation |
+| S3 | Pending | Repeated equivalent workloads; decode + import + consumer, encode quality |
+| S4 | Pending; Q1 identified | Queue retrieval, submission/lifetime protocol, display conversion |
+| S5 | Library tests contain timings | End-to-end playback, percentiles/drops, independent color oracle |
+| S6 | Pending | Installed libplacebo contracts, image-quality and copy comparisons |
+| S7 | Pending; NVIDIA unavailable | Decode+interop+composition and export on actual NVIDIA |
+| S8 | Pending; AMD unavailable | Same criteria on actual AMD |
 
----
+Protocols and stop criteria live in [the audit](skeptical-review.md#validation-protocols).
+No pending experiment is relabeled as completed by this documentary review.
 
-## 5. Validation spikes (before the definitive code)
+## 6. Capacity model
 
-Each spike has a measurable criterion. They replace the technical part of the "first
-experiment" in `CLAUDE.md` §24.
+Use measured resource budgets, not only throughput. Tightly packed 4K RGBA16F is 63.28 MiB
+per frame; three streams with eight such cached frames consume about 1.48 GiB before decoder
+pools, intermediate targets and padding. This is a calculated lower-bound illustration,
+not measured VRAM usage. [Inputs and calculations](skeptical-review.md#quantitative-checks).
+On integrated GPUs, GPU-local allocation does not imply physically separate VRAM.
 
-| # | Spike | Success criterion | Hardware |
-|---|---|---|---|
-| S1 | `vulkaninfo` + `vainfo`: capability inventory on the Iris Xe | Documented codec × API table | Iris Xe |
-| S2 | FFmpeg 9 using a `VkDevice` created by OmaMovie (Vulkan-Hpp) | H.264/HEVC/AV1 decoded into `AVVkFrame` without readback | Iris Xe |
-| S3 | Vulkan Video vs. VA-API→map: frame time, CPU, power | Numbers per codec; selection policy defined | Iris Xe |
-| S4 | Qt Quick on the same device showing the compositor image | 60 fps preview without a CPU copy; queue lock without deadlock | Iris Xe |
-| S5 | Compositing 2 videos + 1 image (transform, crop, opacity, YUV→RGB) | Frame time measured at 1080p60 | Iris Xe |
-| S6 | libplacebo on OmaMovie's images | Color conversion/scaling without copies; decision for the ADR | Iris Xe |
-| S7 | NVDEC → Vulkan (interop) vs. Vulkan Video on NVIDIA | NVIDIA path chosen by measurement | **Needs an NVIDIA machine** |
-| S8 | AMD (RADV) | Same measurements as S3 | **Needs an AMD machine** |
+## 7. Application decision
 
----
-
-## 6. Main risks
-
-| Risk | Mitigation |
-|---|---|
-| Queue synchronization between Qt, FFmpeg and the compositor | S4 early; a single lock mechanism; ADR-0005 |
-| Driver differences in DMA-BUF/modifiers | Use FFmpeg's mapping; fallback with a logged GPU→GPU copy |
-| CUDA does not accept wait-before-signal | The scheduler guarantees the order; specific tests |
-| No AMD/NVIDIA hardware for testing | Plan test machines or contributors; CI only covers software paths |
-| Vulkan-Hpp compile cost | Confined include + PCH; evaluate the `vulkan` module |
-| libplacebo not accepting external images as expected | S6 before deciding |
-
----
-
-## Suggested next steps
-
-1. The maintainer decides the remaining points of §4 (mainly libplacebo).
-2. Update `CLAUDE.md` with whatever is approved.
-3. Install `vulkan-headers vulkan-tools libva-utils` and run S1.
-4. Continue with S2–S4 (M1 in `Docs/implementation-plan.md`).
+Continue bounded Intel correctness work. Resolve Q1 and SDR/display handling before wiring
+the final UI. Support claims must name tested hardware/drivers/media; untested AMD/NVIDIA
+remain planned. Choosing a proxy codec also needs storage, seek, quality and compatibility
+measurements; GPU compute decode alone does not justify FFv1/ProRes as the default.

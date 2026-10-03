@@ -1,0 +1,960 @@
+Command: make test
+Mode: debug, executed outside sandbox after sandbox GPU initialization failure
+Exit status: 0
+Environment: 2026-10-03-local.txt
+These are existing tests, not the proposed validation pilots. GPU-dependent branches may be conditional.
+
+
+== base_tests (debug)
+
+● Rational
+  normalizes sign and common factors
+  ✓ r.has_value() to be truthy
+  ✓ r->num() to equal -3
+  ✓ r->den() to equal 4
+  rejects a zero denominator
+  ✓ r.has_value() to be falsy
+  ✓ static_cast<int>(r.error().code()) to equal static_cast<int>(ErrorCode::InvalidArgument)
+  rejects INT64_MIN because it cannot be negated
+  ✓ Rational::make(kMin, 1).has_value() to be falsy
+  ✓ Rational::make(1, kMin).has_value() to be falsy
+  orders fractions exactly
+  ✓ Rational::literal(1, 3) < Rational::literal(1, 2) to be truthy
+  ✓ Rational::literal(-1, 2) < Rational::literal(1, 3) to be truthy
+  ✓ Rational::literal(30000, 1001) > Rational::literal(29, 1) to be truthy
+  ✓ Rational::literal(kMax, 1) > Rational::literal(kMax - 1, 1) to be truthy
+  ✓ Rational::literal(kMax, kMax - 1) > Rational::literal(kMax - 1, kMax - 2) to be falsy
+  inverts and refuses to invert zero
+  ✓ Rational::literal(1001, 30000).inverse()->num() to equal 30000
+  ✓ Rational::literal(0, 1).inverse().has_value() to be falsy
+
+● rescale
+  converts seconds to a 90 kHz timebase exactly
+  ✓ rescale_ok(1, kSecond, kTb90k, Rounding::Floor) to equal 90000
+  converts one 29.97 fps frame to 90 kHz exactly (3003 ticks)
+  ✓ rescale_ok(1, kFrame2997, kTb90k, Rounding::Floor) to equal 3003
+  rounds one 23.976 fps frame (3753.75 ticks) as requested
+  ✓ rescale_ok(1, kFrame23976, kTb90k, Rounding::Floor) to equal 3753
+  ✓ rescale_ok(1, kFrame23976, kTb90k, Rounding::Ceil) to equal 3754
+  ✓ rescale_ok(1, kFrame23976, kTb90k, Rounding::Nearest) to equal 3754
+  rounds negative values toward the right direction
+  ✓ rescale_ok(-1, kFrame23976, kTb90k, Rounding::Floor) to equal -3754
+  ✓ rescale_ok(-1, kFrame23976, kTb90k, Rounding::Ceil) to equal -3753
+  ✓ rescale_ok(-1, kFrame23976, kTb90k, Rounding::Nearest) to equal -3754
+  breaks ties away from zero with Nearest
+  ✓ rescale_ok(1, Rational::literal(1, 2), kSecond, Rounding::Nearest) to equal 1
+  ✓ rescale_ok(-1, Rational::literal(1, 2), kSecond, Rounding::Nearest) to equal -1
+  ✓ rescale_ok(3, Rational::literal(1, 2), kSecond, Rounding::Nearest) to equal 2
+  maps video frames to audio samples (29.97 fps at 48 kHz = 1601.6 samples)
+  ✓ rescale_ok(1, kFrame2997, kTb48k, Rounding::Nearest) to equal 1602
+  ✓ rescale_ok(5, kFrame2997, kTb48k, Rounding::Nearest) to equal 8008
+  ✓ rescale_ok(1, kFrame2997, Rational::literal(1, 44100), Rounding::Floor) to equal 1471
+  handles ten hours of media in a 90 kHz timebase
+  ✓ rescale_ok(ten_hours, kTb90k, kTb48k, Rounding::Floor) to equal 10LL * 3600 * 48000
+  ✓ rescale_ok(ten_hours, kTb90k, kFrame2997, Rounding::Floor) to equal 1078921
+  reports overflow instead of truncating
+  ✓ static_cast<int>(rescale_error(kMax, kSecond, kTb90k)) to equal static_cast<int>(ErrorCode::Overflow)
+  ✓ rescale_ok(kMax, kTb90k, kSecond, Rounding::Floor) to equal kMax / 90000
+  rejects non-positive units
+  ✓ static_cast<int>(rescale_error(1, Rational::literal(0, 1), kSecond)) to equal static_cast<int>(ErrorCode::InvalidArgument)
+  ✓ static_cast<int>(rescale_error(1, kSecond, Rational::literal(-1, 25))) to equal static_cast<int>(ErrorCode::InvalidArgument)
+
+● RationalTime
+  compares instants exactly across timebases
+  ✓ t(3003, kTb90k) == t(1001, kTb30k) to be truthy
+  ✓ t(48000, kTb48k) == t(90000, kTb90k) to be truthy
+  ✓ t(1, kTb48k) < t(2, kTb90k) to be truthy
+  ✓ t(-1, kTb48k) < t(0, kTb90k) to be truthy
+  compares extreme values without overflowing
+  ✓ t(max, kSecond) > t(max, Rational::literal(1, 2)) to be truthy
+  ✓ t(max, kTb90k) < t(max, kTb48k) to be truthy
+  ✓ t(max - 1, Rational::literal(1, max)) < t(1, kSecond) to be truthy
+  rejects a non-positive timebase
+  ✓ RationalTime::make(1, Rational::literal(0, 1)).has_value() to be falsy
+  ✓ RationalTime::make(1, Rational::literal(-1, 25)).has_value() to be falsy
+  rescales with explicit rounding
+  ✓ r->value() to equal 3754
+  ✓ r->timebase() == kTb90k to be truthy
+  adds only within one timebase
+  ✓ t(10, kTb90k).plus(t(5, kTb90k))->value() to equal 15
+  ✓ code_of(bad.error()) to equal static_cast<int>(ErrorCode::InvalidArgument)
+  detects overflow in addition
+  ✓ code_of(r.error()) to equal static_cast<int>(ErrorCode::Overflow)
+
+● TimeRange
+  is half-open
+  ✓ range->contains(t(100, kTb90k)) to be truthy
+  ✓ range->contains(t(149, kTb90k)) to be truthy
+  ✓ range->contains(t(150, kTb90k)) to be falsy
+  ✓ range->contains(t(99, kTb90k)) to be falsy
+  ✓ range->end().value() to equal 150
+  checks membership across timebases
+  ✓ range->contains(t(89999, kTb90k)) to be truthy
+  ✓ range->contains(t(90000, kTb90k)) to be falsy
+  detects overlap
+  ✓ a->overlaps(*b) to be falsy
+  ✓ a->overlaps(*c) to be truthy
+  rejects negative durations and mixed timebases
+  ✓ TimeRange::make(t(0, kTb90k), t(-1, kTb90k)).has_value() to be falsy
+  ✓ TimeRange::make(t(0, kTb90k), t(1, kTb48k)).has_value() to be falsy
+
+● FrameRate
+  represents NTSC rates as exact fractions
+  ✓ fr::k29_97.fps() == Rational::literal(30000, 1001) to be truthy
+  ✓ fr::k59_94.frame_duration() == Rational::literal(1001, 60000) to be truthy
+  maps frame 300 at 29.97 fps to 10.01 s
+  ✓ at == t(1001, Rational::literal(1, 100)) to be truthy
+  maps a time back to a frame with explicit rounding
+  ✓ *fr::k29_97.time_to_frame(t(10, kSecond), Rounding::Floor) to equal 299
+  ✓ *fr::k29_97.time_to_frame(t(10, kSecond), Rounding::Nearest) to equal 300
+  ✓ *fr::k25.time_to_frame(t(10, kSecond), Rounding::Floor) to equal 250
+  rejects non-positive rates
+  ✓ FrameRate::make(Rational::literal(0, 1)).has_value() to be falsy
+
+● SampleRate
+  addresses audio in samples
+  ✓ *sr->time_to_sample(t(1, kSecond), Rounding::Floor) to equal 48000
+  ✓ sr->sample_to_time(24000) == t(1, Rational::literal(1, 2)) to be truthy
+  converts 44.1 kHz positions to 96 kHz
+  ✓ *sr96->time_to_sample(pos, Rounding::Floor) to equal 96000
+  rejects non-positive rates
+  ✓ SampleRate::make(0).has_value() to be falsy
+  ✓ SampleRate::make(-48000).has_value() to be falsy
+
+● Error and Result
+  carries code, category, message and context
+  ✓ static_cast<int>(e.code()) to equal static_cast<int>(ErrorCode::InvalidData)
+  ✓ static_cast<int>(e.category()) to equal static_cast<int>(Category::Importer)
+  ✓ e.message() to equal "truncated header"
+  ✓ e.context() to equal "clip.prproj"
+  describes itself for logs and UI warnings
+  ✓ e.summary() to equal "[timeline] overflow: trim too long (clip 4)"
+  ✓ bare.summary() to equal "[base] cancelled: stopped"
+  propagates through Result
+  ✓ *parse_positive(3) to equal 3
+  ✓ r.has_value() to be falsy
+  ✓ r.error().context() to equal "field 'duration'"
+
+● Logging
+  formats messages and records category and call site
+  ✓ record_count() to equal 1
+  ✓ c.message to equal "opened clip.mp4 (2 streams)"
+  ✓ static_cast<int>(c.category) to equal static_cast<int>(Category::Decode)
+  ✓ static_cast<int>(c.level) to equal static_cast<int>(LogLevel::Info)
+  ✓ c.line to be greater than 0
+  drops records below the category level
+  ✓ record_count() to equal 0
+  ✓ record_count() to equal 1
+  reports enabled levels without formatting
+  ✓ oma::log_enabled(Category::Cache, LogLevel::Info) to be falsy
+  ✓ oma::log_enabled(Category::Cache, LogLevel::Error) to be truthy
+  ✓ oma::log_enabled(Category::Cache, LogLevel::Off) to be falsy
+
+● JobPool
+  runs a job and reports success with full progress
+  ✓ h.wait().has_value() to be truthy
+  ✓ value.load() to equal 42
+  ✓ state_of(h) to equal st(JobState::Succeeded)
+  ✓ h.progress() to be close to 1 (precision 0.0001)
+  keeps the error of a failed job
+  ✓ wait_code(h) to equal static_cast<int>(ErrorCode::InvalidData)
+  ✓ state_of(h) to equal st(JobState::Failed)
+  never starts a pending job that was cancelled
+  ✓ first.wait().has_value() to be truthy
+  ✓ wait_code(second) to equal static_cast<int>(ErrorCode::Cancelled)
+  ✓ state_of(second) to equal st(JobState::Cancelled)
+  ✓ second_ran.load() to be falsy
+  cancels a running job cooperatively
+  ✓ wait_code(h) to equal static_cast<int>(ErrorCode::Cancelled)
+  ✓ state_of(h) to equal st(JobState::Cancelled)
+  shuts down with running and pending jobs
+  ✓ state_of(running) to equal st(JobState::Cancelled)
+  ✓ state_of(pending) to equal st(JobState::Cancelled)
+  ✓ pending_ran.load() to be falsy
+  refuses work after shutdown
+  ✓ state_of(h) to equal st(JobState::Cancelled)
+  turns an escaping exception into an internal error
+  ✓ wait_code(h) to equal static_cast<int>(ErrorCode::Internal)
+  ✓ state_of(h) to equal st(JobState::Failed)
+  runs many jobs across workers
+  ✓ counter.load() to equal 200
+
+Test Suites Summary:
+  All 109 tests passed!
+
+
+== gpu_tests (debug)
+
+● gpu::Device
+15:19:52.251 INFO  gpu        device: Intel(R) Iris(R) Xe Graphics (TGL GT2) (Intel open-source Mesa driver, Mesa 26.2.2-arch1.1), Vulkan 1.4, 8 extensions, internally synchronized queues: yes (device.cpp:280)
+  reports the selected device
+  ✓ d->info().name.empty() to be falsy
+  ✓ d->info().api_version >= VK_API_VERSION_1_3 to be truthy
+    device: Intel(R) Iris(R) Xe Graphics (TGL GT2) (Mesa 26.2.2-arch1.1)
+  exposes valid raw handles for interop
+  ✓ d->instance() != VK_NULL_HANDLE to be truthy
+  ✓ d->physical_device() != VK_NULL_HANDLE to be truthy
+  ✓ d->device() != VK_NULL_HANDLE to be truthy
+  ✓ d->instance_proc_addr() != nullptr to be truthy
+  has a graphics and compute queue family
+  ✓ family_has(*d, g, VK_QUEUE_GRAPHICS_BIT) to be truthy
+  ✓ family_has(*d, g, VK_QUEUE_COMPUTE_BIT) to be truthy
+  ✓ d->queue(g, 0) != VK_NULL_HANDLE to be truthy
+  enables timeline semaphores and synchronization2
+  ✓ timeline to be truthy
+  ✓ sync2 to be truthy
+  only reports extensions it enabled
+  ✓ d->has_extension(e) to be truthy
+  ✓ d->has_extension(e) to be truthy
+  ✓ d->has_extension(e) to be truthy
+  ✓ d->has_extension(e) to be truthy
+  ✓ d->has_extension(e) to be truthy
+  ✓ d->has_extension(e) to be truthy
+  ✓ d->has_extension(e) to be truthy
+  ✓ d->has_extension(e) to be truthy
+  ✓ d->has_extension("VK_NOT_A_REAL_extension") to be falsy
+  matches the queue creation flags to internal synchronization
+  ✓ flagged == d->internally_synchronized_queues() to be truthy
+  locks and unlocks every queue it created
+  ✓ true to be truthy
+
+● gpu::enumerate_devices
+  lists the device that was created
+  ✓ all.has_value() to be truthy
+  ✓ found to be truthy
+  rejects a device name that does not exist
+  ✓ r.has_value() to be falsy
+  ✓ static_cast<int>(r.error().code()) to equal static_cast<int>(ErrorCode::Unsupported)
+
+● gpu::Buffer and gpu::CommandRunner
+  round-trips bytes through device-local memory
+  ✓ upload && local && readback && runner to be truthy
+  ✓ upload->mapped() != nullptr to be truthy
+  ✓ local->mapped() == nullptr to be truthy
+  ✓ ran.has_value() to be truthy
+  ✓ std::memcmp(readback->mapped(), pattern.data(), pattern.size()) == 0 to be truthy
+  creates images with views and moves them
+  ✓ img.has_value() to be truthy
+  ✓ img->handle() != VK_NULL_HANDLE to be truthy
+  ✓ img->view() != VK_NULL_HANDLE to be truthy
+  ✓ img->desc().width to equal 64
+  ✓ moved.handle() != VK_NULL_HANDLE to be truthy
+  ✓ img->handle() == VK_NULL_HANDLE to be truthy
+
+Test Suites Summary:
+  All 37 tests passed!
+
+
+== media_tests (debug)
+
+● media::probe
+  describes an H.264 + AAC file
+  ✓ info.has_value() to be truthy
+  ✓ info->container to contain "mp4"
+  ✓ info->streams.size() to equal 2
+  ✓ info->duration.has_value() to be truthy
+  ✓ info->duration->seconds_approx() to be close to 1 (precision 0.1)
+  ✓ v != nullptr to be truthy
+  ✓ v->kind == StreamKind::Video to be truthy
+  ✓ v->codec to equal "h264"
+  ✓ v->video->width to equal 320
+  ✓ v->video->height to equal 180
+  ✓ v->video->pixel_format to equal "yuv420p"
+  ✓ v->video->bit_depth to equal 8
+  ✓ v->video->rotation to equal 0
+  ✓ v->video->frame_rate.has_value() to be truthy
+  ✓ v->video->frame_rate->fps() == Rational::literal(30, 1) to be truthy
+  ✓ v->video->variable_frame_rate to be falsy
+  ✓ v->video->still_image to be falsy
+  ✓ v->frame_count.value_or(0) to equal 30
+  ✓ a != nullptr to be truthy
+  ✓ a->codec to equal "aac"
+  ✓ a->audio->sample_rate.has_value() to be truthy
+  ✓ a->audio->sample_rate->hz() to equal 48000
+  ✓ a->audio->channels to equal 1
+  ✓ a->audio->channel_layout to equal "mono"
+  keeps NTSC frame rates exact
+  ✓ info.has_value() to be truthy
+  ✓ rate.has_value() to be truthy
+  ✓ rate && rate->fps() == Rational::literal(30000, 1001) to be truthy
+  detects variable frame rate from timestamps
+  ✓ info.has_value() to be truthy
+  ✓ best_video(*info)->video->variable_frame_rate to be truthy
+  reads the display rotation
+  ✓ info.has_value() to be truthy
+  ✓ best_video(*info)->video->rotation to equal 90
+  reports 10-bit HEVC
+  ✓ info.has_value() to be truthy
+  ✓ v.codec to equal "hevc"
+  ✓ v.profile to equal "Main 10"
+  ✓ v.video->bit_depth to equal 10
+  ✓ v.video->color.range == ColorRange::Full to be falsy
+  describes audio-only files
+  ✓ info.has_value() to be truthy
+  ✓ info->best_video.has_value() to be falsy
+  ✓ a != nullptr to be truthy
+  ✓ a->audio->sample_rate->hz() to equal 44100
+  ✓ a->duration.has_value() to be truthy
+  ✓ a->duration->seconds_approx() to be close to 2 (precision 0.05)
+  marks still images
+  ✓ info.has_value() to be truthy
+  ✓ best_video(*info)->video->still_image to be truthy
+  ✓ best_video(*info)->video->width to equal 640
+  rejects a truncated file as invalid data
+  ✓ info.has_value() to be falsy
+  ✓ code_of(info.error()) to equal static_cast<int>(ErrorCode::InvalidData)
+  reports a missing file as an I/O error
+  ✓ info.has_value() to be falsy
+  ✓ code_of(info.error()) to equal static_cast<int>(ErrorCode::IoError)
+  ✓ info.error().context() to contain "does-not-exist.mp4"
+
+● media::VideoDecoder (software)
+  decodes every frame in presentation order
+  ✓ d.has_value() to be truthy
+  ✓ d->path() == DecodePath::Software to be truthy
+  ✓ d->stream().codec to equal "h264"
+  ✓ f.has_value() to be truthy
+  ✓ frame.on_gpu() to be falsy
+  ✓ frame.width() to equal 320
+  ✓ frame.height() to equal 180
+  ✓ std::string(frame.pixel_format()) to equal "yuv420p"
+  ✓ frame.plane_count() to equal 3
+  ✓ frame.layout().chroma_shift_x to equal 1
+  ✓ frame.layout().chroma_shift_y to equal 1
+  ✓ frame.layout().interleaved_chroma to be falsy
+  ✓ frame.layout().container_bits to equal 8
+  ✓ frame.stride(0) >= 320 to be truthy
+  ✓ frame.plane(0).size() >= static_cast<std::size_t>(frame.stride(0)) * 180 to be truthy
+  ✓ frame.pts().has_value() to be truthy
+  ✓ frame.pts()->value() to equal 0
+  ✓ frame.acquire_gpu().has_value() to be falsy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ count to equal 30
+  ✓ increasing to be truthy
+  ✓ after_end.has_value() && !after_end->has_value() to be truthy
+  keeps 10-bit samples
+  ✓ d.has_value() to be truthy
+  ✓ f.has_value() && f->has_value() to be truthy
+  ✓ std::string((*f)->pixel_format()) to equal "yuv420p10le"
+  ✓ (*f)->bit_depth() to equal 10
+  ✓ (*f)->layout().container_bits to equal 16
+  ✓ (*f)->layout().lsb_shift to equal 0
+  seeks to the frame on screen on VFR media
+  ✓ d.has_value() to be truthy
+  ✓ pts.size() > 10 to be truthy
+  ✓ d->seek(ticks(*d, target)).has_value() to be truthy
+  ✓ f.has_value() && f->has_value() to be truthy
+  ✓ (*f)->pts()->value() to equal pts[i]
+  ✓ following.has_value() && following->has_value() to be truthy
+  ✓ (*following)->pts()->value() to equal pts[i + 1]
+  ✓ d->seek(ticks(*d, target)).has_value() to be truthy
+  ✓ f.has_value() && f->has_value() to be truthy
+  ✓ (*f)->pts()->value() to equal pts[i]
+  ✓ following.has_value() && following->has_value() to be truthy
+  ✓ (*following)->pts()->value() to equal pts[i + 1]
+  ✓ d->seek(ticks(*d, target)).has_value() to be truthy
+  ✓ f.has_value() && f->has_value() to be truthy
+  ✓ (*f)->pts()->value() to equal pts[i]
+  ✓ following.has_value() && following->has_value() to be truthy
+  ✓ (*following)->pts()->value() to equal pts[i + 1]
+  seeks to exact frames, before the start and past the end
+  ✓ d.has_value() to be truthy
+  ✓ d->seek(ticks(*d, pts[5])).has_value() to be truthy
+  ✓ on && *on && (*on)->pts()->value() == pts[5] to be truthy
+  ✓ d->seek(ticks(*d, -1000)).has_value() to be truthy
+  ✓ first && *first && (*first)->pts()->value() == pts.front() to be truthy
+  ✓ d->seek(ticks(*d, pts.back() + 10000)).has_value() to be truthy
+  ✓ last && *last && (*last)->pts()->value() == pts.back() to be truthy
+  ✓ end.has_value() && !end->has_value() to be truthy
+  seeks with a time in another timebase
+  ✓ d.has_value() to be truthy
+  ✓ d->seek(t).has_value() to be truthy
+  ✓ f && *f && (*f)->pts().has_value() to be truthy
+  ✓ *(*f)->pts() == t to be truthy
+  fails without a usable path
+  ✓ d.has_value() to be falsy
+  ✓ code_of(d.error()) to equal static_cast<int>(ErrorCode::Unsupported)
+  rejects damaged files and non-video streams
+  ✓ truncated.has_value() to be falsy
+  ✓ wrong.has_value() to be falsy
+  ✓ code_of(wrong.error()) to equal static_cast<int>(ErrorCode::InvalidArgument)
+
+● media::VideoDecoder (GPU paths)
+  decodes H.264 onto OmaMovie's device
+  ✓ d.has_value() to be truthy
+  ✓ consumer.ok() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ frame.layout().interleaved_chroma to be truthy
+  ✓ frame.layout().lsb_shift to equal bit_depth > 8 ? 16 - bit_depth : 0
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+    h264_30fps_aac.mp4: VA-API to Vulkan, 30 frames, 30 on the GPU
+  ✓ frames to equal 30
+  ✓ on_gpu to equal frames
+  ✓ consumer.consumed() to equal frames
+  ✓ same_luma(gpu_luma, software_luma(name), bit_depth) to be truthy
+  decodes 10-bit HEVC onto OmaMovie's device
+  ✓ d.has_value() to be truthy
+  ✓ consumer.ok() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ frame.layout().interleaved_chroma to be truthy
+  ✓ frame.layout().lsb_shift to equal bit_depth > 8 ? 16 - bit_depth : 0
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+    hevc_10bit.mp4: VA-API to Vulkan, 30 frames, 30 on the GPU
+  ✓ frames to equal 30
+  ✓ on_gpu to equal frames
+  ✓ consumer.consumed() to equal frames
+  ✓ same_luma(gpu_luma, software_luma(name), bit_depth) to be truthy
+  decodes AV1 onto OmaMovie's device
+  ✓ d.has_value() to be truthy
+  ✓ consumer.ok() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ frame.layout().interleaved_chroma to be truthy
+  ✓ frame.layout().lsb_shift to equal bit_depth > 8 ? 16 - bit_depth : 0
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ frame.path() == (*d)->path() to be truthy
+  ✓ f.has_value() to be truthy
+    av1_opus.mkv: VA-API to Vulkan, 30 frames, 30 on the GPU
+  ✓ frames to equal 30
+  ✓ on_gpu to equal frames
+  ✓ consumer.consumed() to equal frames
+  ✓ same_luma(gpu_luma, software_luma(name), bit_depth) to be truthy
+  falls back to software when the driver refuses a stream
+  ✓ d.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+  ✓ f.has_value() to be truthy
+    h264_444.mp4: software
+  ✓ frames to equal 30
+  ✓ first_pts to equal 0
+  reports a refusal when software is not allowed
+  ✓ (f && *f && (*f)->on_gpu()) || (!f && f.error().code() == oma::ErrorCode::Unsupported) to be truthy
+
+● media::AudioDecoder
+  decodes PCM to planar float with contiguous timestamps
+  ✓ d.has_value() to be truthy
+  ✓ (*d)->sample_rate().hz() to equal 44100
+  ✓ (*d)->channels() to equal 1
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ t.frames to equal 88200
+  ✓ t.first_pts to equal 0
+  ✓ t.contiguous to be truthy
+  ✓ static_cast<double>(t.peak) to be close to 0.125 (precision 0.01)
+  resamples and changes the channel count
+  ✓ d.has_value() to be truthy
+  ✓ (*d)->sample_rate().hz() to equal 48000
+  ✓ (*d)->channels() to equal 2
+  ✓ first && *first && (*first)->channel(1).size() == (*first)->channel(0).size() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ total to equal 96000
+  decodes AAC and Opus
+  ✓ aac.has_value() to be truthy
+  ✓ (*aac)->stream().codec to equal "aac"
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ std::llabs(t.frames - 48000) <= 2048 to be truthy
+  ✓ t.contiguous to be truthy
+  ✓ opus.has_value() to be truthy
+  ✓ (*opus)->stream().codec to equal "opus"
+  ✓ (*opus)->sample_rate().hz() to equal 48000
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ std::llabs(t.frames - 48000) <= 2048 to be truthy
+  seeks to an exact sample
+  ✓ (*d)->seek(t).has_value() to be truthy
+  ✓ b && *b to be truthy
+  ✓ (*b)->pts.value() to equal 30000
+  ✓ static_cast<double>((*b)->channel(0)[0]) to be close to 0.113194 (precision 0.001)
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ b.has_value() to be truthy
+  ✓ first_frames + rest.frames to equal 88200 - 30000
+  fails on files without audio
+  ✓ d.has_value() to be falsy
+  ✓ code_of(d.error()) to equal static_cast<int>(ErrorCode::InvalidArgument)
+
+Test Suites Summary:
+  All 571 tests passed!
+
+
+== compositor_tests (debug)
+
+● compositor geometry
+  composes and inverts affine transforms
+  ✓ maps(m, 1, 0, 10, 22) to be truthy
+  ✓ inv.has_value() to be truthy
+  ✓ maps(*inv, 10, 22, 1, 0) to be truthy
+  ✓ maps(m.then(*inv), 5, -7, 5, -7, 1e-12) to be truthy
+  ✓ Affine::scale(0, 1).inverse().has_value() to be falsy
+  fits, fills and places sources natively
+  ✓ maps(m, 0, 0, 0, 0) && maps(m, 320, 180, 1920, 1080) to be truthy
+  ✓ maps(m, 0, 0, 240, 0) && maps(m, 640, 480, 1680, 1080) to be truthy
+  ✓ maps(m, 0, 0, 0, -180) && maps(m, 640, 480, 1920, 1260) to be truthy
+  ✓ maps(m, 0, 0, 800, 450) to be truthy
+  applies display rotation and pixel aspect
+  ✓ box.has_value() to be truthy
+  ✓ (*box)[0] to equal 656
+  ✓ (*box)[2] to equal 1264
+  ✓ (*box)[1] to equal 0
+  ✓ (*box)[3] to equal 1080
+  ✓ maps(m, 0, 0, 656.25, 1080) to be truthy
+  ✓ maps(w, 160, 180, 1920, 1080) to be truthy
+  crops, scales and offsets layers
+  ✓ maps(m, 200, 100, 600, 450) to be truthy
+  ✓ maps(m, 100, 100, 400, 450) to be truthy
+  ✓ box && (*box)[0] == 400 && (*box)[2] == 800 && (*box)[1] == 250 && (*box)[3] == 650 to be truthy
+  ✓ oma::compositor::covered_pixels(layer, src, 1000, 1000).has_value() to be falsy
+  validates render graphs
+  ✓ oma::compositor::validate(g, 1).has_value() to be truthy
+  ✓ oma::compositor::validate(g, 0).has_value() to be falsy
+  ✓ oma::compositor::validate(g, 1).has_value() to be falsy
+  ✓ oma::compositor::validate(g, 1).has_value() to be falsy
+  ✓ !r && r.error().code() == ErrorCode::InvalidArgument to be truthy
+  ✓ oma::compositor::validate(g, 1).has_value() to be falsy
+
+● compositor color
+  converts limited, full and 10-bit YUV
+  ✓ rgb_near(rgb(m8, 16.0 / 255, 128.0 / 255, 128.0 / 255), 0, 0, 0) to be truthy
+  ✓ rgb_near(rgb(m8, 235.0 / 255, 128.0 / 255, 128.0 / 255), 1, 1, 1) to be truthy
+  ✓ rgb_near(rgb(m8, 63.0 / 255, 102.0 / 255, 240.0 / 255), 1, 0, 0, 0.01) to be truthy
+  ✓ rgb_near(rgb(m10, 64.0 / 1023, 512.0 / 1023, 512.0 / 1023), 0, 0, 0) to be truthy
+  ✓ rgb_near(rgb(m10, 940.0 / 1023, 512.0 / 1023, 512.0 / 1023), 1, 1, 1) to be truthy
+  ✓ rgb_near(rgb(full, 1.0, 128.0 / 255, 128.0 / 255), 1, 1, 1) to be truthy
+  ✓ near(sd.matrix.at(0, 2), hd.matrix.at(0, 2), 1e-3) to be falsy
+  converts primaries and decodes transfers
+  ✓ near(same.at(0, 0), 1, 1e-9) && near(same.at(0, 1), 0, 1e-9) && near(same.at(2, 2), 1, 1e-9) to be truthy
+  ✓ near(m.at(0, 0), 1.6605, 1e-3) && near(m.at(0, 1), -0.5876, 1e-3) && near(m.at(0, 2), -0.0728, 1e-3) to be truthy
+  ✓ near(m.at(1, 0), -0.1246, 1e-3) && near(m.at(1, 1), 1.1329, 1e-3) to be truthy
+  ✓ near(m.at(2, 1), -0.1006, 1e-3) && near(m.at(2, 2), 1.1187, 1e-3) to be truthy
+  ✓ near(oma::compositor::to_linear(0.5, Transfer::Srgb), 0.214041, 1e-6) to be truthy
+  ✓ near(oma::compositor::to_linear(0.5, Transfer::Bt1886), std::pow(0.5, 2.4)) to be truthy
+  ✓ near(oma::compositor::to_linear(1.7, Transfer::Linear), 1.0) to be truthy
+  ✓ oma::compositor::resolve_transfer(16, &hdr) == Transfer::Bt1886 && hdr to be truthy
+  ✓ oma::compositor::resolve_transfer(13, &hdr) == Transfer::Srgb && !hdr to be truthy
+
+● compositor::CpuCompositor
+  fills the background premultiplied
+  ✓ out.has_value() to be truthy
+  ✓ static_cast<double>(px[0]) to be close to 0.5 (precision 1e-06)
+  ✓ static_cast<double>(px[1]) to be close to 0.25 (precision 1e-06)
+  ✓ static_cast<double>(px[3]) to be close to 0.5 (precision 1e-06)
+  draws opaque layers and moves them by exact pixels
+  ✓ src.frame.has_value() to be truthy
+  ✓ a && b to be truthy
+  ✓ static_cast<double>(a->at(0, 0)[3]) to be close to 1 (precision 1e-06)
+  ✓ shifted to be truthy
+  ✓ static_cast<double>(b->at(5, 100)[1]) to be close to 0 (precision 1e-06)
+  ✓ static_cast<double>(b->at(5, 100)[2]) to be close to 1 (precision 1e-06)
+  applies opacity and blend modes
+  ✓ full && half && doubled to be truthy
+  ✓ static_cast<double>(h[0]) to be close to 0.0250907 (precision 1e-06)
+  ✓ static_cast<double>(h[3]) to be close to 0.5 (precision 1e-06)
+  ✓ static_cast<double>(d[1]) to be close to 1.93159 (precision 1e-06)
+  ✓ static_cast<double>(d[3]) to be close to 1 (precision 1e-06)
+  rejects missing inputs
+  ✓ CpuCompositor{}.render(g, empty).has_value() to be falsy
+  ✓ CpuCompositor{}.render(g, {}).has_value() to be falsy
+
+● compositor::VulkanCompositor
+  matches the CPU reference on uploaded frames
+  ✓ vk.has_value() to be truthy
+  ✓ rendered.has_value() to be truthy
+  ✓ cpu && gpu to be truthy
+    max difference 0.00178, 0 of 230400 pixels over tolerance
+  ✓ diff.over_tolerance <= cpu->pixels.size() / 4 / 500 to be truthy
+  matches the CPU reference on zero-copy GPU frames
+  ✓ (*vk)->render(g, gpu_inputs).has_value() to be truthy
+  ✓ (*vk)->render(g, gpu_inputs).has_value() to be truthy
+  ✓ cpu && gpu to be truthy
+    VA-API to Vulkan frames: max difference 0.00121, 0 pixels over tolerance
+  ✓ diff.over_tolerance <= cpu->pixels.size() / 4 / 500 to be truthy
+  measures three 1080p layers
+  ✓ (*vk)->render(g, inputs).has_value() to be truthy
+    1080p, 3 layers (GPU inputs): 3.93 ms per frame, submit to completion
+
+Test Suites Summary:
+  All 68 tests passed!
+

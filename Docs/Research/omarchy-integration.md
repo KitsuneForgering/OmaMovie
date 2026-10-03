@@ -1,212 +1,80 @@
-# Omarchy integration
+# Omarchy integration: installed evidence and adapter boundaries
 
-> Research done on 2026-10-02 by **inspecting the local Omarchy 4.0.4 installation**
-> (`/usr/share/omarchy`, `~/.config/omarchy`, `~/.local/state/omarchy`). Paths and formats may
-> change between Omarchy versions. Every integration must have a fallback and live in a single
-> app module (`CLAUDE.md` §11).
+> Reviewed on 2026-10-03 with skeptical-research. This is non-normative research.
+> Source metadata and access limits: [source register](sources.md). Decisions and open
+> validation gates: [audit](skeptical-review.md). Product descriptions are not user studies.
 
----
+## 1. Conclusion
 
-## 1. Summary
+The installed Omarchy scripts provide useful theme, recording and opacity conventions.
+They are version-sensitive integration evidence, not stable cross-version APIs. Keep them
+in the app adapter with timeouts/fallbacks. No user/system configuration was modified.
 
-Omarchy 4 offers concrete integration points that are stable enough for OmaMovie to use:
+## 2. Provenance
 
-| Point | Mechanism | Use in OmaMovie |
-|---|---|---|
-| **Theme** | `~/.local/state/omarchy/current/theme/colors.toml` + `omarchy-theme-color` | UI colors, live switching |
-| **Window opacity** | Hyprland rules in Lua | **A 100% opaque window** (correct preview color) |
-| **Screen recordings** | `gpu-screen-recorder` → `$XDG_VIDEOS_DIR` | A "Recordings" source in the library |
-| **Shell** (Quickshell/QML) | Plugins with `manifest.json`, IPC | Export progress widget (optional) |
-| **Omarchy menu** | `~/.config/omarchy/extensions/omarchy-menu.jsonc` | Shortcuts: new project, edit last recording |
-| **Notifications** | `omarchy-notification-send` / D-Bus | "Export finished" |
-| **Hooks** | `~/.config/omarchy/hooks/<name>.d/` | React to theme and font changes |
-| **Drivers** | Omarchy's per-vendor installer | Know which hardware path to expect |
+On 2026-10-03 `pacman -Q omarchy` reports **4.0.4-1**, whereas
+`/usr/share/omarchy/version` contains **4.0.0.alpha**. The mismatch is recorded, not resolved
+by assuming a clean upstream release. [Environment and source hashes](evidence/2026-10-03-local.txt)
+identify the installed files inspected; no upstream commit identity was available.
 
-Product finding: **Kdenlive is installed by default on Omarchy** (`install/omarchy-base.packages`),
-together with OBS, mpv, `gpu-screen-recorder` and `ffmpegthumbnailer`. OmaMovie competes for
-that default editor slot.
+The base package list contains Kdenlive. That supports an installer-default observation,
+not a statement about all existing installations or demand for its replacement. The GPU
+installer scripts select packages by detected hardware; installed Vulkan packages alone
+do not guarantee every codec/profile works.
 
----
+## 3. Theme and font
 
-## 2. Omarchy 4 technical context
+The local `omarchy-theme-color` documents `--all` resolved key/tab/value output and reads
+`~/.local/state/omarchy/current/theme/colors.toml`. Invoke occasionally off the hot path,
+parse defensively, and keep semantic UI tokens/fallback palette in one place.
 
-- Arch Linux + Hyprland; **the Hyprland configuration is written in Lua** (`default/hypr/*.lua`).
-- **`omarchy-shell`**: a single **Quickshell** (QML) instance that hosts the bar, menus, panels,
-  notifications and overlays as plugins. **It is the same UI technology as OmaMovie (Qt Quick/QML).**
-- More than 440 `omarchy-*` commands in `/usr/share/omarchy/bin`, with metadata (`omarchy:summary`, `omarchy:args`).
-- Installed as a package (`omarchy 4.0.4-1`), with its own kernel (`linux-omarchy`).
+The local `omarchy-theme-set` removes the current directory and then moves the staged one,
+then writes `theme.name`. **This is not an atomic directory replacement**: there is a missing-
+directory interval. Watch the parent, debounce, retry/re-register watches and retain the
+last good palette during incomplete updates. Theme files must not tint preview imagery.
 
----
+The Omarchy font is an existing product choice. A shell `base-size` is not established as
+an application font contract; use an app default until that mapping is tested. The adapter
+must also work when scripts/files are absent in headless tests.
 
-## 3. Theme
+## 4. Opacity and display correctness
 
-### Format
-Each theme's `colors.toml` defines:
-```toml
-mode = "dark"
-accent = "#89b4fa"
-selection = "#45475a"
-muted = "#585b70"
-background = "#1e1e2e"          # + dark_background, darker_background, lighter_background
-foreground = "#cdd6f4"          # + dark_foreground, light_foreground, bright_foreground
-red/yellow/orange/green/cyan/blue/magenta/brown (+ bright_* variants)
-```
+Local `default/hypr/windows.lua` tags ordinary windows for opacity `0.985 0.96`; the Resolve
+rule removes that tag and sets `1 1`. These support an analogous documented app-specific
+rule for the installed Lua configuration, not all Hyprland versions. A stable `omamovie`
+Wayland app_id should be checked in the actual Qt window before shipping the rule.
 
-### How a theme is applied (`omarchy-theme-set`)
-1. Assembles the theme in `~/.local/state/omarchy/current/next-theme` (official theme + user overlay).
-2. Generates configs from `*.tpl` templates (`{{ accent }}`, `{{ accent_rgb }}`, `{{ mix a b 30% }}`...).
-3. **Atomic swap**: `mv next-theme → theme`, writes `theme.name`.
-4. Sends the palette to the shell over IPC, restarts/retints known apps (`omarchy-theme-set-obsidian`, `-vscode`...).
-5. Runs `omarchy-hook theme-set <name>` (scripts in `~/.config/omarchy/hooks/theme-set.d/`).
+Full opacity removes wallpaper blending; it does not ensure color calibration, display
+transfer, gamut or HDR correctness. Document the rule without installing it automatically.
+Native Qt/Wayland and any compositor-specific syntax need versioned integration tests.
 
-### Color resolver
-`omarchy-theme-color --all` prints `key<TAB>value` for **every resolved color** (aliases,
-legacy names, derived shades, light/dark mode detection). It is the same resolver the templates use.
+## 5. Recordings
 
-### Recommendation for OmaMovie
-- **Read the palette with `omarchy-theme-color --all`**: no TOML parser dependency and the same
-  resolution as Omarchy. Fallback: read `colors.toml` directly; final fallback: a built-in
-  palette (the app must work outside Omarchy and in tests).
-- **Live switching**: watch `~/.local/state/omarchy/current/` (the `theme` directory is
-  **replaced** with `mv`, so watch the parent; `theme.name` changes on every switch) with
-  `QFileSystemWatcher`, debounced. This avoids installing hooks in the user's directory.
-- Map the palette to semantic UI tokens (panel background, selection, accent, secondary text) in
-  a single place (a `ThemeProvider` exposed to QML).
-- **Never theme color-critical areas**: preview, scopes, color picker and thumbnails show the
-  real image. The theme only affects the surrounding interface.
-- Fonts: `omarchy-font-current` and the `font-set.d` hook.
+Local `omarchy-capture-screenrecording` selects
+`${OMARCHY_SCREENRECORD_DIR:-${XDG_VIDEOS_DIR:-$HOME/Videos}}`, passes auto codec selection,
+60 fps CFR intent and CPU-encoding fallback. AAC is added only when audio devices are selected.
+Therefore recordings may have **no audio**, and encoder intent is not a guarantee about the
+file actually produced. Probe timestamps/codecs/color, including dropped frames/VFR inputs.
 
----
+The Recordings source must respect the directory override rather than assuming `~/Videos`.
+Do not index a still-growing capture as a completed file without retry/stability handling.
+Test actual locally generated captures and no-audio files; do not commit private recordings.
 
-## 4. Window opacity (critical for color)
+## 6. Notifications, shell and packaging
 
-Omarchy applies translucency to **every** window:
-```lua
-o.window(".*", { tag = "+default-opacity" })
-o.window({ tag = "default-opacity" }, { opacity = "0.985 0.96" })
-```
-Omarchy itself makes an exception for DaVinci Resolve (`default/hypr/apps/davinci-resolve.lua`):
-> "Kept fully opaque: the default translucency distorts colour-critical grading work."
+Standard D-Bus notifications and `.desktop`/MIME integration are preferred app boundaries.
+Shell progress plugins and dynamic menu providers are later optional integrations. Their
+old manifest/IPC examples were not revalidated as stable public contracts and are no longer
+copypaste guidance. An OmaStore hook on one machine does not establish release installability;
+validate the manifest/artifacts separately when publishing is actually in scope.
 
-**OmaMovie needs the same exception.** A 96% opaque window blends the wallpaper into the preview
-and invalidates any color judgment.
+The PKGBUILD remains the dependency source of truth. Read-only docs auditing does not
+install packages, hooks, plugins, opacity rules or propose upstream changes automatically.
 
-- The app sets a **stable Wayland app_id**: `omamovie` (through `QGuiApplication::setDesktopFileName("omamovie")`).
-- Required rule:
-  ```lua
-  o.window("omamovie", { tag = "-default-opacity", opacity = "1 1" })
-  ```
-- Where to put it: short term, document it for users (Hyprland config in `~/.config/hypr`);
-  medium term, **propose upstream** a `default/hypr/apps/omamovie.lua`, as exists for Resolve.
-- A Wayland client does not control the opacity applied by the compositor.
+## 7. Proposed verification
 
----
-
-## 5. Screen recordings
-
-`omarchy-capture-screenrecording` (default shortcut **ALT+PRINT**) uses `gpu-screen-recorder`:
-```
-gpu-screen-recorder ... -k auto -f 60 -fm cfr -fallback-cpu-encoding yes -o <file> -a <audio> -ac aac
-```
-- Output in `${OMARCHY_SCREENRECORD_DIR:-$XDG_VIDEOS_DIR}` (usually `~/Videos`), named
-  `screenrecording-YYYY-MM-DD_HH-MM-SS.mp4`.
-- Codec chosen by GPU (`-k auto`: H.264/HEVC/AV1), **60 fps CFR**, **AAC** audio (desktop and/or microphone).
-- Optional webcam overlay (picture-in-picture) already burned into the video.
-
-### Recommendations
-- **A "Recordings" source in the MediaPanel**: watches the video folder and shows recent
-  recordings. It is the most natural flow for creators on Omarchy (record → edit).
-- Make sure the decode path accepts exactly these files (H.264/HEVC/AV1 + AAC). Use real
-  recordings as test fixtures (generated locally, not committed if large).
-- **Future / upstream**: an "Edit in OmaMovie" notification when recording stops
-  (`omarchy-notification-send` supports `--exec`). Today the script has no post-recording hook;
-  that would need a contribution to Omarchy.
-- Recording the webcam and the screen **separately** (two tracks) would give more control when
-  editing than a pre-composited webcam. An idea to propose to Omarchy, or for recording built
-  into OmaMovie itself (through PipeWire/the ScreenCast portal).
-
----
-
-## 6. Shell (Quickshell): plugins and IPC
-
-Plugins live in `~/.config/omarchy/plugins/<id>/` with a `manifest.json`:
-```json
-{
-  "schemaVersion": 1,
-  "id": "io.github.<author>.<name>",
-  "kinds": ["bar-widget"],
-  "entryPoints": { "barWidget": "BarWidget.qml" }
-}
-```
-Kinds: `bar-widget`, `panel`, `overlay`, `menu`, `service`, `bar`. Installed from a git
-repository or by hand + `omarchy-shell shell rescanPlugins`. Third-party plugins receive
-capability-scoped facades.
-
-IPC: `omarchy-shell shell summon|hide|toggle|call <id> ...`, `listPlugins`, `reloadConfig`.
-
-### Recommendations
-- **Optional and later**: a `bar-widget` plugin showing export/background render progress, so
-  the user can close or minimize the editor.
-- App → widget communication through a simple channel (a state file in `$XDG_RUNTIME_DIR` or
-  D-Bus). The plugin must not contain editor logic.
-- Not a priority. The app must be complete without the shell.
-
----
-
-## 7. Menu, notifications and shortcuts
-
-- **Menu**: `~/.config/omarchy/extensions/omarchy-menu.jsonc` accepts entries with `icon`,
-  `label`, `action`, `when`, `provider` (dynamic rows from a command that returns JSON). Examples
-  for OmaMovie: "OmaMovie › New project", "› Recent projects" (provider), "› Edit last recording".
-- **Notifications**: use the freedesktop standard (`org.freedesktop.Notifications` over D-Bus),
-  which the Omarchy shell serves. `omarchy-notification-send` is a convenient wrapper, but
-  coupling to the script is unnecessary.
-- **Launching**: `omarchy-launch-or-focus` (focuses the window if already open) is Omarchy's
-  pattern for app shortcuts.
-
----
-
-## 8. Drivers installed by Omarchy (what to expect on each machine)
-
-| Vendor | Omarchy installs | Implication |
-|---|---|---|
-| **Intel** | `vulkan-intel`, `intel-media-driver` (VA-API iHD), `libvpl`, `vpl-gpu-rt` (QSV) | VA-API, Vulkan Video and QSV available |
-| **AMD** | `vulkan-radeon` (VA-API ships with Mesa) | VA-API and Vulkan Video (RADV) available |
-| **NVIDIA** (with GSP) | `nvidia-open-dkms`, `nvidia-utils`, `libva-nvidia-driver`; envs `LIBVA_DRIVER_NAME=nvidia`, `NVD_BACKEND=direct` | NVDEC/NVENC and Vulkan; VA-API through a translation layer |
-| **NVIDIA** (without GSP) | Legacy 580xx driver | More limited support |
-| All | **No OpenCL runtime**, no CUDA toolkit | Do not depend on the CUDA toolkit by default (OpenCL was removed from the project) |
-
----
-
-## 9. Packaging and distribution
-
-- **Arch/PKGBUILD** as the primary format (Omarchy is Arch).
-- **OmaStore**: there is an `omastore.hook` in `post-update.d` on this machine. An `omastore.toml`
-  and compatible releases would let OmaMovie be installed from the store.
-- **`.desktop` + MIME**: `omamovie.desktop` (same app_id), a MIME type for the project format and
-  "Open with" association for videos.
-- **Portals**: `xdg-desktop-portal-hyprland` and `-gtk` are installed; the file chooser and
-  ScreenCast through the portal work without Hyprland-specific code.
-- **Long-term goal**: propose OmaMovie to Omarchy as the default editor (instead of Kdenlive),
-  including the opacity rule and an `omarchy-theme-set-omamovie`, if it makes sense.
-
----
-
-## 10. Rules for the code
-
-- Every Omarchy integration lives in a single app module (e.g. `apps/omamovie/src/platform/omarchy/`), **never** in the libs.
-- Every Omarchy path read has a fallback; the app works on Hyprland without Omarchy and in headless tests.
-- Do not write to `~/.config/omarchy` without an explicit user action (e.g. an "Add to the Omarchy menu" button).
-- Do not run `omarchy-*` scripts on the hot path; only occasional reads (theme, font).
-
----
-
-## Sources (local files, Omarchy 4.0.4)
-
-- `/usr/share/omarchy/bin/omarchy-theme-set`, `omarchy-theme-set-templates`, `omarchy-theme-color`, `omarchy-hook`, `omarchy-notification-send`, `omarchy-capture-screenrecording`
-- `/usr/share/omarchy/themes/*/colors.toml`, `/usr/share/omarchy/default/themed/*.tpl`
-- `/usr/share/omarchy/default/hypr/windows.lua`, `apps/davinci-resolve.lua`, `nvidia.lua`, `bindings/utilities.lua`
-- `/usr/share/omarchy/shell/README.md`
-- `/usr/share/omarchy/install/omarchy-base.packages`, `install/hardware/{vulkan.sh,nvidia.sh,intel/video-acceleration.sh}`
-- `~/.config/omarchy/extensions/omarchy-menu.jsonc`, `~/.config/omarchy/plugins/*/manifest.json`, `~/.config/omarchy/hooks/`
-- [Quickshell](https://quickshell.org/)
+In M6 test missing scripts, malformed/partial palettes, rapid theme changes, different fonts,
+wide/half/narrow windows, custom recording directories, no-audio capture, and actual app_id.
+Compare a standard Qt palette/file chooser baseline. Accept integration only if editing
+remains usable when the optional platform input fails. These behavioral tests did not run
+here; the evidence is installed-source inspection, not execution of the installer.
