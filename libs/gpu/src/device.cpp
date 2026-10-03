@@ -172,7 +172,7 @@ Result<std::unique_ptr<Device>> Device::create(const DeviceOptions& options) {
     for (const auto& e : *ext_props) {
         available.insert(e.extensionName.data());
     }
-    auto want = [&](const char* name) {
+    const auto want = [&](const char* name) {
         if (available.contains(name)) {
             impl->extension_storage.emplace_back(name);
         }
@@ -189,7 +189,7 @@ Result<std::unique_ptr<Device>> Device::create(const DeviceOptions& options) {
 
     // ---- features: enable exactly what the device supports
     void** tail = &impl->features2.pNext;
-    auto link = [&](auto& s) {
+    const auto link = [&](auto& s) {
         *tail = &s;
         tail = &s.pNext;
     };
@@ -209,7 +209,7 @@ Result<std::unique_ptr<Device>> Device::create(const DeviceOptions& options) {
         link(impl->descriptor_buffer);
     }
     vkGetPhysicalDeviceFeatures2(static_cast<VkPhysicalDevice>(*impl->physical),
-                                 reinterpret_cast<VkPhysicalDeviceFeatures2*>(&impl->features2));
+                                 &static_cast<VkPhysicalDeviceFeatures2&>(impl->features2));
     impl->internally_synchronized = impl->isq.internallySynchronizedQueues == vk::True;
     if (impl->v12.timelineSemaphore != vk::True || impl->v13.synchronization2 != vk::True) {
         return make_error(ErrorCode::Unsupported, Category::Gpu,
@@ -328,7 +328,7 @@ PFN_vkGetInstanceProcAddr Device::instance_proc_addr() const noexcept {
     return vkGetInstanceProcAddr;
 }
 const VkPhysicalDeviceFeatures2& Device::enabled_features() const noexcept {
-    return *reinterpret_cast<const VkPhysicalDeviceFeatures2*>(&impl_->features2);
+    return static_cast<const VkPhysicalDeviceFeatures2&>(impl_->features2);
 }
 VkQueue Device::queue(uint32_t family, uint32_t index) const {
     const VkDeviceQueueInfo2 info{.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
