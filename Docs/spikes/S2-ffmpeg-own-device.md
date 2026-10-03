@@ -6,6 +6,27 @@
 - **Code:** `tools/spikes/s2_ffmpeg_own_device.cpp` (`make spikes`)
 - **Run:** `build/debug/spikes/s2_ffmpeg_own_device <media> [--mode vaapi|vulkan] [--frames N]`
 
+## Evidence review (2026-10-03)
+
+The results below are **previously reported local experiments**, not rerun by the skeptical
+review. Preserve them as historical observations of the named hardware/build/inputs.
+The scripts/source exist, but the document does not retain the raw outputs, source-build
+provenance and repetitions needed for independent reproduction. Package labels were
+re-observed in [the environment snapshot](../Research/evidence/2026-10-03-local.txt);
+they do not resolve the upstream-release discrepancy recorded in the audit.
+
+The application path reports no explicit host transfer except a verification readback.
+`DeviceLocal` on an integrated GPU does not imply separate VRAM or prove absence of driver
+copies. Not using `AV_HWFRAME_MAP_DIRECT` removes a direct-mapping guarantee; inspect source
+and trace the actual path before publishing an allocation-level zero-copy claim.
+The compared first-frame luma samples do not establish chroma, every pixel/frame, color
+management or concurrency. CPU percentage and isolated throughput do not establish the
+end-to-end playback budget. Validation layers and multi-submitter stress remain pending.
+
+The Qt queue concern below now has documentary support: see [Q1](../Research/skeptical-review.md#q1-qt-queue-integration).
+The leak assertion requires retained unsuppressed output and repeated decoder teardown;
+the current broad suppressions are not evidence of a harmless bounded leak.
+
 ## Question
 
 Does FFmpeg 9 accept a `VkDevice` created by OmaMovie with Vulkan-Hpp and deliver decoded
@@ -43,20 +64,19 @@ What the spike does:
 | HEVC 10 | Vulkan Video (`ANV_DEBUG`) | `vulkan` | — | p010le, 1 multi-planar image, optimal tiling | 600/600, 600/600 | 32/32 samples exact | 21% |
 | AV1 | Vulkan Video (`ANV_DEBUG`) | software fallback | — | — | 0 | — | — |
 
-Throughput was 580–1000 fps for 1080p60 including a fence wait per frame. That number only
-shows the path is far from the bottleneck; S3 measures properly.
+Throughput was 580–1000 fps for 1080p60 including a fence wait per frame. This is an isolated throughput observation, not evidence that the complete path meets playback deadlines; S3 must measure representative end-to-end workloads.
 
 ## Findings
 
 1. **FFmpeg 9 accepts a device created by OmaMovie.** Filling `AVVulkanDeviceContext` and calling
    `av_hwdevice_ctx_init()` works; FFmpeg uses our instance, device, extensions and queues.
-2. **VA-API → Vulkan is zero-copy by construction.** The surface is exported as a DMA-BUF and
+2. **VA-API → Vulkan has no explicit host transfer in the inspected application path.** The surface is exported as a DMA-BUF and
    imported into our device (memory `DeviceLocal`, tiling `VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT`).
    No `av_hwframe_transfer_data` call happens; CPU use stays at 16–28% of one core for 1080p60
    decode + map + consume.
 3. **The `AVVkFrame` synchronization contract works on our queue**: waiting on `sem_value` and
    signalling `sem_value + 1` from OmaMovie's own submissions, frame after frame.
-4. **Decoded content is correct**: luma matches a software decode exactly for 8-bit and 10-bit.
+4. **Sampled first-frame luma matches** a software decode for the compared 8-bit and 10-bit values; full-frame/chroma validation remains pending.
 5. **`AV_HWFRAME_MAP_DIRECT` breaks VA-API → Vulkan in FFmpeg 9** (`EINVAL`, also on a device
    FFmpeg creates itself). Mapping with `AV_HWFRAME_MAP_READ` alone imports the DMA-BUF. Use no
    `DIRECT` flag.
@@ -86,8 +106,7 @@ shows the path is far from the bottleneck; S3 measures properly.
 
 ## Consequences for the design
 
-- `libs/gpu` owns the device; `libs/media` wraps it for FFmpeg exactly as this spike does. The
-  approach is confirmed, not hypothetical.
+- `libs/gpu` owns the device; `libs/media` wraps it for FFmpeg exactly as this spike does. The prototype reports this integration for the tested setup; release/concurrency validation is still pending.
 - Decode on Intel TigerLake: VA-API + mapping without `DIRECT` (S1 policy confirmed).
 - `Frame` in `libs/media` wraps the mapped `AVVkFrame`, keeps the source VA-API `AVFrame`
   referenced while the image is in use (`CLAUDE.md` §8.1) and exposes the plane layout (separate
@@ -105,6 +124,8 @@ shows the path is far from the bottleneck; S3 measures properly.
 
 - Repeat with validation layers (`vulkan-validation-layers`).
 - Multithreaded submission (decode thread + compositor thread) on the internally synchronized queue.
-- S4: Qt Quick on this device with an internally synchronized queue.
+- S4 follow-up: [Qt 6.11.2 requires zero-flag queues](S4-qt-shared-device.md) for its
+  imported-device path. The S2 internally synchronized queues remain valid for the
+  measured FFmpeg/compositor prototype, but cannot be passed through that Qt API.
 - AV1 Vulkan Video failure (also seen in S1).
 - A real Omarchy screen recording (`gpu-screen-recorder`) as input.

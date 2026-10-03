@@ -5,6 +5,22 @@
 - **Feeds:** ADR-0004 (GPU frame, synchronization, decode policy)
 - **Reproduce:** `tools/spikes/s1-inventory.sh [output-dir]`
 
+## Evidence review (2026-10-03)
+
+The results below are **previously reported local experiments**, not rerun by the skeptical
+review. Preserve them as historical observations of the named hardware/build/inputs.
+The scripts/source exist, but the document does not retain the raw outputs, source-build
+provenance and repetitions needed for independent reproduction. Package labels were
+re-observed in [the environment snapshot](../Research/evidence/2026-10-03-local.txt);
+they do not resolve the upstream-release discrepancy recorded in the audit.
+
+Capability listings and actual successful decodes are separate evidence. VP9 is advertised
+in the text but absent from the executed-decode table; do not count it as tested playback.
+Flags/profile lists, resolutions and codec claims are limited to this setup. Extension
+presence is necessary but insufficient for mapping. Compute-codec success does not select
+a default proxy format without seek/quality/storage measurements. AMD defaults and NVIDIA
+behavior remain unmeasured here.
+
 ## Question
 
 Which codecs and profiles does the development machine decode and encode, through which
@@ -76,8 +92,7 @@ The interop extensions OmaMovie needs are exposed **by default**:
 
 ## Findings
 
-1. **VA-API is the default hardware decode path on Intel TigerLake.** It decodes every codec
-   OmaMovie cares about (H.264, HEVC 8/10-bit, AV1, VP9) and Omarchy installs its driver.
+1. **VA-API is the default hardware decode path on Intel TigerLake.** The table reports H.264, HEVC Main 10 and AV1 at the tested sizes; other advertised profiles/codecs need execution checks. The local Omarchy installer selects its driver.
 2. **Vulkan Video on ANV/TigerLake is behind a debug flag.** OmaMovie must not depend on users
    (or the app) setting `ANV_DEBUG`, which is a developer switch, not a supported configuration.
    Vulkan Video stays a candidate for newer Intel generations and for AMD (RADV), to be checked
