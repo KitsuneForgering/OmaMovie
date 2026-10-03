@@ -69,6 +69,7 @@ If a task pushes toward a non-goal, stop and ask.
 GNU Make build (ADR-0001). `make help` lists everything.
 
 ```sh
+make deps                      # install every dependency declared in the PKGBUILD (sudo pacman)
 make -j                        # libs + tests + compile_commands.json (BUILD=debug)
 make -j test                   # build and run the tests
 make -j test FILTER=rescale    # only tests whose name contains the pattern
@@ -79,6 +80,8 @@ make -j CXX=clang++ test       # another compiler (CI runs g++ and clang++)
 make format | make format-check
 make tidy                      # clang-tidy on the libs (warnings are errors)
 make fixtures                  # test media in tests/fixtures/generated/ (ffmpeg)
+make spikes                    # M1 spikes in tools/spikes (Docs/spikes/)
+makepkg -si                    # build and install the Arch package from the PKGBUILD
 ```
 
 Commits and releases:
@@ -131,9 +134,15 @@ changes also pass with `BUILD=tsan`. If you did not run the tests, say so.
 | Structured data | SQLite | Only where justified (§17). |
 | Crypto | OpenSSL | Only for real cryptographic needs. Content hashing alone does not require OpenSSL. |
 
+**Dependencies are declared in the `PKGBUILD`** (single source of truth): `depends` for what
+shipped code uses at runtime, `makedepends`/`checkdepends` for building and testing the
+package, and `_devdepends` for development-only tools. `scripts/deps.sh` and CI install from
+it; never list packages anywhere else (README, CI files, scripts). Move a package from
+`_devdepends` to `depends` when shipped code starts using it.
+
 **New dependencies:** any dependency not listed here needs a justification in the commit/PR
-(problem solved, alternatives considered, build/runtime cost). A large dependency needs an
-ADR. Do not add a framework to solve a trivial problem.
+(problem solved, alternatives considered, build/runtime cost) and an entry in the `PKGBUILD`.
+A large dependency needs an ADR. Do not add a framework to solve a trivial problem.
 
 Fuzzing with libFuzzer (Clang).
 
@@ -167,6 +176,7 @@ oma-movie/
   third_party/           # Vendored, pinned third-party code (cest/).
   scripts/               # Repository scripts (commit check, changelog).
   Makefile               # Build; each lib has libs/<lib>/module.mk.
+  PKGBUILD               # Arch package and the single source of truth for dependencies.
   Docs/
     adr/                 # Architecture Decision Records.
     Research/            # Product/UX and technology research (non-normative).

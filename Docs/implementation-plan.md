@@ -234,7 +234,7 @@ the preview.
 - [ ] SQLite media index, if justified in the ADR.
 - [ ] Export: render graph → encoder (Vulkan/VA-API on Intel/AMD, NVENC on NVIDIA, software fallback) + mux, as a background job with progress and a notification (D-Bus).
 - [ ] `oma-project inspect | validate | dump` for the native format.
-- [ ] Packaging: PKGBUILD, `omastore.toml`, GitHub release with binaries.
+- [ ] Packaging: `omastore.toml`, GitHub release with binaries, the app installed by `package()` (the `-git` PKGBUILD and dependency declaration already exist).
 
 **Done when**: save/load round trip without differences; loader fuzzing without crashes;
 exported file validated with `ffprobe` and A/V in sync; installation from the PKGBUILD on a
