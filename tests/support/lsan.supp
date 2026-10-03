@@ -1,0 +1,8 @@
+# LeakSanitizer suppressions for third-party code (BUILD=asan). Only one-time allocations made by
+# drivers and libraries outside OmaMovie belong here; never suppress a frame from libs/ or tests/.
+
+# Vulkan drivers: process-lifetime state created under pthread_once (llvmpipe initializes LLVM).
+leak:libvulkan_lvp.so
+leak:libvulkan_intel.so
+leak:libvulkan_radeon.so
+leak:libLLVM
