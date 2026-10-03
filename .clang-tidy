@@ -1,5 +1,5 @@
 ---
-# Lint das libs do projeto (make tidy). Convenções de nome do ADR-0001.
+# Lint for the project libraries (make tidy). Naming conventions from ADR-0001.
 Checks: >
   -*,
   bugprone-*,

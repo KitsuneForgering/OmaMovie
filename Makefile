@@ -1,13 +1,13 @@
-# OmaMovie — build com GNU Make (ADR-0001).
+# OmaMovie — GNU Make build (ADR-0001).
 #
-#   make                  compila libs e testes (BUILD=debug)
-#   make test             compila e roda os testes
+#   make                  build libs and tests (BUILD=debug)
+#   make test             build and run the tests
 #   make BUILD=asan test  AddressSanitizer + UBSan     (BUILD: debug release asan tsan)
-#   make help             lista todos os alvos
+#   make help             list every target
 #
-# Não recursivo: cada lib declara seus fontes em libs/<nome>/module.mk e cada suíte de
-# testes em tests/<nome>/module.mk. O grafo de dependências do CLAUDE.md §5.2 é
-# verificado aqui: uma dependência proibida é erro antes de compilar qualquer coisa.
+# Non-recursive: each lib declares its sources in libs/<name>/module.mk and each test
+# suite in tests/<name>/module.mk. The dependency graph from CLAUDE.md §5.2 is enforced
+# here: a forbidden dependency is an error before anything compiles.
 
 MAKEFLAGS += --no-builtin-rules
 .SUFFIXES:
@@ -16,7 +16,7 @@ MAKEFLAGS += --no-builtin-rules
 
 BUILD     ?= debug
 BUILD_DIR := build/$(BUILD)
-# Respeita CXX/AR vindos da linha de comando ou do ambiente; senão usa g++/ar.
+# Honor CXX/AR from the command line or environment; default to g++/ar.
 ifeq ($(origin CXX),default)
   CXX := g++
 endif
@@ -48,18 +48,18 @@ else ifeq ($(BUILD),tsan)
   MODE_FLAGS := -O1 -g -fno-omit-frame-pointer -fsanitize=thread
   TEST_ENV   := TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1
 else
-  $(error BUILD='$(BUILD)' inválido. Use: debug, release, asan ou tsan)
+  $(error invalid BUILD='$(BUILD)'. Use: debug, release, asan or tsan)
 endif
 
 CXXFLAGS_BASE := -std=c++23 -pthread $(MODE_FLAGS)
 DEPFLAGS      := -MMD -MP
 LDFLAGS_BASE  := -pthread $(filter -fsanitize=%,$(MODE_FLAGS))
 
-# Libs do projeto (CLAUDE.md §22).
+# Project libraries (CLAUDE.md §22).
 LIB_WARNINGS := -Wall -Wextra -Wpedantic -Wshadow -Wnon-virtual-dtor -Wold-style-cast \
                 -Wcast-align -Wconversion -Wsign-conversion -Wnull-dereference \
                 -Wdouble-promotion -Wformat=2 -Wimplicit-fallthrough
-# Testes expandem macros do Cest no próprio arquivo (casts no estilo C, conversões).
+# Tests expand Cest macros in their own files (C-style casts, implicit conversions).
 TEST_WARNINGS := -Wall -Wextra -Wshadow
 
 ifeq ($(WERROR),1)
@@ -67,9 +67,9 @@ ifeq ($(WERROR),1)
   TEST_WARNINGS += -Werror
 endif
 
-# ----------------------------------------------------------------- grafo de módulos
+# ------------------------------------------------------------------- module graph
 
-# Dependências permitidas por lib (CLAUDE.md §5.2). Uma lib nova precisa estar aqui.
+# Allowed dependencies per lib (CLAUDE.md §5.2). A new lib must be registered here.
 ALLOWED_DEPS_base       :=
 ALLOWED_DEPS_gpu        := base
 ALLOWED_DEPS_media      := base gpu
@@ -86,10 +86,10 @@ ALL_TESTS   :=
 
 obj_of = $(patsubst %.cpp,$(BUILD_DIR)/obj/%.o,$(1))
 
-# $(call oma_library,<nome>,<fontes>,<deps do projeto>,<flags externas>,<libs externas>)
+# $(call oma_library,<name>,<sources>,<project deps>,<external flags>,<external libs>)
 define oma_library
-$$(if $$(filter undefined,$$(origin ALLOWED_DEPS_$(1))),$$(error lib '$(1)' não registrada no Makefile (ALLOWED_DEPS_$(1)); ver CLAUDE.md §5.2))
-$$(foreach d,$(3),$$(if $$(filter $$(d),$$(ALLOWED_DEPS_$(1))),,$$(error lib '$(1)': dependência proibida em '$$(d)'. Permitidas: [$$(ALLOWED_DEPS_$(1))] (CLAUDE.md §5.2))))
+$$(if $$(filter undefined,$$(origin ALLOWED_DEPS_$(1))),$$(error lib '$(1)' is not registered in the Makefile (ALLOWED_DEPS_$(1)); see CLAUDE.md §5.2))
+$$(foreach d,$(3),$$(if $$(filter $$(d),$$(ALLOWED_DEPS_$(1))),,$$(error lib '$(1)': forbidden dependency on '$$(d)'. Allowed: [$$(ALLOWED_DEPS_$(1))] (CLAUDE.md §5.2))))
 INC_$(1)  := -Ilibs/$(1)/include $$(foreach d,$(3),$$(INC_$$(d))) $(4)
 LIB_$(1)  := $(BUILD_DIR)/lib/liboma_$(1).a
 LINK_$(1) := $$(LIB_$(1)) $$(foreach d,$(3),$$(LINK_$$(d))) $(5)
@@ -102,7 +102,7 @@ ALL_SOURCES += $(2)
 ALL_LIBS    += $$(LIB_$(1))
 endef
 
-# $(call oma_test,<nome>,<fontes>,<libs do projeto>)
+# $(call oma_test,<name>,<sources>,<project libs>)
 define oma_test
 TEST_BIN_$(1) := $(BUILD_DIR)/tests/$(1)
 $$(foreach s,$(2),$$(eval SRCFLAGS_$$(s) := $$(TEST_WARNINGS) $$(foreach l,$(3),$$(INC_$$(l))) -Itests/support -Ithird_party/cest))
@@ -117,7 +117,7 @@ endef
 include libs/base/module.mk
 include tests/base/module.mk
 
-# ----------------------------------------------------------------------- regras
+# -------------------------------------------------------------------------- rules
 
 $(BUILD_DIR)/obj/%.o: %.cpp $(MAKEFILE_LIST)
 	$(call say,CXX,$<)
@@ -134,8 +134,8 @@ libs: $(ALL_LIBS)
 
 tests: $(ALL_TESTS)
 
-# FILTER=<padrão> roda só os testes cujo nome contém o padrão (filtro do Cest).
-# JUNIT_DIR=<dir> grava um relatório JUnit por binário (usado na CI).
+# FILTER=<pattern> runs only tests whose name contains the pattern (Cest filter).
+# JUNIT_DIR=<dir> writes one JUnit report per test binary (used by CI).
 test: $(ALL_TESTS)
 	@failed=0; \
 	for t in $(ALL_TESTS); do \
@@ -152,7 +152,7 @@ clean:
 distclean:
 	rm -rf build compile_commands.json
 
-# compile_commands.json na raiz, para clangd e clang-tidy (flags do BUILD atual).
+# compile_commands.json at the root for clangd and clang-tidy (flags of the current BUILD).
 comma := ,
 compdb_entry = {"directory":"$(CURDIR)","file":"$(CURDIR)/$(1)","command":"$(CXX) $(CXXFLAGS_BASE) $(SRCFLAGS_$(1)) -c $(1) -o $(call obj_of,$(1))"}
 
@@ -178,13 +178,13 @@ fixtures:
 	tests/fixtures/generate.sh
 
 help:
-	@echo 'Alvos:'
-	@echo '  all           libs + testes + compile_commands.json (padrão)'
-	@echo '  test          compila e roda os testes  [FILTER=padrão] [JUNIT_DIR=dir]'
-	@echo '  libs | tests  só compila'
-	@echo '  compdb        gera compile_commands.json para clangd/clang-tidy'
-	@echo '  format        aplica clang-format    | format-check  verifica sem alterar'
-	@echo '  tidy          roda clang-tidy nas libs'
-	@echo '  fixtures      gera mídia de teste em tests/fixtures/generated (precisa de ffmpeg)'
-	@echo '  clean         apaga build/$$BUILD    | distclean     apaga build/ inteiro'
-	@echo 'Variáveis: BUILD=debug|release|asan|tsan  CXX=g++|clang++  WERROR=1|0  V=1 (verboso)'
+	@echo 'Targets:'
+	@echo '  all           libs + tests + compile_commands.json (default)'
+	@echo '  test          build and run the tests  [FILTER=pattern] [JUNIT_DIR=dir]'
+	@echo '  libs | tests  build only'
+	@echo '  compdb        write compile_commands.json for clangd/clang-tidy'
+	@echo '  format        apply clang-format     | format-check  check without changing'
+	@echo '  tidy          run clang-tidy on the libs'
+	@echo '  fixtures      generate test media in tests/fixtures/generated (needs ffmpeg)'
+	@echo '  clean         remove build/$$BUILD   | distclean     remove all of build/'
+	@echo 'Variables: BUILD=debug|release|asan|tsan  CXX=g++|clang++  WERROR=1|0  V=1 (verbose)'

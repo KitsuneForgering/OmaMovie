@@ -1,2 +1,2 @@
-# libs/base — tempo racional, Result/Error, logging e job system. Sem dependências.
+# libs/base — rational time, Result/Error, logging and the job system. No dependencies.
 $(eval $(call oma_library,base,$(wildcard libs/base/src/*.cpp),,,))
