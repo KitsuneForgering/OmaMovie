@@ -45,11 +45,17 @@ if has_encoder libx264; then
         "$out/h264_23.976fps.mp4"
     note h264_23.976fps.mp4
 
-    # VFR: alternates 1/30 s and 1/15 s gaps between frames.
+    # VFR: dropping every third frame alternates 1/30 s and 1/15 s gaps between frames. (Shifting
+    # timestamps by half a frame does not work: the encoder timebase is 1/rate and rounds them.)
     ff -f lavfi -i "$(video_src 30 2)" \
-        -vf "setpts='if(eq(mod(N,2),0),N,N+0.5)/30/TB'" -fps_mode passthrough \
+        -vf "select='not(eq(mod(n\\,3)\\,1))'" -fps_mode passthrough \
         -c:v libx264 -preset veryfast -pix_fmt yuv420p "$out/h264_vfr.mkv"
     note h264_vfr.mkv
+
+    # 4:4:4 H.264 (High 4:4:4): most hardware decoders refuse it, exercising the fallback.
+    ff -f lavfi -i "$(video_src 30)" -c:v libx264 -preset veryfast -pix_fmt yuv444p \
+        "$out/h264_444.mp4"
+    note h264_444.mp4
 
     # Rotation through the display matrix (portrait phone video).
     ff -display_rotation 90 -i "$out/h264_30fps_aac.mp4" -c copy "$out/h264_rotated90.mp4"
