@@ -79,6 +79,12 @@ public:
     // Fetches a queue with the right creation flags (vkGetDeviceQueue2).
     [[nodiscard]] VkQueue queue(uint32_t family, uint32_t index) const;
 
+    // Vulkan requires external synchronization of a VkQueue unless it was created internally
+    // synchronized. Every submitter (FFmpeg, the compositor, Qt) brackets vkQueueSubmit* and
+    // vkQueuePresent with these; they are no-ops on internally synchronized queues.
+    void lock_queue(uint32_t family, uint32_t index) const;
+    void unlock_queue(uint32_t family, uint32_t index) const;
+
 private:
     struct Impl;
     explicit Device(std::unique_ptr<Impl> impl);

@@ -15,6 +15,7 @@
 #include <array>
 #include <cstring>
 #include <format>
+#include <mutex>
 #include <set>
 
 namespace oma::gpu {
@@ -77,6 +78,8 @@ struct Device::Impl {
     std::vector<std::string> extension_storage;
     std::vector<const char*> extensions;
     bool internally_synchronized = false;
+    // One mutex per queue, indexed [family][index]; only used without internal synchronization.
+    mutable std::vector<std::vector<std::mutex>> queue_mutexes;
 
     // Enabled feature chain; FFmpeg keeps pointers into it, so Impl never moves (unique_ptr).
     vk::PhysicalDeviceFeatures2 features2{};
@@ -268,6 +271,10 @@ Result<std::unique_ptr<Device>> Device::create(const DeviceOptions& options) {
         return std::unexpected(vk_error(device.error(), "cannot create the Vulkan device"));
     }
     impl->device = std::move(*device);
+    impl->queue_mutexes.reserve(impl->families.size());
+    for (const auto& f : impl->families) {
+        impl->queue_mutexes.emplace_back(f.count);
+    }
 
     log_info(Category::Gpu,
              "device: {} ({}, {}), Vulkan {}.{}, {} extensions, internally synchronized queues: {}",
@@ -332,6 +339,16 @@ VkQueue Device::queue(uint32_t family, uint32_t index) const {
     VkQueue q = VK_NULL_HANDLE;
     vkGetDeviceQueue2(device(), &info, &q);
     return q;
+}
+void Device::lock_queue(uint32_t family, uint32_t index) const {
+    if (!impl_->internally_synchronized) {
+        impl_->queue_mutexes.at(family).at(index).lock();
+    }
+}
+void Device::unlock_queue(uint32_t family, uint32_t index) const {
+    if (!impl_->internally_synchronized) {
+        impl_->queue_mutexes.at(family).at(index).unlock();
+    }
 }
 
 } // namespace oma::gpu

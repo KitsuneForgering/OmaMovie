@@ -98,6 +98,16 @@ void run_device_tests() {
             const bool flagged = d->queue_create_flags() != 0;
             expect(flagged == d->internally_synchronized_queues()).toBeTruthy();
         });
+
+        it("locks and unlocks every queue it created", {
+            for (const auto& f : d->queue_families()) {
+                for (uint32_t i = 0; i < f.count; ++i) {
+                    d->lock_queue(f.index, i);
+                    d->unlock_queue(f.index, i);
+                }
+            }
+            expect(true).toBeTruthy();
+        });
     });
 
     describe("gpu::enumerate_devices", {
