@@ -97,6 +97,12 @@ shows the path is far from the bottleneck; S3 measures properly.
 
 ## Open items
 
+- FFmpeg 9.0.1 leaks a reference cycle when mapping VA-API frames into Vulkan (direct mapping
+  and through an explicit DRM step alike): the VA-API device, its surface pool and the derived
+  Vulkan frames context stay alive, ~200 KB once per decoder. Reproduced with plain FFmpeg and
+  an FFmpeg-created Vulkan device under ASan; suppressed in `tests/support/lsan.supp`. Report
+  upstream.
+
 - Repeat with validation layers (`vulkan-validation-layers`).
 - Multithreaded submission (decode thread + compositor thread) on the internally synchronized queue.
 - S4: Qt Quick on this device with an internally synchronized queue.

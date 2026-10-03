@@ -127,20 +127,22 @@ S7 (NVIDIA path) and S8 (AMD) need other hardware; they are scheduled for when a
 ### M2 — `libs/gpu` and `libs/media`
 
 **`libs/gpu`**
-- [ ] `VkInstance`/`VkDevice` creation with Vulkan-Hpp (`vk::raii`, `VULKAN_HPP_NO_EXCEPTIONS` + `VULKAN_HPP_RAII_NO_EXCEPTIONS` → `std::expected`), include confined to `.cpp` files + PCH.
-- [ ] Extension list: interop (DMA-BUF, DRM modifiers, external memory/semaphore fd), video (decode/encode), those Qt requires.
-- [ ] A single queue lock shared with FFmpeg and Qt.
+- [x] `VkInstance`/`VkDevice` creation with Vulkan-Hpp (`vk::raii`, `VULKAN_HPP_NO_EXCEPTIONS` + `VULKAN_HPP_RAII_NO_EXCEPTIONS` → `std::expected`), include confined to `.cpp` files + PCH.
+- [x] Extension list: interop (DMA-BUF, DRM modifiers, external memory/semaphore fd), video (decode/encode), those Qt requires.
+- [x] A single queue lock shared with FFmpeg and Qt (internally synchronized queues when available, per-queue locks otherwise).
 - [ ] VMA for our allocations; a separate path for imported memory.
 - [ ] Timeline semaphore wrappers; ordered destruction (consumers → pools → device).
 - [ ] Capability table + device selection (hybrid laptops: one primary device; do not wake the dGPU needlessly).
 
 **`libs/media`**
-- [ ] Probe → our own structure (streams, codec, timebase, duration, color, rotation, audio layout).
-- [ ] Demux, software decode (correctness reference).
-- [ ] Hardware decode with the per-codec/driver policy from S3 (Vulkan Video, mapped VA-API, NVDEC on NVIDIA), logged software fallback.
-- [ ] `Frame` wrapping `AVVkFrame` (timeline semaphore contract), frame pool, no per-frame allocation in steady state.
-- [ ] Accurate seek by PTS (VFR), `AV_NOPTS_VALUE` converted to `std::optional`.
-- [ ] Audio decode + resampling to planar float32.
+- [x] Probe → our own structure (streams, codec, timebase, duration, color, rotation, audio layout).
+- [x] Demux, software decode (correctness reference).
+- [x] Hardware decode with the per-codec/driver policy (ADR-0004: mapped VA-API, Vulkan Video), logged software fallback.
+- [ ] NVDEC on NVIDIA, once NVIDIA hardware is in the matrix.
+- [x] `Frame` wrapping `AVVkFrame` (timeline semaphore contract).
+- [ ] Frame pool, no per-frame allocation in steady state.
+- [x] Accurate seek by PTS (VFR), `AV_NOPTS_VALUE` converted to `std::optional`.
+- [x] Audio decode + resampling to planar float32.
 - [ ] Compute-shader intermediates (FFv1/ProRes) verified in FFmpeg 9.
 
 **Tests**: CFR/VFR, 8/10-bit, H.264/HEVC/AV1, rotation, AAC/Opus and truncated fixtures;
@@ -277,7 +279,7 @@ clean Omarchy machine.
 | Build, C++23, test framework, license | M0 | 0001 | **Accepted**: GNU Make, C++23, Cest |
 | Time representation + speed curves | M0 | 0002 | **Accepted**: `RationalTime` + piecewise monotonic `TimeMap` |
 | Threading and job system | M0 | 0003 | **Accepted**: pipeline threads + `JobPool` |
-| GPU frame, synchronization, decode policy | M1 | 0004 | Wrapped `AVVkFrame`; selection per codec/driver |
+| GPU frame, synchronization, decode policy | M2 | 0004 | **Accepted**: wrapped `AVVkFrame`, VA-API → Vulkan Video → software |
 | Qt Quick ↔ compositor | M1 | 0005 | Single device through `fromDeviceObjects` |
 | Color space + libplacebo | M1 | 0006 | Linear float16; libplacebo depending on S6 |
 | Project format | M7 | 0007 | The file is the source of truth, diffable |

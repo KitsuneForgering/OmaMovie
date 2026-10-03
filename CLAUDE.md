@@ -71,15 +71,15 @@ GNU Make build (ADR-0001). `make help` lists everything.
 ```sh
 make deps                      # install every dependency declared in the PKGBUILD (sudo pacman)
 make -j                        # libs + tests + compile_commands.json (BUILD=debug)
-make -j test                   # build and run the tests
+make -j test                   # build and run the tests (generates the fixtures first)
 make -j test FILTER=rescale    # only tests whose name contains the pattern
-make -j BUILD=asan test        # AddressSanitizer + UBSan
+make -j BUILD=asan test        # AddressSanitizer + UBSan (third-party suppressions: tests/support/)
 make -j BUILD=tsan test        # ThreadSanitizer
 make -j BUILD=release test     # -O2
 make -j CXX=clang++ test       # another compiler (CI runs g++ and clang++)
 make format | make format-check
 make tidy                      # clang-tidy on the libs (warnings are errors)
-make fixtures                  # test media in tests/fixtures/generated/ (ffmpeg)
+make fixtures                  # regenerate test media in tests/fixtures/generated/ (ffmpeg)
 make spikes                    # M1 spikes in tools/spikes (Docs/spikes/)
 makepkg -si                    # build and install the Arch package from the PKGBUILD
 ```

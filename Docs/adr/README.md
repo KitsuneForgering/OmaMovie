@@ -10,7 +10,7 @@ one as superseded.
 | [0001](0001-build-language-tests.md) | Build (GNU Make), C++23, tests with Cest, conventions | Accepted |
 | [0002](0002-time-representation.md) | Time representation | Accepted |
 | [0003](0003-threading-and-job-system.md) | Threading model and job system | Accepted |
-| 0004 | GPU frame abstraction and synchronization | Pending (M1) |
+| [0004](0004-gpu-frames-sync-decode-policy.md) | GPU frame abstraction, synchronization and decode policy | Accepted |
 | 0005 | Qt Quick ↔ Vulkan compositor integration | Pending (M1) |
 | 0006 | Working color space and libplacebo | Pending (M1) |
 | 0007 | Native project format | Pending (M7) |
