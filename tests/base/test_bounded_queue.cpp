@@ -67,13 +67,13 @@ bool close_releases_producer() {
 
 void run_bounded_queue_tests() {
     describe("BoundedQueue", {
-        it("keeps order between a producer and a consumer thread", {
-            expect(stream_in_order(5000)).toBe(-1LL);
-        });
+        it("keeps order between a producer and a consumer thread",
+           { expect(stream_in_order(5000)).toBe(-1LL); });
 
         it("blocks the producer while full", { expect(push_waits_for_room()).toBeTruthy(); });
 
-        it("releases a blocked producer on close", { expect(close_releases_producer()).toBeTruthy(); });
+        it("releases a blocked producer on close",
+           { expect(close_releases_producer()).toBeTruthy(); });
 
         it("pops only what the predicate accepts", {
             BoundedQueue<int> q(4);
