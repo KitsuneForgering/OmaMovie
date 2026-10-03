@@ -96,6 +96,10 @@ note tone_44100.wav
 # Still image.
 ff -f lavfi -i "testsrc2=size=640x360:rate=1:duration=1" -frames:v 1 "$out/still.png"
 note still.png
+# The compositor currently accepts YUV video frames, not RGB PNG frames. A single-frame Y4M
+# preserves the still-image scenario for its GPU path until RGB image import lands.
+ff -i "$out/still.png" -frames:v 1 -pix_fmt yuv420p -f yuv4mpegpipe "$out/still.y4m"
+note still.y4m
 
 echo "Fixtures in $out:"
 printf '  %s\n' "${made[@]}"
