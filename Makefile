@@ -132,6 +132,7 @@ include libs/compositor/module.mk
 include tests/base/module.mk
 include tests/gpu/module.mk
 include tests/media/module.mk
+include tests/compositor/module.mk
 
 # -------------------------------------------------------------------------- rules
 
