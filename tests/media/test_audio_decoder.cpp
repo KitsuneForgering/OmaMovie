@@ -84,6 +84,33 @@ void resamples_and_upmixes() {
     expect(total).toEqual(96000);
 }
 
+// Mono sound placed on a stereo timeline plays on both channels at its recorded level (dual
+// mono), not 3 dB lower as a center channel would.
+void upmixes_mono_at_full_level() {
+    AudioDecoderOptions o;
+    o.channels = 2;
+    auto d = AudioDecoder::open(fixture("tone_44100.wav"), o);
+    expect(d.has_value()).toBeTruthy();
+    if (!d) {
+        return;
+    }
+    float left = 0.0F;
+    float right = 0.0F;
+    for (;;) {
+        auto b = (*d)->next();
+        if (!b || !*b) {
+            break;
+        }
+        for (const float v : (*b)->channel(0)) {
+            left = std::max(left, std::abs(v));
+        }
+        for (const float v : (*b)->channel(1)) {
+            right = std::max(right, std::abs(v));
+        }
+    }
+    expect(std::abs(left - 0.125F) < 0.002F && std::abs(right - 0.125F) < 0.002F).toBeTruthy();
+}
+
 void decodes_aac_and_opus() {
     auto aac = AudioDecoder::open(fixture("h264_30fps_aac.mp4"));
     expect(aac.has_value()).toBeTruthy();
@@ -216,6 +243,7 @@ void run_audio_decoder_tests() {
     describe("media::AudioDecoder", {
         it("decodes PCM to planar float with contiguous timestamps", { decodes_wav(); });
         it("resamples and changes the channel count", { resamples_and_upmixes(); });
+        it("upmixes mono to both channels at full level", { upmixes_mono_at_full_level(); });
         it("decodes AAC and Opus", { decodes_aac_and_opus(); });
         it("seeks to an exact sample", { seeks_to_the_sample(); });
         it("fails on files without audio", { rejects_video_only(); });

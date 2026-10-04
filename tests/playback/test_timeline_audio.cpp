@@ -6,10 +6,10 @@ using namespace playback_test;
 
 namespace {
 
-// The fixture's mono tone peaks at 1/8. The decoder's upmix to stereo spreads it at -3 dB per
-// channel, and resampling to 48 kHz may overshoot slightly.
+// The fixture's mono tone peaks at 1/8 on both channels; resampling to 48 kHz may overshoot
+// slightly.
 bool near_tone(float p, float gain) {
-    return std::abs(p - (0.125F * 0.70710678F * gain)) < 0.005F;
+    return std::abs(p - (0.125F * gain)) < 0.005F;
 }
 
 tl::AudioProperties with_gain(float gain) {

@@ -122,6 +122,12 @@ Result<void> AudioDecoder::Impl::configure_resampler(const AVFrame& f) {
                                   &in_layout.layout, static_cast<AVSampleFormat>(f.format),
                                   f.sample_rate, 0, nullptr);
     ff::SwrPtr ctx(raw);
+    if (err >= 0 && in_layout.layout.nb_channels == 1 && out_layout.layout.nb_channels == 2) {
+        // Mono becomes dual mono at its recorded level. swresample's own matrix spreads a mono
+        // channel at -3 dB (a fixed 1/sqrt(2)), which would play voiceovers quieter than recorded.
+        constexpr std::array<double, 2> kDualMono{1.0, 1.0};
+        err = swr_set_matrix(ctx.get(), kDualMono.data(), 1);
+    }
     if (err >= 0) {
         err = swr_init(ctx.get());
     }
