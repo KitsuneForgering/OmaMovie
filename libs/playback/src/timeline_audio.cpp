@@ -56,7 +56,7 @@ oma::Result<void> TimelineAudio::render(std::span<float> out, std::int64_t first
         }
         for (const tl::Clip& clip : track.clips) {
             const tl::MediaInfo* media = timeline_.find_media(clip.media);
-            if (media == nullptr || !media->has_audio || clip.audio.muted) {
+            if (media == nullptr || !media->has_audio || clip.audio.muted || clip.audio_detached) {
                 continue;
             }
             // The clip owns the samples whose start lies inside [start, end).

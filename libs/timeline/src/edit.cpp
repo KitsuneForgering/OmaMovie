@@ -544,6 +544,35 @@ std::unique_ptr<Command> set_audio(ClipId id, AudioProperties audio) {
     });
 }
 
+std::unique_ptr<Command> detach_audio(ClipId video, TrackId lane, ClipId audio) {
+    return detail::make_planned("Detach Audio", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, video);
+        auto t = get_track(tl, lane);
+        if (!c || !t) {
+            return std::unexpected(!c ? c.error() : t.error());
+        }
+        const MediaInfo* m = tl.find_media((*c)->media);
+        if (tl.track_of(video)->kind != TrackKind::Video || m == nullptr || !m->has_audio ||
+            (*c)->audio_detached) {
+            return error(ErrorCode::InvalidArgument, "the clip has no sound to detach",
+                         detail::clip_context(video));
+        }
+        if ((*t)->kind != TrackKind::Audio) {
+            return error(ErrorCode::InvalidArgument, "sound detaches onto an audio track",
+                         detail::track_context(lane));
+        }
+        Clip sound = **c;
+        sound.id = audio;
+        sound.video = {};
+        Clip picture = **c;
+        picture.audio_detached = true;
+        Steps steps;
+        steps.push_back(detail::insert_clip(lane, sound));
+        steps.push_back(detail::replace_clip(picture));
+        return steps;
+    });
+}
+
 std::unique_ptr<Command> add_marker(MarkerId id, RationalTime at, std::string name) {
     return detail::make_planned(
         "Add Marker", [=, name = std::move(name)](Timeline& tl) -> Result<Steps> {

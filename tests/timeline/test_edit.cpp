@@ -1,5 +1,7 @@
 #include "fixture.hpp"
 
+#include "oma/timeline/evaluate.hpp"
+
 #include <string>
 #include <vector>
 
@@ -443,6 +445,78 @@ void run_edit_tests() {
             expect(fx.editor.timeline().markers().size()).toBe(2U);
             const auto off_grid = oma::RationalTime::make(1, q(1, 60)).value();
             expect(ok(fx, edit::add_marker(fx.editor.new_marker_id(), off_grid, "x"))).toBeFalsy();
+        });
+    });
+
+    describe("timeline edits: detaching audio", {
+        it("moves a video clip's sound to an audio clip of its own", {
+            auto fx = make_fixture();
+            const ClipId video = place(fx, fx.video, 10, 5, 30);
+            const ClipId sound = fx.editor.new_clip_id();
+            expect(ok(fx, edit::detach_audio(video, fx.audio, sound))).toBeTruthy();
+            const Timeline& tl = fx.editor.timeline();
+            const Clip* a = tl.find_clip(sound);
+            expect(a != nullptr && tl.track_of(sound)->id == fx.audio).toBeTruthy();
+            expect(a->start == f(10) && a->duration == f(30) && a->source_in == mf(5)).toBeTruthy();
+            expect(tl.find_clip(video)->audio_detached).toBeTruthy();
+            // The sound plays once, from the lane.
+            const auto c = evaluate(tl, f(20)).value();
+            expect(c.audio.size()).toBe(1U);
+            expect(c.audio.front().clip == sound).toBeTruthy();
+            expect(c.video.size()).toBe(1U);
+        });
+
+        it("lets the two parts be trimmed apart and joins them on undo", {
+            auto fx = make_fixture();
+            const ClipId video = place(fx, fx.video, 10, 5, 30);
+            const ClipId sound = fx.editor.new_clip_id();
+            expect(ok(fx, edit::detach_audio(video, fx.audio, sound))).toBeTruthy();
+            // A J-cut: the sound starts 3 frames before the picture.
+            expect(ok(fx, edit::trim_start(sound, f(7), false))).toBeTruthy();
+            expect(layout(fx.editor.timeline(), fx.audio)).toEqual("7+33@2");
+            expect(layout(fx)).toEqual("10+30@5");
+            expect(fx.editor.undo().has_value()).toBeTruthy();
+            expect(fx.editor.undo().has_value()).toBeTruthy();
+            expect(fx.editor.timeline().find_clip(sound) == nullptr).toBeTruthy();
+            expect(fx.editor.timeline().find_clip(video)->audio_detached).toBeFalsy();
+            expect(evaluate(fx.editor.timeline(), f(20)).value().audio.size()).toBe(1U);
+        });
+
+        it("refuses clips without sound, occupied lanes and a second detach", {
+            auto fx = make_fixture();
+            const ClipId video = place(fx, fx.video, 0, 0, 30);
+            const ClipId picture = fx.editor.new_clip_id();
+            expect(fx.editor
+                       .execute(edit::overwrite(fx.overlay, picture, f(0),
+                                                edit::ClipSource{.media = kPicture,
+                                                                 .source_in = {},
+                                                                 .duration = f(10),
+                                                                 .time_map = {},
+                                                                 .video = {},
+                                                                 .audio = {}}))
+                       .has_value())
+                .toBeTruthy();
+            expect(ok(fx, edit::detach_audio(picture, fx.audio, fx.editor.new_clip_id())))
+                .toBeFalsy();
+            expect(ok(fx, overwrite_music(fx.audio, fx.editor.new_clip_id(), 5))).toBeTruthy();
+            expect(ok(fx, edit::detach_audio(video, fx.audio, fx.editor.new_clip_id())))
+                .toBeFalsy();
+            expect(ok(fx, edit::detach_audio(video, fx.video, fx.editor.new_clip_id())))
+                .toBeFalsy();
+            expect(fx.editor.undo().has_value()).toBeTruthy(); // the music
+            expect(ok(fx, edit::detach_audio(video, fx.audio, fx.editor.new_clip_id())))
+                .toBeTruthy();
+            expect(ok(fx, edit::detach_audio(video, fx.audio, fx.editor.new_clip_id())))
+                .toBeFalsy();
+        });
+
+        it("keeps the detached state when the video clip is split", {
+            auto fx = make_fixture();
+            const ClipId video = place(fx, fx.video, 0, 0, 30);
+            expect(ok(fx, edit::detach_audio(video, fx.audio, fx.editor.new_clip_id())))
+                .toBeTruthy();
+            expect(ok(fx, edit::split(video, f(10)))).toBeTruthy();
+            expect(fx.editor.timeline().find_clip(clip_at(fx, 20))->audio_detached).toBeTruthy();
         });
     });
 }

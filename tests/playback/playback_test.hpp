@@ -23,7 +23,8 @@ namespace playback_test {
 namespace tl = oma::timeline;
 
 inline constexpr int kChannels = 2;
-inline const tl::MediaId kTone{1}; // tone_44100.wav: 2 s of 440 Hz at amplitude 1/8
+inline const tl::MediaId kTone{1};   // tone_44100.wav: 2 s of 440 Hz at amplitude 1/8
+inline const tl::MediaId kCamera{2}; // h264_30fps_aac.mp4: 1 s of video with a 440 Hz AAC tone
 
 inline std::filesystem::path fixture(const char* name) {
     const char* dir = std::getenv("OMA_FIXTURES");
@@ -54,10 +55,11 @@ inline oma::RationalTime s(std::int64_t samples) {
 struct Sequence {
     tl::Editor editor;
     tl::TrackId audio;
+    tl::TrackId video;
 };
 
 inline Sequence make_sequence() {
-    Sequence seq{tl::Editor(tl::Timeline::create(oma::frame_rates::k30, rate()).value()), {}};
+    Sequence seq{tl::Editor(tl::Timeline::create(oma::frame_rates::k30, rate()).value()), {}, {}};
     (void)seq.editor.add_media(
         tl::MediaInfo{.id = kTone,
                       .start = oma::RationalTime::make(0, q(1, 44100)).value(),
@@ -65,7 +67,16 @@ inline Sequence make_sequence() {
                       .has_video = false,
                       .has_audio = true,
                       .still = false});
+    (void)seq.editor.add_media(
+        tl::MediaInfo{.id = kCamera,
+                      .start = oma::RationalTime::make(0, q(1, 15360)).value(),
+                      .duration = oma::RationalTime::make(15360, q(1, 15360)).value(),
+                      .has_video = true,
+                      .has_audio = true,
+                      .still = false});
+    seq.video = seq.editor.new_track_id();
     seq.audio = seq.editor.new_track_id();
+    (void)seq.editor.execute(tl::edit::add_track(seq.video, tl::TrackKind::Video, "V1"));
     (void)seq.editor.execute(tl::edit::add_track(seq.audio, tl::TrackKind::Audio, "A1"));
     return seq;
 }
@@ -84,8 +95,22 @@ inline tl::ClipId place(Sequence& seq, std::int64_t at, std::int64_t in, std::in
                                                                                  : tl::ClipId{};
 }
 
+// The whole camera fixture on the video track at sequence sample `at`.
+inline tl::ClipId place_camera(Sequence& seq, std::int64_t at) {
+    const tl::ClipId id = seq.editor.new_clip_id();
+    const tl::edit::ClipSource source{.media = kCamera,
+                                      .source_in = oma::RationalTime::make(0, q(1, 15360)).value(),
+                                      .duration = s(48000),
+                                      .time_map = {},
+                                      .video = {},
+                                      .audio = {}};
+    return seq.editor.execute(tl::edit::overwrite(seq.video, id, s(at), source)) ? id
+                                                                                 : tl::ClipId{};
+}
+
 inline std::unordered_map<std::uint64_t, std::string> paths() {
-    return {{kTone.value(), fixture("tone_44100.wav").string()}};
+    return {{kTone.value(), fixture("tone_44100.wav").string()},
+            {kCamera.value(), fixture("h264_30fps_aac.mp4").string()}};
 }
 
 // Renders `frames` sequence samples from `first`, in blocks of `block` frames.

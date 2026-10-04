@@ -70,6 +70,25 @@ void run_timeline_audio_tests() {
             expect(a == b).toBeTruthy();
         });
 
+        it("plays detached sound exactly like the video clip's own", {
+            if (!have_fixture("h264_30fps_aac.mp4")) {
+                return;
+            }
+            Sequence joined = make_sequence();
+            expect(place_camera(joined, 4800).valid()).toBeTruthy();
+            Sequence detached = make_sequence();
+            const tl::ClipId video = place_camera(detached, 4800);
+            expect(detached.editor
+                       .execute(tl::edit::detach_audio(video, detached.audio,
+                                                       detached.editor.new_clip_id()))
+                       .has_value())
+                .toBeTruthy();
+            const auto a = render(joined.editor.timeline(), 0, 60000);
+            const auto b = render(detached.editor.timeline(), 0, 60000);
+            expect(peak(a, 4800, 52800) > 0.05F).toBeTruthy();
+            expect(a == b).toBeTruthy();
+        });
+
         it("renders the same samples from a later start as in one pass", {
             if (!have_fixture("tone_44100.wav")) {
                 return;

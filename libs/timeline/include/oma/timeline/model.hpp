@@ -131,6 +131,9 @@ struct Clip {
     TimeMap time_map;
     VideoProperties video;
     AudioProperties audio;
+    // On a video track: its sound was detached into an audio clip of its own (edit::detach_audio),
+    // so this clip plays no sound. Always false on other tracks.
+    bool audio_detached = false;
 
     // Exact end: start + duration.
     [[nodiscard]] std::int64_t start_ticks() const noexcept { return start.value(); }

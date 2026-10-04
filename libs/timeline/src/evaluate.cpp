@@ -47,7 +47,8 @@ Result<Composition> evaluate(const Timeline& timeline, const RationalTime& at) {
                 VideoLayer{.clip = c->id, .media = c->media, .media_time = *t, .video = c->video});
         }
         const bool plays_audio =
-            track.kind == TrackKind::Audio || (track.kind == TrackKind::Video && m->has_audio);
+            track.kind == TrackKind::Audio ||
+            (track.kind == TrackKind::Video && m->has_audio && !c->audio_detached);
         if (plays_audio && !track.muted && !c->audio.muted) {
             out.audio.push_back(AudioSource{.clip = c->id,
                                             .media = c->media,

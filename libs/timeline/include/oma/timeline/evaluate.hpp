@@ -41,8 +41,8 @@ struct Composition {
 };
 
 // Hidden video tracks contribute no layers, muted tracks and clips no audio. Clips on video
-// tracks contribute their audio when their media has some. Media times are expressed in the
-// media's own timebase (MediaInfo::start).
+// tracks contribute their audio when their media has some and it was not detached. Media times are
+// expressed in the media's own timebase (MediaInfo::start).
 [[nodiscard]] Result<Composition> evaluate(const Timeline& timeline, const RationalTime& at);
 
 } // namespace oma::timeline
