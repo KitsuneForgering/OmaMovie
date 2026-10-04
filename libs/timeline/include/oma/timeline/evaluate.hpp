@@ -6,6 +6,9 @@
 #include "oma/timeline/ids.hpp"
 #include "oma/timeline/model.hpp"
 
+#include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <vector>
 
 // What the timeline shows and plays at one instant (CLAUDE.md §9.1): plain data, testable
@@ -22,6 +25,10 @@ struct VideoLayer {
     // (the frame on screen at t is the last one with PTS <= t).
     RationalTime media_time;
     VideoProperties video;
+    // Set by a transition: a factor on the clip's opacity, and the fraction of the output width
+    // the layer shows, from the left (a wipe). 1 and 1 outside transitions.
+    float opacity = 1.0F;
+    double reveal = 1.0;
 };
 
 struct AudioSource {
@@ -40,9 +47,30 @@ struct Composition {
     std::vector<AudioSource> audio;
 };
 
-// Hidden video tracks contribute no layers, muted tracks and clips no audio. Clips on video
-// tracks contribute their audio when their media has some and it was not detached. Media times are
-// expressed in the media's own timebase (MediaInfo::start).
+// Where a clip's incoming transition plays: [cut - half, cut + half) in sequence ticks, cut being
+// the clip's start. `half` is the transition's half length, shortened to the media both clips
+// have to spare past the cut and to the clips' own lengths.
+struct TransitionWindow {
+    const Clip* from = nullptr; // the clip ending at the cut
+    const Clip* to = nullptr;   // the clip with the transition
+    TransitionKind kind = TransitionKind::Dissolve;
+    std::int64_t cut = 0;
+    std::int64_t half = 0;
+
+    // Position in the transition, in [0, 1), for ticks inside the window.
+    [[nodiscard]] double progress(std::int64_t ticks) const noexcept;
+};
+
+// The window of the transition into track.clips[index], or std::nullopt when it has none, no
+// clip ends where it starts, or there is no media to spare.
+[[nodiscard]] std::optional<TransitionWindow>
+transition_window(const Timeline& timeline, const Track& track, std::size_t index);
+
+// Hidden video tracks contribute no layers, muted tracks and clips no audio. Inside a
+// transition a video track contributes both clips, outgoing first, with their transition
+// opacity and reveal; audio sources list each clip on its own (playback mixes transitions). Clips
+// on video tracks contribute their audio when their media has some and it was not detached. Media
+// times are expressed in the media's own timebase (MediaInfo::start).
 [[nodiscard]] Result<Composition> evaluate(const Timeline& timeline, const RationalTime& at);
 
 } // namespace oma::timeline

@@ -269,6 +269,12 @@ Result<void> Timeline::validate() const {
                 return error(ErrorCode::InvalidData, "clip references unknown media",
                              detail::clip_context(c.id));
             }
+            if (const auto& tr = c.transition_in;
+                tr && (t.kind == TrackKind::Caption || tr->kind > TransitionKind::Wipe ||
+                       tr->duration.timebase() != timebase_ || tr->duration.value() <= 0)) {
+                return error(ErrorCode::InvalidData, "invalid transition",
+                             detail::clip_context(c.id));
+            }
             if (c.audio_detached && t.kind != TrackKind::Video) {
                 return error(ErrorCode::InvalidData, "only video clips detach their audio",
                              detail::clip_context(c.id));

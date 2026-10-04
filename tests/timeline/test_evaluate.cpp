@@ -2,6 +2,8 @@
 
 #include "oma/timeline/evaluate.hpp"
 
+#include <cmath>
+
 #include "oma_test.hpp"
 
 using namespace timeline_test;
@@ -17,7 +19,105 @@ std::int64_t layer_frame(const Composition& c, std::size_t n) {
     return c.video.at(n).media_time.value() / 3000;
 }
 
+// Clip A shows media frames 0-29 at 0, clip B frames 100-129 at 30, and B gets a transition of
+// `frames` (centered on the cut at 30).
+Fixture with_transition(TransitionKind kind, std::int64_t frames, std::int64_t b_in = 100) {
+    auto fx = make_fixture();
+    place(fx, fx.video, 0, 0, 30);
+    const ClipId b = place(fx, fx.video, 30, b_in, 30);
+    (void)fx.editor.execute(
+        edit::set_transition(b, Transition{.kind = kind, .duration = f(frames)}));
+    return fx;
+}
+
+bool near(double a, double b) {
+    return std::abs(a - b) < 1e-6;
+}
+
 } // namespace
+
+void run_transition_tests() {
+    describe("timeline transitions", {
+        it("dissolves across the cut, both clips playing past it", {
+            auto fx = with_transition(TransitionKind::Dissolve, 10);
+            expect(at(fx, 24).video.size()).toBe(1U);
+            const Composition early = at(fx, 27); // 20% into [25, 35)
+            expect(early.video.size()).toBe(2U);
+            expect(layer_frame(early, 0)).toBe(27LL);
+            expect(layer_frame(early, 1)).toBe(97LL); // B before its in point
+            expect(near(early.video[0].opacity, 1.0) && near(early.video[1].opacity, 0.2))
+                .toBeTruthy();
+            const Composition late = at(fx, 34);
+            expect(layer_frame(late, 0)).toBe(34LL); // A past its out point
+            expect(layer_frame(late, 1)).toBe(104LL);
+            expect(near(late.video[1].opacity, 0.9)).toBeTruthy();
+            expect(at(fx, 35).video.size()).toBe(1U);
+        });
+
+        it("dips through black and wipes from the left", {
+            auto dip = with_transition(TransitionKind::DipToBlack, 10);
+            const Composition out = at(dip, 27);
+            expect(out.video.size()).toBe(1U);
+            expect(layer_frame(out, 0)).toBe(27LL);
+            expect(near(out.video[0].opacity, 0.6)).toBeTruthy();
+            const Composition in = at(dip, 33);
+            expect(in.video.size()).toBe(1U);
+            expect(layer_frame(in, 0)).toBe(103LL);
+            expect(near(in.video[0].opacity, 0.6)).toBeTruthy();
+            auto wipe = with_transition(TransitionKind::Wipe, 10);
+            const Composition half = at(wipe, 30);
+            expect(half.video.size()).toBe(2U);
+            expect(near(half.video[1].reveal, 0.5) && near(half.video[1].opacity, 1.0))
+                .toBeTruthy();
+        });
+
+        it("shortens to the media the clips have to spare", {
+            // B starts 2 frames into its media: the transition can only span 28 to 32.
+            auto fx = with_transition(TransitionKind::Dissolve, 10, 2);
+            // At 28 the incoming clip has opacity 0 and is left out; at 29 it is a quarter in.
+            expect(at(fx, 28).video.size()).toBe(1U);
+            const Composition c = at(fx, 29);
+            expect(c.video.size()).toBe(2U);
+            expect(layer_frame(c, 1)).toBe(1LL);
+            expect(near(c.video[1].opacity, 0.25)).toBeTruthy();
+            expect(at(fx, 32).video.size()).toBe(1U);
+        });
+
+        it("is a plain cut without a clip ending at the start", {
+            auto fx = make_fixture();
+            place(fx, fx.video, 0, 0, 20);
+            const ClipId b = place(fx, fx.video, 30, 100, 30);
+            expect(fx.editor
+                       .execute(edit::set_transition(
+                           b, Transition{.kind = TransitionKind::Dissolve, .duration = f(10)}))
+                       .has_value())
+                .toBeTruthy();
+            expect(at(fx, 31).video.size()).toBe(1U);
+            const Track& track = *fx.editor.timeline().find_track(fx.video);
+            expect(transition_window(fx.editor.timeline(), track, 1).has_value()).toBeFalsy();
+        });
+
+        it("rejects empty transitions and keeps them off new cuts", {
+            auto fx = with_transition(TransitionKind::Dissolve, 10);
+            const ClipId b = fx.editor.timeline().clip_at(fx.video, 30)->id;
+            expect(fx.editor
+                       .execute(edit::set_transition(
+                           b, Transition{.kind = TransitionKind::Dissolve, .duration = f(0)}))
+                       .has_value())
+                .toBeFalsy();
+            // Splitting B: the right part starts at a new cut, without a transition.
+            expect(fx.editor.execute(edit::split(b, f(45))).has_value()).toBeTruthy();
+            expect(fx.editor.timeline().clip_at(fx.video, 50)->transition_in.has_value())
+                .toBeFalsy();
+            expect(fx.editor.timeline().find_clip(b)->transition_in.has_value()).toBeTruthy();
+            expect(fx.editor.execute(edit::set_transition(b, std::nullopt)).has_value())
+                .toBeTruthy();
+            expect(at(fx, 31).video.size()).toBe(1U);
+            expect(fx.editor.undo().has_value()).toBeTruthy();
+            expect(at(fx, 31).video.size()).toBe(2U);
+        });
+    });
+}
 
 void run_evaluate_tests() {
     describe("timeline evaluation", {

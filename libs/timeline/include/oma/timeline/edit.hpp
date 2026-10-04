@@ -81,6 +81,9 @@ struct ClipSource {
 [[nodiscard]] std::unique_ptr<Command> set_speed(ClipId id, Rational speed, bool ripple);
 [[nodiscard]] std::unique_ptr<Command> set_video(ClipId id, VideoProperties video);
 [[nodiscard]] std::unique_ptr<Command> set_audio(ClipId id, AudioProperties audio);
+// Sets or removes (std::nullopt) the transition into a clip from the clip before it.
+[[nodiscard]] std::unique_ptr<Command> set_transition(ClipId id,
+                                                      std::optional<Transition> transition);
 // Detaches a video clip's sound into audio clip `audio` on the audio track `lane`, at the same
 // time and source range with the same audio adjustments, so the two can be trimmed apart (J- and
 // L-cuts). The video clip then plays no sound. The range on the lane must be free.

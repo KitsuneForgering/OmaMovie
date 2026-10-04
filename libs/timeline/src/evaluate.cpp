@@ -2,6 +2,9 @@
 
 #include "mutation.hpp"
 
+#include <algorithm>
+#include <limits>
+
 namespace oma::timeline {
 
 namespace {
@@ -20,7 +23,104 @@ Result<RationalTime> media_time(const Timeline& tl, const Clip& c, const MediaIn
     return exact->rescaled(m.start.timebase(), Rounding::Floor);
 }
 
+// Ticks of sequence time the media past (or before) a clip lasts at the clip's speed, rounded
+// down; `available` is the media duration from the clip edge outward.
+std::int64_t spare_ticks(const Timeline& tl, const Clip& c, const RationalTime& available) {
+    auto unit = detail::multiply(tl.timebase(), c.time_map.speed());
+    if (!unit || available.value() <= 0) {
+        return 0;
+    }
+    auto ticks = rescale(available.value(), available.timebase(), *unit, Rounding::Floor);
+    return ticks ? std::max<std::int64_t>(*ticks, 0) : 0;
+}
+
+RationalTime negated(const RationalTime& t) {
+    return *RationalTime::make(-t.value(), t.timebase());
+}
+
+// Media a clip can show past its last instant.
+std::int64_t spare_after(const Timeline& tl, const Clip& c) {
+    const MediaInfo* m = tl.find_media(c.media);
+    if (m == nullptr) {
+        return 0;
+    }
+    if (m->still) {
+        return std::numeric_limits<std::int64_t>::max();
+    }
+    auto end = detail::source_end(c, tl.timebase());
+    auto media_end = m->start.plus(m->duration);
+    if (!end || !media_end) {
+        return 0;
+    }
+    auto available = detail::add_exact(*media_end, negated(*end));
+    return available ? spare_ticks(tl, c, *available) : 0;
+}
+
+// Media a clip can show before its first instant.
+std::int64_t spare_before(const Timeline& tl, const Clip& c) {
+    const MediaInfo* m = tl.find_media(c.media);
+    if (m == nullptr) {
+        return 0;
+    }
+    if (m->still) {
+        return std::numeric_limits<std::int64_t>::max();
+    }
+    auto available = detail::add_exact(c.source_in, negated(m->start));
+    return available ? spare_ticks(tl, c, *available) : 0;
+}
+
+struct Mix {
+    float from = 1.0F;
+    float to = 1.0F;
+    double reveal = 1.0;
+};
+
+Mix mix_of(TransitionKind kind, double p) {
+    switch (kind) {
+    case TransitionKind::DipToBlack:
+        return p < 0.5
+                   ? Mix{.from = static_cast<float>(1.0 - (2.0 * p)), .to = 0.0F, .reveal = 1.0}
+                   : Mix{.from = 0.0F, .to = static_cast<float>((2.0 * p) - 1.0), .reveal = 1.0};
+    case TransitionKind::Wipe:
+        return {.from = 1.0F, .to = 1.0F, .reveal = p};
+    case TransitionKind::Dissolve:
+        break;
+    }
+    return {.from = 1.0F, .to = static_cast<float>(p), .reveal = 1.0};
+}
+
 } // namespace
+
+double TransitionWindow::progress(std::int64_t ticks) const noexcept {
+    if (half <= 0) {
+        return 1.0;
+    }
+    const auto p = static_cast<double>(ticks - (cut - half)) / static_cast<double>(2 * half);
+    return std::clamp(p, 0.0, 1.0);
+}
+
+std::optional<TransitionWindow> transition_window(const Timeline& timeline, const Track& track,
+                                                  std::size_t index) {
+    if (index == 0 || index >= track.clips.size()) {
+        return std::nullopt;
+    }
+    const Clip& to = track.clips[index];
+    const Clip& from = track.clips[index - 1];
+    if (!to.transition_in || from.end_ticks() != to.start_ticks()) {
+        return std::nullopt;
+    }
+    const std::int64_t half =
+        std::min({to.transition_in->duration.value() / 2, spare_after(timeline, from),
+                  spare_before(timeline, to), from.duration.value(), to.duration.value()});
+    if (half <= 0) {
+        return std::nullopt;
+    }
+    return TransitionWindow{.from = &from,
+                            .to = &to,
+                            .kind = to.transition_in->kind,
+                            .cut = to.start_ticks(),
+                            .half = half};
+}
 
 Result<Composition> evaluate(const Timeline& timeline, const RationalTime& at) {
     auto ticks = timeline.to_ticks(at);
@@ -43,8 +143,45 @@ Result<Composition> evaluate(const Timeline& timeline, const RationalTime& at) {
             return std::unexpected(t.error());
         }
         if (track.kind == TrackKind::Video && !track.hidden) {
-            out.video.push_back(
-                VideoLayer{.clip = c->id, .media = c->media, .media_time = *t, .video = c->video});
+            // A transition window around the cut at this clip's start or end, if any covers t.
+            const auto index = static_cast<std::size_t>(c - track.clips.data());
+            std::optional<TransitionWindow> window = transition_window(timeline, track, index);
+            if (window && *ticks >= window->cut + window->half) {
+                window.reset();
+            }
+            if (!window) {
+                window = transition_window(timeline, track, index + 1);
+                if (window && *ticks < window->cut - window->half) {
+                    window.reset();
+                }
+            }
+            if (!window) {
+                out.video.push_back(VideoLayer{
+                    .clip = c->id, .media = c->media, .media_time = *t, .video = c->video});
+            } else {
+                const Mix mix = mix_of(window->kind, window->progress(*ticks));
+                for (const Clip* layer : {window->from, window->to}) {
+                    const bool incoming = layer == window->to;
+                    const float opacity = incoming ? mix.to : mix.from;
+                    if (opacity <= 0.0F) {
+                        continue;
+                    }
+                    const MediaInfo* lm = timeline.find_media(layer->media);
+                    auto lt = lm != nullptr ? media_time(timeline, *layer, *lm, *ticks)
+                                            : Result<RationalTime>(std::unexpected(
+                                                  Error(ErrorCode::InvalidData, Category::Timeline,
+                                                        "clip references unknown media")));
+                    if (!lt) {
+                        return std::unexpected(lt.error());
+                    }
+                    out.video.push_back(VideoLayer{.clip = layer->id,
+                                                   .media = layer->media,
+                                                   .media_time = *lt,
+                                                   .video = layer->video,
+                                                   .opacity = opacity,
+                                                   .reveal = incoming ? mix.reveal : 1.0});
+                }
+            }
         }
         const bool plays_audio =
             track.kind == TrackKind::Audio ||

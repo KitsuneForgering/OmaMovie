@@ -83,6 +83,7 @@ Result<Steps> clear_range(Timeline& tl, const Track& track, std::int64_t from, s
                 return std::unexpected(!head ? head.error() : tail.error());
             }
             tail->id = ClipId(detail::Mutation(tl).allocate_id());
+            tail->transition_in.reset(); // the new cut inside the clip is a plain one
             steps.push_back(detail::replace_clip(*head));
             steps.push_back(detail::insert_clip(track.id, *tail));
         } else if (start < from) {
@@ -121,7 +122,9 @@ Result<Clip> new_clip(const Timeline& tl, ClipId id, std::int64_t start, const C
                 .source_in = source.source_in,
                 .time_map = source.time_map,
                 .video = source.video,
-                .audio = source.audio};
+                .audio = source.audio,
+                .audio_detached = false,
+                .transition_in = std::nullopt};
 }
 
 // A change to a clip plus a shift of the clips after it. Whichever frees space runs first, so
@@ -302,6 +305,7 @@ std::unique_ptr<Command> split(ClipId id, RationalTime at) {
             return std::unexpected(!head ? head.error() : tail.error());
         }
         tail->id = ClipId(detail::Mutation(tl).allocate_id());
+        tail->transition_in.reset(); // the new cut inside the clip is a plain one
         Steps steps;
         steps.push_back(detail::replace_clip(*head));
         steps.push_back(detail::insert_clip(tl.track_of(id)->id, *tail));
@@ -538,6 +542,27 @@ std::unique_ptr<Command> set_audio(ClipId id, AudioProperties audio) {
         }
         Clip changed = **c;
         changed.audio = audio;
+        Steps steps;
+        steps.push_back(detail::replace_clip(changed));
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> set_transition(ClipId id, std::optional<Transition> transition) {
+    return detail::make_planned("Transition", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        if (!c) {
+            return std::unexpected(c.error());
+        }
+        Clip changed = **c;
+        changed.transition_in = transition;
+        if (transition) {
+            auto ticks = tl.to_ticks(transition->duration);
+            if (!ticks) {
+                return std::unexpected(ticks.error());
+            }
+            changed.transition_in->duration = tl.at(*ticks);
+        }
         Steps steps;
         steps.push_back(detail::replace_clip(changed));
         return steps;

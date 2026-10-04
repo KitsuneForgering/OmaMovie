@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -169,6 +170,23 @@ struct AudioProperties {
     friend bool operator==(const AudioProperties&, const AudioProperties&) noexcept = default;
 };
 
+enum class TransitionKind : std::uint8_t {
+    Dissolve,   // the incoming clip fades in over the outgoing one
+    DipToBlack, // out to black, then in from black
+    Wipe,       // the incoming clip is revealed from left to right
+};
+
+// A transition into a clip from the clip that ends exactly where it starts, centered on that cut
+// (ui-design §7.2). Both clips play past the cut for half of it, so it needs media to spare on
+// both sides; with less, it gets shorter, and without a neighbour it is a plain cut. Sound
+// crossfades over the same span. Timeline duration does not change.
+struct Transition {
+    TransitionKind kind = TransitionKind::Dissolve;
+    RationalTime duration; // sequence timebase, > 0
+
+    friend bool operator==(const Transition&, const Transition&) noexcept = default;
+};
+
 // A clip places a range of a media item on a track. Non-destructive: it only references media.
 struct Clip {
     ClipId id;
@@ -184,6 +202,7 @@ struct Clip {
     // On a video track: its sound was detached into an audio clip of its own (edit::detach_audio),
     // so this clip plays no sound. Always false on other tracks.
     bool audio_detached = false;
+    std::optional<Transition> transition_in;
 
     // Exact end: start + duration.
     [[nodiscard]] std::int64_t start_ticks() const noexcept { return start.value(); }
