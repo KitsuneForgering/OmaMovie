@@ -80,6 +80,9 @@ struct Layer {
     BlendMode blend = BlendMode::Normal;
     ColorAdjust color;
     Filter filter;
+    // In [-1, 1]: below 0 a gaussian blur (up to 2% of the source height in standard
+    // deviation), above 0 an unsharp mask that sharpens edges; 0 leaves detail alone.
+    double sharpness = 0.0;
 };
 
 struct RenderGraph {

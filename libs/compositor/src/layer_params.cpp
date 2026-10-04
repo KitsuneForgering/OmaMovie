@@ -106,6 +106,12 @@ Result<PreparedLayer> prepare_layer(const Layer& layer, const LayerInput& input,
         p.vignette = {static_cast<float>(look.vignette), static_cast<float>(cx),
                       static_cast<float>(cy), static_cast<float>(1.0 / std::max(corner, 1.0))};
     }
+    const Detail detail = make_detail(layer.sharpness, source_height);
+    p.detail = {static_cast<float>(detail.mode), static_cast<float>(detail.amount),
+                static_cast<float>(detail.radius), 0.0F};
+    for (std::size_t i = 0; i < detail.weights.size(); ++i) {
+        p.weights[i / 4][i % 4] = static_cast<float>(detail.weights[i]);
+    }
     return out;
 }
 

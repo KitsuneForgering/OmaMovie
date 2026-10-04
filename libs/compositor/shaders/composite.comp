@@ -1,14 +1,24 @@
 #version 460
-// Composites one layer into the working image (linear BT.709, premultiplied RGBA16F).
+// Composites one layer into the working image (linear BT.709, premultiplied RGBA16F). With
+// blur or sharpen, two earlier passes of this shader blur the source first (pass 1 across,
+// pass 2 down, into RGBA32F images); pass 0 composites.
 // The CPU reference in src/cpu_compositor.cpp performs the same steps; keep them in sync,
 // and the uniform block in sync with LayerParams (src/layer_params.hpp).
 
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-layout(set = 0, binding = 0, rgba16f) uniform image2D target;
+layout(push_constant) uniform Pass {
+    int index; // 0 composite, 1 blur across, 2 blur down
+} P;
+
+layout(set = 0, binding = 0, rgba16f) uniform image2D target; // pass 0: the output
 layout(set = 0, binding = 1) uniform sampler2D plane0; // luma
 layout(set = 0, binding = 2) uniform sampler2D plane1; // Cb (planar) or CbCr (interleaved)
 layout(set = 0, binding = 3) uniform sampler2D plane2; // Cr (planar), unused otherwise
+// Pass 2: the horizontal blur. Pass 0: the blurred source (a 1x1 placeholder without detail).
+layout(set = 0, binding = 5) uniform sampler2D blurred;
+// Passes 1 and 2: where the blur goes (a 1x1 placeholder in pass 0).
+layout(set = 0, binding = 6, rgba32f) uniform writeonly image2D blur_target;
 
 layout(std140, set = 0, binding = 4) uniform Layer {
     vec4 inv0;    // output -> source: a, b, tx
@@ -29,7 +39,12 @@ layout(std140, set = 0, binding = 4) uniform Layer {
     vec4 look_g;
     vec4 look_b;
     vec4 vignette; // darkening, center x, center y (source pixels), 1 / corner distance
+    vec4 detail;   // blur/sharpen (src/look.hpp Detail): mode, sharpen amount, radius
+    vec4 weights[17]; // gaussian weights, center first
 } L;
+
+const int kDetailBlur = 1;
+const int kDetailSharpen = 2;
 
 const float kContrastPivot = 0.18;
 const float kVignetteStart = 0.45;
@@ -76,7 +91,58 @@ vec3 texel(ivec2 p) {
     return vec3(dot(L.gamut_r.xyz, lin), dot(L.gamut_g.xyz, lin), dot(L.gamut_b.xyz, lin));
 }
 
+// The cropped source's texel bounds, where bilinear taps and blur taps clamp.
+void tap_bounds(out ivec2 lo, out ivec2 hi) {
+    lo = clamp(ivec2(floor(L.crop.xy)), ivec2(0), L.extra.yz - 1);
+    hi = clamp(ivec2(ceil(L.crop.zw)) - 1, ivec2(0), L.extra.yz - 1);
+}
+
+float weight(int i) {
+    int k = abs(i);
+    return L.weights[k >> 2][k & 3];
+}
+
+// One separable gaussian pass over the cropped source, mirrored by blurred_source() in
+// src/cpu_compositor.cpp.
+void blur_pass(bool down) {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 lo;
+    ivec2 hi;
+    tap_bounds(lo, hi);
+    if (any(lessThan(p, lo)) || any(greaterThan(p, hi))) {
+        return;
+    }
+    int radius = int(L.detail.z);
+    vec3 sum = vec3(0.0);
+    for (int i = -radius; i <= radius; ++i) {
+        if (down) {
+            sum += weight(i) * texelFetch(blurred, ivec2(p.x, clamp(p.y + i, lo.y, hi.y)), 0).rgb;
+        } else {
+            sum += weight(i) * texel(ivec2(clamp(p.x + i, lo.x, hi.x), p.y));
+        }
+    }
+    imageStore(blur_target, p, vec4(sum, 1.0));
+}
+
+// The source texel after blur or sharpen.
+vec3 detailed(ivec2 p) {
+    int mode = int(L.detail.x);
+    if (mode != kDetailBlur && mode != kDetailSharpen) {
+        return texel(p);
+    }
+    vec3 b = texelFetch(blurred, p, 0).rgb;
+    if (mode == kDetailBlur) {
+        return b;
+    }
+    vec3 o = texel(p);
+    return o + L.detail.y * (o - b);
+}
+
 void main() {
+    if (P.index != 0) {
+        blur_pass(P.index == 2);
+        return;
+    }
     ivec2 out_px = L.region.xy + ivec2(gl_GlobalInvocationID.xy);
     if (out_px.x >= L.region.z || out_px.y >= L.region.w) {
         return;
@@ -89,17 +155,18 @@ void main() {
     }
 
     // Bilinear filtering in linear light, taps clamped to the cropped area.
-    ivec2 lo = clamp(ivec2(floor(L.crop.xy)), ivec2(0), L.extra.yz - 1);
-    ivec2 hi = clamp(ivec2(ceil(L.crop.zw)) - 1, ivec2(0), L.extra.yz - 1);
+    ivec2 lo;
+    ivec2 hi;
+    tap_bounds(lo, hi);
     vec2 f = s - 0.5;
     vec2 base = floor(f);
     vec2 t = f - base;
     ivec2 p0 = clamp(ivec2(base), lo, hi);
     ivec2 p1 = clamp(ivec2(base) + 1, lo, hi);
-    vec3 c00 = texel(ivec2(p0.x, p0.y));
-    vec3 c10 = texel(ivec2(p1.x, p0.y));
-    vec3 c01 = texel(ivec2(p0.x, p1.y));
-    vec3 c11 = texel(ivec2(p1.x, p1.y));
+    vec3 c00 = detailed(ivec2(p0.x, p0.y));
+    vec3 c10 = detailed(ivec2(p1.x, p0.y));
+    vec3 c01 = detailed(ivec2(p0.x, p1.y));
+    vec3 c11 = detailed(ivec2(p1.x, p1.y));
     vec3 color = mix(mix(c00, c10, t.x), mix(c01, c11, t.x), t.y);
 
     // The layer's look, in the order of src/look.hpp.

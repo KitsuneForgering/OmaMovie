@@ -72,6 +72,8 @@ RenderGraph looked_graph(std::uint32_t w, std::uint32_t h) {
     g.layers[1].filter = {.kind = oma::compositor::FilterKind::Vignette, .amount = 0.8};
     g.layers[1].color.contrast = -0.5;
     g.layers[2].filter = {.kind = oma::compositor::FilterKind::Vintage, .amount = 0.7};
+    g.layers[0].sharpness = -0.4; // blurred background
+    g.layers[2].sharpness = 0.8;  // sharpened overlay
     return g;
 }
 
@@ -219,6 +221,33 @@ void color_adjustments() {
     const auto half = at(vivid, {}, Filter{.kind = FilterKind::Sepia, .amount = 0.5});
     expect(static_cast<double>(half[0]))
         .toBeCloseTo((static_cast<double>(color[0]) + static_cast<double>(sepia[0])) / 2.0, 1e-5);
+}
+
+// The native patches layer with a sharpness, pixel (x, 90).
+std::array<float, 4> detailed_at(const LayerInput& input, double sharpness, std::uint32_t x) {
+    RenderGraph g = native_graph(320, 180);
+    g.layers[0].sharpness = sharpness;
+    const std::array<LayerInput, 1> inputs{input};
+    const auto out = CpuCompositor{}.render(g, inputs);
+    return out ? out->at(x, 90) : std::array<float, 4>{};
+}
+
+void blur_and_sharpen() {
+    auto src = decode_first("color_patches.y4m");
+    if (!src.frame) {
+        std::printf("    (skipped: fixture color_patches.y4m missing)\n");
+        return;
+    }
+    const LayerInput in = src.input();
+    // x = 78 is dark grey, 2 px left of the mid grey patch; x = 40 is far from any edge.
+    const double edge = luma(detailed_at(in, 0.0, 78));
+    const double flat = luma(detailed_at(in, 0.0, 40));
+    // Blur spreads the brighter neighbour into the edge and leaves flat areas alone.
+    expect(luma(detailed_at(in, -0.5, 78)) > edge + 0.005).toBeTruthy();
+    expect(luma(detailed_at(in, -0.5, 40))).toBeCloseTo(flat, 1e-4);
+    // Sharpen pushes the dark side of the edge darker (unsharp-mask undershoot), next to it.
+    expect(luma(detailed_at(in, 1.0, 79)) < luma(detailed_at(in, 0.0, 79)) - 0.002).toBeTruthy();
+    expect(luma(detailed_at(in, 1.0, 40))).toBeCloseTo(flat, 1e-4);
 }
 
 void vignette_darkens_the_corners() {
@@ -438,6 +467,7 @@ void run_cpu_compositor_tests() {
         it("adjusts exposure, saturation, temperature, contrast and filters",
            { color_adjustments(); });
         it("darkens the corners with a vignette", { vignette_darkens_the_corners(); });
+        it("blurs and sharpens edges, leaving flat areas", { blur_and_sharpen(); });
     });
 }
 

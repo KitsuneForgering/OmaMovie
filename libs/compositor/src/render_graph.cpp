@@ -60,6 +60,9 @@ Result<void> validate(const RenderGraph& graph, std::size_t input_count) {
             l.filter.kind > FilterKind::Vignette) {
             return std::unexpected(invalid("invalid filter", where));
         }
+        if (!within(l.sharpness, 1.0)) {
+            return std::unexpected(invalid("sharpness outside [-1, 1]", where));
+        }
     }
     return {};
 }

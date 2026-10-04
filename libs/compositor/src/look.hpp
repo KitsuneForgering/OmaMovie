@@ -11,6 +11,7 @@
 #include "oma/compositor/render_graph.hpp"
 
 #include <array>
+#include <cstdint>
 
 namespace oma::compositor {
 
@@ -31,5 +32,25 @@ struct Look {
 };
 
 [[nodiscard]] Look make_look(const ColorAdjust& color, const Filter& filter);
+
+// Blur and sharpen (Layer::sharpness): a separable gaussian over the source, run as a horizontal
+// then a vertical pass in linear light, its taps clamped to the cropped source like the bilinear
+// sampling. Blur shows the blurred image; sharpen adds amount * (original - blurred).
+inline constexpr int kMaxBlurRadius = 64;
+
+enum class DetailMode : std::uint8_t {
+    None = 0,
+    Blur = 1,
+    Sharpen = 2,
+};
+
+struct Detail {
+    DetailMode mode = DetailMode::None;
+    double amount = 0.0;                              // sharpen strength
+    int radius = 0;                                   // taps on each side of the center
+    std::array<double, kMaxBlurRadius + 1> weights{}; // center first, normalized over 2r + 1 taps
+};
+
+[[nodiscard]] Detail make_detail(double sharpness, std::uint32_t source_height);
 
 } // namespace oma::compositor

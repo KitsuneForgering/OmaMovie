@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 namespace oma::compositor {
 
@@ -78,6 +79,81 @@ Rgb texel(const LayerParams& p, const Planes& planes, int x, int y) {
             .b = dot3(p.gamut_b, r, g, b)};
 }
 
+// The cropped source's texel bounds, as composite() clamps its bilinear taps: x0, y0, x1, y1.
+std::array<int, 4> tap_bounds(const LayerParams& p) {
+    const int width = p.extra[1];
+    const int height = p.extra[2];
+    return {std::clamp(static_cast<int>(std::floor(p.crop[0])), 0, width - 1),
+            std::clamp(static_cast<int>(std::floor(p.crop[1])), 0, height - 1),
+            std::clamp(static_cast<int>(std::ceil(p.crop[2])) - 1, 0, width - 1),
+            std::clamp(static_cast<int>(std::ceil(p.crop[3])) - 1, 0, height - 1)};
+}
+
+float weight(const LayerParams& p, int i) {
+    const auto k = static_cast<std::size_t>(std::abs(i));
+    return p.weights[k / 4][k % 4];
+}
+
+// The gaussian-blurred source in linear light (look.hpp Detail), mirroring the shader's
+// horizontal then vertical passes; empty without blur or sharpen.
+std::vector<Rgb> blurred_source(const LayerParams& p, const Planes& planes) {
+    if (p.detail[0] == 0.0F) {
+        return {};
+    }
+    const int width = p.extra[1];
+    const int height = p.extra[2];
+    const auto [x0, y0, x1, y1] = tap_bounds(p);
+    const int radius = static_cast<int>(p.detail[2]);
+    const auto at = [&](int x, int y) {
+        return (static_cast<std::size_t>(y) * static_cast<std::size_t>(width)) +
+               static_cast<std::size_t>(x);
+    };
+    std::vector<Rgb> across(static_cast<std::size_t>(width) * static_cast<std::size_t>(height),
+                            Rgb{.r = 0, .g = 0, .b = 0});
+    for (int y = y0; y <= y1; ++y) {
+        for (int x = x0; x <= x1; ++x) {
+            Rgb sum{.r = 0, .g = 0, .b = 0};
+            for (int i = -radius; i <= radius; ++i) {
+                const Rgb c = texel(p, planes, std::clamp(x + i, x0, x1), y);
+                const float w = weight(p, i);
+                sum = {.r = sum.r + (w * c.r), .g = sum.g + (w * c.g), .b = sum.b + (w * c.b)};
+            }
+            across[at(x, y)] = sum;
+        }
+    }
+    std::vector<Rgb> out(across.size(), Rgb{.r = 0, .g = 0, .b = 0});
+    for (int y = y0; y <= y1; ++y) {
+        for (int x = x0; x <= x1; ++x) {
+            Rgb sum{.r = 0, .g = 0, .b = 0};
+            for (int i = -radius; i <= radius; ++i) {
+                const Rgb& c = across[at(x, std::clamp(y + i, y0, y1))];
+                const float w = weight(p, i);
+                sum = {.r = sum.r + (w * c.r), .g = sum.g + (w * c.g), .b = sum.b + (w * c.b)};
+            }
+            out[at(x, y)] = sum;
+        }
+    }
+    return out;
+}
+
+// The source texel after blur or sharpen; mirrors detailed() in shaders/composite.comp.
+Rgb detailed(const LayerParams& p, const Planes& planes, const std::vector<Rgb>& blurred, int x,
+             int y) {
+    const auto mode = static_cast<DetailMode>(static_cast<int>(p.detail[0]));
+    if (mode == DetailMode::None) {
+        return texel(p, planes, x, y);
+    }
+    const Rgb& b = blurred[(static_cast<std::size_t>(y) * static_cast<std::size_t>(p.extra[1])) +
+                           static_cast<std::size_t>(x)];
+    if (mode == DetailMode::Blur) {
+        return b;
+    }
+    const Rgb o = texel(p, planes, x, y);
+    const float k = p.detail[1];
+    return {
+        .r = o.r + (k * (o.r - b.r)), .g = o.g + (k * (o.g - b.g)), .b = o.b + (k * (o.b - b.b))};
+}
+
 Rgb mix(const Rgb& a, const Rgb& b, float t) {
     return {
         .r = a.r + ((b.r - a.r) * t), .g = a.g + ((b.g - a.g) * t), .b = a.b + ((b.b - a.b) * t)};
@@ -114,12 +190,8 @@ Rgb apply_look(const LayerParams& p, float sx, float sy, Rgb c) {
 
 // Mirrors main() in shaders/composite.comp.
 void composite(const LayerParams& p, const Planes& planes, RgbaImage& out) {
-    const int width = p.extra[1];
-    const int height = p.extra[2];
-    const int lo_x = std::clamp(static_cast<int>(std::floor(p.crop[0])), 0, width - 1);
-    const int lo_y = std::clamp(static_cast<int>(std::floor(p.crop[1])), 0, height - 1);
-    const int hi_x = std::clamp(static_cast<int>(std::ceil(p.crop[2])) - 1, 0, width - 1);
-    const int hi_y = std::clamp(static_cast<int>(std::ceil(p.crop[3])) - 1, 0, height - 1);
+    const auto [lo_x, lo_y, hi_x, hi_y] = tap_bounds(p);
+    const std::vector<Rgb> blurred = blurred_source(p, planes);
     for (int oy = p.region[1]; oy < p.region[3]; ++oy) {
         for (int ox = p.region[0]; ox < p.region[2]; ++ox) {
             const float fx = static_cast<float>(ox) + 0.5F;
@@ -137,10 +209,12 @@ void composite(const LayerParams& p, const Planes& planes, RgbaImage& out) {
             const int y0 = std::clamp(static_cast<int>(by), lo_y, hi_y);
             const int x1 = std::clamp(static_cast<int>(bx) + 1, lo_x, hi_x);
             const int y1 = std::clamp(static_cast<int>(by) + 1, lo_y, hi_y);
-            const Rgb color =
-                apply_look(p, sx, sy,
-                           mix(mix(texel(p, planes, x0, y0), texel(p, planes, x1, y0), tx),
-                               mix(texel(p, planes, x0, y1), texel(p, planes, x1, y1), tx), ty));
+            const Rgb color = apply_look(p, sx, sy,
+                                         mix(mix(detailed(p, planes, blurred, x0, y0),
+                                                 detailed(p, planes, blurred, x1, y0), tx),
+                                             mix(detailed(p, planes, blurred, x0, y1),
+                                                 detailed(p, planes, blurred, x1, y1), tx),
+                                             ty));
 
             const float a = p.misc[0];
             const std::array<float, 4> src{color.r * a, color.g * a, color.b * a, a};

@@ -1,5 +1,6 @@
 #include "look.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 
@@ -117,6 +118,37 @@ Look make_look(const ColorAdjust& color, const Filter& filter) {
         look.vignette = kVignetteDepth * filter.amount;
     }
     return look;
+}
+
+Detail make_detail(double sharpness, std::uint32_t source_height) {
+    Detail d;
+    if (sharpness == 0.0 || source_height == 0) {
+        return d;
+    }
+    const double scale = static_cast<double>(source_height) / 1080.0;
+    double sigma = 0.0;
+    if (sharpness < 0.0) {
+        d.mode = DetailMode::Blur;
+        sigma = -sharpness * 0.02 * static_cast<double>(source_height);
+    } else {
+        // A fine unsharp mask: about a pixel of radius at 1080p, scaled with the source.
+        d.mode = DetailMode::Sharpen;
+        sigma = std::max(0.8, 1.2 * scale);
+        d.amount = 1.5 * sharpness;
+    }
+    sigma = std::clamp(sigma, 0.3, static_cast<double>(kMaxBlurRadius) / 3.0);
+    d.radius = std::min(kMaxBlurRadius, static_cast<int>(std::ceil(3.0 * sigma)));
+    double total = 0.0;
+    for (int i = 0; i <= d.radius; ++i) {
+        const double w =
+            std::exp(-(static_cast<double>(i) * static_cast<double>(i)) / (2.0 * sigma * sigma));
+        d.weights[static_cast<std::size_t>(i)] = w;
+        total += i == 0 ? w : 2.0 * w;
+    }
+    for (int i = 0; i <= d.radius; ++i) {
+        d.weights[static_cast<std::size_t>(i)] /= total;
+    }
+    return d;
 }
 
 } // namespace oma::compositor

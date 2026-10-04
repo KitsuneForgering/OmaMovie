@@ -3,6 +3,8 @@
 // Per-layer parameters shared by the CPU reference and the compute shader. The struct mirrors
 // the std140 uniform block in shaders/composite.comp; change both together.
 
+#include "look.hpp"
+
 #include "oma/compositor/compositor.hpp"
 #include "oma/media/video_frame.hpp"
 
@@ -37,8 +39,12 @@ struct alignas(16) LayerParams {
     std::array<float, 4> look_g{0.0F, 1.0F, 0.0F, 0.0F};
     std::array<float, 4> look_b{0.0F, 0.0F, 1.0F, 0.0F};
     std::array<float, 4> vignette{};
+    // Blur and sharpen (src/look.hpp Detail): mode, sharpen amount, radius in taps; then the
+    // gaussian weights, center first, four per vector.
+    std::array<float, 4> detail{};
+    std::array<std::array<float, 4>, (kMaxBlurRadius + 4) / 4> weights{};
 };
-static_assert(sizeof(LayerParams) == 18U * 16U, "LayerParams must match the std140 block");
+static_assert(sizeof(LayerParams) == 36U * 16U, "LayerParams must match the std140 block");
 
 struct PreparedLayer {
     LayerParams params;
