@@ -166,6 +166,11 @@ public:
     Q_INVOKABLE void setClipFraming(int fit, double left, double top, double right, double bottom);
     // Position in output pixels from the center, uniform scale, clockwise rotation in degrees.
     Q_INVOKABLE void setClipTransform(double x, double y, double scale, double rotation);
+    // The transition into a storyline clip from the clip before it: a TransitionKind, or -1 to
+    // remove it, lasting `seconds` (snapped to whole frames).
+    Q_INVOKABLE void setTransition(double clip, int kind, double seconds);
+    // Adds a one-second cross dissolve at the storyline cut nearest the playhead.
+    Q_INVOKABLE void addDissolveAtPlayhead();
     // Renders the selected clip's first frame under every filter, in the background.
     Q_INVOKABLE void requestFilterPreviews();
     Q_INVOKABLE void undo();
@@ -215,7 +220,8 @@ private:
     void placeSelected(int how);
     bool placeAudio(int how, oma::timeline::ClipId id, const oma::timeline::edit::ClipSource& clip);
     [[nodiscard]] std::vector<oma::timeline::TrackId> audioLanes() const;
-    [[nodiscard]] QVariantMap clipMap(const oma::timeline::Clip& c) const;
+    [[nodiscard]] QVariantMap clipMap(const oma::timeline::Clip& c, const oma::timeline::Track& track,
+                                       std::size_t index) const;
     // The selected clip's waveform and the media seconds it shows, if analysed.
     struct ClipSound {
         std::shared_ptr<const oma::playback::Waveform> waveform;

@@ -300,7 +300,7 @@ int main(int argc, char** argv) {
         bool inserted = false, overwritten = false, trimmed = false, audio = false;
         bool volume = false, muted = false, gpu_viewer = false, shuttle = false;
         bool played = false, space = false, escape = false, stepped = false, keys_focused = true;
-        bool controls = false, lanes = false, looks = false;
+        bool controls = false, lanes = false, looks = false, transitions = false;
         double after_steps = 0;
     } r;
     const auto clip_count = [&] { return session.clips().size(); };
@@ -530,6 +530,37 @@ int main(int argc, char** argv) {
              r.looks = r.looks && !session.info().value("colorAdjusted").toBool();
              window->requestActivate();
          }},
+        {"transition", after(100), [&] {
+             // The storyline clips touch at 0.5 s with no media to spare there, so a dissolve
+             // stays a plain cut. Trimming 6 frames off each side of the cut gives both clips
+             // handles: the dissolve then spans 12 frames, shortened from its 1 s.
+             session.seek(0.45);
+             session.addDissolveAtPlayhead();
+             r.transitions = session.clips().at(1).toMap().value("transitionKind").toInt() == -1;
+             session.undo();
+             const double first = session.clips().at(0).toMap().value("id").toDouble();
+             const double second = session.clips().at(1).toMap().value("id").toDouble();
+             session.trimClip(first, false, -6);
+             session.trimClip(second, true, 6);
+             session.addDissolveAtPlayhead();
+             const QVariantMap b = session.clips().at(1).toMap();
+             r.transitions = r.transitions && session.undoText() == QStringLiteral("Transition") &&
+                             b.value("transitionKind").toInt() == 0 &&
+                             std::abs(b.value("transitionSpan").toDouble() - 12.0 / 30.0) < 1e-6;
+             session.setTransition(second, 2, 1.0);
+             r.transitions = r.transitions && session.clips().at(1).toMap().value("transitionKind").toInt() == 2;
+             session.seek(0.2);
+             session.togglePlay();
+         }},
+        {"transition playback", after(500), [&] {
+             session.pause();
+             screenshot(window, "OMA_GUI_SMOKE_TRANSITION_SCREENSHOT");
+             for (int i = 0; i < 4; ++i) session.undo();
+             r.transitions = r.transitions && !session.clips().at(1).toMap().value("transitionSet").toBool() &&
+                             std::abs(session.duration() - 2.0) < 1e-6 && !session.failed();
+             if (!r.transitions) std::printf("GUI smoke: transitions failed (%s)\n", qPrintable(session.status()));
+             window->requestActivate();
+         }},
         {"space", after(300), [&] { press(Qt::Key_Space); }},
         {"space again", after(250), [&] {
              r.space = session.playing();
@@ -542,6 +573,8 @@ int main(int argc, char** argv) {
          }},
         {"frames", after(250), [&] {
              r.escape = !window->property("viewerOnly").toBool();
+             // Without focus the key never arrived: leave full screen so later steps see the timeline.
+             window->setProperty("viewerOnly", false);
              session.seek(0);
              for (int i = 0; i < 3; ++i) press(Qt::Key_Right);
          }},
@@ -576,14 +609,14 @@ int main(int argc, char** argv) {
              screenshot(window, "OMA_GUI_SMOKE_SCREENSHOT");
              const bool edits = r.imported && r.split && r.undone && r.redone && r.rippled && r.inserted &&
                                 r.overwritten && r.trimmed && r.played && r.audio && r.volume && r.muted &&
-                                r.gpu_viewer && r.shuttle && r.lanes && r.looks;
+                                r.gpu_viewer && r.shuttle && r.lanes && r.looks && r.transitions;
              const bool keys = r.space && r.escape && r.stepped;
              std::printf("GUI smoke: edits %s (import %d, split %d, undo %d, redo %d, ripple delete %d, "
                          "insert %d, overwrite %d, trim %d, play %d, audio %d, volume %d, mute %d, "
-                         "GPU viewer %d, J/K/L %d, audio lanes %d, video looks %d)\n",
+                         "GPU viewer %d, J/K/L %d, audio lanes %d, video looks %d, transitions %d)\n",
                          edits ? "PASS" : "FAIL", r.imported, r.split, r.undone, r.redone, r.rippled,
                          r.inserted, r.overwritten, r.trimmed, r.played, r.audio, r.volume, r.muted,
-                         r.gpu_viewer, r.shuttle, r.lanes, r.looks);
+                         r.gpu_viewer, r.shuttle, r.lanes, r.looks, r.transitions);
              if (r.keys_focused) {
                  std::printf("GUI smoke: keyboard %s (Space %d, Escape %d, Right x3 -> %.4fs)\n",
                              keys ? "PASS" : "FAIL", r.space, r.escape, r.after_steps);

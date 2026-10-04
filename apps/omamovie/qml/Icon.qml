@@ -40,6 +40,7 @@ Item {
         "split": "M12 4v16M4 8h5v8H4zM15 8h5v8h-5z",
         "rippleDelete": "M4 8h5v8H4zM15 8h5v8h-5zM10 10l4 4M14 10l-4 4",
         "detach": "M4 5h16v7H4zM5 15.5h2l1.5-2 2 5 2-6 2 4.5 1.5-1.5h3",
+        "transition": "M4 6l8 6-8 6zM20 6l-8 6 8 6z",
         "lift": "M4 8h16v9H4zM12 12V3M9 6l3-3 3 3",
         "fullscreen": "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5",
         "zoomIn": "M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13zM15.5 15.5L20 20M7.5 10.5h6M10.5 7.5v6",

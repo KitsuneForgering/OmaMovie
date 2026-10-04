@@ -63,7 +63,10 @@ oma::Result<std::shared_ptr<ViewerFrame>> build_viewer_frame(const tl::Timeline&
         if (!picture) {
             return std::unexpected(picture.error());
         }
-        out->graph.layers.push_back(to_layer(layer.video, out->pictures.size()));
+        auto composited = to_layer(layer.video, out->pictures.size());
+        composited.opacity *= layer.opacity; // a transition fading it
+        composited.reveal = layer.reveal;
+        out->graph.layers.push_back(composited);
         out->pictures.push_back(std::move(*picture));
     }
     return out;

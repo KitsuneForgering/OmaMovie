@@ -163,6 +163,10 @@ ApplicationWindow {
             enabled: actions.editing && !!session.info.canDetach
             onTriggered: session.detachAudio()
         }
+        property OmaAction addDissolve: OmaAction {
+            text: "Add cross dissolve"; keys: "Ctrl+T"; enabled: actions.editing && session.clips.length > 1
+            onTriggered: session.addDissolveAtPlayhead()
+        }
         property OmaAction undo: OmaAction {
             text: session.canUndo ? "Undo " + session.undoText : "Undo"
             keys: "Ctrl+Z"; enabled: actions.editing && session.canUndo
@@ -1170,6 +1174,7 @@ ApplicationWindow {
                         OmaButton { action: actions.lift; iconName: "lift"; showLabel: !root.compact }
                         Separator { Layout.leftMargin: 5; Layout.rightMargin: 5 }
                         OmaButton { action: actions.detachAudio; iconName: "detach"; showLabel: !root.compact }
+                        OmaButton { action: actions.addDissolve; iconName: "transition"; showLabel: !root.compact }
                         Item { Layout.fillWidth: true }
                     }
                     Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
@@ -1315,6 +1320,86 @@ ApplicationWindow {
                             }
                             TrimEdge { owner: clipItem; clipId: modelData.id; head: true; anchors.left: parent.left }
                             TrimEdge { owner: clipItem; clipId: modelData.id; head: false; anchors.right: parent.right }
+                        }
+                    }
+                    // Cuts between touching storyline clips (ui-design §7.2): the span a transition
+                    // covers, and a ⋈ marker that edits it.
+                    Repeater {
+                        model: session.clips
+                        delegate: Item {
+                            id: junction
+                            required property var modelData
+                            visible: modelData.joined
+                            readonly property real cutX: timelinePanel.origin + modelData.start * timelinePanel.scale
+                            Rectangle { // the transition's span
+                                visible: junction.modelData.transitionKind >= 0
+                                x: junction.cutX - width / 2
+                                y: 4
+                                width: junction.modelData.transitionSpan * timelinePanel.scale
+                                height: timelinePanel.storylineHeight
+                                color: Qt.rgba(1, 1, 1, 0.12)
+                                border.color: root.accent
+                                border.width: 1
+                                radius: 3
+                            }
+                            Rectangle {
+                                x: junction.cutX - width / 2
+                                y: 4 + timelinePanel.storylineHeight / 2 - height / 2
+                                width: 20
+                                height: 20
+                                radius: 10
+                                z: 3
+                                color: junction.modelData.transitionSet ? root.accent : colors.dark_background
+                                border.color: root.line
+                                Icon {
+                                    anchors.centerIn: parent
+                                    name: "transition"
+                                    size: 12
+                                    color: junction.modelData.transitionSet ? colors.background : root.fg
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    ToolTip.visible: containsMouse
+                                    ToolTip.text: "Transition"
+                                    hoverEnabled: true
+                                    onClicked: {
+                                        transitionMenu.clipId = junction.modelData.id
+                                        transitionMenu.kind = junction.modelData.transitionSet ? junction.modelData.transitionKind : -1
+                                        transitionMenu.popup()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Menu {
+                        id: transitionMenu
+                        property double clipId: 0 // `clip` is a Menu property
+                        property int kind: -1
+                        property real seconds: 1
+                        Repeater {
+                            model: [{ name: "No transition", kind: -1 }, { name: "Cross dissolve", kind: 0 },
+                                    { name: "Dip to black", kind: 1 }, { name: "Wipe", kind: 2 }]
+                            delegate: MenuItem {
+                                text: modelData.name
+                                checkable: true
+                                checked: transitionMenu.kind === modelData.kind
+                                onTriggered: session.setTransition(transitionMenu.clipId, modelData.kind, transitionMenu.seconds)
+                            }
+                        }
+                        MenuSeparator {}
+                        Repeater {
+                            model: [0.5, 1, 2]
+                            delegate: MenuItem {
+                                text: modelData + " s"
+                                checkable: true
+                                checked: transitionMenu.seconds === modelData
+                                onTriggered: {
+                                    transitionMenu.seconds = modelData
+                                    if (transitionMenu.kind >= 0)
+                                        session.setTransition(transitionMenu.clipId, transitionMenu.kind, modelData)
+                                }
+                            }
                         }
                     }
                     // Audio lanes below the storyline: music, voiceover, sound effects.
@@ -1470,7 +1555,7 @@ ApplicationWindow {
         model: [actions.playPause, actions.pause, actions.stop, actions.playForward, actions.playBackward, actions.previousFrame,
                 actions.nextFrame, actions.back10, actions.forward10, actions.toStart, actions.toEnd,
                 actions.append, actions.insert, actions.overwrite, actions.split, actions.remove,
-                actions.lift, actions.detachAudio, actions.undo, actions.redo, actions.importMedia,
+                actions.lift, actions.detachAudio, actions.addDissolve, actions.undo, actions.redo, actions.importMedia,
                 actions.exportMovie, actions.toggleLibrary, actions.fullViewer, actions.leaveFullViewer,
                 actions.zoomIn, actions.zoomOut, actions.zoomFit, actions.volume, actions.info,
                 actions.color, actions.crop, actions.effects]

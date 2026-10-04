@@ -622,6 +622,46 @@ void Session::setClipFilter(int kind, double amount) {
     setSelectedVideo(video);
 }
 
+void Session::setTransition(double clip, int kind, double seconds) {
+    if (!editor_ || !std::isfinite(seconds) || kind < -1 || kind > static_cast<int>(tl::TransitionKind::Wipe)) return;
+    const tl::ClipId id(static_cast<std::uint64_t>(clip));
+    const tl::Clip* c = editor_->timeline().find_clip(id);
+    if (c == nullptr) return;
+    std::optional<tl::Transition> transition;
+    if (kind >= 0) {
+        // Whole frames, at least two so each side gets one.
+        const std::int64_t frames = std::max<std::int64_t>(2, std::llround(seconds * frameRate()));
+        transition = tl::Transition{.kind = static_cast<tl::TransitionKind>(kind),
+                                    .duration = editor_->timeline().at(frames * ticksPerFrame())};
+    }
+    if (transition == c->transition_in) return;
+    if (run(tl::edit::set_transition(id, transition)) && transition &&
+        !tl::transition_window(editor_->timeline(), *editor_->timeline().track_of(id),
+                               static_cast<std::size_t>(c - editor_->timeline().track_of(id)->clips.data()))) {
+        setNotice(QStringLiteral("The clips have no media to spare at this cut: it stays a plain cut"));
+    }
+}
+
+void Session::addDissolveAtPlayhead() {
+    if (!editor_) return;
+    const tl::Track* track = editor_->timeline().find_track(primary_);
+    if (track == nullptr) return;
+    // The storyline cut closest to the playhead, between clips that touch.
+    const tl::Clip* best = nullptr;
+    for (std::size_t i = 1; i < track->clips.size(); ++i) {
+        const tl::Clip& c = track->clips[i];
+        if (track->clips[i - 1].end_ticks() != c.start_ticks()) continue;
+        if (best == nullptr || std::llabs(c.start_ticks() - playhead_) < std::llabs(best->start_ticks() - playhead_)) {
+            best = &c;
+        }
+    }
+    if (best == nullptr) {
+        setNotice(QStringLiteral("Transitions go between two touching clips on the storyline"));
+        return;
+    }
+    setTransition(static_cast<double>(best->id.value()), static_cast<int>(tl::TransitionKind::Dissolve), 1.0);
+}
+
 void Session::setClipSharpness(double sharpness) {
     const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
     if (c == nullptr || !std::isfinite(sharpness)) return;
@@ -760,9 +800,18 @@ QVariantList Session::media() const {
     return list;
 }
 
-QVariantMap Session::clipMap(const tl::Clip& c) const {
+QVariantMap Session::clipMap(const tl::Clip& c, const tl::Track& track, std::size_t index) const {
     const LibraryItem* source = item(c.media);
+    // The transition into this clip as it plays: its kind (-1 none, or not playable here) and
+    // the span it covers around the clip's start, in seconds (display only).
+    const auto window = tl::transition_window(editor_->timeline(), track, index);
+    const tl::Timeline& t = editor_->timeline();
+    const bool joined = index > 0 && track.clips[index - 1].end_ticks() == c.start_ticks();
     return QVariantMap{{"id", static_cast<double>(c.id.value())},
+                       {"joined", joined},
+                       {"transitionKind", window ? static_cast<int>(window->kind) : -1},
+                       {"transitionSet", c.transition_in.has_value()},
+                       {"transitionSpan", window ? t.at(2 * window->half).seconds_approx() : 0.0},
                        {"media", static_cast<double>(c.media.value())},
                        {"hasAudio", source != nullptr && source->media.has_audio && !c.audio_detached},
                        {"audioDetached", c.audio_detached},
@@ -785,7 +834,7 @@ QVariantList Session::clips() const {
     if (!editor_) return list;
     const tl::Track* track = editor_->timeline().find_track(primary_);
     if (track == nullptr) return list;
-    for (const tl::Clip& c : track->clips) list.push_back(clipMap(c));
+    for (std::size_t i = 0; i < track->clips.size(); ++i) list.push_back(clipMap(track->clips[i], *track, i));
     return list;
 }
 
@@ -794,7 +843,7 @@ QVariantList Session::audioTracks() const {
     for (const tl::TrackId id : audioLanes()) {
         const tl::Track* track = editor_->timeline().find_track(id);
         QVariantList clips;
-        for (const tl::Clip& c : track->clips) clips.push_back(clipMap(c));
+        for (std::size_t i = 0; i < track->clips.size(); ++i) clips.push_back(clipMap(track->clips[i], *track, i));
         lanes.push_back(QVariantMap{{"id", static_cast<double>(id.value())},
                                     {"name", QString::fromStdString(track->name)},
                                     {"clips", clips}});
