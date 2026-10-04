@@ -921,17 +921,29 @@ ApplicationWindow {
                                     }
                                 }
                             }
-                            DrawerSlider {
-                                id: amountControl
+                            ColumnLayout {
                                 Layout.fillWidth: false
-                                Layout.preferredWidth: 160
-                                enabled: (session.info.filterKind || 0) !== 0
-                                label: "AMOUNT"
-                                readout: Math.round(amountControl.slider.value * 100) + "%"
-                                onCommitted: session.setClipFilter(session.info.filterKind || 0, amountControl.slider.value)
+                                Layout.preferredWidth: 180
+                                spacing: 6
+                                DrawerSlider {
+                                    id: amountControl
+                                    enabled: (session.info.filterKind || 0) !== 0
+                                    label: "AMOUNT"
+                                    readout: Math.round(amountControl.slider.value * 100) + "%"
+                                    onCommitted: session.setClipFilter(session.info.filterKind || 0, amountControl.slider.value)
+                                }
+                                DrawerSlider {
+                                    id: sharpnessControl
+                                    label: "SOFTEN · SHARPEN"
+                                    readout: sharpnessControl.slider.value < 0 ? "Soften " + Math.round(-sharpnessControl.slider.value * 100)
+                                           : sharpnessControl.slider.value > 0 ? "Sharpen " + Math.round(sharpnessControl.slider.value * 100) : "Off"
+                                    onCommitted: session.setClipSharpness(sharpnessControl.slider.value)
+                                }
                             }
                         }
                         Binding { target: amountControl.slider; property: "value"; value: session.info.filterAmount === undefined ? 1 : session.info.filterAmount; when: !amountControl.slider.pressed }
+                        Binding { target: sharpnessControl.slider; property: "from"; value: -1 }
+                        Binding { target: sharpnessControl.slider; property: "value"; value: session.info.sharpness || 0; when: !sharpnessControl.slider.pressed }
                         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
                     }
 

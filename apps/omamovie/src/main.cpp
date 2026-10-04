@@ -509,9 +509,11 @@ int main(int argc, char** argv) {
              session.setClipColor(0.5, 0.2, -0.3, 0.4);
              session.setClipFilter(2, 0.8); // sepia
              session.setClipFraming(1, 0.1, 0, 0.1, 0);
+             session.setClipSharpness(-0.3);
              const QVariantMap info = session.info();
              r.looks = info.value("exposure").toDouble() == 0.5 && info.value("filterKind").toInt() == 2 &&
                        info.value("fit").toInt() == 1 && info.value("cropLeft").toDouble() == 0.1 &&
+                       info.value("sharpness").toDouble() == -0.3 &&
                        session.undoText() == QStringLiteral("Video Adjustments");
              window->setProperty("drawer", QStringLiteral("effects"));
              session.requestFilterPreviews();
@@ -524,9 +526,7 @@ int main(int argc, char** argv) {
         {"effects drawer", after(400), [&] {
              screenshot(window, "OMA_GUI_SMOKE_EFFECTS_SCREENSHOT");
              window->setProperty("drawer", QString());
-             session.undo();
-             session.undo();
-             session.undo();
+             for (int i = 0; i < 4; ++i) session.undo();
              r.looks = r.looks && !session.info().value("colorAdjusted").toBool();
              window->requestActivate();
          }},

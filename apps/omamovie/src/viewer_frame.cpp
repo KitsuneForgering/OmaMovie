@@ -34,6 +34,7 @@ oma::compositor::Layer to_layer(const tl::VideoProperties& v, std::size_t input)
                    .temperature = v.color.temperature};
     layer.filter = {.kind = static_cast<oma::compositor::FilterKind>(v.filter.kind), // same enumerators
                     .amount = v.filter.amount};
+    layer.sharpness = v.sharpness;
     return layer;
 }
 

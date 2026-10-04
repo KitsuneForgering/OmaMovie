@@ -622,6 +622,14 @@ void Session::setClipFilter(int kind, double amount) {
     setSelectedVideo(video);
 }
 
+void Session::setClipSharpness(double sharpness) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr || !std::isfinite(sharpness)) return;
+    tl::VideoProperties video = c->video;
+    video.sharpness = std::clamp(std::round(sharpness * 100.0) / 100.0, -1.0, 1.0);
+    setSelectedVideo(video);
+}
+
 void Session::setClipFraming(int fit, double left, double top, double right, double bottom) {
     const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
     if (c == nullptr || fit < 0 || fit > static_cast<int>(tl::Fit::Native)) return;
@@ -832,6 +840,7 @@ QVariantMap Session::info() const {
             out.insert("temperature", v.color.temperature);
             out.insert("filterKind", static_cast<int>(v.filter.kind));
             out.insert("filterAmount", v.filter.amount);
+            out.insert("sharpness", v.sharpness);
             out.insert("fit", static_cast<int>(v.fit));
             out.insert("cropLeft", v.crop.left);
             out.insert("cropTop", v.crop.top);
@@ -843,7 +852,7 @@ QVariantMap Session::info() const {
             out.insert("rotation", v.transform.rotation);
             out.insert("colorAdjusted", v.color != tl::ColorAdjust{});
             out.insert("framingAdjusted", v.fit != tl::Fit::Fit || v.crop != tl::Crop{} || v.transform != tl::Transform{});
-            out.insert("filtered", v.filter.kind != tl::FilterKind::None);
+            out.insert("filtered", v.filter.kind != tl::FilterKind::None || v.sharpness != 0.0);
         }
     }
     return out;

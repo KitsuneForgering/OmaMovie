@@ -160,6 +160,8 @@ public:
     Q_INVOKABLE void setClipColor(double exposure, double contrast, double saturation, double temperature);
     // Effects: a FilterKind and its amount in [0, 1].
     Q_INVOKABLE void setClipFilter(int kind, double amount);
+    // Blur (below 0) or sharpen (above 0), in [-1, 1].
+    Q_INVOKABLE void setClipSharpness(double sharpness);
     // Crop and framing: a Fit mode and the fractions cropped from each edge.
     Q_INVOKABLE void setClipFraming(int fit, double left, double top, double right, double bottom);
     // Position in output pixels from the center, uniform scale, clockwise rotation in degrees.
