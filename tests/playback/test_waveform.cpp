@@ -3,6 +3,7 @@
 #include "oma/playback/waveform.hpp"
 
 #include <atomic>
+#include <cstdio>
 
 #include "oma_test.hpp"
 
@@ -53,6 +54,23 @@ void run_waveform_tests() {
             expect(w->peak_between(0.5, 0.6) > 0.12F).toBeTruthy();
             expect(w->peak_between(2.5, 3.0)).toEqual(0.0F); // past the end
             expect(w->peak_between(0.6, 0.5)).toEqual(0.0F); // empty range
+        });
+
+        it("estimates the noise floor from the quietest buckets", {
+            if (!have_fixture("noisy_tone.wav")) {
+                return;
+            }
+            auto w = waveform_of("noisy_tone.wav");
+            expect(w.has_value()).toBeTruthy();
+            if (!w) {
+                return;
+            }
+            // The hiss measures -38.7 dBFS RMS (ffmpeg volumedetect over the first second).
+            const auto floor = w->noise_floor_db(0.0, 3.0);
+            expect(floor.has_value()).toBeTruthy();
+            std::printf("    noise floor %.1f dB\n", static_cast<double>(floor.value_or(0.0F)));
+            expect(floor && std::abs(*floor + 38.7F) < 2.0F).toBeTruthy();
+            expect(w->noise_floor_db(1.0, 1.0).has_value()).toBeFalsy();
         });
 
         it("stops when the job is cancelled", {
