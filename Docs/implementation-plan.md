@@ -193,9 +193,9 @@ uploaded software frames — isolated means below the 16.7 ms interval. These ar
 
 - [x] PipeWire output; real-time callback without allocation or contended locks (lock-free SPSC `SampleRing`; a null output paced by a steady clock for CI and machines without PipeWire). Tested in `tests/audio`, including a producer/consumer ordering test under TSan; TSan does not prove RT deadline safety.
 - [x] Master clock = audio; video drops/repeats frames. `PlaybackClock` (audible position from consumed frames minus device latency, re-anchored on seek) drives the editor's viewer: `AudioPlayer` (apps/omamovie) renders the timeline's audio on a dedicated pipeline thread into the output ring, and the video frame shown is the one at the audible sample. Silent fallback: the null output keeps an audio-paced clock. *Not measured yet*: the 10-minute drift protocol below.
-- [x] Timeline audio mix: gain, linear fades and mute per clip, sample-accurate clip boundaries, any number of overlapping clips (`oma::audio::mix_planar`, tested); clip audio at speeds other than 1 stays silent until time-stretching exists; mixing lives in the app (`TimelineAudio`) until a `playback` library is decided.
-- [ ] Playback scheduler: decode ahead with bounded queues, cancellation on seek. *Partial*: audio renders 0.25 s ahead into the bounded ring and restarts on seek/edit; video still decodes one frame at a time on request.
-- [ ] J/K/L (multiple speeds), frame step. *Partial*: frame step (←/→, Shift for 10) lands on exact rational frame times; K pauses and L plays at normal speed; reverse and faster speeds remain.
+- [x] Timeline audio mix: gain, linear fades and mute per clip, sample-accurate clip boundaries, any number of overlapping clips (`oma::audio::mix_planar`, tested); clip audio at speeds other than 1 stays silent until time-stretching exists. The mix lives in `libs/playback` (`TimelineAudio`, tested against fixtures): a clip continuing the same media where the previous one stopped (a split) keeps its decoder; per-clip three-band equalizer (`oma::audio::Equalizer`) and noise reduction (FFmpeg `afftdn` in `AudioDecoder`, noise level measured from the clip). Mono sources play as dual mono at full level.
+- [ ] Playback scheduler: decode ahead with bounded queues, cancellation on seek. *Partial*: audio renders 0.25 s ahead into the bounded ring and restarts on seek/edit; video decodes up to 8 frames ahead in a bounded queue (`VideoScheduler`). Open: the UI thread waits for both producers and reopens every decoder on each play/seek (audit 2026-10-03).
+- [ ] J/K/L (multiple speeds), frame step. *Partial*: frame step (←/→, Shift for 10) lands on exact rational frame times; J/L shuttle at 1×, 2× and 4× in both directions. Open: reverse re-seeks for every frame (one GOP of decoding per frame shown).
 - [x] On-screen compositor-image handoff for the viewer (2026-10-03): the timeline's `Composition` becomes a `RenderGraph` with every visible layer and its fit/crop/transform/opacity/blend; `PreviewItem` composites and encodes on Qt's render thread and Qt samples the compositor's own `VkImage` (no readback, no CPU conversion). Decoding is still software (one plane upload per frame, CLAUDE.md §7.3); hardware frames need queue admission for producers on other threads. The smoke check verifies that the viewer shows composited video; a run under the Vulkan validation layer with synchronization validation reports no errors when no window capture is taken (Qt's `grabWindow` itself triggers swapchain hazards). *Not measured yet*: 1080p60 new-frame time on the render thread.
 - [x] Qt Quick editor shell through `make run-gui`: Projects/Edit, media library, viewer, responsive timeline, play/pause and seek. The storyline is the M5 `Editor` (commands and undo/redo through `Session`); the viewer evaluates the timeline at the playhead, decodes forward without reseeking during playback and follows the audio clock. Decode-ahead queues remain pending.
 
@@ -231,6 +231,17 @@ transactions; render graph snapshots for known states.
 **Research**: [premiere-pro](Research/premiere-pro.md), [imovie](Research/imovie.md), [davinci-resolve](Research/davinci-resolve.md).
 
 ---
+
+### Audio editing ahead of order (2026-10-03)
+
+The maintainer chose to finish audio editing and start video effects before M7
+(`CLAUDE.md` §24 order), with persistence and export still required for v0.1.
+Done: audio lanes (import sound, place, move between lanes, trim without ripple),
+waveforms (`playback::compute_waveform`, 10 ms peaks and RMS, session-only until
+ADR-0009 decides the cache), detach audio for J/L-cuts (`edit::detach_audio`,
+`Clip::audio_detached`), Volume "More" (equalizer presets, noise reduction,
+peak normalize). Not done: linking lane clips to the storyline clip they belong to
+(sync-locked ripple), loudness (LUFS) normalization, speed-changed clip audio.
 
 ### M6 — UI v0.1
 
