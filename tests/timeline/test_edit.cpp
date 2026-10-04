@@ -334,6 +334,19 @@ void run_edit_tests() {
             expect(ok(fx, edit::set_audio(id, a))).toBeTruthy();
             a.fade_out = f(7);
             expect(ok(fx, edit::set_audio(id, a))).toBeFalsy();
+            a.fade_out = f(6);
+            a.eq.mid_db = -24.0F;
+            a.noise.amount = 0.5F;
+            a.noise.floor_db = -40.0F;
+            expect(ok(fx, edit::set_audio(id, a))).toBeTruthy();
+            a.eq.high_db = 25.0F;
+            expect(ok(fx, edit::set_audio(id, a))).toBeFalsy();
+            a.eq.high_db = 0.0F;
+            a.noise.amount = 1.5F;
+            expect(ok(fx, edit::set_audio(id, a))).toBeFalsy();
+            a.noise.amount = 1.0F;
+            a.noise.floor_db = 3.0F;
+            expect(ok(fx, edit::set_audio(id, a))).toBeFalsy();
         });
     });
 

@@ -163,6 +163,17 @@ Result<void> validate_properties(const Clip& c) {
     if (!std::isfinite(a.gain) || a.gain < 0.0F) {
         return error(ErrorCode::InvalidData, "invalid audio gain", detail::clip_context(c.id));
     }
+    const auto band_ok = [](float db) {
+        return std::isfinite(db) && std::abs(db) <= 24.0F;
+    };
+    if (!band_ok(a.eq.low_db) || !band_ok(a.eq.mid_db) || !band_ok(a.eq.high_db)) {
+        return error(ErrorCode::InvalidData, "equalizer gain outside ±24 dB",
+                     detail::clip_context(c.id));
+    }
+    if (!std::isfinite(a.noise.amount) || a.noise.amount < 0.0F || a.noise.amount > 1.0F ||
+        !std::isfinite(a.noise.floor_db) || a.noise.floor_db < -120.0F || a.noise.floor_db > 0.0F) {
+        return error(ErrorCode::InvalidData, "invalid noise reduction", detail::clip_context(c.id));
+    }
     const RationalTime zero;
     auto fades = detail::add_exact(a.fade_in, a.fade_out);
     if (a.fade_in < zero || a.fade_out < zero || !fades || c.duration < *fades) {

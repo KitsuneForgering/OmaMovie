@@ -109,12 +109,31 @@ struct VideoProperties {
     friend bool operator==(const VideoProperties&, const VideoProperties&) noexcept = default;
 };
 
+// A three-band equalizer, gains in dB within ±24 (0 is flat).
+struct Equalizer {
+    float low_db = 0.0F;
+    float mid_db = 0.0F;
+    float high_db = 0.0F;
+
+    friend bool operator==(const Equalizer&, const Equalizer&) noexcept = default;
+};
+
+// Reduction of steady background noise (hiss, hum, fans).
+struct NoiseReduction {
+    float amount = 0.0F;     // in [0, 1]; 0 is off
+    float floor_db = -50.0F; // the noise level it removes, dBFS RMS, measured from the clip
+
+    friend bool operator==(const NoiseReduction&, const NoiseReduction&) noexcept = default;
+};
+
 struct AudioProperties {
     float gain = 1.0F; // linear
     bool muted = false;
     // Fade lengths in timeline time; together they fit in the clip.
     RationalTime fade_in;
     RationalTime fade_out;
+    Equalizer eq;
+    NoiseReduction noise;
 
     friend bool operator==(const AudioProperties&, const AudioProperties&) noexcept = default;
 };
