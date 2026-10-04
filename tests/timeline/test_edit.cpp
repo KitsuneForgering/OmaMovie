@@ -338,6 +338,11 @@ void run_edit_tests() {
             v.color.saturation = 0.0;
             v.filter.amount = 2.0;
             expect(ok(fx, edit::set_video(id, v))).toBeFalsy();
+            v.filter.amount = 1.0;
+            v.sharpness = -1.0;
+            expect(ok(fx, edit::set_video(id, v))).toBeTruthy();
+            v.sharpness = 1.1;
+            expect(ok(fx, edit::set_video(id, v))).toBeFalsy();
             AudioProperties a;
             a.fade_in = f(4);
             a.fade_out = f(6);

@@ -135,6 +135,7 @@ struct VideoProperties {
     BlendMode blend = BlendMode::Normal;
     ColorAdjust color;
     Filter filter;
+    double sharpness = 0.0; // in [-1, 1]: below 0 blurred, above 0 sharpened
 
     friend bool operator==(const VideoProperties&, const VideoProperties&) noexcept = default;
 };

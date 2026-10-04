@@ -161,7 +161,8 @@ Result<void> validate_properties(const Clip& c) {
     const bool color_ok = within(v.color.exposure, 4.0) && within(v.color.contrast, 1.0) &&
                           within(v.color.saturation, 1.0) && within(v.color.temperature, 1.0);
     const bool filter_ok = std::isfinite(v.filter.amount) && v.filter.amount >= 0.0 &&
-                           v.filter.amount <= 1.0 && v.filter.kind <= FilterKind::Vignette;
+                           v.filter.amount <= 1.0 && v.filter.kind <= FilterKind::Vignette &&
+                           within(v.sharpness, 1.0);
     if (!crop_ok || !transform_ok || !opacity_ok || !color_ok || !filter_ok) {
         return error(ErrorCode::InvalidData, "invalid video properties",
                      detail::clip_context(c.id));
