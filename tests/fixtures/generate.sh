@@ -108,6 +108,15 @@ note still.png
 # preserves the still-image scenario for its GPU path until RGB image import lands.
 ff -i "$out/still.png" -frames:v 1 -pix_fmt yuv420p -f yuv4mpegpipe "$out/still.y4m"
 note still.y4m
+# Flat color patches for color adjustment tests, 80 px each: dark neutral grey, mid neutral grey,
+# a vivid orange and white.
+ff -f lavfi -i "color=c=0x303030:size=80x180,format=yuv420p" \
+    -f lavfi -i "color=c=0x777777:size=80x180,format=yuv420p" \
+    -f lavfi -i "color=c=0xc05020:size=80x180,format=yuv420p" \
+    -f lavfi -i "color=c=0xffffff:size=80x180,format=yuv420p" \
+    -filter_complex "[0][1][2][3]hstack=inputs=4,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv" \
+    -frames:v 1 -f yuv4mpegpipe "$out/color_patches.y4m"
+note color_patches.y4m
 
 echo "Fixtures in $out:"
 printf '  %s\n' "${made[@]}"
