@@ -74,6 +74,7 @@ RenderGraph looked_graph(std::uint32_t w, std::uint32_t h) {
     g.layers[2].filter = {.kind = oma::compositor::FilterKind::Vintage, .amount = 0.7};
     g.layers[0].sharpness = -0.4; // blurred background
     g.layers[2].sharpness = 0.8;  // sharpened overlay
+    g.layers[1].reveal = 0.6;     // a wipe edge through the picture-in-picture
     return g;
 }
 
@@ -248,6 +249,27 @@ void blur_and_sharpen() {
     // Sharpen pushes the dark side of the edge darker (unsharp-mask undershoot), next to it.
     expect(luma(detailed_at(in, 1.0, 79)) < luma(detailed_at(in, 0.0, 79)) - 0.002).toBeTruthy();
     expect(luma(detailed_at(in, 1.0, 40))).toBeCloseTo(flat, 1e-4);
+}
+
+void reveal_shows_the_left_part() {
+    auto src = decode_first("h264_30fps_aac.mp4");
+    if (!src.frame) {
+        return;
+    }
+    const std::array<LayerInput, 1> inputs{src.input()};
+    RenderGraph g = native_graph(320, 180);
+    g.background = {0.0F, 0.0F, 0.0F, 0.0F};
+    g.layers[0].reveal = 0.25; // the edge at x = 80
+    const auto out = CpuCompositor{}.render(g, inputs);
+    expect(out.has_value()).toBeTruthy();
+    if (!out) {
+        return;
+    }
+    expect(static_cast<double>(out->at(79, 90)[3])).toBeCloseTo(1.0, 1e-6);
+    expect(static_cast<double>(out->at(80, 90)[3])).toBeCloseTo(0.0, 1e-6);
+    g.layers[0].reveal = 0.2515625; // 80.5 px: pixel 80 half covered
+    const auto half = CpuCompositor{}.render(g, inputs);
+    expect(half && std::abs(half->at(80, 90)[3] - 0.5F) < 1e-5F).toBeTruthy();
 }
 
 void vignette_darkens_the_corners() {
@@ -468,6 +490,7 @@ void run_cpu_compositor_tests() {
            { color_adjustments(); });
         it("darkens the corners with a vignette", { vignette_darkens_the_corners(); });
         it("blurs and sharpens edges, leaving flat areas", { blur_and_sharpen(); });
+        it("reveals the left part of a layer for wipes", { reveal_shows_the_left_part(); });
     });
 }
 

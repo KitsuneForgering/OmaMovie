@@ -63,6 +63,9 @@ Result<void> validate(const RenderGraph& graph, std::size_t input_count) {
         if (!within(l.sharpness, 1.0)) {
             return std::unexpected(invalid("sharpness outside [-1, 1]", where));
         }
+        if (!std::isfinite(l.reveal) || l.reveal < 0.0 || l.reveal > 1.0) {
+            return std::unexpected(invalid("reveal outside [0, 1]", where));
+        }
     }
     return {};
 }

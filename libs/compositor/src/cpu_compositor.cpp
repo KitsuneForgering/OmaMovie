@@ -216,7 +216,10 @@ void composite(const LayerParams& p, const Planes& planes, RgbaImage& out) {
                                                  detailed(p, planes, blurred, x1, y1), tx),
                                              ty));
 
-            const float a = p.misc[0];
+            float a = p.misc[0];
+            if (p.misc[2] >= 0.0F) {
+                a *= std::clamp(p.misc[2] - static_cast<float>(ox), 0.0F, 1.0F);
+            }
             const std::array<float, 4> src{color.r * a, color.g * a, color.b * a, a};
             float* dst =
                 out.pixels.data() +

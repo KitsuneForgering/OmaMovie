@@ -83,6 +83,9 @@ struct Layer {
     // In [-1, 1]: below 0 a gaussian blur (up to 2% of the source height in standard
     // deviation), above 0 an unsharp mask that sharpens edges; 0 leaves detail alone.
     double sharpness = 0.0;
+    // The fraction of the output width the layer shows, from the left (a wipe transition); the
+    // edge is anti-aliased over one pixel. 1 shows the whole layer.
+    double reveal = 1.0;
 };
 
 struct RenderGraph {

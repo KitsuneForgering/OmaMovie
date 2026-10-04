@@ -42,7 +42,7 @@ Result<PreparedLayer> prepare_layer(const Layer& layer, const LayerInput& input,
                                   .sample_aspect = input.sample_aspect};
     const auto inverse = source_to_output(layer, geometry, out_width, out_height).inverse();
     const auto region = covered_pixels(layer, geometry, out_width, out_height);
-    if (!inverse || !region || layer.opacity <= 0.0F) {
+    if (!inverse || !region || layer.opacity <= 0.0F || layer.reveal <= 0.0) {
         return out; // nothing to draw
     }
     out.visible = true;
@@ -72,7 +72,11 @@ Result<PreparedLayer> prepare_layer(const Layer& layer, const LayerInput& input,
     const double container_max = std::ldexp(1.0, layout.container_bits) - 1.0;
     const double sample_max =
         (std::ldexp(1.0, layout.bit_depth) - 1.0) * std::ldexp(1.0, layout.lsb_shift);
-    p.misc = {layer.opacity, static_cast<float>(container_max / sample_max), 0.0F, 0.0F};
+    // A partial reveal (wipe) stores its edge in output pixels; a negative edge means none.
+    const float reveal_edge =
+        layer.reveal < 1.0 ? static_cast<float>(layer.reveal * static_cast<double>(out_width))
+                           : -1.0F;
+    p.misc = {layer.opacity, static_cast<float>(container_max / sample_max), reveal_edge, 0.0F};
 
     p.mode = {static_cast<std::int32_t>(layout.interleaved_chroma ? ChromaMode::Interleaved
                                                                   : ChromaMode::Planar),

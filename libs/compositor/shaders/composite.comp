@@ -30,7 +30,7 @@ layout(std140, set = 0, binding = 4) uniform Layer {
     vec4 gamut_r; // linear source primaries -> BT.709
     vec4 gamut_g;
     vec4 gamut_b;
-    vec4 misc;    // opacity, sample scale
+    vec4 misc;    // opacity, sample scale, reveal edge in output pixels (negative: none)
     ivec4 mode;   // chroma mode (1 interleaved, 2 planar), chroma shift x, chroma shift y, transfer
     ivec4 extra;  // blend, source width, source height
     ivec4 region; // output pixels x0, y0, x1, y1
@@ -184,6 +184,9 @@ void main() {
     color = max(color, vec3(0.0));
 
     float alpha = L.misc.x;
+    if (L.misc.z >= 0.0) {
+        alpha *= clamp(L.misc.z - float(out_px.x), 0.0, 1.0); // pixel coverage left of the edge
+    }
     vec4 src = vec4(color * alpha, alpha);
     vec4 dst = imageLoad(target, out_px);
     vec4 result;
