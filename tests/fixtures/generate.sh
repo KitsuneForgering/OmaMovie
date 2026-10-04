@@ -93,6 +93,14 @@ fi
 ff -f lavfi -i "$(audio_src 44100 2)" -c:a pcm_s16le "$out/tone_44100.wav"
 note tone_44100.wav
 
+# Steady hiss under a tone that starts after one second (noise reduction): seeded white noise
+# at amplitude 0.02 for 3 s, plus the 440 Hz tone from 1 s on.
+ff -f lavfi -i "anoisesrc=duration=3:color=white:amplitude=0.02:sample_rate=48000:seed=7" \
+    -f lavfi -i "$(audio_src 48000 3)" \
+    -filter_complex "[1]volume=volume=0:enable='lt(t,1)'[tone];[0][tone]amix=inputs=2:normalize=0" \
+    -c:a pcm_s16le "$out/noisy_tone.wav"
+note noisy_tone.wav
+
 # Still image.
 ff -f lavfi -i "testsrc2=size=640x360:rate=1:duration=1" -frames:v 1 "$out/still.png"
 note still.png
