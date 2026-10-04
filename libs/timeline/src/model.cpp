@@ -155,7 +155,14 @@ Result<void> validate_properties(const Clip& c) {
                               std::isfinite(tr.rotation) && std::isfinite(tr.scale_x) &&
                               std::isfinite(tr.scale_y) && tr.scale_x != 0.0 && tr.scale_y != 0.0;
     const bool opacity_ok = std::isfinite(v.opacity) && v.opacity >= 0.0F && v.opacity <= 1.0F;
-    if (!crop_ok || !transform_ok || !opacity_ok) {
+    const auto within = [](double x, double limit) {
+        return std::isfinite(x) && std::abs(x) <= limit;
+    };
+    const bool color_ok = within(v.color.exposure, 4.0) && within(v.color.contrast, 1.0) &&
+                          within(v.color.saturation, 1.0) && within(v.color.temperature, 1.0);
+    const bool filter_ok = std::isfinite(v.filter.amount) && v.filter.amount >= 0.0 &&
+                           v.filter.amount <= 1.0 && v.filter.kind <= FilterKind::Vignette;
+    if (!crop_ok || !transform_ok || !opacity_ok || !color_ok || !filter_ok) {
         return error(ErrorCode::InvalidData, "invalid video properties",
                      detail::clip_context(c.id));
     }

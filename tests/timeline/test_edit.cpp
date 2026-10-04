@@ -328,6 +328,16 @@ void run_edit_tests() {
             expect(fx.editor.timeline().find_clip(id)->video == v).toBeTruthy();
             v.opacity = 1.5F;
             expect(ok(fx, edit::set_video(id, v))).toBeFalsy();
+            v.opacity = 1.0F;
+            v.color.exposure = 1.5;
+            v.filter.kind = FilterKind::Sepia;
+            v.filter.amount = 0.5;
+            expect(ok(fx, edit::set_video(id, v))).toBeTruthy();
+            v.color.saturation = -1.5;
+            expect(ok(fx, edit::set_video(id, v))).toBeFalsy();
+            v.color.saturation = 0.0;
+            v.filter.amount = 2.0;
+            expect(ok(fx, edit::set_video(id, v))).toBeFalsy();
             AudioProperties a;
             a.fade_in = f(4);
             a.fade_out = f(6);

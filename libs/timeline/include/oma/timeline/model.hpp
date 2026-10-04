@@ -99,12 +99,42 @@ struct Transform {
     friend bool operator==(const Transform&, const Transform&) noexcept = default;
 };
 
+// Color adjustments (ui-design §6, Color); 0 leaves the picture unchanged.
+struct ColorAdjust {
+    double exposure = 0.0;    // stops, in [-4, 4]
+    double contrast = 0.0;    // in [-1, 1]
+    double saturation = 0.0;  // in [-1, 1]: -1 black and white
+    double temperature = 0.0; // in [-1, 1]: cooler to warmer
+
+    friend bool operator==(const ColorAdjust&, const ColorAdjust&) noexcept = default;
+};
+
+// A clip filter (ui-design §6, Effects): one look per clip.
+enum class FilterKind : std::uint8_t {
+    None,
+    BlackAndWhite,
+    Sepia,
+    Vintage,
+    Cool,
+    Warm,
+    Vignette,
+};
+
+struct Filter {
+    FilterKind kind = FilterKind::None;
+    double amount = 1.0; // in [0, 1]
+
+    friend bool operator==(const Filter&, const Filter&) noexcept = default;
+};
+
 struct VideoProperties {
     Fit fit = Fit::Fit;
     Crop crop;
     Transform transform;
     float opacity = 1.0F;
     BlendMode blend = BlendMode::Normal;
+    ColorAdjust color;
+    Filter filter;
 
     friend bool operator==(const VideoProperties&, const VideoProperties&) noexcept = default;
 };
