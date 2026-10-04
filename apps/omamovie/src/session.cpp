@@ -518,6 +518,77 @@ void Session::setClipAudio(double gain, double fadeIn, double fadeOut, bool mute
     run(tl::edit::set_audio(id, audio));
 }
 
+void Session::setSelectedAudio(const tl::AudioProperties& audio) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr || audio == c->audio) return;
+    const tl::ClipId id = c->id;
+    run(tl::edit::set_audio(id, audio));
+}
+
+void Session::setClipEq(double low, double mid, double high) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr || !std::isfinite(low) || !std::isfinite(mid) || !std::isfinite(high)) return;
+    tl::AudioProperties audio = c->audio;
+    const auto band = [](double db) { return static_cast<float>(std::clamp(std::round(db * 2.0) / 2.0, -24.0, 24.0)); };
+    audio.eq = tl::Equalizer{.low_db = band(low), .mid_db = band(mid), .high_db = band(high)};
+    setSelectedAudio(audio);
+}
+
+std::optional<Session::ClipSound> Session::selectedSound() const {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr) return std::nullopt;
+    auto waveform = waveforms_.get(c->media.value());
+    if (!waveform) return std::nullopt;
+    // Display-grade seconds are enough to pick buckets of 10 ms (CLAUDE.md §6).
+    const double from = c->source_in.seconds_approx() - waveform->start.seconds_approx();
+    const double length = c->duration.seconds_approx() * c->time_map.speed().to_double_approx();
+    return ClipSound{.waveform = std::move(waveform), .from = from, .to = from + length};
+}
+
+void Session::setClipNoise(double amount) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr || !std::isfinite(amount)) return;
+    tl::AudioProperties audio = c->audio;
+    audio.noise.amount = static_cast<float>(std::clamp(amount, 0.0, 1.0));
+    if (audio.noise.amount > 0.0F && c->audio.noise.amount == 0.0F) {
+        // Measure the noise once, when reduction is turned on; later changes keep it.
+        const auto sound = selectedSound();
+        if (!sound) {
+            setNotice(QStringLiteral("Still analysing this clip's sound; try again in a moment"));
+            return;
+        }
+        const auto floor = sound->waveform->noise_floor_db(sound->from, sound->to);
+        if (!floor) {
+            setNotice(QStringLiteral("This clip is silent: there is no noise to reduce"));
+            return;
+        }
+        audio.noise.floor_db = std::clamp(*floor, -120.0F, 0.0F);
+    }
+    setSelectedAudio(audio);
+}
+
+void Session::normalizeClip() {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr) return;
+    const auto sound = selectedSound();
+    if (!sound) {
+        setNotice(QStringLiteral("Still analysing this clip's sound; try again in a moment"));
+        return;
+    }
+    const float peak = sound->waveform->peak_between(sound->from, sound->to);
+    if (peak <= 0.0F) {
+        setNotice(QStringLiteral("This clip is silent"));
+        return;
+    }
+    // Peak normalization to -1 dBFS, before the equalizer; loudness (LUFS) matching would need a
+    // loudness meter the project does not have yet.
+    tl::AudioProperties audio = c->audio;
+    audio.gain = static_cast<float>(std::clamp(std::pow(10.0, -1.0 / 20.0) / static_cast<double>(peak), 0.0, 4.0));
+    audio.muted = false;
+    setSelectedAudio(audio);
+    if (audio.gain >= 4.0F) setNotice(QStringLiteral("The clip is very quiet: volume raised to the maximum"));
+}
+
 void Session::undo() {
     if (!editor_ || !editor_->can_undo()) return;
     pause();
@@ -562,7 +633,8 @@ QVariantMap Session::clipMap(const tl::Clip& c) const {
                        {"fadeIn", c.audio.fade_in.seconds_approx()},
                        {"fadeOut", c.audio.fade_out.seconds_approx()},
                        {"audioAdjusted", c.audio.muted || c.audio.gain != 1.0F || c.audio.fade_in.value() != 0 ||
-                                             c.audio.fade_out.value() != 0}};
+                                             c.audio.fade_out.value() != 0 || c.audio.eq != tl::Equalizer{} ||
+                                             c.audio.noise.amount > 0.0F}};
 }
 
 QVariantList Session::clips() const {
@@ -612,6 +684,10 @@ QVariantMap Session::info() const {
             out.insert("fadeIn", c->audio.fade_in.seconds_approx());
             out.insert("fadeOut", c->audio.fade_out.seconds_approx());
             out.insert("muted", c->audio.muted);
+            out.insert("eqLow", static_cast<double>(c->audio.eq.low_db));
+            out.insert("eqMid", static_cast<double>(c->audio.eq.mid_db));
+            out.insert("eqHigh", static_cast<double>(c->audio.eq.high_db));
+            out.insert("noise", static_cast<double>(c->audio.noise.amount));
         }
     }
     return out;

@@ -473,8 +473,33 @@ int main(int argc, char** argv) {
              session.undo();
              session.undo();
              ok = ok && lane_count() == 1 && session.clips().front().toMap().value("hasAudio").toBool();
+             // Volume "More" on the sound: equalizer preset, noise reduction from the measured
+             // floor (the waveform is ready by now), and normalize (the quiet tone hits the
+             // maximum volume).
+             session.selectClip(id);
+             session.setClipEq(-6, 3, 2);
+             QVariantMap info = session.info();
+             ok = ok && info.value("eqLow").toDouble() == -6.0 && info.value("eqMid").toDouble() == 3.0;
+             session.setClipNoise(0.5);
+             info = session.info();
+             const bool noise = info.value("noise").toDouble() == 0.5;
+             session.normalizeClip();
+             info = session.info();
+             const bool normalized = info.value("gain").toDouble() == 4.0;
+             if (!noise || !normalized)
+                 std::printf("GUI smoke: noise %d normalize %d (%s)\n", noise, normalized, qPrintable(session.notice()));
+             ok = ok && noise && normalized;
+             window->setProperty("drawer", QStringLiteral("volume"));
+             window->setProperty("volumeMore", true);
              r.lanes = ok;
+         }},
+        {"volume more", after(300), [&] {
              screenshot(window, "OMA_GUI_SMOKE_LANES_SCREENSHOT");
+             window->setProperty("drawer", QString());
+             window->setProperty("volumeMore", false);
+             session.undo();
+             session.undo();
+             session.undo();
              window->requestActivate();
          }},
         {"space", after(300), [&] { press(Qt::Key_Space); }},

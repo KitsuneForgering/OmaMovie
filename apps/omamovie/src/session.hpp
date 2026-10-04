@@ -140,6 +140,13 @@ public:
     // Volume drawer (ui-design §6): one command per committed change. Fades are snapped to
     // whole frames and clamped so both fit in the clip.
     Q_INVOKABLE void setClipAudio(double gain, double fadeIn, double fadeOut, bool muted);
+    // Volume "More" (ui-design §6, level 2), each one command. Equalizer gains in dB.
+    Q_INVOKABLE void setClipEq(double low, double mid, double high);
+    // Noise reduction amount in [0, 1]. The noise level comes from the clip's quiet parts, so it
+    // needs the clip's waveform (analysis runs after import).
+    Q_INVOKABLE void setClipNoise(double amount);
+    // Sets the volume so the clip's loudest peak reaches -1 dBFS.
+    Q_INVOKABLE void normalizeClip();
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
 
@@ -187,6 +194,14 @@ private:
     bool placeAudio(int how, oma::timeline::ClipId id, const oma::timeline::edit::ClipSource& clip);
     [[nodiscard]] std::vector<oma::timeline::TrackId> audioLanes() const;
     [[nodiscard]] QVariantMap clipMap(const oma::timeline::Clip& c) const;
+    // The selected clip's waveform and the media seconds it shows, if analysed.
+    struct ClipSound {
+        std::shared_ptr<const oma::playback::Waveform> waveform;
+        double from = 0; // in the waveform's own clock
+        double to = 0;
+    };
+    [[nodiscard]] std::optional<ClipSound> selectedSound() const;
+    void setSelectedAudio(const oma::timeline::AudioProperties& audio);
     void setNotice(const QString& text);
     void fail(const QString& message);
 

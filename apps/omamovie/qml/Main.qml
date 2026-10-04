@@ -43,10 +43,32 @@ ApplicationWindow {
             pad(s % 60, 2) + ":" + pad(total % fps, 2)
     }
     readonly property bool audioAdjusted: !!session.info.clip &&
-        (session.info.gain !== 1 || session.info.fadeIn > 0 || session.info.fadeOut > 0 || session.info.muted)
+        (session.info.gain !== 1 || session.info.fadeIn > 0 || session.info.fadeOut > 0 || session.info.muted ||
+         session.info.eqLow !== 0 || session.info.eqMid !== 0 || session.info.eqHigh !== 0 || session.info.noise > 0)
+    property bool volumeMore: false // the Volume drawer's "More" level (ui-design §6)
+    // Equalizer presets (low, mid, high in dB); "Custom" is whatever the sliders say.
+    readonly property var eqPresets: [
+        { name: "Flat", bands: [0, 0, 0] },
+        { name: "Voice", bands: [-6, 3, 2] },
+        { name: "Reduce rumble", bands: [-12, 0, 0] },
+        { name: "Bass boost", bands: [6, 0, 0] },
+        { name: "Treble boost", bands: [0, 0, 6] }
+    ]
+    function eqPresetIndex() {
+        for (let i = 0; i < eqPresets.length; ++i) {
+            const b = eqPresets[i].bands
+            if (b[0] === session.info.eqLow && b[1] === session.info.eqMid && b[2] === session.info.eqHigh) return i
+        }
+        return eqPresets.length // Custom
+    }
     function decibels(gain) {
         return gain <= 0.0001 ? "−∞ dB" : (20 * Math.log(gain) / Math.LN10).toFixed(1) + " dB"
     }
+    // The volume slider moves in decibels: −40 dB at the bottom means silence, +12 dB on top
+    // (the most the model allows, gain 4).
+    readonly property real volumeFloorDb: -40
+    function gainOf(db) { return db <= volumeFloorDb ? 0 : Math.pow(10, db / 20) }
+    function dbOf(gain) { return gain > 0 ? Math.max(volumeFloorDb, 20 * Math.log(gain) / Math.LN10) : volumeFloorDb }
     function shortcutText(action) {
         return action && action.keys ? " (" + action.keys + ")" : ""
     }
@@ -498,71 +520,157 @@ ApplicationWindow {
                         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
                     }
 
-                    // Volume drawer (§6, level 1): volume, fades and mute for the selected clip.
-                    // Values follow the clip; a change is committed as one command on release.
+                    // Volume drawer (§6): volume, fades and mute for the selected clip; "More" adds the
+                    // equalizer, noise reduction and normalize. Values follow the clip; a change is
+                    // committed as one command on release.
                     Rectangle {
                         id: volumeDrawer
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 64
+                        Layout.preferredHeight: root.volumeMore ? 124 : 64
                         visible: !root.viewerOnly && root.drawer === "volume" && actions.volume.enabled
                         color: colors.dark_background
                         function commit() {
-                            session.setClipAudio(gainControl.slider.value, fadeInControl.slider.value,
+                            session.setClipAudio(root.gainOf(gainControl.slider.value), fadeInControl.slider.value,
                                                  fadeOutControl.slider.value, !!session.info.muted)
                         }
+                        function commitEq() {
+                            session.setClipEq(lowControl.slider.value, midControl.slider.value, highControl.slider.value)
+                        }
                         component DrawerSlider: ColumnLayout {
+                            id: drawerSlider
                             property alias slider: control
                             property string label
                             property string readout
+                            signal committed()
                             spacing: 0
                             Layout.fillWidth: true
                             RowLayout {
-                                Text { text: parent.parent.label; color: root.muted; font.pixelSize: 9; font.bold: true }
+                                Text { text: drawerSlider.label; color: root.muted; font.pixelSize: 9; font.bold: true }
                                 Item { Layout.fillWidth: true }
-                                Text { text: parent.parent.readout; color: root.fg; font.pixelSize: 10 }
+                                Text { text: drawerSlider.readout; color: root.fg; font.pixelSize: 10 }
                             }
                             Slider {
                                 id: control
                                 Layout.fillWidth: true
                                 focusPolicy: Qt.NoFocus
-                                onPressedChanged: if (!pressed) volumeDrawer.commit()
+                                onPressedChanged: if (!pressed) drawerSlider.committed()
                             }
                         }
-                        RowLayout {
+                        ColumnLayout {
                             anchors.fill: parent
                             anchors.leftMargin: 12
                             anchors.rightMargin: 12
-                            spacing: 18
-                            DrawerSlider {
-                                id: gainControl
-                                label: "VOLUME"
-                                readout: root.decibels(gainControl.slider.value)
+                            anchors.topMargin: 6
+                            anchors.bottomMargin: 6
+                            spacing: 6
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 18
+                                DrawerSlider {
+                                    id: gainControl
+                                    label: "VOLUME"
+                                    readout: root.decibels(root.gainOf(gainControl.slider.value))
+                                    onCommitted: volumeDrawer.commit()
+                                }
+                                DrawerSlider {
+                                    id: fadeInControl
+                                    label: "FADE IN"
+                                    readout: fadeInControl.slider.value.toFixed(2) + " s"
+                                    onCommitted: volumeDrawer.commit()
+                                }
+                                DrawerSlider {
+                                    id: fadeOutControl
+                                    label: "FADE OUT"
+                                    readout: fadeOutControl.slider.value.toFixed(2) + " s"
+                                    onCommitted: volumeDrawer.commit()
+                                }
+                                OmaButton {
+                                    text: session.info.muted ? "Unmute" : "Mute"
+                                    selected: !!session.info.muted
+                                    onClicked: session.setClipAudio(root.gainOf(gainControl.slider.value), fadeInControl.slider.value,
+                                                                    fadeOutControl.slider.value, !session.info.muted)
+                                }
+                                OmaButton {
+                                    text: "More"
+                                    selected: root.volumeMore
+                                    tip: "Equalizer, noise reduction, normalize"
+                                    onClicked: root.volumeMore = !root.volumeMore
+                                }
                             }
-                            DrawerSlider {
-                                id: fadeInControl
-                                label: "FADE IN"
-                                readout: fadeInControl.slider.value.toFixed(2) + " s"
-                            }
-                            DrawerSlider {
-                                id: fadeOutControl
-                                label: "FADE OUT"
-                                readout: fadeOutControl.slider.value.toFixed(2) + " s"
-                            }
-                            OmaButton {
-                                text: session.info.muted ? "Unmute" : "Mute"
-                                selected: !!session.info.muted
-                                onClicked: session.setClipAudio(gainControl.slider.value, fadeInControl.slider.value,
-                                                                fadeOutControl.slider.value, !session.info.muted)
+                            RowLayout {
+                                Layout.fillWidth: true
+                                visible: root.volumeMore
+                                spacing: 18
+                                ColumnLayout {
+                                    spacing: 2
+                                    Text { text: "EQUALIZER"; color: root.muted; font.pixelSize: 9; font.bold: true }
+                                    ComboBox {
+                                        id: eqPreset
+                                        Layout.preferredWidth: 140
+                                        font.pixelSize: 11
+                                        focusPolicy: Qt.NoFocus
+                                        model: root.eqPresets.map(p => p.name).concat(["Custom"])
+                                        currentIndex: root.eqPresetIndex()
+                                        onActivated: (index) => {
+                                            if (index < root.eqPresets.length) {
+                                                const b = root.eqPresets[index].bands
+                                                session.setClipEq(b[0], b[1], b[2])
+                                            }
+                                        }
+                                    }
+                                }
+                                DrawerSlider {
+                                    id: lowControl
+                                    label: "LOW"
+                                    readout: lowControl.slider.value.toFixed(1) + " dB"
+                                    onCommitted: volumeDrawer.commitEq()
+                                }
+                                DrawerSlider {
+                                    id: midControl
+                                    label: "MID"
+                                    readout: midControl.slider.value.toFixed(1) + " dB"
+                                    onCommitted: volumeDrawer.commitEq()
+                                }
+                                DrawerSlider {
+                                    id: highControl
+                                    label: "HIGH"
+                                    readout: highControl.slider.value.toFixed(1) + " dB"
+                                    onCommitted: volumeDrawer.commitEq()
+                                }
+                                DrawerSlider {
+                                    id: noiseControl
+                                    label: "NOISE REDUCTION"
+                                    readout: noiseControl.slider.value > 0 ? Math.round(noiseControl.slider.value * 100) + "%" : "Off"
+                                    onCommitted: session.setClipNoise(noiseControl.slider.value)
+                                }
+                                OmaButton {
+                                    text: "Normalize"
+                                    tip: "Raise or lower the volume so the loudest peak reaches −1 dB"
+                                    onClicked: session.normalizeClip()
+                                }
                             }
                         }
                         // The sliders follow the selected clip, except while one is being dragged.
-                        Binding { target: gainControl.slider; property: "from"; value: 0 }
-                        Binding { target: gainControl.slider; property: "to"; value: 2 }
-                        Binding { target: gainControl.slider; property: "value"; value: session.info.gain || 0; when: !gainControl.slider.pressed }
+                        Binding { target: gainControl.slider; property: "from"; value: root.volumeFloorDb }
+                        Binding { target: gainControl.slider; property: "to"; value: 12 }
+                        Binding { target: gainControl.slider; property: "value"; value: root.dbOf(session.info.gain || 0); when: !gainControl.slider.pressed }
                         Binding { target: fadeInControl.slider; property: "to"; value: Math.max(0.01, session.info.clipDuration || 0) }
                         Binding { target: fadeInControl.slider; property: "value"; value: session.info.fadeIn || 0; when: !fadeInControl.slider.pressed }
                         Binding { target: fadeOutControl.slider; property: "to"; value: Math.max(0.01, session.info.clipDuration || 0) }
                         Binding { target: fadeOutControl.slider; property: "value"; value: session.info.fadeOut || 0; when: !fadeOutControl.slider.pressed }
+                        Binding { target: lowControl.slider; property: "from"; value: -12 }
+                        Binding { target: lowControl.slider; property: "to"; value: 12 }
+                        Binding { target: lowControl.slider; property: "stepSize"; value: 0.5 }
+                        Binding { target: lowControl.slider; property: "value"; value: session.info.eqLow || 0; when: !lowControl.slider.pressed }
+                        Binding { target: midControl.slider; property: "from"; value: -12 }
+                        Binding { target: midControl.slider; property: "to"; value: 12 }
+                        Binding { target: midControl.slider; property: "stepSize"; value: 0.5 }
+                        Binding { target: midControl.slider; property: "value"; value: session.info.eqMid || 0; when: !midControl.slider.pressed }
+                        Binding { target: highControl.slider; property: "from"; value: -12 }
+                        Binding { target: highControl.slider; property: "to"; value: 12 }
+                        Binding { target: highControl.slider; property: "stepSize"; value: 0.5 }
+                        Binding { target: highControl.slider; property: "value"; value: session.info.eqHigh || 0; when: !highControl.slider.pressed }
+                        Binding { target: noiseControl.slider; property: "value"; value: session.info.noise || 0; when: !noiseControl.slider.pressed }
                         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
                     }
 
