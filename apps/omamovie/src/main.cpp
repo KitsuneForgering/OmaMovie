@@ -461,6 +461,18 @@ int main(int argc, char** argv) {
              session.moveClip(id, 1, 0); // to a new lane; the emptied one goes away
              ok = ok && lane_count() == 1 && session.undoText() == QStringLiteral("Move");
              session.undo();
+             // Detaching the first storyline clip's sound: lane 1 is taken there, so a new lane.
+             session.selectClip(session.clips().front().toMap().value("id").toDouble());
+             session.detachAudio();
+             ok = ok && lane_count() == 2 && session.undoText() == QStringLiteral("Detach Audio") &&
+                  !session.clips().front().toMap().value("hasAudio").toBool();
+             const double sound = lane_clip(1).value("id").toDouble();
+             const double before = lane_clip(1).value("duration").toDouble();
+             session.trimClip(sound, false, -5); // the sound ends 5 frames before the picture
+             ok = ok && std::abs(lane_clip(1).value("duration").toDouble() - (before - 5.0 / 30.0)) < 1e-6;
+             session.undo();
+             session.undo();
+             ok = ok && lane_count() == 1 && session.clips().front().toMap().value("hasAudio").toBool();
              r.lanes = ok;
              screenshot(window, "OMA_GUI_SMOKE_LANES_SCREENSHOT");
              window->requestActivate();

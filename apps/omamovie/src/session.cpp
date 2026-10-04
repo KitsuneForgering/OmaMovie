@@ -465,6 +465,42 @@ void Session::moveClip(double id, int lanes, int frames) {
     }
 }
 
+void Session::detachAudio() {
+    if (!editor_) return;
+    const tl::Timeline& t = editor_->timeline();
+    const tl::Clip* c = t.find_clip(selected_clip_);
+    if (c == nullptr || t.track_of(c->id)->id != primary_) c = t.clip_at(primary_, playhead_);
+    const tl::MediaInfo* m = c != nullptr ? t.find_media(c->media) : nullptr;
+    if (c == nullptr || m == nullptr || !m->has_audio || c->audio_detached) {
+        setNotice(QStringLiteral("Select a storyline clip with sound to detach it"));
+        return;
+    }
+    const tl::ClipId video = c->id;
+    const std::int64_t start = c->start_ticks();
+    const std::int64_t end = c->end_ticks();
+    const auto lanes = audioLanes();
+    std::optional<tl::TrackId> lane;
+    for (const tl::TrackId l : lanes) {
+        if (std::ranges::none_of(t.find_track(l)->clips, [&](const tl::Clip& other) {
+                return other.start_ticks() < end && start < other.end_ticks();
+            })) {
+            lane = l;
+            break;
+        }
+    }
+    std::vector<std::unique_ptr<tl::Command>> steps;
+    if (!lane) {
+        lane = editor_->new_track_id();
+        steps.push_back(tl::edit::add_track(*lane, tl::TrackKind::Audio, "Audio " + std::to_string(lanes.size() + 1)));
+    }
+    const tl::ClipId sound = editor_->new_clip_id();
+    steps.push_back(tl::edit::detach_audio(video, *lane, sound));
+    if (run(tl::edit::transaction("Detach Audio", std::move(steps)))) {
+        selected_clip_ = sound;
+        emit selectionChanged();
+    }
+}
+
 void Session::setClipAudio(double gain, double fadeIn, double fadeOut, bool muted) {
     if (!editor_ || !selected_clip_.valid()) return;
     const tl::Clip* c = editor_->timeline().find_clip(selected_clip_);
@@ -514,7 +550,8 @@ QVariantMap Session::clipMap(const tl::Clip& c) const {
     const LibraryItem* source = item(c.media);
     return QVariantMap{{"id", static_cast<double>(c.id.value())},
                        {"media", static_cast<double>(c.media.value())},
-                       {"hasAudio", source != nullptr && source->media.has_audio},
+                       {"hasAudio", source != nullptr && source->media.has_audio && !c.audio_detached},
+                       {"audioDetached", c.audio_detached},
                        {"sourceIn", c.source_in.seconds_approx()},
                        {"speed", c.time_map.speed().to_double_approx()},
                        {"gain", c.audio.muted ? 0.0 : static_cast<double>(c.audio.gain)},
@@ -565,6 +602,11 @@ QVariantMap Session::info() const {
     if (editor_ && selected_clip_.valid()) {
         if (const tl::Clip* c = editor_->timeline().find_clip(selected_clip_)) {
             out.insert("clip", true);
+            // Detached sound is adjusted on its own clip.
+            if (c->audio_detached) out.insert("hasAudio", false);
+            out.insert("onStoryline", editor_->timeline().track_of(c->id)->id == primary_);
+            out.insert("canDetach", source->media.has_audio && !c->audio_detached &&
+                                        editor_->timeline().track_of(c->id)->id == primary_);
             out.insert("clipDuration", c->duration.seconds_approx());
             out.insert("gain", static_cast<double>(c->audio.gain));
             out.insert("fadeIn", c->audio.fade_in.seconds_approx());

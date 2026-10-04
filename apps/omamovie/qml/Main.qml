@@ -129,6 +129,11 @@ ApplicationWindow {
             text: "Replace with a gap"; keys: "Shift+Delete"; enabled: actions.media
             onTriggered: session.deleteSelected(false)
         }
+        property OmaAction detachAudio: OmaAction {
+            text: "Detach audio"; keys: "Ctrl+Shift+S"
+            enabled: actions.editing && !!session.info.canDetach
+            onTriggered: session.detachAudio()
+        }
         property OmaAction undo: OmaAction {
             text: session.canUndo ? "Undo " + session.undoText : "Undo"
             keys: "Ctrl+Z"; enabled: actions.editing && session.canUndo
@@ -782,6 +787,8 @@ ApplicationWindow {
                         OmaButton { objectName: "editSplit"; action: actions.split; iconName: "split"; showLabel: !root.compact }
                         OmaButton { action: actions.remove; iconName: "rippleDelete"; showLabel: !root.compact }
                         OmaButton { action: actions.lift; iconName: "lift"; showLabel: !root.compact }
+                        Separator { Layout.leftMargin: 5; Layout.rightMargin: 5 }
+                        OmaButton { action: actions.detachAudio; iconName: "detach"; showLabel: !root.compact }
                         Item { Layout.fillWidth: true }
                     }
                     Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
@@ -1082,7 +1089,7 @@ ApplicationWindow {
         model: [actions.playPause, actions.pause, actions.stop, actions.playForward, actions.playBackward, actions.previousFrame,
                 actions.nextFrame, actions.back10, actions.forward10, actions.toStart, actions.toEnd,
                 actions.append, actions.insert, actions.overwrite, actions.split, actions.remove,
-                actions.lift, actions.undo, actions.redo, actions.importMedia,
+                actions.lift, actions.detachAudio, actions.undo, actions.redo, actions.importMedia,
                 actions.exportMovie, actions.toggleLibrary, actions.fullViewer, actions.leaveFullViewer,
                 actions.zoomIn, actions.zoomOut, actions.zoomFit, actions.volume, actions.info]
         delegate: Item {

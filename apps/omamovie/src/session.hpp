@@ -134,6 +134,9 @@ public:
     // Moves a clip on the lanes below the storyline by whole lanes (a new lane past the last)
     // and frames; the storyline reorders by editing instead.
     Q_INVOKABLE void moveClip(double id, int lanes, int frames);
+    // Detaches the selected storyline clip's sound onto an audio lane (a new one if no lane has
+    // room), so picture and sound can be trimmed apart for J- and L-cuts.
+    Q_INVOKABLE void detachAudio();
     // Volume drawer (ui-design §6): one command per committed change. Fades are snapped to
     // whole frames and clamped so both fit in the clip.
     Q_INVOKABLE void setClipAudio(double gain, double fadeIn, double fadeOut, bool muted);
