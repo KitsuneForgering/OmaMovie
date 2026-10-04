@@ -17,8 +17,20 @@ constexpr double kForwardWindowSeconds = 2.0;
 
 } // namespace
 
-oma::Result<FrameSource::Stream*> FrameSource::stream(const std::string& path) {
-    const auto it = std::ranges::find(streams_, path, &Stream::path);
+bool FrameSource::reaches(const Stream& s, const oma::RationalTime& t) {
+    // Display-grade seconds only choose between decoding forward and seeking.
+    return s.current && pts_of(*s.current) <= t &&
+           (t.seconds_approx() - pts_of(*s.current).seconds_approx()) <= kForwardWindowSeconds;
+}
+
+oma::Result<FrameSource::Stream*> FrameSource::stream(const std::string& path, const oma::RationalTime& t) {
+    auto it = std::ranges::find_if(streams_, [&](const Stream& s) { return s.path == path && reaches(s, t); });
+    const auto open = std::ranges::count(streams_, path, &Stream::path);
+    if (it == streams_.end() && std::cmp_greater_equal(open, kStreamsPerFile)) {
+        // Seek the least recently used decoder of this file.
+        it = std::ranges::find(streams_.rbegin(), streams_.rend(), path, &Stream::path).base();
+        --it;
+    }
     if (it != streams_.end()) {
         streams_.splice(streams_.begin(), streams_, it);
         return &streams_.front();
@@ -73,15 +85,12 @@ oma::Result<void> FrameSource::advance(Stream& s, const oma::RationalTime& t) {
 }
 
 oma::Result<Picture> FrameSource::picture_at(const std::string& path, const oma::RationalTime& t) {
-    auto opened = stream(path);
+    auto opened = stream(path, t);
     if (!opened) {
         return std::unexpected(opened.error());
     }
     Stream& s = **opened;
-    const bool from_current =
-        s.current && pts_of(*s.current) <= t &&
-        (t.seconds_approx() - pts_of(*s.current).seconds_approx()) <= kForwardWindowSeconds;
-    if (auto r = from_current ? advance(s, t) : seek(s, t); !r) {
+    if (auto r = reaches(s, t) ? advance(s, t) : seek(s, t); !r) {
         return std::unexpected(r.error());
     }
     Picture picture{.frame = s.current, .color = {}, .rotation = 0, .sample_aspect = oma::Rational::literal(1, 1)};

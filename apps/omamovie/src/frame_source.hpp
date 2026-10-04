@@ -48,12 +48,18 @@ private:
         bool ended = false;                              // no frame after `ahead`/`current`
     };
 
-    [[nodiscard]] oma::Result<Stream*> stream(const std::string& path);
+    // A decoder for `path` that reaches `t` cheapest: one that can decode forward to it, else a
+    // new one while the file has fewer than kStreamsPerFile, else the least recently used.
+    [[nodiscard]] oma::Result<Stream*> stream(const std::string& path, const oma::RationalTime& t);
+    [[nodiscard]] static bool reaches(const Stream& s, const oma::RationalTime& t);
     [[nodiscard]] static oma::Result<void> seek(Stream& s, const oma::RationalTime& t);
     [[nodiscard]] static oma::Result<void> advance(Stream& s, const oma::RationalTime& t);
 
     // A few open decoders, most recently used first: cutting between clips of the same files
-    // keeps their decoders warm. Bounded so memory does not grow with the library.
-    static constexpr std::size_t kMaxStreams = 4;
+    // keeps their decoders warm, and two per file let a transition between two parts of one
+    // recording decode both forward instead of seeking each frame. Bounded so memory does not
+    // grow with the library.
+    static constexpr std::size_t kMaxStreams = 6;
+    static constexpr std::size_t kStreamsPerFile = 2;
     std::list<Stream> streams_;
 };
