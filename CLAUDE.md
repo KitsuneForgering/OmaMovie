@@ -10,7 +10,7 @@ rules, architectural invariants, priorities and conventions. It is not user docu
 
 ## 0. Repository status
 
-- **M0 done** (2026-10-02); `base`, `gpu`, `media` and `compositor` now exist. M2/M3 are partial, S1/S2 have prior experiment reports; `audio` (PipeWire/null output, master clock) and the M5 `timeline` core (model, commands, undo/redo, evaluation) exist and are tested; the GUI storyline edits through the timeline `Editor`, and playback follows the audio clock (timeline audio mixed by `libs/playback`). Audio lanes, waveforms, detach audio, equalizer/noise reduction/normalize, color/crop/filter/blur effects and transitions (ADR-0011) were built ahead of M7 by maintainer choice; project save and export are still missing. The final app and several target tools remain pending. See the plan for deliverables.
+- **M0 done** (2026-10-02); `base`, `gpu`, `media` and `compositor` now exist. M2/M3 are partial, S1/S2 have prior experiment reports; `audio` (PipeWire/null output, master clock) and the M5 `timeline` core (model, commands, undo/redo, evaluation) exist and are tested; the GUI storyline edits through the timeline `Editor`, and playback follows the audio clock (timeline audio mixed by `libs/playback`). Audio lanes, waveforms, detach audio, equalizer/noise reduction/normalize, color/crop/filter/blur effects, transitions (ADR-0011) and color grading (CDL, curves, 3D LUTs; ADR-0012) were built ahead of M7 by maintainer choice. M7 started: `libs/project` saves and loads the native format (ADR-0007), not yet wired to the app; export is still missing. The final app and several target tools remain pending. See the plan for deliverables.
 - **Evidence review** (2026-10-03): `Docs/Research/skeptical-review.md`. Research recommendations are provisional; accepted decisions remain in their ADRs. S4's same-device compositor-image import is verified by the offscreen diagnostic (`Docs/spikes/S4-qt-shared-device.md`, ADR-0005). `make run-gui` now runs a Qt Quick editor shell (timeline edits with undo/redo, audio-clock playback) whose viewer composites on the GPU and hands the image to Qt without readback (ADR-0005); hardware-decoded frames and swapchain admission for other threads remain M4. Independent color validation remains S6/ADR-0006.
 - The structure, commands and decisions below are the **target**. When creating something
   this document describes, follow it. When diverging, record why in an ADR (§20) and
@@ -79,6 +79,7 @@ make -j CXX=clang++ test       # another compiler (CI runs g++ and clang++)
 make format | make format-check
 make tidy                      # clang-tidy on the libs (warnings are errors)
 make fixtures                  # regenerate test media in tests/fixtures/generated/ (ffmpeg)
+make fuzz                      # libFuzzer targets for untrusted-file parsers (clang); FUZZ_RUNS=n
 make spikes                    # M1 spikes in tools/spikes (Docs/spikes/)
 make run-gui                   # Qt/Vulkan editor shell; GUI_FILE=path or RUN_GUI_SMOKE=1
 makepkg -si                    # build and install the Arch package from the PKGBUILD
@@ -131,6 +132,7 @@ changes also pass with `BUILD=tsan`. If you did not run the tests, say so.
 | GPU / compositing | Vulkan | Main graphics backend. |
 | Compute | Vulkan Compute, CUDA, CPU | Behind `ComputeBackend`. **No OpenCL** (§9.3). |
 | Audio | PipeWire | System integration. **Do not use OpenAL** as the foundation. |
+| Project files | simdjson | Parsing the JSON project format in `libs/project` (ADR-0007). |
 | Structured data | SQLite | Only where justified (§17). |
 | Crypto | OpenSSL | Only for real cryptographic needs. Content hashing alone does not require OpenSSL. |
 
@@ -249,6 +251,12 @@ values (hours of media in a 90 kHz timebase), rounding and overflow.
 ## 7. GPU-first pipeline
 
 The GPU compositor is part of the fundamental architecture, not a future optimization.
+Here, **software** means an algorithm executed as programmable CPU code or GPU code
+(Vulkan shaders/compute or CUDA kernels). **Hardware specialization** means using a
+dedicated fixed-function block, such as a video decoder or encoder, for a supported
+codec/profile. GPU execution alone does not make an algorithm fixed-function. The
+"software decode" fallback below specifically means FFmpeg decoding on the CPU;
+its frames still enter the Vulkan compositor through one upload.
 
 ### 7.1 Target path
 

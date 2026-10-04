@@ -49,12 +49,17 @@ std::optional<float> Waveform::noise_floor_db(double from, double to) const {
     }
     std::vector<float> levels(rms.begin() + static_cast<std::ptrdiff_t>(range.first),
                               rms.begin() + static_cast<std::ptrdiff_t>(range.second));
-    const auto tenth = levels.begin() + static_cast<std::ptrdiff_t>(levels.size() / 10);
-    std::ranges::nth_element(levels, tenth);
-    if (*tenth <= 0.0F) {
+    const std::size_t tenth = levels.size() / 10;
+    std::ranges::nth_element(levels, levels.begin() + static_cast<std::ptrdiff_t>(tenth));
+    const float* level_at = levels.data() + tenth;
+    if (level_at == nullptr) { // never: the range is not empty; GCC -O2 cannot tell
         return std::nullopt;
     }
-    return static_cast<float>(20.0 * std::log10(static_cast<double>(*tenth)));
+    const float level = *level_at;
+    if (level <= 0.0F) {
+        return std::nullopt;
+    }
+    return static_cast<float>(20.0 * std::log10(static_cast<double>(level)));
 }
 
 Result<Waveform> compute_waveform(const std::filesystem::path& path, JobContext& job) {

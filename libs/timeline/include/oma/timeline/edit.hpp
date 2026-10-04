@@ -75,6 +75,11 @@ struct ClipSource {
 [[nodiscard]] std::unique_ptr<Command> slide(ClipId id, RationalTime delta);
 // Moves a clip to another time and/or track (same kind); the destination must be free.
 [[nodiscard]] std::unique_ptr<Command> move_clip(ClipId id, TrackId track, RationalTime start);
+// Moves a clip along its own track, closing the gap it leaves and pushing later clips to make
+// room where it lands (a storyline reorder). `at` is measured with the clip already taken out
+// and must not fall inside another clip. Transitions into the moved clip, into the clip that
+// followed it and into the clip it now precedes are removed: their clip pairs no longer meet.
+[[nodiscard]] std::unique_ptr<Command> ripple_move(ClipId id, RationalTime at);
 
 // Changes a constant speed keeping the same source range; the duration becomes
 // source length / speed, rounded down to the sequence grid. With ripple, later clips follow.

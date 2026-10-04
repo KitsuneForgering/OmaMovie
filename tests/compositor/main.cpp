@@ -14,6 +14,7 @@ void run_geometry_tests();
 void run_color_tests();
 void run_cpu_compositor_tests();
 void run_vulkan_compositor_tests();
+void run_grade_tests();
 
 namespace {
 
@@ -104,6 +105,7 @@ int main(int argc, char* argv[]) {
     run_color_tests();
     run_cpu_compositor_tests();
     run_vulkan_compositor_tests();
+    run_grade_tests();
     release_compositor_test_device();
     return cest_result();
 }

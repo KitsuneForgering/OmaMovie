@@ -2,6 +2,7 @@
 
 #include "oma/timeline/evaluate.hpp"
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,22 @@ Fixture three_clips() {
     place(fx, fx.video, 10, 50, 10);
     place(fx, fx.video, 20, 100, 10);
     return fx;
+}
+
+std::array<double, 3> graded_slope() {
+    return {1.1, 1.0, 0.9};
+}
+
+std::vector<CurvePoint> s_curve() {
+    return {{.x = 0.0, .y = 0.0}, {.x = 0.3, .y = 0.2}, {.x = 0.7, .y = 0.8}, {.x = 1.0, .y = 1.0}};
+}
+
+std::vector<CurvePoint> backwards_curve() {
+    return {{.x = 0.6, .y = 0.5}, {.x = 0.4, .y = 0.7}};
+}
+
+Transition dissolve() {
+    return Transition{.kind = TransitionKind::Dissolve, .duration = f(4)};
 }
 
 ClipId clip_at(const Fixture& fx, std::int64_t frame) {
@@ -291,6 +308,47 @@ void run_edit_tests() {
             expect(layout(fx)).toEqual("0+10@0 10+10@50 20+10@100");
         });
 
+        it("reorders a clip along its track, closing and opening gaps", {
+            auto fx = three_clips();
+            expect(ok(fx, edit::ripple_move(clip_at(fx, 0), f(20)))).toBeTruthy();
+            expect(layout(fx)).toEqual("0+10@50 10+10@100 20+10@0");
+            expect(ok(fx, edit::ripple_move(clip_at(fx, 20), f(10)))).toBeTruthy();
+            expect(layout(fx)).toEqual("0+10@50 10+10@0 20+10@100");
+            expect(ok(fx, edit::ripple_move(clip_at(fx, 20), f(0)))).toBeTruthy();
+            expect(layout(fx)).toEqual("0+10@100 10+10@50 20+10@0");
+        });
+
+        it("refuses a reorder that lands inside another clip", {
+            auto fx = three_clips();
+            expect(ok(fx, edit::ripple_move(clip_at(fx, 0), f(5)))).toBeFalsy();
+            expect(ok(fx, edit::ripple_move(clip_at(fx, 0), f(-10)))).toBeFalsy();
+            expect(layout(fx)).toEqual("0+10@0 10+10@50 20+10@100");
+        });
+
+        it("drops the transitions whose clip pairs a reorder separates", {
+            auto fx = three_clips();
+            expect(ok(fx, edit::set_transition(clip_at(fx, 10), dissolve()))).toBeTruthy();
+            expect(ok(fx, edit::set_transition(clip_at(fx, 20), dissolve()))).toBeTruthy();
+            const ClipId first = clip_at(fx, 0);
+            // The middle clip followed the first and the last one now follows it.
+            expect(ok(fx, edit::ripple_move(first, f(10)))).toBeTruthy();
+            const Timeline& tl = fx.editor.timeline();
+            expect(tl.find_clip(clip_at(fx, 0))->transition_in.has_value()).toBeFalsy();
+            expect(tl.find_clip(first)->transition_in.has_value()).toBeFalsy();
+            expect(tl.find_clip(clip_at(fx, 20))->transition_in.has_value()).toBeFalsy();
+            expect(fx.editor.undo().has_value()).toBeTruthy();
+            expect(fx.editor.timeline().find_clip(clip_at(fx, 20))->transition_in.has_value())
+                .toBeTruthy();
+        });
+
+        it("undoes and redoes a reorder exactly", {
+            auto fx = three_clips();
+            std::vector<std::unique_ptr<Command>> commands;
+            commands.push_back(edit::ripple_move(clip_at(fx, 10), f(20)));
+            commands.push_back(edit::ripple_move(clip_at(fx, 20), f(0)));
+            expect(undo_redo_round_trip(fx, std::move(commands))).toBeTruthy();
+        });
+
         it("doubles the speed, halving the duration and pulling later clips", {
             auto fx = three_clips();
             expect(ok(fx, edit::set_speed(clip_at(fx, 10), q(2, 1), true))).toBeTruthy();
@@ -362,6 +420,29 @@ void run_edit_tests() {
             a.noise.amount = 1.0F;
             a.noise.floor_db = 3.0F;
             expect(ok(fx, edit::set_audio(id, a))).toBeFalsy();
+        });
+
+        it("grades a clip with a registered LUT, refusing unknown ones and bad curves", {
+            auto fx = three_clips();
+            const ClipId id = clip_at(fx, 0);
+            VideoProperties v;
+            v.grade.cdl.slope = graded_slope();
+            v.grade.curves.master = s_curve();
+            v.grade.lut = LutId(77);
+            expect(ok(fx, edit::set_video(id, v))).toBeFalsy(); // not registered
+            expect(fx.editor.add_lut(LutInfo{.id = LutId(77), .name = "Film"}).has_value())
+                .toBeTruthy();
+            expect(fx.editor.add_lut(LutInfo{.id = LutId(77), .name = "Again"}).has_value())
+                .toBeFalsy();
+            expect(ok(fx, edit::set_video(id, v))).toBeTruthy();
+            expect(fx.editor.timeline().find_clip(id)->video.grade == v.grade).toBeTruthy();
+            expect(fx.editor.undo().has_value()).toBeTruthy();
+            expect(fx.editor.timeline().find_clip(id)->video.grade == ColorGrade{}).toBeTruthy();
+            v.grade.curves.red = backwards_curve();
+            expect(ok(fx, edit::set_video(id, v))).toBeFalsy();
+            v.grade.curves.red.clear();
+            v.grade.cdl.power[2] = 0.0;
+            expect(ok(fx, edit::set_video(id, v))).toBeFalsy();
         });
     });
 

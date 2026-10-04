@@ -5,6 +5,7 @@
 #include "oma/base/time.hpp"
 #include "oma/timeline/ids.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -31,6 +32,13 @@ struct MediaInfo {
     bool has_video = false;
     bool has_audio = false;
     bool still = false; // an image: any source range is valid
+};
+
+// A 3D color lookup table the project uses (ADR-0012). Its entries live outside the model (the
+// app loads the file); clips reference it by ID, like media.
+struct LutInfo {
+    LutId id;
+    std::string name;
 };
 
 // Maps time local to a clip (sequence timebase) to an offset in media time (ADR-0002).
@@ -128,15 +136,81 @@ struct Filter {
     friend bool operator==(const Filter&, const Filter&) noexcept = default;
 };
 
+// Color grading (ADR-0012), applied after the color adjustments and the filter, on the clip's
+// code values. Mirrors compositor::Grade; the app maps one onto the other.
+//
+// ASC CDL v1.2: per channel clamp(in * slope + offset)^power, then saturation. The UI shows
+// lift/gamma/gain, which map onto it exactly.
+struct Cdl {
+    std::array<double, 3> slope{1.0, 1.0, 1.0};  // in [0, 4]
+    std::array<double, 3> offset{0.0, 0.0, 0.0}; // in [-1, 1]
+    std::array<double, 3> power{1.0, 1.0, 1.0};  // in [0.1, 4]
+    double saturation = 1.0;                     // in [0, 4]
+
+    friend bool operator==(const Cdl&, const Cdl&) noexcept = default;
+};
+
+struct CurvePoint {
+    double x = 0.0; // in [0, 1]
+    double y = 0.0; // in [0, 1]
+
+    friend bool operator==(const CurvePoint&, const CurvePoint&) noexcept = default;
+};
+
+inline constexpr std::size_t kMaxCurvePoints = 16;
+
+// Each empty (identity) or 2 to kMaxCurvePoints points with strictly increasing x.
+struct Curves {
+    std::vector<CurvePoint> master;
+    std::vector<CurvePoint> red;
+    std::vector<CurvePoint> green;
+    std::vector<CurvePoint> blue;
+
+    friend bool operator==(const Curves&, const Curves&) noexcept = default;
+};
+
+struct ColorGrade {
+    Cdl cdl;
+    Curves curves;
+    LutId lut;               // none when invalid; otherwise a LutInfo of the timeline
+    double lut_amount = 1.0; // in [0, 1]
+
+    friend bool operator==(const ColorGrade&, const ColorGrade&) noexcept = default;
+};
+
+// How a keyframed value moves from a key to the next one.
+enum class Interpolation : std::uint8_t {
+    Hold,   // stays until the next key
+    Linear, // constant rate
+    Ease,   // slow out and in (smoothstep)
+};
+
+inline constexpr std::size_t kMaxKeys = 256;
+
+// The transform at one instant of the clip's media (Ken Burns, M8 keyframes). Keys sit in source
+// time, comparable to Clip::source_in, so split, trims, slip and speed changes keep the motion
+// on the same picture without touching the keys; a key outside the clip's range still shapes
+// the motion inside it.
+struct TransformKey {
+    RationalTime at;
+    Transform value;
+    Interpolation interpolation = Interpolation::Linear; // toward the next key
+
+    friend bool operator==(const TransformKey&, const TransformKey&) noexcept = default;
+};
+
 struct VideoProperties {
     Fit fit = Fit::Fit;
     Crop crop;
-    Transform transform;
+    Transform transform; // used when transform_keys is empty
+    // At most kMaxKeys, strictly increasing `at`; timeline::transform_at evaluates them.
+    std::vector<TransformKey> transform_keys;
     float opacity = 1.0F;
     BlendMode blend = BlendMode::Normal;
     ColorAdjust color;
     Filter filter;
     double sharpness = 0.0; // in [-1, 1]: below 0 blurred, above 0 sharpened
+    ColorGrade grade;
 
     friend bool operator==(const VideoProperties&, const VideoProperties&) noexcept = default;
 };
@@ -238,17 +312,26 @@ public:
     // where one frame is 8008 ticks and one sample 5.
     [[nodiscard]] static Result<Rational> default_timebase(FrameRate rate, SampleRate audio_rate);
 
+    // A timeline rebuilt from saved state (libs/project): the parts as they were, checked by
+    // validate(); new IDs continue after the largest one used. Not an edit: the caller starts a
+    // fresh history (Editor::clear_history is implicit in a new Editor).
+    [[nodiscard]] static Result<Timeline>
+    restore(FrameRate rate, Rational timebase, std::vector<Track> tracks,
+            std::vector<Marker> markers, std::vector<MediaInfo> media, std::vector<LutInfo> luts);
+
     [[nodiscard]] FrameRate frame_rate() const noexcept { return rate_; }
     [[nodiscard]] Rational timebase() const noexcept { return timebase_; }
 
     [[nodiscard]] std::span<const Track> tracks() const noexcept { return tracks_; }
     [[nodiscard]] std::span<const Marker> markers() const noexcept { return markers_; }
     [[nodiscard]] std::span<const MediaInfo> media() const noexcept { return media_; }
+    [[nodiscard]] std::span<const LutInfo> luts() const noexcept { return luts_; }
 
     [[nodiscard]] const Track* find_track(TrackId id) const noexcept;
     [[nodiscard]] const Clip* find_clip(ClipId id) const noexcept;
     [[nodiscard]] const Track* track_of(ClipId id) const noexcept;
     [[nodiscard]] const MediaInfo* find_media(MediaId id) const noexcept;
+    [[nodiscard]] const LutInfo* find_lut(LutId id) const noexcept;
     [[nodiscard]] const Marker* find_marker(MarkerId id) const noexcept;
     // The clip covering `ticks` on a track, if any.
     [[nodiscard]] const Clip* clip_at(TrackId track, std::int64_t ticks) const noexcept;
@@ -276,6 +359,7 @@ private:
     std::vector<Track> tracks_; // video tracks bottom first, then any order for audio
     std::vector<Marker> markers_;
     std::vector<MediaInfo> media_;
+    std::vector<LutInfo> luts_;
     // IDs only grow, even across undo, so an ID is never reused for another object.
     std::uint64_t next_id_ = 1;
 };

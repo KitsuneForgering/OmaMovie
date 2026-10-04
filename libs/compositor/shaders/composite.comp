@@ -1,24 +1,29 @@
 #version 460
 // Composites one layer into the working image (linear BT.709, premultiplied RGBA16F). With
-// blur or sharpen, two earlier passes of this shader blur the source first (pass 1 across,
-// pass 2 down, into RGBA32F images); pass 0 composites.
+// blur or sharpen, four earlier passes of this shader blur the source first, into RGBA16F
+// images: passes 4 and 3 linearize and reduce it, pass 1 blurs across, pass 2 down; pass 0
+// composites, reading the result bilinearly (src/look.hpp Detail).
 // The CPU reference in src/cpu_compositor.cpp performs the same steps; keep them in sync,
 // and the uniform block in sync with LayerParams (src/layer_params.hpp).
 
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 layout(push_constant) uniform Pass {
-    int index; // 0 composite, 1 blur across, 2 blur down
+    int index; // 0 composite, 1 blur across, 2 blur down, 3 reduce down, 4 reduce across
 } P;
 
 layout(set = 0, binding = 0, rgba16f) uniform image2D target; // pass 0: the output
 layout(set = 0, binding = 1) uniform sampler2D plane0; // luma
 layout(set = 0, binding = 2) uniform sampler2D plane1; // Cb (planar) or CbCr (interleaved)
 layout(set = 0, binding = 3) uniform sampler2D plane2; // Cr (planar), unused otherwise
-// Pass 2: the horizontal blur. Pass 0: the blurred source (a 1x1 placeholder without detail).
+// Pass 3: the source reduced across. Pass 1: the reduced source. Pass 2: the horizontal blur.
+// Pass 0: the blurred source (a 1x1 placeholder without detail).
 layout(set = 0, binding = 5) uniform sampler2D blurred;
-// Passes 1 and 2: where the blur goes (a 1x1 placeholder in pass 0).
-layout(set = 0, binding = 6, rgba32f) uniform writeonly image2D blur_target;
+// Passes 1-4: where the pass writes (a 1x1 placeholder in pass 0).
+layout(set = 0, binding = 6, rgba16f) uniform writeonly image2D blur_target;
+// The layer's 3D LUT, red along x (a 1x1x1 placeholder without one). Read with texelFetch and
+// interpolated tetrahedrally, as the CPU reference does.
+layout(set = 0, binding = 7) uniform sampler3D lut;
 
 layout(std140, set = 0, binding = 4) uniform Layer {
     vec4 inv0;    // output -> source: a, b, tx
@@ -39,9 +44,22 @@ layout(std140, set = 0, binding = 4) uniform Layer {
     vec4 look_g;
     vec4 look_b;
     vec4 vignette; // darkening, center x, center y (source pixels), 1 / corner distance
-    vec4 detail;   // blur/sharpen (src/look.hpp Detail): mode, sharpen amount, radius
-    vec4 weights[17]; // gaussian weights, center first
+    vec4 detail;   // blur/sharpen (src/look.hpp Detail): mode, sharpen amount, radius, factor
+    vec4 weights[5]; // gaussian weights, center first
+    ivec4 grade;       // stages (1 CDL, 2 curves, 4 LUT), LUT size
+    vec4 lut_amount;   // x: mix with the LUT result
+    vec4 cdl_slope;    // w: saturation
+    vec4 cdl_offset;
+    vec4 cdl_power;
+    vec4 lut_min;      // LUT domain minimum
+    vec4 lut_scale;    // (size - 1) / domain extent
+    ivec4 curve_count; // points of the master, red, green and blue curves
+    vec4 curve[64];    // x, y, tangent; 16 per curve
 } L;
+
+const int kGradeCdl = 1;
+const int kGradeCurves = 2;
+const int kGradeLut = 4;
 
 const int kDetailBlur = 1;
 const int kDetailSharpen = 2;
@@ -66,6 +84,91 @@ float to_linear(float v) {
         return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4);
     }
     return pow(v, 2.4); // BT.1886
+}
+
+// The inverse of to_linear: the layer's code values, the grading space (ADR-0012).
+float from_linear(float v) {
+    v = clamp(v, 0.0, 1.0);
+    if (L.mode.w == kTransferLinear) {
+        return v;
+    }
+    if (L.mode.w == kTransferSrgb) {
+        return v <= 0.0031308 ? v * 12.92 : 1.055 * pow(v, 1.0 / 2.4) - 0.055;
+    }
+    return pow(v, 1.0 / 2.4);
+}
+
+// Curve c (0 master, 1-3 red, green, blue) at x: monotone cubic Hermite through its points.
+float curve(int c, float x) {
+    int n = L.curve_count[c];
+    if (n == 0) {
+        return x;
+    }
+    int base = c * 16;
+    if (x <= L.curve[base].x) {
+        return L.curve[base].y;
+    }
+    if (x >= L.curve[base + n - 1].x) {
+        return L.curve[base + n - 1].y;
+    }
+    int k = 0;
+    while (k + 2 < n && x >= L.curve[base + k + 1].x) {
+        ++k;
+    }
+    vec4 p0 = L.curve[base + k];
+    vec4 p1 = L.curve[base + k + 1];
+    float h = p1.x - p0.x;
+    float t = (x - p0.x) / h;
+    float t2 = t * t;
+    float t3 = t2 * t;
+    return (2.0 * t3 - 3.0 * t2 + 1.0) * p0.y + (t3 - 2.0 * t2 + t) * h * p0.z +
+           (-2.0 * t3 + 3.0 * t2) * p1.y + (t3 - t2) * h * p1.z;
+}
+
+vec3 lut_at(ivec3 i) {
+    return texelFetch(lut, i, 0).rgb;
+}
+
+// Tetrahedral interpolation of the LUT: four entries, greys stay grey.
+vec3 lut_sample(vec3 e) {
+    int n = L.grade.y;
+    vec3 s = clamp((e - L.lut_min.xyz) * L.lut_scale.xyz, vec3(0.0), vec3(float(n - 1)));
+    ivec3 i = min(ivec3(floor(s)), ivec3(n - 2));
+    vec3 f = s - vec3(i);
+    vec3 v1;
+    vec3 v2;
+    vec4 w;
+    if (f.r >= f.g && f.g >= f.b) {
+        v1 = lut_at(i + ivec3(1, 0, 0)); v2 = lut_at(i + ivec3(1, 1, 0)); w = vec4(1.0 - f.r, f.r - f.g, f.g - f.b, f.b);
+    } else if (f.r >= f.b && f.b > f.g) {
+        v1 = lut_at(i + ivec3(1, 0, 0)); v2 = lut_at(i + ivec3(1, 0, 1)); w = vec4(1.0 - f.r, f.r - f.b, f.b - f.g, f.g);
+    } else if (f.b > f.r && f.r >= f.g) {
+        v1 = lut_at(i + ivec3(0, 0, 1)); v2 = lut_at(i + ivec3(1, 0, 1)); w = vec4(1.0 - f.b, f.b - f.r, f.r - f.g, f.g);
+    } else if (f.g > f.r && f.r >= f.b) {
+        v1 = lut_at(i + ivec3(0, 1, 0)); v2 = lut_at(i + ivec3(1, 1, 0)); w = vec4(1.0 - f.g, f.g - f.r, f.r - f.b, f.b);
+    } else if (f.g >= f.b && f.b > f.r) {
+        v1 = lut_at(i + ivec3(0, 1, 0)); v2 = lut_at(i + ivec3(0, 1, 1)); w = vec4(1.0 - f.g, f.g - f.b, f.b - f.r, f.r);
+    } else {
+        v1 = lut_at(i + ivec3(0, 0, 1)); v2 = lut_at(i + ivec3(0, 1, 1)); w = vec4(1.0 - f.b, f.b - f.g, f.g - f.r, f.r);
+    }
+    return w.x * lut_at(i) + w.y * v1 + w.z * v2 + w.w * lut_at(i + ivec3(1));
+}
+
+// The layer's grade (include/oma/compositor/grade.hpp): CDL, curves, LUT in the grading space.
+vec3 grade(vec3 c) {
+    vec3 e = vec3(from_linear(c.r), from_linear(c.g), from_linear(c.b));
+    if ((L.grade.x & kGradeCdl) != 0) {
+        e = pow(clamp(e * L.cdl_slope.rgb + L.cdl_offset.rgb, 0.0, 1.0), L.cdl_power.rgb);
+        float luma = dot(vec3(0.2126, 0.7152, 0.0722), e);
+        e = clamp(luma + L.cdl_slope.w * (e - luma), 0.0, 1.0);
+    }
+    if ((L.grade.x & kGradeCurves) != 0) {
+        e = vec3(curve(1, curve(0, e.r)), curve(2, curve(0, e.g)), curve(3, curve(0, e.b)));
+    }
+    if ((L.grade.x & kGradeLut) != 0) {
+        e = mix(e, lut_sample(e), L.lut_amount.x);
+    }
+    return vec3(to_linear(e.r), to_linear(e.g), to_linear(e.b));
 }
 
 // Linear BT.709 RGB of one source pixel.
@@ -102,26 +205,83 @@ float weight(int i) {
     return L.weights[k >> 2][k & 3];
 }
 
-// One separable gaussian pass over the cropped source, mirrored by blurred_source() in
-// src/cpu_compositor.cpp.
-void blur_pass(bool down) {
-    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+// The last texel of the reduced image: it covers the cropped source from `lo`, `factor` source
+// texels per reduced texel.
+ivec2 reduced_last(ivec2 lo, ivec2 hi) {
+    return (hi - lo) / int(L.detail.w);
+}
+
+// Passes 4 and 3: the linear source reduced by a factor x factor box average, run across (each
+// cropped source row into `factor` times fewer texels) then down, taps clamped to the cropped
+// source. Separable so no thread averages factor^2 texels alone. Mirrored by blurred_source() in
+// src/cpu_compositor.cpp, like the passes below.
+void reduce_across_pass() {
+    ivec2 q = ivec2(gl_GlobalInvocationID.xy); // reduced column, cropped source row
     ivec2 lo;
     ivec2 hi;
     tap_bounds(lo, hi);
-    if (any(lessThan(p, lo)) || any(greaterThan(p, hi))) {
+    if (q.x > reduced_last(lo, hi).x || q.y > hi.y - lo.y) {
+        return;
+    }
+    int f = int(L.detail.w);
+    vec3 sum = vec3(0.0);
+    for (int i = 0; i < f; ++i) {
+        sum += texel(ivec2(min(lo.x + q.x * f + i, hi.x), lo.y + q.y));
+    }
+    imageStore(blur_target, q, vec4(sum / float(f), 1.0));
+}
+
+void reduce_down_pass() {
+    ivec2 q = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 lo;
+    ivec2 hi;
+    tap_bounds(lo, hi);
+    if (any(greaterThan(q, reduced_last(lo, hi)))) {
+        return;
+    }
+    int f = int(L.detail.w);
+    vec3 sum = vec3(0.0);
+    for (int j = 0; j < f; ++j) {
+        sum += texelFetch(blurred, ivec2(q.x, min(q.y * f + j, hi.y - lo.y)), 0).rgb;
+    }
+    imageStore(blur_target, q, vec4(sum / float(f), 1.0));
+}
+
+// Passes 1 and 2: one separable gaussian pass over the reduced image.
+void blur_pass(bool down) {
+    ivec2 q = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 lo;
+    ivec2 hi;
+    tap_bounds(lo, hi);
+    ivec2 last = reduced_last(lo, hi);
+    if (any(greaterThan(q, last))) {
         return;
     }
     int radius = int(L.detail.z);
     vec3 sum = vec3(0.0);
     for (int i = -radius; i <= radius; ++i) {
-        if (down) {
-            sum += weight(i) * texelFetch(blurred, ivec2(p.x, clamp(p.y + i, lo.y, hi.y)), 0).rgb;
-        } else {
-            sum += weight(i) * texel(ivec2(clamp(p.x + i, lo.x, hi.x), p.y));
-        }
+        ivec2 t = down ? ivec2(q.x, clamp(q.y + i, 0, last.y)) : ivec2(clamp(q.x + i, 0, last.x), q.y);
+        sum += weight(i) * texelFetch(blurred, t, 0).rgb;
     }
-    imageStore(blur_target, p, vec4(sum, 1.0));
+    imageStore(blur_target, q, vec4(sum, 1.0));
+}
+
+// The blurred image at source texel p: bilinear between the reduced texels around its center.
+vec3 blurred_at(ivec2 p) {
+    ivec2 lo;
+    ivec2 hi;
+    tap_bounds(lo, hi);
+    ivec2 last = reduced_last(lo, hi);
+    vec2 u = (vec2(p - lo) + 0.5) / L.detail.w - 0.5;
+    vec2 base = floor(u);
+    vec2 t = u - base;
+    ivec2 q0 = clamp(ivec2(base), ivec2(0), last);
+    ivec2 q1 = clamp(ivec2(base) + 1, ivec2(0), last);
+    vec3 b00 = texelFetch(blurred, ivec2(q0.x, q0.y), 0).rgb;
+    vec3 b10 = texelFetch(blurred, ivec2(q1.x, q0.y), 0).rgb;
+    vec3 b01 = texelFetch(blurred, ivec2(q0.x, q1.y), 0).rgb;
+    vec3 b11 = texelFetch(blurred, ivec2(q1.x, q1.y), 0).rgb;
+    return mix(mix(b00, b10, t.x), mix(b01, b11, t.x), t.y);
 }
 
 // The source texel after blur or sharpen.
@@ -130,7 +290,7 @@ vec3 detailed(ivec2 p) {
     if (mode != kDetailBlur && mode != kDetailSharpen) {
         return texel(p);
     }
-    vec3 b = texelFetch(blurred, p, 0).rgb;
+    vec3 b = blurred_at(p);
     if (mode == kDetailBlur) {
         return b;
     }
@@ -139,6 +299,14 @@ vec3 detailed(ivec2 p) {
 }
 
 void main() {
+    if (P.index == 4) {
+        reduce_across_pass();
+        return;
+    }
+    if (P.index == 3) {
+        reduce_down_pass();
+        return;
+    }
     if (P.index != 0) {
         blur_pass(P.index == 2);
         return;
@@ -182,6 +350,9 @@ void main() {
         color *= 1.0 - L.vignette.x * smoothstep(kVignetteStart, kVignetteEnd, d);
     }
     color = max(color, vec3(0.0));
+    if (L.grade.x != 0) {
+        color = grade(color);
+    }
 
     float alpha = L.misc.x;
     if (L.misc.z >= 0.0) {

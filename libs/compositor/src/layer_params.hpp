@@ -39,12 +39,32 @@ struct alignas(16) LayerParams {
     std::array<float, 4> look_g{0.0F, 1.0F, 0.0F, 0.0F};
     std::array<float, 4> look_b{0.0F, 0.0F, 1.0F, 0.0F};
     std::array<float, 4> vignette{};
-    // Blur and sharpen (src/look.hpp Detail): mode, sharpen amount, radius in taps; then the
-    // gaussian weights, center first, four per vector.
+    // Blur and sharpen (src/look.hpp Detail): mode, sharpen amount, radius in taps, reduction
+    // factor; then the gaussian weights, center first, four per vector.
     std::array<float, 4> detail{};
     std::array<std::array<float, 4>, (kMaxBlurRadius + 4) / 4> weights{};
+    // Grading (grade.hpp): which stages run (GradeStage bits) and the LUT size; the LUT amount;
+    // the CDL (saturation in slope.w); the LUT domain minimum and (size - 1) / its extent; the
+    // point counts of the master, red, green and blue curves; and their points (x, y, tangent),
+    // kMaxCurvePoints per curve.
+    std::array<std::int32_t, 4> grade{};
+    std::array<float, 4> lut_amount{};
+    std::array<float, 4> cdl_slope{1.0F, 1.0F, 1.0F, 1.0F};
+    std::array<float, 4> cdl_offset{};
+    std::array<float, 4> cdl_power{1.0F, 1.0F, 1.0F, 0.0F};
+    std::array<float, 4> lut_min{};
+    std::array<float, 4> lut_scale{};
+    std::array<std::int32_t, 4> curve_count{};
+    std::array<std::array<float, 4>, 4 * kMaxCurvePoints> curve{};
 };
-static_assert(sizeof(LayerParams) == 36U * 16U, "LayerParams must match the std140 block");
+static_assert(sizeof(LayerParams) == 96U * 16U, "LayerParams must match the std140 block");
+
+// Bits of LayerParams::grade[0].
+enum GradeStage : std::int32_t {
+    kGradeCdl = 1,
+    kGradeCurves = 2,
+    kGradeLut = 4,
+};
 
 struct PreparedLayer {
     LayerParams params;

@@ -41,6 +41,16 @@ Result<void> Editor::add_media(MediaInfo media) {
     return {};
 }
 
+Result<void> Editor::add_lut(LutInfo lut) {
+    if (!lut.id.valid() || timeline_.find_lut(lut.id) != nullptr) {
+        return detail::error(ErrorCode::InvalidArgument, "LUT ID is invalid or in use",
+                             std::format("LUT {}", lut.id.value()));
+    }
+    detail::Mutation(timeline_).luts().push_back(std::move(lut));
+    ++revision_;
+    return {};
+}
+
 std::string_view Editor::undo_name() const noexcept {
     return undo_.empty() ? std::string_view{} : undo_.back()->name();
 }

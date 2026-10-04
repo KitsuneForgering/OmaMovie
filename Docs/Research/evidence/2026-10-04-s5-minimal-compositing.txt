@@ -1,0 +1,33 @@
+S5 raw output (2026-10-04, release build, Iris Xe, Mesa 26.2.2, FFmpeg n9.0.1). Inputs from tools/spikes/s3-decode-paths.sh (h264.mp4, hevc10.mp4: 1080p60 testsrc2) and a 1920x1080 testsrc2 PNG. Two runs per path.
+-- run 1, software
+  input 0: 1920x1080, path software
+  input 1: 1920x1080, path software
+  input 2: 1920x1080, path software
+  decode A + B           p50   0.09  p95   0.12  p99   0.14  max  46.09 ms
+  composite (3 layers)   p50   9.21  p95  20.05  p99  21.86  max  22.64 ms
+  decode + composite     p50   9.31  p95  20.20  p99  22.07  max  60.23 ms
+  frames over 16.67 ms: 37 of 600
+-- run 1, hardware
+  input 0: 1920x1080, path VA-API to Vulkan
+  input 1: 1920x1080, path VA-API to Vulkan
+  input 2: 1920x1080, path software
+  decode A + B           p50   3.05  p95   3.49  p99   3.82  max   8.54 ms
+  composite (3 layers)   p50   5.52  p95   6.67  p99   6.95  max  18.96 ms
+  decode + composite     p50   8.23  p95   9.61  p99   9.93  max  21.23 ms
+  frames over 16.67 ms: 3 of 600
+-- run 2, software
+  input 0: 1920x1080, path software
+  input 1: 1920x1080, path software
+  input 2: 1920x1080, path software
+  decode A + B           p50   0.08  p95   0.11  p99   0.14  max  30.64 ms
+  composite (3 layers)   p50   9.04  p95  10.50  p99  21.26  max  22.66 ms
+  decode + composite     p50   9.13  p95  10.59  p99  21.52  max  40.33 ms
+  frames over 16.67 ms: 22 of 600
+-- run 2, hardware
+  input 0: 1920x1080, path VA-API to Vulkan
+  input 1: 1920x1080, path VA-API to Vulkan
+  input 2: 1920x1080, path software
+  decode A + B           p50   3.06  p95   3.85  p99   4.40  max   9.93 ms
+  composite (3 layers)   p50   5.48  p95   7.06  p99   7.47  max  18.37 ms
+  decode + composite     p50   8.31  p95   9.95  p99  12.27  max  21.44 ms
+  frames over 16.67 ms: 4 of 600

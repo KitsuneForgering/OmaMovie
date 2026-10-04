@@ -58,3 +58,16 @@ jobs:
             make compdb
             make tidy
           '
+
+  fuzz:
+    name: parser fuzzing (libFuzzer, ASan/UBSan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Fuzz the parsers of untrusted files
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
+            pacman -Syu --noconfirm >/dev/null
+            scripts/deps.sh --install --noconfirm >/dev/null
+            make fuzz FUZZ_RUNS=500000
+          '

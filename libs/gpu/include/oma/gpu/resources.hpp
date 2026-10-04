@@ -55,9 +55,11 @@ struct ImageDesc {
     std::uint32_t height = 0;
     VkFormat format = VK_FORMAT_UNDEFINED;
     VkImageUsageFlags usage = 0;
+    std::uint32_t depth = 0; // above 0: a 3D image of `depth` slices (lookup tables)
 };
 
-// A 2D, single-mip, optimal-tiling, device-local image with a full color view.
+// A 2D (or 3D, see ImageDesc::depth), single-mip, optimal-tiling, device-local image with a full
+// color view.
 class Image {
 public:
     Image() = default;

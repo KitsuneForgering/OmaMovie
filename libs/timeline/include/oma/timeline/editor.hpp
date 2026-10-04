@@ -47,6 +47,8 @@ public:
     // of the history (undoing an edit never unregisters media a library still shows), and
     // registered media is never removed while the timeline lives.
     [[nodiscard]] Result<void> add_media(MediaInfo media);
+    // Registers a LUT clips can grade with (ADR-0012). Like media, outside the edit history.
+    [[nodiscard]] Result<void> add_lut(LutInfo lut);
 
     // Applies a command, checks every timeline invariant and records it for undo; clears the
     // redo stack. A failing command or a broken invariant leaves the timeline unchanged.

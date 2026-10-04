@@ -11,6 +11,7 @@
 extern "C" {
 #include <libavutil/hwcontext.h>
 #include <libavutil/pixdesc.h>
+#include <libswscale/swscale.h>
 }
 
 #include <algorithm>
@@ -68,6 +69,25 @@ Error unsupported(std::string message, const std::string& context = {}) {
 
 } // namespace
 
+struct SwsFreer {
+    void operator()(SwsContext* p) const noexcept { sws_freeContext(p); }
+};
+
+// Consumers read YUV or planar GBR (SampleLayout); packed RGB, palette and grey frames (PNG,
+// JPEG, RGB codecs) are rearranged into planar GBR. Alpha is dropped for now.
+AVPixelFormat planar_rgb_for(AVPixelFormat format) {
+    const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(format);
+    if (desc == nullptr || (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) != 0) {
+        return AV_PIX_FMT_NONE;
+    }
+    const bool rgb_like = (desc->flags & (AV_PIX_FMT_FLAG_RGB | AV_PIX_FMT_FLAG_PAL)) != 0 ||
+                          desc->nb_components < 3;
+    if (!rgb_like || format == AV_PIX_FMT_GBRP || format == AV_PIX_FMT_GBRP16) {
+        return AV_PIX_FMT_NONE;
+    }
+    return desc->comp[0].depth > 8 ? AV_PIX_FMT_GBRP16 : AV_PIX_FMT_GBRP;
+}
+
 struct VideoDecoder::Impl {
     std::filesystem::path file;
     const gpu::Device* device = nullptr;
@@ -94,6 +114,7 @@ struct VideoDecoder::Impl {
     std::optional<RationalTime> seek_target;
     std::optional<RationalTime> last_seek; // where a software fallback restarts
     ff::FramePtr pending;                  // first frame past a seek target, returned next
+    std::unique_ptr<SwsContext, SwsFreer> to_planar_rgb; // reused while the format holds
 
     [[nodiscard]] Result<void> open_path(DecodePath candidate);
     [[nodiscard]] Result<void> reposition();
@@ -336,6 +357,25 @@ Result<VideoFrame> VideoDecoder::Impl::finish(ff::FramePtr frame) {
             return std::unexpected(mapped.error());
         }
         impl->frame = std::move(*mapped);
+    } else if (const AVPixelFormat planar = planar_rgb_for(static_cast<AVPixelFormat>(frame->format));
+               planar != AV_PIX_FMT_NONE) {
+        // ponytail: one new frame per conversion; pool it if RGB video ever plays in real time.
+        to_planar_rgb.reset(sws_getCachedContext(
+            to_planar_rgb.release(), frame->width, frame->height,
+            static_cast<AVPixelFormat>(frame->format), frame->width, frame->height, planar,
+            SWS_POINT, nullptr, nullptr, nullptr));
+        ff::FramePtr out(av_frame_alloc());
+        if (!to_planar_rgb || !out) {
+            return std::unexpected(unsupported("cannot convert this RGB format", file.string()));
+        }
+        out->format = planar;
+        out->width = frame->width;
+        out->height = frame->height;
+        if (const int err = sws_scale_frame(to_planar_rgb.get(), out.get(), frame.get()); err < 0) {
+            return std::unexpected(ff::av_error(err, Category::Decode, "RGB conversion failed"));
+        }
+        av_frame_copy_props(out.get(), frame.get());
+        impl->frame = std::move(out);
     } else {
         impl->frame = std::move(frame);
     }

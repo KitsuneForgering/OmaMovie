@@ -42,7 +42,7 @@ public:
     // Starts preparing frames from `from`, `step` frames apart (2 for double speed, -1 for
     // reverse), up to frame `last` (or 0 in reverse).
     void start(std::shared_ptr<const oma::timeline::Timeline> timeline, std::shared_ptr<const MediaPaths> paths,
-               std::uint32_t width, std::uint32_t height, std::int64_t ticks_per_frame, std::int64_t from,
+               std::shared_ptr<const LutTables> luts, std::uint32_t width, std::uint32_t height, std::int64_t ticks_per_frame, std::int64_t from,
                int step, std::int64_t last);
     void stop() noexcept;
 

@@ -8,7 +8,8 @@ VideoScheduler::~VideoScheduler() {
 }
 
 void VideoScheduler::start(std::shared_ptr<const oma::timeline::Timeline> timeline,
-                           std::shared_ptr<const MediaPaths> paths, std::uint32_t width, std::uint32_t height,
+                           std::shared_ptr<const MediaPaths> paths, std::shared_ptr<const LutTables> luts,
+                           std::uint32_t width, std::uint32_t height,
                            std::int64_t ticks_per_frame, std::int64_t from, int step, std::int64_t last) {
     stop();
     step_ = step == 0 ? 1 : step;
@@ -17,7 +18,8 @@ void VideoScheduler::start(std::shared_ptr<const oma::timeline::Timeline> timeli
     queue_ = queue;
     const int stride = step_;
     producer_ = pipeline_.submit("playback-video", [this, queue, timeline = std::move(timeline),
-                                                    paths = std::move(paths), width, height, ticks_per_frame,
+                                                    paths = std::move(paths), luts = std::move(luts), width, height,
+                                                    ticks_per_frame,
                                                     from, stride, last](oma::JobContext& ctx) {
         FrameSource frames; // this pipeline's own decoders
         std::int64_t next = from;
@@ -30,7 +32,7 @@ void VideoScheduler::start(std::shared_ptr<const oma::timeline::Timeline> timeli
             if (next < 0 || next > last) {
                 break; // the end in this direction; the clock's owner stops playback
             }
-            auto view = build_viewer_frame(*timeline, *paths, width, height, next, ticks_per_frame, frames);
+            auto view = build_viewer_frame(*timeline, *paths, *luts, width, height, next, ticks_per_frame, frames);
             if (!view) {
                 const std::scoped_lock lock(error_mutex_);
                 error_ = view.error().summary();

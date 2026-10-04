@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cstring>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -32,10 +33,16 @@ constexpr VkFormat kDisplayFormat = VK_FORMAT_R8G8B8A8_UNORM;
 
 constexpr std::uint32_t kGroupSize = 16;
 constexpr VkFormat kOutputFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-// Blur intermediates keep float precision so the GPU follows the CPU reference closely.
-constexpr VkFormat kBlurFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+// Blur intermediates: half floats halve the bandwidth of the passes (evidence 2026-10-04 §5)
+// and stay within the GPU vs CPU tolerance.
+constexpr VkFormat kBlurFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 constexpr std::size_t kMaxPlanes = 3;
-constexpr std::uint32_t kBindings = 7; // see shaders/composite.comp
+constexpr std::uint32_t kBindings = 8; // see shaders/composite.comp
+// LUT entries: lookups are 32-bit float, read with texelFetch (no filtering needed).
+constexpr VkFormat kLutFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+// LUT images kept between renders. ponytail: least recently used out past this; a project uses few
+// LUTs.
+constexpr std::size_t kMaxLutImages = 8;
 
 // Descriptor type of each binding of the composite shader.
 constexpr VkDescriptorType binding_type(std::uint32_t b) {
@@ -55,6 +62,8 @@ enum class Pass : std::uint8_t {
     Composite = 0,
     BlurAcross = 1,
     BlurDown = 2,
+    ReduceDown = 3,
+    ReduceAcross = 4,
 };
 
 Error vk_failure(VkResult r, std::string what) {
@@ -152,10 +161,20 @@ struct Upload {
     gpu::Buffer staging;
 };
 
-// The two blur images of a layer with blur or sharpen, reused while its source size holds.
+// The two blur images of a layer with blur or sharpen (src/look.hpp Detail), reused while their
+// sizes hold: `across` is reduced in width only (it first takes the source reduced across),
+// `down` in both (the reduced source, then the result).
 struct BlurImages {
-    gpu::Image across; // pass 1 output
-    gpu::Image down;   // pass 2 output: the blurred source
+    gpu::Image across; // pass 4 output, then pass 1 output
+    gpu::Image down;   // pass 3 output, then pass 2 output: the blurred source
+};
+
+// A LUT uploaded to the GPU, kept while recent graphs use it.
+struct LutImage {
+    std::shared_ptr<const Lut3d> lut; // the cache key; holding it keeps the address unique
+    gpu::Image image;
+    gpu::Buffer staging;    // RGBA rows until the upload has run
+    std::uint64_t used = 0; // the last render that read it
 };
 
 // What one input contributes to this render.
@@ -188,7 +207,10 @@ struct VulkanCompositor::Impl {
     gpu::Buffer display_readback;
 
     gpu::Image output;
-    gpu::Image placeholder;              // 1x1 blur image for layers without blur or sharpen
+    gpu::Image placeholder;     // 1x1 blur image for layers without blur or sharpen
+    gpu::Image lut_placeholder; // 1x1x1 LUT for layers without one
+    std::vector<LutImage> luts;
+    std::uint64_t renders = 0;
     std::vector<BlurImages> blur_images; // by draw index
     gpu::Buffer params;
     gpu::Buffer readback;
@@ -228,10 +250,12 @@ struct VulkanCompositor::Impl {
     [[nodiscard]] Result<void> create_display_pipeline();
     [[nodiscard]] Result<void> ensure_params(std::size_t layers);
     [[nodiscard]] Result<gpu::Image> blur_image(std::uint32_t width, std::uint32_t height) const;
+    // `width` x `height` is the reduced source; `across` keeps the source's `full_height`.
     [[nodiscard]] Result<BlurImages*> ensure_blur(std::size_t draw, std::uint32_t width,
-                                                  std::uint32_t height);
+                                                  std::uint32_t height, std::uint32_t full_height);
     [[nodiscard]] Result<Upload*> stage_upload(std::size_t index, const media::VideoFrame& frame);
     [[nodiscard]] Result<BoundInput> bind_gpu_frame(media::VideoFrame& frame);
+    [[nodiscard]] Result<LutImage*> ensure_lut(const std::shared_ptr<const Lut3d>& lut);
 };
 
 Result<VkImageView> VulkanCompositor::Impl::make_view(VkImage image, VkFormat format,
@@ -354,16 +378,17 @@ Result<gpu::Image> VulkanCompositor::Impl::blur_image(std::uint32_t width,
 }
 
 Result<BlurImages*> VulkanCompositor::Impl::ensure_blur(std::size_t draw, std::uint32_t width,
-                                                        std::uint32_t height) {
+                                                        std::uint32_t height,
+                                                        std::uint32_t full_height) {
     if (blur_images.size() <= draw) {
         blur_images.resize(draw + 1);
     }
     BlurImages& b = blur_images[draw];
-    if (b.across.handle() != VK_NULL_HANDLE && b.across.desc().width == width &&
-        b.across.desc().height == height) {
+    if (b.down.handle() != VK_NULL_HANDLE && b.down.desc().width == width &&
+        b.down.desc().height == height && b.across.desc().height == full_height) {
         return &b;
     }
-    auto across = blur_image(width, height);
+    auto across = blur_image(width, full_height);
     auto down = blur_image(width, height);
     if (!across || !down) {
         return std::unexpected(!across ? across.error() : down.error());
@@ -474,6 +499,48 @@ Result<BoundInput> VulkanCompositor::Impl::bind_gpu_frame(media::VideoFrame& fra
     }
     bound.access = std::move(*access);
     return bound;
+}
+
+// The LUT's image, staged for upload the first time it is seen.
+Result<LutImage*> VulkanCompositor::Impl::ensure_lut(const std::shared_ptr<const Lut3d>& lut) {
+    const auto found =
+        std::ranges::find(luts, lut.get(), [](const LutImage& l) { return l.lut.get(); });
+    if (found != luts.end()) {
+        found->used = renders;
+        return &*found;
+    }
+    if (luts.size() >= kMaxLutImages) {
+        // Never one this render already bound: a graph with more LUTs grows the cache instead.
+        const auto oldest = std::ranges::min_element(luts, {}, &LutImage::used);
+        if (oldest->used != renders) {
+            luts.erase(oldest);
+        }
+    }
+    const std::uint32_t n = lut->size;
+    auto image = gpu::Image::create(
+        *device, {.width = n,
+                  .height = n,
+                  .format = kLutFormat,
+                  .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                  .depth = n});
+    const std::size_t entries = static_cast<std::size_t>(n) * n * n;
+    auto staging = gpu::Buffer::create(*device, entries * 4 * sizeof(float),
+                                       VK_BUFFER_USAGE_TRANSFER_SRC_BIT, gpu::MemoryUse::Upload);
+    if (!image || !staging) {
+        return std::unexpected(!image ? image.error() : staging.error());
+    }
+    // RGB rows to RGBA texels, red fastest as in the .cube file (x is red).
+    auto* rgba = static_cast<float*>(staging->mapped());
+    for (std::size_t i = 0; i < entries; ++i) {
+        rgba[(i * 4) + 0] = lut->rgb[(i * 3) + 0];
+        rgba[(i * 4) + 1] = lut->rgb[(i * 3) + 1];
+        rgba[(i * 4) + 2] = lut->rgb[(i * 3) + 2];
+        rgba[(i * 4) + 3] = 1.0F;
+    }
+    staging->flush();
+    luts.push_back(
+        {.lut = lut, .image = std::move(*image), .staging = std::move(*staging), .used = renders});
+    return &luts.back();
 }
 
 VulkanCompositor::VulkanCompositor(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
@@ -613,6 +680,15 @@ Result<std::unique_ptr<VulkanCompositor>> VulkanCompositor::create(const gpu::De
         return std::unexpected(placeholder.error());
     }
     impl->placeholder = std::move(*placeholder);
+    auto lut_placeholder = gpu::Image::create(device, {.width = 1,
+                                                       .height = 1,
+                                                       .format = kLutFormat,
+                                                       .usage = VK_IMAGE_USAGE_SAMPLED_BIT,
+                                                       .depth = 1});
+    if (!lut_placeholder) {
+        return std::unexpected(lut_placeholder.error());
+    }
+    impl->lut_placeholder = std::move(*lut_placeholder);
     return std::unique_ptr<VulkanCompositor>(new VulkanCompositor(std::move(impl)));
 }
 
@@ -678,9 +754,12 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
         // With blur or sharpen: its index in blur_images (an index, since later layers may grow
         // the vector).
         std::optional<std::size_t> blur;
-        std::uint32_t source_width = 0;
+        std::uint32_t blur_width = 0; // the reduced source
+        std::uint32_t blur_height = 0;
         std::uint32_t source_height = 0;
+        VkImageView lut = VK_NULL_HANDLE; // the layer's LUT, if its grade uses one
     };
+    ++d.renders;
     std::vector<Draw> draws;
     auto* params = static_cast<std::uint8_t*>(d.params.mapped());
     for (const Layer& layer : graph.layers) {
@@ -697,19 +776,35 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
         const VkDeviceSize offset = draws.size() * d.params_stride;
         std::memcpy(params + offset, &prepared->params, sizeof(LayerParams));
         std::optional<std::size_t> blur;
+        // Sized for the whole source, so crop changes keep the images.
+        const auto factor = static_cast<std::uint32_t>(prepared->params.detail[3]);
+        const std::uint32_t blur_width = factor == 0 ? 0 : (in.width + factor - 1) / factor;
+        const std::uint32_t blur_height = factor == 0 ? 0 : (in.height + factor - 1) / factor;
         if (prepared->params.detail[0] != 0.0F) {
-            if (auto images = d.ensure_blur(draws.size(), in.width, in.height); !images) {
+            if (auto images = d.ensure_blur(draws.size(), blur_width, blur_height, in.height);
+                !images) {
                 d.destroy_transient_views();
                 return std::unexpected(images.error());
             }
             blur = draws.size();
         }
+        VkImageView lut_view = VK_NULL_HANDLE;
+        if ((prepared->params.grade[0] & kGradeLut) != 0) {
+            auto lut = d.ensure_lut(layer.grade.lut);
+            if (!lut) {
+                d.destroy_transient_views();
+                return std::unexpected(lut.error());
+            }
+            lut_view = (*lut)->image.view();
+        }
         draws.push_back({.input = layer.input,
                          .offset = offset,
                          .region = prepared->params.region,
                          .blur = blur,
-                         .source_width = in.width,
-                         .source_height = in.height});
+                         .blur_width = blur_width,
+                         .blur_height = blur_height,
+                         .source_height = in.height,
+                         .lut = lut_view});
     }
     d.params.flush();
 
@@ -774,6 +869,28 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
                     gpu::transition(cmd, img.images[i], img.layouts[i], VK_IMAGE_LAYOUT_GENERAL);
                 }
             }
+            for (const LutImage& l : d.luts) {
+                if (l.staging.handle() == VK_NULL_HANDLE) {
+                    continue; // already on the GPU
+                }
+                const std::uint32_t n = l.lut->size;
+                gpu::transition(cmd, l.image.handle(), VK_IMAGE_LAYOUT_UNDEFINED,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                const VkBufferImageCopy copy{
+                    .bufferOffset = 0,
+                    .bufferRowLength = 0,
+                    .bufferImageHeight = 0,
+                    .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                         .mipLevel = 0,
+                                         .baseArrayLayer = 0,
+                                         .layerCount = 1},
+                    .imageOffset = {.x = 0, .y = 0, .z = 0},
+                    .imageExtent = {.width = n, .height = n, .depth = n}};
+                vkCmdCopyBufferToImage(cmd, l.staging.handle(), l.image.handle(),
+                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+                gpu::transition(cmd, l.image.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                VK_IMAGE_LAYOUT_GENERAL);
+            }
             barrier(cmd, memory_barrier(
                              VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
                              VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -781,6 +898,8 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
 
             // Blur images start undefined every frame: their contents are rewritten before use.
             gpu::transition(cmd, d.placeholder.handle(), VK_IMAGE_LAYOUT_UNDEFINED,
+                            VK_IMAGE_LAYOUT_GENERAL);
+            gpu::transition(cmd, d.lut_placeholder.handle(), VK_IMAGE_LAYOUT_UNDEFINED,
                             VK_IMAGE_LAYOUT_GENERAL);
             for (const Draw& draw : draws) {
                 if (draw.blur) {
@@ -824,6 +943,11 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
                     const VkDescriptorImageInfo blur_target{.sampler = VK_NULL_HANDLE,
                                                             .imageView = written,
                                                             .imageLayout = VK_IMAGE_LAYOUT_GENERAL};
+                    const VkDescriptorImageInfo lut{.sampler = d.sampler,
+                                                    .imageView = draw.lut != VK_NULL_HANDLE
+                                                                     ? draw.lut
+                                                                     : d.lut_placeholder.view(),
+                                                    .imageLayout = VK_IMAGE_LAYOUT_GENERAL};
                     const VkDescriptorBufferInfo ubo{.buffer = d.params.handle(),
                                                      .offset = draw.offset,
                                                      .range = sizeof(LayerParams)};
@@ -832,6 +956,7 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
                         const VkDescriptorImageInfo* image = b == 0   ? &target
                                                              : b == 5 ? &blurred
                                                              : b == 6 ? &blur_target
+                                                             : b == 7 ? &lut
                                                              : b == 4 ? nullptr
                                                                       : &planes[b - 1];
                         writes[b] = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -860,9 +985,13 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
                 if (draw.blur) {
                     const BlurImages& images = d.blur_images[*draw.blur];
                     bind(none, images.across.view());
-                    run_pass(Pass::BlurAcross, draw.source_width, draw.source_height);
+                    run_pass(Pass::ReduceAcross, draw.blur_width, draw.source_height);
                     bind(images.across.view(), images.down.view());
-                    run_pass(Pass::BlurDown, draw.source_width, draw.source_height);
+                    run_pass(Pass::ReduceDown, draw.blur_width, draw.blur_height);
+                    bind(images.down.view(), images.across.view());
+                    run_pass(Pass::BlurAcross, draw.blur_width, draw.blur_height);
+                    bind(images.across.view(), images.down.view());
+                    run_pass(Pass::BlurDown, draw.blur_width, draw.blur_height);
                     bind(images.down.view(), none);
                 } else {
                     bind(none, none);
@@ -875,6 +1004,14 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
         },
         waits, signals);
 
+    // Uploaded LUTs drop their staging; after a failed run they upload again next time.
+    std::erase_if(d.luts,
+                  [&](const LutImage& l) { return !ran && l.staging.handle() != VK_NULL_HANDLE; });
+    if (ran) {
+        for (LutImage& l : d.luts) {
+            l.staging = gpu::Buffer{};
+        }
+    }
     for (auto& [index, in] : bound) {
         if (in.access && ran) {
             in.access->commit(VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_2_SHADER_READ_BIT);

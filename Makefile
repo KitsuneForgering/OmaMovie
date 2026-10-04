@@ -133,6 +133,7 @@ include libs/compositor/module.mk
 include libs/audio/module.mk
 include libs/timeline/module.mk
 include libs/playback/module.mk
+include libs/project/module.mk
 include tests/base/module.mk
 include tests/gpu/module.mk
 include tests/media/module.mk
@@ -140,6 +141,7 @@ include tests/compositor/module.mk
 include tests/audio/module.mk
 include tests/timeline/module.mk
 include tests/playback/module.mk
+include tests/project/module.mk
 
 # -------------------------------------------------------------------------- rules
 
@@ -150,7 +152,7 @@ $(BUILD_DIR)/obj/%.o: %.cpp $(MAKEFILE_LIST)
 
 -include $(patsubst %.cpp,$(BUILD_DIR)/obj/%.d,$(ALL_SOURCES))
 
-.PHONY: all libs tests test clean distclean compdb format format-check tidy fixtures spikes run-gui deps help
+.PHONY: all libs tests test clean distclean compdb format format-check tidy fixtures fuzz spikes run-gui deps help
 
 # Spikes (tools/spikes/*.cpp): disposable single-file experiments (Docs/spikes/), built only on
 # request because they need the Vulkan and FFmpeg development files. pkg-config runs inside the
@@ -165,6 +167,19 @@ $(BUILD_DIR)/spikes/%: tools/spikes/%.cpp $(MAKEFILE_LIST)
 		$$(pkg-config --libs $(SPIKE_PKGS)) $(LDFLAGS_BASE)
 
 spikes: $(SPIKE_BINS)
+
+# S5 drives the library decoder and compositor directly.
+$(BUILD_DIR)/spikes/s5_minimal_compositing: tools/spikes/s5_minimal_compositing.cpp $(LIB_compositor) $(LIB_media) $(LIB_gpu) $(LIB_base) $(MAKEFILE_LIST)
+	$(call say,SPIKE,$@)
+	@mkdir -p $(@D)
+	$(Q)$(CXX) $(CXXFLAGS_BASE) $(TEST_WARNINGS) $(INC_compositor) $< -o $@ $(LINK_compositor) $(LDFLAGS_BASE)
+
+# S6 imports OmaMovie's device into libplacebo (development dependency only, ADR-0006).
+$(BUILD_DIR)/spikes/s6_libplacebo: tools/spikes/s6_libplacebo.cpp $(LIB_compositor) $(LIB_media) $(LIB_gpu) $(LIB_base) $(MAKEFILE_LIST)
+	$(call say,SPIKE,$@)
+	@mkdir -p $(@D)
+	$(Q)$(CXX) $(CXXFLAGS_BASE) -Wall -Wextra $(INC_compositor) $$(pkg-config --cflags libplacebo) \
+		$< -o $@ $(LINK_compositor) $$(pkg-config --libs libplacebo) $(LDFLAGS_BASE)
 
 # S4 reuses the real compositor and Qt's versioned RHI headers (limited compatibility API).
 # Keep Qt discovery in this recipe: core library/test builds do not require Qt.
@@ -190,13 +205,13 @@ $(BUILD_DIR)/gen/omamovie/moc_%.cpp: apps/omamovie/src/%.hpp $(MAKEFILE_LIST)
 	$(Q)/usr/lib/qt6/moc $< -o $@
 
 # The viewer wraps compositor images with Qt's RHI (limited compatibility API, versioned headers).
-$(BUILD_DIR)/omamovie: $(APP_SOURCES) $(APP_HEADERS) $(APP_MOCS) $(wildcard apps/omamovie/qml/*.qml) $(LIB_playback) $(LIB_timeline) $(LIB_audio) $(LIB_compositor) $(LIB_media) $(LIB_gpu) $(LIB_base) $(MAKEFILE_LIST)
+$(BUILD_DIR)/omamovie: $(APP_SOURCES) $(APP_HEADERS) $(APP_MOCS) $(wildcard apps/omamovie/qml/*.qml) $(LIB_project) $(LIB_playback) $(LIB_timeline) $(LIB_audio) $(LIB_compositor) $(LIB_media) $(LIB_gpu) $(LIB_base) $(MAKEFILE_LIST)
 	$(call say,GUI,$@)
 	@mkdir -p $(@D)
-	$(Q)$(CXX) $(CXXFLAGS_BASE) -fPIC $(TEST_WARNINGS) $(INC_playback) $(INC_compositor) -Iapps/omamovie/src \
+	$(Q)$(CXX) $(CXXFLAGS_BASE) -fPIC $(TEST_WARNINGS) $(INC_project) $(INC_playback) $(INC_compositor) -Iapps/omamovie/src \
 		$$(pkg-config --cflags Qt6Quick Qt6Test) \
 		-isystem $$(pkg-config --variable=includedir Qt6Gui)/QtGui/$$(pkg-config --modversion Qt6Gui)/QtGui \
-		$(APP_SOURCES) $(APP_MOCS) -o $@ $(LINK_playback) $(LINK_compositor) \
+		$(APP_SOURCES) $(APP_MOCS) -o $@ $(LINK_project) $(LINK_playback) $(LINK_compositor) \
 		$$(pkg-config --libs Qt6Quick Qt6Test) $(LDFLAGS_BASE)
 
 run-gui: $(BUILD_DIR)/omamovie
@@ -253,6 +268,36 @@ tidy: compdb $(TIDY_PREREQS)
 fixtures:
 	tests/fixtures/generate.sh
 
+# libFuzzer targets for parsers of untrusted files (CLAUDE.md §18). Clang only; each target
+# compiles its parser with the sanitizers and starts from the seeds in tests/fuzz/corpus/.
+# New inputs go to build/fuzz/, never into the repository.
+FUZZ_CXX   ?= clang++
+FUZZ_RUNS  ?= 200000
+FUZZ_FLAGS := -std=c++23 -g -O1 -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=all \
+              -Ilibs/base/include -Ilibs/compositor/include
+
+build/fuzz/fuzz_cube: tests/fuzz/fuzz_cube.cpp libs/compositor/src/grade.cpp libs/base/src/error.cpp \
+                      libs/compositor/include/oma/compositor/grade.hpp $(MAKEFILE_LIST)
+	$(call say,FUZZ,$@)
+	@mkdir -p $(@D)/cube-corpus
+	$(Q)$(FUZZ_CXX) $(FUZZ_FLAGS) $(filter %.cpp,$^) -o $@
+
+PROJECT_FUZZ_SOURCES := tests/fuzz/fuzz_project.cpp $(wildcard libs/project/src/*.cpp) \
+                        $(wildcard libs/timeline/src/*.cpp) $(wildcard libs/base/src/*.cpp)
+build/fuzz/fuzz_project: $(PROJECT_FUZZ_SOURCES) $(MAKEFILE_LIST)
+	$(call say,FUZZ,$@)
+	@mkdir -p $(@D)/project-corpus
+	$(Q)$(FUZZ_CXX) $(FUZZ_FLAGS) -Ilibs/timeline/include -Ilibs/timeline/src -Ilibs/project/include \
+		$(filter %.cpp,$^) -o $@ $$(pkg-config --libs simdjson)
+
+fuzz: build/fuzz/fuzz_cube build/fuzz/fuzz_project
+	build/fuzz/fuzz_cube -runs=$(FUZZ_RUNS) -max_len=65536 build/fuzz/cube-corpus tests/fuzz/corpus/cube
+	@# simdjson's inline padded_string pairs new(std::nothrow)[] with delete[]; under clang's
+	@# sanitizers with libstdc++ the delete reaches free(), a toolchain mismatch outside our code
+	@# (which allocates no arrays with new[]).
+	ASAN_OPTIONS=alloc_dealloc_mismatch=0 build/fuzz/fuzz_project -runs=$(FUZZ_RUNS) -max_len=65536 \
+		build/fuzz/project-corpus tests/fuzz/corpus/project
+
 # Installs every dependency declared in the PKGBUILD (runtime, build, check and dev tools).
 deps:
 	scripts/deps.sh --install
@@ -266,6 +311,7 @@ help:
 	@echo '  format        apply clang-format     | format-check  check without changing'
 	@echo '  tidy          run clang-tidy on the libs'
 	@echo '  fixtures      generate test media in tests/fixtures/generated (needs ffmpeg)'
+	@echo '  fuzz          run the parser fuzz targets with clang (libFuzzer) [FUZZ_RUNS=n]'
 	@echo '  spikes        build the M1 spikes in tools/spikes (Vulkan + FFmpeg + Qt Quick/RHI)'
 	@echo '  run-gui       open the Qt editor shell [GUI_FILE=path; RUN_GUI_SMOKE=1]'
 	@echo '  deps          install the dependencies declared in the PKGBUILD (uses sudo pacman)'

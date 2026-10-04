@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
+#include <iterator>
 #include <filesystem>
 #include <span>
 #include <utility>
@@ -14,6 +16,13 @@ oma::RationalTime pts_of(const oma::media::VideoFrame& frame) {
 
 // How far ahead decoding forward beats seeking (which restarts at the previous keyframe).
 constexpr double kForwardWindowSeconds = 2.0;
+// The most frames one backward chunk decodes ahead of the target.
+constexpr std::size_t kMaxChunkFrames = 64;
+
+std::size_t bytes_of(const oma::media::VideoFrame& f) {
+    const std::size_t sample = f.bit_depth() > 8 ? 2 : 1;
+    return static_cast<std::size_t>(f.width()) * static_cast<std::size_t>(f.height()) * sample * 3 / 2;
+}
 
 } // namespace
 
@@ -42,14 +51,70 @@ oma::Result<FrameSource::Stream*> FrameSource::stream(const std::string& path, c
         return std::unexpected(decoder.error());
     }
     if (streams_.size() >= kMaxStreams) {
+        for (const auto& f : streams_.back().history) history_bytes_ -= bytes_of(*f);
         streams_.pop_back();
     }
-    streams_.push_front(
-        Stream{.path = path, .decoder = std::move(*decoder), .current = {}, .ahead = {}, .ended = false});
+    streams_.push_front(Stream{
+        .path = path, .decoder = std::move(*decoder), .current = {}, .ahead = {}, .ended = false, .history = {},
+        .backward = false});
     return &streams_.front();
 }
 
+void FrameSource::record(Stream& s, std::shared_ptr<oma::media::VideoFrame> frame) {
+    history_bytes_ += bytes_of(*frame);
+    s.history.push_back(frame);
+    s.current = std::move(frame);
+    while (!s.backward && s.history.size() > kStepBackFrames) {
+        history_bytes_ -= bytes_of(*s.history.front());
+        s.history.pop_front();
+    }
+    // Over budget: drop the oldest frames, of the least recently used streams first. Never
+    // the current frame of a stream (it is still its decoder's position).
+    for (auto it = streams_.rbegin(); it != streams_.rend() && history_bytes_ > kHistoryBytes; ++it) {
+        while (it->history.size() > 1 && history_bytes_ > kHistoryBytes) {
+            history_bytes_ -= bytes_of(*it->history.front());
+            it->history.pop_front();
+        }
+    }
+}
+
+std::shared_ptr<oma::media::VideoFrame> FrameSource::remembered(const std::string& path,
+                                                                const oma::RationalTime& t) const {
+    for (const Stream& s : streams_) {
+        if (s.path != path) continue;
+        // O(log h): the first remembered frame after `t`; the one before it is on screen at t.
+        const auto after = std::ranges::upper_bound(s.history, t, std::less{},
+                                                    [](const auto& f) { return pts_of(*f); });
+        if (after != s.history.begin() && after != s.history.end()) return *std::prev(after);
+    }
+    return nullptr;
+}
+
 oma::Result<void> FrameSource::seek(Stream& s, const oma::RationalTime& t) {
+    for (const auto& f : s.history) history_bytes_ -= bytes_of(*f);
+    s.history.clear(); // a new run: the history stays contiguous
+    s.backward = s.current && t < pts_of(*s.current);
+    // Stepping back from where this decoder is: start a chunk earlier and decode forward to `t`,
+    // so the next steps back find their frames in the history.
+    if (s.backward) {
+        const std::size_t frame_bytes = std::max<std::size_t>(1, bytes_of(*s.current));
+        const std::size_t frames = std::clamp<std::size_t>(kHistoryBytes / 2 / frame_bytes, 1, kMaxChunkFrames);
+        // The nominal frame rate only sizes the chunk; frames are still found by PTS.
+        const auto& video = s.decoder->stream().video;
+        const oma::Rational frame = video && video->frame_rate ? video->frame_rate->frame_duration()
+                                                               : oma::Rational::literal(1, 30);
+        const auto back = oma::rescale(static_cast<std::int64_t>(frames), frame, t.timebase(), oma::Rounding::Floor);
+        if (auto earlier = back ? oma::RationalTime::make(t.value() - *back, t.timebase())
+                                : oma::Result<oma::RationalTime>(std::unexpected(back.error()));
+            earlier && *back > 0) {
+            if (auto r = seek_to(s, *earlier); !r) return r;
+            return advance(s, t);
+        }
+    }
+    return seek_to(s, t);
+}
+
+oma::Result<void> FrameSource::seek_to(Stream& s, const oma::RationalTime& t) {
     if (auto r = s.decoder->seek(t); !r) {
         return r;
     }
@@ -61,7 +126,7 @@ oma::Result<void> FrameSource::seek(Stream& s, const oma::RationalTime& t) {
         return oma::make_error(oma::ErrorCode::OutOfRange, oma::Category::Playback, "no frame at this time",
                                s.path);
     }
-    s.current = std::make_shared<oma::media::VideoFrame>(std::move(**first));
+    record(s, std::make_shared<oma::media::VideoFrame>(std::move(**first)));
     auto next = s.decoder->next();
     if (!next) {
         return std::unexpected(next.error());
@@ -73,7 +138,7 @@ oma::Result<void> FrameSource::seek(Stream& s, const oma::RationalTime& t) {
 
 oma::Result<void> FrameSource::advance(Stream& s, const oma::RationalTime& t) {
     while (s.ahead && pts_of(*s.ahead) <= t) {
-        s.current = std::make_shared<oma::media::VideoFrame>(std::move(*s.ahead));
+        record(s, std::make_shared<oma::media::VideoFrame>(std::move(*s.ahead)));
         auto next = s.decoder->next();
         if (!next) {
             return std::unexpected(next.error());
@@ -85,15 +150,25 @@ oma::Result<void> FrameSource::advance(Stream& s, const oma::RationalTime& t) {
 }
 
 oma::Result<Picture> FrameSource::picture_at(const std::string& path, const oma::RationalTime& t) {
+    if (auto frame = remembered(path, t)) {
+        const auto s = std::ranges::find(streams_, path, &Stream::path);
+        return picture_of(*s, std::move(frame));
+    }
     auto opened = stream(path, t);
     if (!opened) {
         return std::unexpected(opened.error());
     }
     Stream& s = **opened;
-    if (auto r = reaches(s, t) ? advance(s, t) : seek(s, t); !r) {
+    const bool forward = reaches(s, t);
+    if (forward) s.backward = false; // playing on: back to a short history
+    if (auto r = forward ? advance(s, t) : seek(s, t); !r) {
         return std::unexpected(r.error());
     }
-    Picture picture{.frame = s.current, .color = {}, .rotation = 0, .sample_aspect = oma::Rational::literal(1, 1)};
+    return picture_of(s, s.current);
+}
+
+Picture FrameSource::picture_of(const Stream& s, std::shared_ptr<oma::media::VideoFrame> frame) const {
+    Picture picture{.frame = std::move(frame), .color = {}, .rotation = 0, .sample_aspect = oma::Rational::literal(1, 1)};
     if (const auto& video = s.decoder->stream().video) {
         picture.color = video->color;
         picture.rotation = video->rotation;

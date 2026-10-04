@@ -40,15 +40,23 @@ theme updates remain M6 work.
 Shell state (2026-10-03), aligned with this document:
 - Top bar per §2.1 (back, name, undo/redo, import, export); undo/redo name the
   command they revert ("Undo Split"); export stays disabled until M7.
-- Adjustments bar per §6 with all seven entries; Color, Crop, Effects (video clips),
+- Adjustments per §6 (the permanent bar was removed on 2026-10-04: they open from the clip's
+  context menu); Color, Crop, Effects (video clips),
   Volume (clips with audio) and Info are enabled; Speed and Overlay show their release
   in the tooltip. A dot marks what is adjusted on the selected clip. Labels collapse
   to icons below 1500 px (§2.2).
 - Color: exposure (±2 EV), contrast, saturation and temperature, in linear light
   (no "Auto" yet). Crop: Fit/Fill/Stretch and the four edges; "More" adds position,
-  scale and rotation (no Ken Burns yet: it needs keyframes; no on-viewer handles yet).
+  scale and rotation, with keyframes (2026-10-04): "Add key" keeps the framing at the
+  playhead, and once a clip has keys the sliders set the key at the playhead (adding one);
+  "Ken Burns" pushes in to 120% over the clip, eased. No key markers on the clip and no
+  on-viewer handles yet.
   Effects: one filter per clip (Black & White, Sepia, Vintage, Cool, Warm, Vignette)
   picked from previews of the clip itself, its amount, and a Soften/Sharpen control.
+  Color "More" (ADR-0012): tabs for lift/gamma/gain wheels (drag the tint, slider for the
+  level, double-click resets), curves (master, red, green, blue; click adds, drag moves,
+  double-click removes a point) and a LUT (load a `.cube`, choose among the project's LUTs,
+  amount). Reset clears the grade too.
 - Transitions (ADR-0011): a ⋈ marker on every cut between touching storyline clips opens
   None / Cross dissolve / Dip to black / Wipe and 0.5, 1 or 2 s; `Ctrl+T` adds a 1 s cross
   dissolve at the cut nearest the playhead. The span it actually plays is drawn over the cut
@@ -58,11 +66,30 @@ Shell state (2026-10-03), aligned with this document:
   reverse, stop/reset, play, forward, full-screen viewer); `K` still pauses in place.
   Failures appear over the viewer,
   routine status does not.
-- Timeline per §7.2/§7.3: a visible edit bar for append, insert, overwrite, split,
-  ripple delete and lift; minimap with the visible region and playhead, clips at
+- Timeline per §7.2/§7.3: no edit bar (edits come from context menus and shortcuts);
+  minimap with the visible region and playhead, clips at
   their sequence time (gaps show), a playhead that clicks and drags scrub, edge
-  drags that ripple-trim, wheel scrolling, Ctrl+wheel/keyboard zoom, fit; no track
-  headers or edit buttons.
+  drags that ripple-trim, wheel scrolling, Ctrl+wheel zoom around the pointer,
+  keyboard zoom, fit; no track headers or edit buttons. Snapping (2026-10-04, on by
+  default, `N` or the magnet button toggles): lane clip moves and edge trims snap within
+  8 px to clip edges on any track, the playhead and zero, with a line on the edge.
+- Keyboard path without a mouse (2026-10-04): every button takes Tab focus with a visible
+  ring, Enter activates it, Space keeps playing; ↑/↓ select clips, Shift+F10 opens the
+  clip menu. Library and clip names are 12/11 px (were 10).
+- Nothing is saved before M7, so the Projects screen shows "Current session" with a
+  visible warning, and New project or closing the window asks before discarding a session
+  that has media.
+- Drag and drop (§7.3): dragging a storyline clip moves it to the nearest cut (one
+  "Move" in the history; transitions of the separated clip pairs are dropped), and
+  library items drag onto the timeline: pictures insert at the nearest cut, sound
+  lands on the lane under the pointer (or the first lane with room, or a new one). An
+  accent bar marks the cut while dragging.
+- Context menus (§7.3): right-clicking a storyline clip offers the adjustments that
+  apply to it (each opens its drawer), Split here, Detach audio, Delete and Replace
+  with a gap; a lane clip offers Volume, Info, Split here and Delete; the ⋈ marker
+  opens the transition menu; a library item offers Append, Insert and Overwrite, which the
+  library header also shows for the selected item (Add, and ▾ for the others). They use
+  the same actions as the adjustments bar and the shortcuts.
 - Commands are `OmaAction`s in one registry in `Main.qml` with the §8.1 keys
   (Space, K, L, arrows, Shift+arrows, Home/End, E, W, D, Ctrl+B, Delete,
   Shift+Delete, Ctrl+Z, Ctrl+Shift+Z, Ctrl+I, Ctrl+1, Ctrl+Shift+F, Escape,
@@ -208,9 +235,14 @@ On the Edit screen, "◂ Projects" always returns to the list.
 
 ---
 
-## 6. Adjustments bar and control drawer
+## 6. Adjustments and control drawer
 
-The bar sits above the viewer. **Only the adjustments that apply to the selection are enabled.** A dot (•) marks adjustments already active on the selected clip.
+**Decided 2026-10-04 (maintainer):** there is no permanent bar of adjustment icons. The
+adjustments open from the clip's context menu (right click, `Shift+F10`/Menu key) or their
+shortcuts; the menu lists only what applies to the clicked clip and marks with ● the ones
+already active on it. While a drawer is open, a thin strip above it names the adjustment and
+the clip and closes it ("Done" or `Esc`). The table keeps the planned adjustments; their icons
+remain for menus and tooltips.
 
 | Icon | Adjustment | Drawer controls (level 1) | "More" (level 2) | Release |
 |---|---|---|---|---|
@@ -222,7 +254,9 @@ The bar sits above the viewer. **Only the adjustments that apply to the selectio
 | ⧉ | **Overlay** (only on layers above the primary storyline) | Picture-in-picture, Side by side, Cutaway, Chroma key | Border, shadow, mask, blend | v0.2 |
 | ⓘ | **Info** | Name, duration, source file, codec, decode path | — | v0.1 |
 
-- The **drawer** opens between the bar and the viewer, pushing the viewer down slightly (the viewer shrinks instead of being covered).
+- The **drawer** opens above the viewer, pushing it down slightly (the viewer shrinks instead of being covered).
+- **Library sidebar**: the top bar's library button (`Ctrl+1`) hides it in wide windows too,
+  leaving the viewer the whole width, centered; in narrow windows it is an overlay.
 - **"More"** expands the drawer. If the content is large (curves, keyframes), a **side panel** opens in place of the library, with "◂ Back to library".
 - For titles the bar changes: **Text** (font, size, color, alignment), **Style** (presets), **Animation**.
 - For transitions: **Type** and **Duration**.
@@ -239,8 +273,9 @@ The bar sits above the viewer. **Only the adjustments that apply to the selectio
 - The model is generic multitrack (`CLAUDE.md` §10); "primary + connected" is how the UI presents and edits it.
 
 ### 7.2 Elements
-- **Edit bar** above the minimap: append, insert, overwrite, split, ripple delete and lift.
-  It calls the same actions as the keyboard shortcuts; labels collapse to icons below 1500 px.
+- **No edit bar** (removed 2026-10-04: it duplicated the context menus). Append, insert and
+  overwrite are in the library item's context menu; split, delete, lift and detach audio in the
+  clip's; transitions on the ⋈ marker. Every one keeps its shortcut (§8.1).
 - **Minimap** at the top: the whole project in miniature, with the visible region highlighted (the answer to Resolve's dual timeline). Click or drag to navigate.
 - **Transitions** as a small ⋈ icon **between** two clips (like Movie Maker), clickable to edit.
 - **Waveform** at the bottom of every clip with audio.
@@ -255,6 +290,9 @@ from Final Cut, **tools** exist and are switched by key (§8.1).
 | Gesture (Select tool) | Result |
 |---|---|
 | Drag a clip edge | Ripple trim (magnetic) |
+| Drag a storyline clip | Moves it to the nearest cut; its gap closes and the neighbors make room (magnetic) |
+| Drag from the library | Pictures insert at the nearest storyline cut; sound lands on the lane under the pointer |
+| Right click a clip or ⋈ | Context menu with what applies to that item: its adjustments (open the drawer), split here, detach audio, delete; transition type and duration |
 | Double click a junction | **Cut editor**: both sides with the unused material dimmed; adjusts the cut and the audio split (J/L-cut) |
 | Drag an edge with the Trim tool (`T`) | Roll between neighbors |
 | Drag the middle with the Trim tool | Slip (changes the content, keeps position and duration) |
@@ -280,7 +318,7 @@ Translation rule: **macOS `Cmd` becomes `Ctrl`**, `Option` becomes `Alt`. OmaMov
 | `/` | Play the selection |
 | `←` `→` | Previous/next frame |
 | `Shift+←` `→` | 10 frames |
-| `↑` `↓` | Previous/next edit |
+| `↑` `↓` | Previous/next storyline clip: selects it and moves the playhead to its start |
 | `Home` / `End` | Project start / end |
 | `S` | Toggle skimming |
 | `N` | Toggle snapping |
@@ -320,7 +358,8 @@ Translation rule: **macOS `Cmd` becomes `Ctrl`**, `Option` becomes `Alt`. OmaMov
 |---|---|
 | `Ctrl+=` / `Ctrl+-` / `Shift+Z` | Timeline zoom / fit the project |
 | `Ctrl+1` | Show/hide the library |
-| `Tab` | Cycle focus: library → viewer → timeline |
+| `Tab` / `Shift+Tab` | Move keyboard focus through the controls (a ring marks it); `Enter` activates. A focused slider or list keeps the arrow keys |
+| `Shift+F10` / `Menu` | Context menu of the selected clip |
 | `Ctrl+I` | Import |
 | `Ctrl+E` | Export |
 | `Ctrl+Shift+F` | Full-screen viewer |

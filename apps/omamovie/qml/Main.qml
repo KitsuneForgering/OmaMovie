@@ -15,7 +15,7 @@ ApplicationWindow {
     height: 800
     minimumWidth: 640
     minimumHeight: 520
-    title: session.editing ? "Untitled project — OmaMovie" : "OmaMovie — Projects"
+    title: session.editing ? session.projectName + (session.dirty ? " •" : "") + " — OmaMovie" : "OmaMovie — Projects"
     color: colors.background
 
     property color fg: colors.foreground
@@ -27,11 +27,13 @@ ApplicationWindow {
     property bool compact: width < 1500
     property bool narrow: width < 900
     property bool libraryOverlay: false
+    property bool libraryHidden: false // wide windows: the library sidebar folded away, the viewer centered
     property bool viewerOnly: false
     property string drawer: "" // the open adjustment, "" when the drawer is closed
     property real upperRatio: 0.55
     property real pixelsPerSecond: 60
     property bool fitTimeline: true
+    property bool snapping: true // ui-design §7.2: on by default, N toggles
 
     function pad(n, width) { return String(n).padStart(width, "0") }
     // HH:MM:SS:FF at the nominal frame rate (display only).
@@ -47,6 +49,9 @@ ApplicationWindow {
          session.info.eqLow !== 0 || session.info.eqMid !== 0 || session.info.eqHigh !== 0 || session.info.noise > 0)
     property bool volumeMore: false // the Volume drawer's "More" level (ui-design §6)
     property bool cropMore: false   // the Crop drawer's "More" level: position, scale, rotation
+    property bool colorMore: false  // the Color drawer's "More" level: grading (ADR-0012)
+    property string gradeTab: "wheels" // wheels, curves or lut
+    property int curveChannel: 0       // 0 master, 1-3 red, green, blue
     readonly property var filterNames: ["None", "Black & White", "Sepia", "Vintage", "Cool", "Warm", "Vignette"]
     // Keep the filter previews in step with the selection while the Effects drawer is open.
     Connections {
@@ -76,6 +81,70 @@ ApplicationWindow {
     readonly property real volumeFloorDb: -40
     function gainOf(db) { return db <= volumeFloorDb ? 0 : Math.pow(10, db / 20) }
     function dbOf(gain) { return gain > 0 ? Math.max(volumeFloorDb, 20 * Math.log(gain) / Math.LN10) : volumeFloorDb }
+    // Replacing or closing the session asks first when it has changes since the last save.
+    // Keys a focused slider or list keeps from the window shortcuts.
+    readonly property var sliderKeys: [Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down, Qt.Key_Home, Qt.Key_End,
+                                       Qt.Key_PageUp, Qt.Key_PageDown]
+    readonly property bool sessionHasWork: session.dirty
+    property bool closeConfirmed: false
+    function confirmDiscard(what, then) {
+        if (!sessionHasWork) { then(); return }
+        discardDialog.what = what
+        discardDialog.then = then
+        discardDialog.open()
+    }
+    onClosing: (close) => {
+        if (closeConfirmed || !sessionHasWork) return
+        close.accepted = false
+        confirmDiscard("Close OmaMovie", () => { root.closeConfirmed = true; root.close() })
+    }
+    Dialog {
+        id: discardDialog
+        objectName: "discardDialog"
+        property string what
+        property var then: null
+        anchors.centerIn: parent
+        width: Math.min(460, root.width - 48)
+        modal: true
+        title: what + "?"
+        Label {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: session.projectPath === "" ? "This project has not been saved. Its media and timeline will be lost."
+                                             : "Changes since the last save will be lost."
+        }
+        // Qt's standard Discard reads "Close without Saving"; name what actually happens.
+        footer: DialogButtonBox {
+            Button { text: "Discard changes"; DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole }
+            Button { text: "Cancel"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        }
+        onDiscarded: { close(); if (then) then() }
+    }
+
+    // Opens the context menu of the selected clip at the clip (Shift+F10 or the Menu key).
+    function openClipMenu() {
+        for (const c of session.clips) {
+            if (c.id !== session.selectedClip) continue
+            storylineMenu.at = session.position
+            storylineMenu.popup(timelineScroll.contentItem, timelinePanel.origin + c.start * timelinePanel.scale, 4 + timelinePanel.storylineHeight)
+            return
+        }
+        for (let lane = 0; lane < session.audioTracks.length; ++lane) {
+            for (const c of session.audioTracks[lane].clips) {
+                if (c.id !== session.selectedClip) continue
+                soundMenu.at = session.position
+                soundMenu.popup(timelineScroll.contentItem, timelinePanel.origin + c.start * timelinePanel.scale,
+                                timelinePanel.laneY(lane) + timelinePanel.laneHeight)
+                return
+            }
+        }
+    }
+
+    // Opens an adjustment for the selected clip; the timeline's context menus use it.
+    function openDrawer(name) {
+        root.drawer = name
+        if (name === "effects") session.requestFilterPreviews()
+    }
     function shortcutText(action) {
         return action && action.keys ? " (" + action.keys + ")" : ""
     }
@@ -167,6 +236,22 @@ ApplicationWindow {
             text: "Add cross dissolve"; keys: "Ctrl+T"; enabled: actions.editing && session.clips.length > 1
             onTriggered: session.addDissolveAtPlayhead()
         }
+        property OmaAction previousClip: OmaAction {
+            text: "Select the previous clip"; keys: "Up"; enabled: actions.editing && session.clips.length > 0
+            onTriggered: session.selectAdjacentClip(-1)
+        }
+        property OmaAction nextClip: OmaAction {
+            text: "Select the next clip"; keys: "Down"; enabled: actions.editing && session.clips.length > 0
+            onTriggered: session.selectAdjacentClip(1)
+        }
+        property OmaAction clipMenu: OmaAction {
+            text: "Clip menu"; keys: "Shift+F10"; enabled: actions.editing && session.selectedClip > 0
+            onTriggered: root.openClipMenu()
+        }
+        property OmaAction clipMenuKey: OmaAction {
+            text: "Clip menu"; keys: "Menu"; enabled: actions.clipMenu.enabled
+            onTriggered: root.openClipMenu()
+        }
         property OmaAction undo: OmaAction {
             text: session.canUndo ? "Undo " + session.undoText : "Undo"
             keys: "Ctrl+Z"; enabled: actions.editing && session.canUndo
@@ -181,10 +266,25 @@ ApplicationWindow {
             text: "Import"; keys: "Ctrl+I"
             onTriggered: fileDialog.open()
         }
+        // Project files (ADR-0007): the first save asks where, later ones replace the file.
+        property OmaAction save: OmaAction {
+            text: "Save"; keys: "Ctrl+S"; enabled: actions.editing && session.media.length > 0
+            onTriggered: session.projectPath === "" ? saveDialog.open() : session.saveProject("")
+        }
+        property OmaAction openProject: OmaAction {
+            text: "Open project…"; keys: "Ctrl+O"
+            onTriggered: root.confirmDiscard("Open another project", () => openDialog.open())
+        }
         property OmaAction exportMovie: OmaAction { text: "Export (M7)"; keys: "Ctrl+E"; enabled: false }
+        // Shows or hides the library: an overlay in narrow windows, the sidebar in wide ones (the
+        // viewer then takes the whole width, centered).
         property OmaAction toggleLibrary: OmaAction {
-            text: "Library"; keys: "Ctrl+1"; enabled: actions.editing && root.compact
-            onTriggered: root.libraryOverlay = !root.libraryOverlay
+            text: "Library"; keys: "Ctrl+1"; enabled: actions.editing
+            onTriggered: root.compact ? root.libraryOverlay = !root.libraryOverlay : root.libraryHidden = !root.libraryHidden
+        }
+        property OmaAction closeDrawer: OmaAction {
+            text: "Done"; keys: "Escape"; enabled: actions.editing && root.drawer !== "" && !root.viewerOnly
+            onTriggered: root.drawer = ""
         }
         property OmaAction fullViewer: OmaAction {
             text: "Full-screen viewer"; keys: "Ctrl+Shift+F"; enabled: actions.editing
@@ -205,6 +305,10 @@ ApplicationWindow {
         property OmaAction zoomFit: OmaAction {
             text: "Fit the project"; keys: "Shift+Z"; enabled: actions.editing
             onTriggered: root.fitTimeline = true
+        }
+        property OmaAction snapping: OmaAction {
+            text: "Snapping"; keys: "N"; enabled: actions.editing; checkable: true; checked: root.snapping
+            onTriggered: root.snapping = !root.snapping
         }
         property OmaAction volume: OmaAction {
             text: "Volume"; keys: "Ctrl+Shift+V"
@@ -235,6 +339,29 @@ ApplicationWindow {
     }
 
     FileDialog {
+        id: saveDialog
+        title: "Save project"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "omamovie"
+        nameFilters: ["OmaMovie project (*.omamovie)"]
+        onAccepted: session.saveProject(selectedFile)
+    }
+
+    FileDialog {
+        id: openDialog
+        title: "Open project"
+        nameFilters: ["OmaMovie project (*.omamovie)", "All files (*)"]
+        onAccepted: session.openProject(selectedFile)
+    }
+
+    FileDialog {
+        id: lutDialog
+        title: "Load LUT"
+        nameFilters: ["3D LUT (*.cube)", "All files (*)"]
+        onAccepted: session.importLut(selectedFile)
+    }
+
+    FileDialog {
         id: fileDialog
         title: "Import"
         fileMode: FileDialog.OpenFiles
@@ -260,7 +387,13 @@ ApplicationWindow {
             height: 60
             Text { text: "OmaMovie"; color: root.fg; font.pixelSize: 18; font.bold: true }
             Item { Layout.fillWidth: true }
-            OmaButton { text: "New project"; primary: true; onClicked: session.newProject() }
+            OmaButton { objectName: "openProject"; action: actions.openProject; iconName: "open" }
+            OmaButton {
+                objectName: "newProject"
+                text: "New project"
+                primary: true
+                onClicked: root.confirmDiscard("Start a new project", () => session.newProject())
+            }
         }
         Rectangle { anchors.top: projectsBar.bottom; width: parent.width; height: 1; color: root.line }
 
@@ -272,7 +405,7 @@ ApplicationWindow {
             spacing: 14
             Text {
                 Layout.topMargin: 16
-                text: "RECENT"
+                text: "CURRENT PROJECT"
                 color: root.muted
                 font.pixelSize: 11
                 font.bold: true
@@ -299,9 +432,14 @@ ApplicationWindow {
                             source: session.media.length ? session.media[0].thumbnail : ""
                         }
                     }
-                    Text { text: "Untitled project"; color: root.fg; font.pixelSize: 13; font.bold: true }
                     Text {
-                        text: session.media.length + " video" + (session.media.length === 1 ? "" : "s") + " · this session"
+                        text: session.projectName + (session.dirty ? " · unsaved changes" : "")
+                        color: root.fg
+                        font.pixelSize: 13
+                        font.bold: true
+                    }
+                    Text {
+                        text: session.media.length + " item" + (session.media.length === 1 ? "" : "s") + " in the library"
                         color: root.muted
                         font.pixelSize: 11
                     }
@@ -310,14 +448,9 @@ ApplicationWindow {
             }
             Text {
                 visible: session.media.length === 0
-                text: "No projects yet. Start one with New project."
+                text: "Nothing open yet. Start a new project or open a saved one."
                 color: root.muted
                 font.pixelSize: 12
-            }
-            Text {
-                text: "Projects are kept for this session only; saving arrives with M7."
-                color: root.muted
-                font.pixelSize: 11
             }
         }
     }
@@ -351,7 +484,8 @@ ApplicationWindow {
                 Text {
                     Layout.leftMargin: 6
                     Layout.fillWidth: true
-                    text: "Untitled project"
+                    objectName: "projectName"
+                    text: session.projectName + (session.dirty ? " •" : "")
                     color: root.fg
                     font.pixelSize: 13
                     font.bold: true
@@ -360,6 +494,14 @@ ApplicationWindow {
                 OmaButton { action: actions.undo; iconName: "undo"; showLabel: false }
                 OmaButton { action: actions.redo; iconName: "redo"; showLabel: false }
                 Separator { Layout.leftMargin: 6; Layout.rightMargin: 6 }
+                OmaButton {
+                    objectName: "toggleLibrary"
+                    action: actions.toggleLibrary
+                    iconName: "library"
+                    showLabel: false
+                    selected: root.compact ? root.libraryOverlay : !root.libraryHidden
+                }
+                OmaButton { action: actions.save; iconName: "save"; showLabel: !root.compact }
                 OmaButton { action: actions.importMedia; iconName: "import"; showLabel: !root.compact }
                 OmaButton { action: actions.exportMovie; iconName: "export"; text: "Export"; showLabel: !root.compact }
             }
@@ -381,8 +523,9 @@ ApplicationWindow {
                 // Library (§4): docked at ~30% in wide windows, an overlay panel otherwise.
                 Rectangle {
                     id: library
+                    objectName: "librarySidebar"
                     z: 3
-                    visible: !root.viewerOnly && (!root.compact || root.libraryOverlay)
+                    visible: !root.viewerOnly && (root.compact ? root.libraryOverlay : !root.libraryHidden)
                     width: root.compact ? Math.min(380, upper.width * 0.8) : upper.width * 0.30
                     // As an overlay it stops above the transport so the timecode stays visible.
                     height: root.compact ? upper.height - transport.height : upper.height
@@ -413,6 +556,20 @@ ApplicationWindow {
                                 Text { text: "Media"; color: root.fg; font.pixelSize: 12; font.bold: true }
                                 Text { text: session.media.length; color: root.muted; font.pixelSize: 11 }
                                 Item { Layout.fillWidth: true }
+                                // The selected item onto the timeline; ▾ offers insert and overwrite.
+                                OmaButton {
+                                    visible: actions.mediaChosen
+                                    action: actions.append
+                                    text: "Add"
+                                    iconName: "append"
+                                }
+                                OmaButton {
+                                    id: placeMore
+                                    visible: actions.mediaChosen
+                                    text: "▾"
+                                    tip: "More ways to add"
+                                    onClicked: libraryMenu.popup(placeMore, 0, placeMore.height)
+                                }
                                 OmaButton { action: actions.importMedia; iconName: "import"; showLabel: false }
                             }
                             GridView {
@@ -421,10 +578,11 @@ ApplicationWindow {
                                 Layout.fillHeight: true
                                 Layout.margins: 6
                                 cellWidth: Math.max(110, Math.floor(width / Math.max(1, Math.floor(width / 150))))
-                                cellHeight: 120
+                                cellHeight: 132
                                 clip: true
                                 model: session.media
                                 delegate: Item {
+                                    objectName: "libraryItem"
                                     width: mediaGrid.cellWidth
                                     height: mediaGrid.cellHeight
                                     readonly property bool chosen: index === session.selectedMedia
@@ -454,14 +612,47 @@ ApplicationWindow {
                                                 color: colors.green || root.fg
                                             }
                                         }
-                                        Text { Layout.fillWidth: true; text: modelData.name; color: root.fg; font.pixelSize: 10; elide: Text.ElideMiddle }
-                                        Text { text: root.timecode(modelData.duration); color: root.muted; font.pixelSize: 10 }
+                                        Text { Layout.fillWidth: true; text: modelData.name; color: root.fg; font.pixelSize: 12; elide: Text.ElideMiddle }
+                                        Text { text: root.timecode(modelData.duration); color: root.muted; font.pixelSize: 11 }
                                     }
+                                    // Click selects, double click appends, dragging carries the item
+                                    // onto the timeline (ui-design §7.3).
                                     MouseArea {
                                         anchors.fill: parent
-                                        onClicked: session.selectMedia(index)
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                        preventStealing: true
+                                        drag.target: mediaDrag
+                                        drag.threshold: 6
+                                        onPressed: (mouse) => {
+                                            if (mouse.button === Qt.RightButton) {
+                                                session.selectMedia(index)
+                                                libraryMenu.popup()
+                                                return
+                                            }
+                                            const p = mapToItem(mediaDrag.parent, mouse.x, mouse.y)
+                                            mediaDrag.x = p.x
+                                            mediaDrag.y = p.y - mediaDrag.height / 2
+                                        }
+                                        onClicked: (mouse) => { if (mouse.button === Qt.LeftButton) session.selectMedia(index) }
                                         onDoubleClicked: actions.append.trigger()
+                                        drag.onActiveChanged: {
+                                            if (drag.active) {
+                                                mediaDrag.index = index
+                                                mediaDrag.Drag.active = true
+                                            } else {
+                                                mediaDrag.Drag.drop()
+                                                mediaDrag.index = -1
+                                            }
+                                        }
                                     }
+                                }
+                                // What a library item can do on the timeline (ui-design §4).
+                                Menu {
+                                    id: libraryMenu
+                                    objectName: "libraryMenu"
+                                    MenuItem { action: actions.append }
+                                    MenuItem { action: actions.insert }
+                                    MenuItem { action: actions.overwrite }
                                 }
                                 Text {
                                     anchors.centerIn: parent
@@ -481,66 +672,35 @@ ApplicationWindow {
 
                 ColumnLayout {
                     id: viewerColumn
-                    x: root.compact || root.viewerOnly ? 0 : library.width
+                    objectName: "viewerColumn"
+                    x: root.compact || root.viewerOnly || root.libraryHidden ? 0 : library.width
                     width: upper.width - x
                     height: upper.height
                     spacing: 0
 
-                    // Adjustments bar (§6): only what applies to the selection is enabled.
+                    // The open drawer's title strip (§6): adjustments open from the clip's context menu
+                    // (or their shortcuts), so there is no permanent bar of icons; this names what is
+                    // open and closes it.
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 44
-                        visible: !root.viewerOnly
+                        Layout.preferredHeight: 34
+                        visible: !root.viewerOnly && root.drawer !== ""
                         color: colors.background
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            spacing: 2
-                            OmaButton {
-                                action: actions.color
-                                iconName: "color"
-                                showLabel: !root.compact
-                                selected: root.drawer === "color"
-                                activeDot: !!session.info.colorAdjusted
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 6
+                            spacing: 6
+                            Text {
+                                Layout.fillWidth: true
+                                text: ({ color: "Color", crop: "Crop and framing", volume: "Volume", effects: "Effects",
+                                         info: "Info" })[root.drawer] + (session.info.name ? " — " + session.info.name : "")
+                                color: root.fg
+                                font.pixelSize: 12
+                                font.bold: true
+                                elide: Text.ElideRight
                             }
-                            OmaButton {
-                                action: actions.crop
-                                iconName: "crop"
-                                showLabel: !root.compact
-                                selected: root.drawer === "crop"
-                                activeDot: !!session.info.framingAdjusted
-                            }
-                            OmaButton {
-                                action: actions.volume
-                                iconName: "volume"
-                                showLabel: !root.compact
-                                selected: root.drawer === "volume"
-                                activeDot: root.audioAdjusted
-                            }
-                            OmaButton { iconName: "speed"; text: "Speed"; showLabel: !root.compact; enabled: false; tip: "Speed (v0.2)" }
-                            OmaButton {
-                                action: actions.effects
-                                iconName: "effects"
-                                showLabel: !root.compact
-                                selected: root.drawer === "effects"
-                                activeDot: !!session.info.filtered
-                            }
-                            OmaButton { iconName: "overlay"; text: "Overlay"; showLabel: !root.compact; enabled: false; tip: "Overlay, for layers above the storyline (v0.2)" }
-                            OmaButton {
-                                action: actions.info
-                                iconName: "info"
-                                showLabel: !root.compact
-                                selected: root.drawer === "info"
-                            }
-                            Item { Layout.fillWidth: true }
-                            OmaButton {
-                                visible: root.compact
-                                action: actions.toggleLibrary
-                                iconName: "library"
-                                showLabel: !root.narrow
-                                selected: root.libraryOverlay
-                            }
+                            OmaButton { objectName: "closeDrawer"; action: actions.closeDrawer; text: "Done" }
                         }
                         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
                     }
@@ -590,15 +750,19 @@ ApplicationWindow {
                             spacing: 0
                             Layout.fillWidth: true
                             RowLayout {
-                                Text { text: drawerSlider.label; color: root.muted; font.pixelSize: 9; font.bold: true }
+                                Text { text: drawerSlider.label; color: root.muted; font.pixelSize: 10; font.bold: true }
                                 Item { Layout.fillWidth: true }
-                                Text { text: drawerSlider.readout; color: root.fg; font.pixelSize: 10 }
+                                Text { text: drawerSlider.readout; color: root.fg; font.pixelSize: 11 }
                             }
                             Slider {
                                 id: control
                                 Layout.fillWidth: true
-                                focusPolicy: Qt.NoFocus
+                                // Tab reaches it; while focused, the arrows and Home/End move it
+                                // instead of the playhead, and each key step is one command.
+                                focusPolicy: Qt.TabFocus
+                                Keys.onShortcutOverride: (event) => event.accepted = root.sliderKeys.includes(event.key)
                                 onPressedChanged: if (!pressed) drawerSlider.committed()
+                                onMoved: if (!pressed) drawerSlider.committed()
                             }
                         }
                         ColumnLayout {
@@ -648,12 +812,13 @@ ApplicationWindow {
                                 spacing: 18
                                 ColumnLayout {
                                     spacing: 2
-                                    Text { text: "EQUALIZER"; color: root.muted; font.pixelSize: 9; font.bold: true }
+                                    Text { text: "EQUALIZER"; color: root.muted; font.pixelSize: 10; font.bold: true }
                                     ComboBox {
                                         id: eqPreset
                                         Layout.preferredWidth: 140
                                         font.pixelSize: 11
-                                        focusPolicy: Qt.NoFocus
+                                        focusPolicy: Qt.TabFocus
+                                        Keys.onShortcutOverride: (event) => event.accepted = root.sliderKeys.includes(event.key) || event.key === Qt.Key_Space
                                         model: root.eqPresets.map(p => p.name).concat(["Custom"])
                                         currentIndex: root.eqPresetIndex()
                                         onActivated: (index) => {
@@ -719,11 +884,12 @@ ApplicationWindow {
                         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
                     }
 
-                    // Color drawer (§6): exposure, contrast, saturation and temperature of the clip.
+                    // Color drawer (§6): exposure, contrast, saturation and temperature of the clip;
+                    // "More" adds grading (ADR-0012): lift/gamma/gain wheels, curves and a LUT.
                     Rectangle {
                         id: colorDrawer
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 64
+                        Layout.preferredHeight: root.colorMore ? 64 + 150 : 64
                         visible: !root.viewerOnly && root.drawer === "color" && actions.color.enabled
                         color: colors.dark_background
                         function commit() {
@@ -731,8 +897,19 @@ ApplicationWindow {
                                                  saturationControl.slider.value, temperatureControl.slider.value)
                         }
                         function signed(v) { return (v > 0 ? "+" : "") + Math.round(v * 100) }
+                        // The three wheels as the session wants them, with one changed.
+                        function commitWheel(name, x, y, level) {
+                            const w = session.info.wheels || {}
+                            const all = { lift: w.lift || {}, gamma: w.gamma || {}, gain: w.gain || {} }
+                            all[name] = { x: x, y: y, level: level }
+                            session.setClipWheels(all)
+                        }
                         RowLayout {
-                            anchors.fill: parent
+                            id: colorBasics
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            height: 64
                             anchors.leftMargin: 12
                             anchors.rightMargin: 12
                             spacing: 18
@@ -764,9 +941,127 @@ ApplicationWindow {
                             OmaButton {
                                 text: "Reset"
                                 enabled: !!session.info.colorAdjusted
-                                onClicked: session.setClipColor(0, 0, 0, 0)
+                                onClicked: { session.setClipColor(0, 0, 0, 0); session.resetClipGrade() }
+                            }
+                            OmaButton {
+                                text: "More"
+                                selected: root.colorMore
+                                activeDot: !!session.info.graded
+                                tip: "Color wheels, curves and LUTs"
+                                onClicked: root.colorMore = !root.colorMore
                             }
                         }
+                        // Grading: one tab at a time, so the drawer stays short.
+                        RowLayout {
+                            visible: root.colorMore
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: colorBasics.bottom
+                            anchors.bottom: parent.bottom
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            anchors.bottomMargin: 8
+                            spacing: 14
+                            ColumnLayout {
+                                Layout.alignment: Qt.AlignTop
+                                Layout.preferredWidth: 84
+                                Layout.fillWidth: false
+                                spacing: 2
+                                Repeater {
+                                    model: [{ name: "Wheels", tab: "wheels" }, { name: "Curves", tab: "curves" }, { name: "LUT", tab: "lut" }]
+                                    delegate: OmaButton {
+                                        Layout.fillWidth: true
+                                        text: modelData.name
+                                        selected: root.gradeTab === modelData.tab
+                                        onClicked: root.gradeTab = modelData.tab
+                                    }
+                                }
+                            }
+                            RowLayout { // lift, gamma, gain
+                                visible: root.gradeTab === "wheels"
+                                Layout.fillWidth: true
+                                spacing: 18
+                                Repeater {
+                                    model: [{ name: "LIFT", key: "lift" }, { name: "GAMMA", key: "gamma" }, { name: "GAIN", key: "gain" }]
+                                    delegate: ColorWheel {
+                                        required property var modelData
+                                        readonly property var value: (session.info.wheels || {})[modelData.key] || {}
+                                        label: modelData.name
+                                        tintX: value.x || 0
+                                        tintY: value.y || 0
+                                        level: value.level || 0
+                                        onCommitted: (x, y, level) => colorDrawer.commitWheel(modelData.key, x, y, level)
+                                    }
+                                }
+                                Item { Layout.fillWidth: true }
+                            }
+                            RowLayout { // curves
+                                visible: root.gradeTab === "curves"
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                spacing: 10
+                                ColumnLayout {
+                                    Layout.alignment: Qt.AlignTop
+                                    spacing: 2
+                                    Repeater {
+                                        model: ["Master", "Red", "Green", "Blue"]
+                                        delegate: OmaButton {
+                                            Layout.fillWidth: true
+                                            text: modelData
+                                            selected: root.curveChannel === index
+                                            activeDot: ((session.info.curves || {})[String(index)] || []).length > 0
+                                            onClicked: root.curveChannel = index
+                                        }
+                                    }
+                                }
+                                CurveEditor {
+                                    Layout.preferredWidth: 180
+                                    Layout.fillHeight: true
+                                    channel: root.curveChannel
+                                    points: (session.info.curves || {})[String(root.curveChannel)] || []
+                                    // Re-read whenever the selection or its properties change.
+                                    samples: session.info && session.info.clip ? session.curveSamples(root.curveChannel, 96) : []
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignTop
+                                    wrapMode: Text.WordWrap
+                                    text: "Click to add a point, drag to move it, double-click to remove it."
+                                    color: root.muted
+                                    font.pixelSize: 11
+                                }
+                            }
+                            ColumnLayout { // LUT
+                                visible: root.gradeTab === "lut"
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignTop
+                                spacing: 8
+                                RowLayout {
+                                    spacing: 8
+                                    ComboBox {
+                                        id: lutChoice
+                                        Layout.preferredWidth: 200
+                                        font.pixelSize: 11
+                                        focusPolicy: Qt.TabFocus
+                                        Keys.onShortcutOverride: (event) => event.accepted = root.sliderKeys.includes(event.key) || event.key === Qt.Key_Space
+                                        textRole: "name"
+                                        model: [{ id: 0, name: "No LUT" }].concat(session.luts)
+                                        currentIndex: Math.max(0, model.findIndex(l => l.id === (session.info.lut || 0)))
+                                        onActivated: (index) => session.setClipLut(model[index].id, lutAmount.slider.value)
+                                    }
+                                    OmaButton { text: "Load LUT…"; tip: "A 3D LUT in the .cube format"; onClicked: lutDialog.open() }
+                                }
+                                DrawerSlider {
+                                    id: lutAmount
+                                    Layout.maximumWidth: 280
+                                    enabled: (session.info.lut || 0) > 0
+                                    label: "AMOUNT"
+                                    readout: Math.round(lutAmount.slider.value * 100) + "%"
+                                    onCommitted: session.setClipLut(session.info.lut || 0, lutAmount.slider.value)
+                                }
+                            }
+                        }
+                        Binding { target: lutAmount.slider; property: "value"; value: session.info.lutAmount === undefined ? 1 : session.info.lutAmount; when: !lutAmount.slider.pressed }
                         Binding { target: exposureControl.slider; property: "from"; value: -2 }
                         Binding { target: exposureControl.slider; property: "to"; value: 2 }
                         Binding { target: exposureControl.slider; property: "value"; value: session.info.exposure || 0; when: !exposureControl.slider.pressed }
@@ -838,10 +1133,25 @@ ApplicationWindow {
                                 DrawerSlider { id: posY; label: "POSITION Y"; readout: Math.round(posY.slider.value) + " px"; onCommitted: cropDrawer.commitTransform() }
                                 DrawerSlider { id: scaleControl; label: "SCALE"; readout: Math.round(scaleControl.slider.value * 100) + "%"; onCommitted: cropDrawer.commitTransform() }
                                 DrawerSlider { id: rotationControl; label: "ROTATION"; readout: rotationControl.slider.value.toFixed(1) + "°"; onCommitted: cropDrawer.commitTransform() }
+                                // Keyframes (M8): with keys, the sliders above set the one at the playhead.
+                                OmaButton {
+                                    objectName: "transformKey"
+                                    text: session.motion.keyHere ? "◆ Remove key" : "◇ Add key"
+                                    tip: session.motion.keys > 0
+                                         ? session.motion.keys + " keys: the sliders set the one at the playhead"
+                                         : "Animate: keep this framing at the playhead"
+                                    selected: !!session.motion.keyHere
+                                    onClicked: session.toggleTransformKey()
+                                }
+                                OmaButton {
+                                    text: "Ken Burns"
+                                    tip: "A slow push in over the whole clip"
+                                    onClicked: session.kenBurns()
+                                }
                                 OmaButton {
                                     text: "Reset"
                                     enabled: !!session.info.framingAdjusted
-                                    onClicked: { session.setClipFraming(0, 0, 0, 0, 0); session.setClipTransform(0, 0, 1, 0) }
+                                    onClicked: session.resetClipFraming()
                                 }
                             }
                         }
@@ -855,16 +1165,16 @@ ApplicationWindow {
                         Binding { target: cropBottom.slider; property: "value"; value: session.info.cropBottom || 0; when: !cropBottom.slider.pressed }
                         Binding { target: posX.slider; property: "from"; value: -session.canvasWidth }
                         Binding { target: posX.slider; property: "to"; value: session.canvasWidth }
-                        Binding { target: posX.slider; property: "value"; value: session.info.posX || 0; when: !posX.slider.pressed }
+                        Binding { target: posX.slider; property: "value"; value: session.motion.posX || 0; when: !posX.slider.pressed }
                         Binding { target: posY.slider; property: "from"; value: -session.canvasHeight }
                         Binding { target: posY.slider; property: "to"; value: session.canvasHeight }
-                        Binding { target: posY.slider; property: "value"; value: session.info.posY || 0; when: !posY.slider.pressed }
+                        Binding { target: posY.slider; property: "value"; value: session.motion.posY || 0; when: !posY.slider.pressed }
                         Binding { target: scaleControl.slider; property: "from"; value: 0.1 }
                         Binding { target: scaleControl.slider; property: "to"; value: 4 }
-                        Binding { target: scaleControl.slider; property: "value"; value: session.info.scale || 1; when: !scaleControl.slider.pressed }
+                        Binding { target: scaleControl.slider; property: "value"; value: session.motion.scale || 1; when: !scaleControl.slider.pressed }
                         Binding { target: rotationControl.slider; property: "from"; value: -180 }
                         Binding { target: rotationControl.slider; property: "to"; value: 180 }
-                        Binding { target: rotationControl.slider; property: "value"; value: session.info.rotation || 0; when: !rotationControl.slider.pressed }
+                        Binding { target: rotationControl.slider; property: "value"; value: session.motion.rotation || 0; when: !rotationControl.slider.pressed }
                         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
                     }
 
@@ -915,7 +1225,7 @@ ApplicationWindow {
                                         horizontalAlignment: Text.AlignHCenter
                                         text: modelData
                                         color: chosen ? root.accent : root.fg
-                                        font.pixelSize: 10
+                                        font.pixelSize: 11
                                         elide: Text.ElideRight
                                     }
                                     MouseArea {
@@ -992,17 +1302,19 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 42
                         color: colors.background
-                        RowLayout {
-                            anchors.fill: parent
+                        // Timecode on the left, the playback controls centered on the viewer, the
+                        // full-screen toggle on the right.
+                        Text {
+                            anchors.left: parent.left
                             anchors.leftMargin: 12
-                            anchors.rightMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.timecode(session.position) + (root.narrow ? "" : " / " + root.timecode(session.duration))
+                            color: session.hasMedia ? root.fg : root.muted
+                            font.pixelSize: 12
+                        }
+                        Row {
+                            anchors.centerIn: parent
                             spacing: 2
-                            Text {
-                                Layout.preferredWidth: root.narrow ? 104 : 214
-                                text: root.timecode(session.position) + (root.narrow ? "" : " / " + root.timecode(session.duration))
-                                color: session.hasMedia ? root.fg : root.muted
-                                font.pixelSize: 12
-                            }
                             OmaButton { objectName: "transportStart"; action: actions.toStart; iconName: "start"; showLabel: false }
                             OmaButton { action: actions.previousFrame; iconName: "previous"; showLabel: false }
                             OmaButton { action: actions.playBackward; iconName: "backward"; showLabel: false }
@@ -1016,25 +1328,25 @@ ApplicationWindow {
                             OmaButton { action: actions.playForward; iconName: "forward"; showLabel: false }
                             OmaButton { action: actions.nextFrame; iconName: "next"; showLabel: false }
                             OmaButton { objectName: "transportEnd"; action: actions.toEnd; iconName: "end"; showLabel: false }
+                        }
+                        Row {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 6
                             Text { // shuttle speed (J/K/L), shown only when not normal
-                                Layout.preferredWidth: 34
+                                anchors.verticalCenter: parent.verticalCenter
                                 visible: session.speed !== 0 && session.speed !== 1
                                 text: (session.speed < 0 ? "−" : "") + Math.abs(session.speed) + "×"
                                 color: root.accent
                                 font.pixelSize: 12
                                 font.bold: true
                             }
-                            Item {
-                                Layout.preferredWidth: 1
-                                Layout.fillWidth: true
-                                implicitHeight: 32
-                                OmaButton {
-                                    anchors.right: parent.right
-                                    action: root.viewerOnly ? actions.leaveFullViewer : actions.fullViewer
-                                    iconName: "fullscreen"
-                                    showLabel: false
-                                    selected: root.viewerOnly
-                                }
+                            OmaButton {
+                                action: root.viewerOnly ? actions.leaveFullViewer : actions.fullViewer
+                                iconName: "fullscreen"
+                                showLabel: false
+                                selected: root.viewerOnly
                             }
                         }
                         Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: root.line }
@@ -1061,7 +1373,8 @@ ApplicationWindow {
                 }
             }
 
-            // Timeline (§7): edit actions, minimap, storyline, and zoom.
+            // Timeline (§7): minimap, storyline and zoom. Edits come from the context menus and
+            // the shortcuts.
             Rectangle {
                 id: timelinePanel
                 visible: !root.viewerOnly
@@ -1081,12 +1394,32 @@ ApplicationWindow {
                 readonly property real storylineHeight:
                     Math.min(86, Math.max(44, timelineScroll.height - 12 - lanes * (laneHeight + laneGap)))
                 function laneY(index) { return 4 + storylineHeight + 8 + index * (laneHeight + laneGap) }
+                // Where a dragged span starting at `seconds` lands, snapped within 8 px when
+                // snapping is on; shows the snap line while it holds. Cleared by unsnap().
+                property real snapLine: -1
+                function snap(seconds, length, exclude) {
+                    if (!root.snapping) { snapLine = -1; return seconds }
+                    const r = session.snapSpan(seconds, length, exclude, 8 / scale)
+                    snapLine = r.line
+                    return r.start
+                }
+                function unsnap() { snapLine = -1 }
+                // Sets the zoom keeping the time under content x `anchorX` where it is on screen.
+                function zoomAround(pixelsPerSecond, anchorX) {
+                    const seconds = timelineScroll.secondsAt(anchorX)
+                    const onScreen = anchorX - timelineScroll.contentX
+                    root.fitTimeline = false
+                    root.pixelsPerSecond = Math.min(2400, Math.max(4, pixelsPerSecond))
+                    const x = origin + seconds * root.pixelsPerSecond - onScreen
+                    timelineScroll.contentX = Math.max(0, Math.min(timelineScroll.contentWidth - timelineScroll.width, x))
+                }
 
                 // Drag a clip edge to trim; committed as one command on release. The storyline is
                 // magnetic (ripple trim, ui-design §7.3); lanes are not.
                 component TrimEdge: MouseArea {
                     required property Item owner
-                    required property double clipId
+                    required property var clip
+                    readonly property double clipId: clip.id
                     property bool head
                     property real pressX: 0
                     width: 8
@@ -1104,14 +1437,17 @@ ApplicationWindow {
                     onPressed: (mouse) => { pressX = mapToItem(timelineScroll.contentItem, mouse.x, 0).x }
                     onPositionChanged: (mouse) => {
                         if (!pressed) return
+                        const edge = head ? clip.start : clip.start + clip.duration
                         const dx = mapToItem(timelineScroll.contentItem, mouse.x, 0).x - pressX
-                        if (head) owner.headDrag = dx
-                        else owner.tailDrag = dx
+                        const snapped = timelinePanel.snap(edge + dx / timelinePanel.scale, 0, clipId)
+                        if (head) owner.headDrag = (snapped - edge) * timelinePanel.scale
+                        else owner.tailDrag = (snapped - edge) * timelinePanel.scale
                     }
                     onReleased: {
                         const dx = head ? owner.headDrag : owner.tailDrag
                         owner.headDrag = 0
                         owner.tailDrag = 0
+                        timelinePanel.unsnap()
                         const frames = Math.round(dx / timelinePanel.scale * session.frameRate)
                         if (frames !== 0) session.trimClip(clipId, head, frames)
                     }
@@ -1154,36 +1490,10 @@ ApplicationWindow {
                     }
                 }
 
-                Rectangle {
-                    id: editBar
-                    anchors.top: parent.top
-                    width: parent.width
-                    height: 42
-                    color: colors.dark_background
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 3
-                        OmaButton { action: actions.append; iconName: "append"; showLabel: !root.compact }
-                        OmaButton { action: actions.insert; iconName: "insert"; showLabel: !root.compact }
-                        OmaButton { action: actions.overwrite; iconName: "overwrite"; showLabel: !root.compact }
-                        Separator { Layout.leftMargin: 5; Layout.rightMargin: 5 }
-                        OmaButton { objectName: "editSplit"; action: actions.split; iconName: "split"; showLabel: !root.compact }
-                        OmaButton { action: actions.remove; iconName: "rippleDelete"; showLabel: !root.compact }
-                        OmaButton { action: actions.lift; iconName: "lift"; showLabel: !root.compact }
-                        Separator { Layout.leftMargin: 5; Layout.rightMargin: 5 }
-                        OmaButton { action: actions.detachAudio; iconName: "detach"; showLabel: !root.compact }
-                        OmaButton { action: actions.addDissolve; iconName: "transition"; showLabel: !root.compact }
-                        Item { Layout.fillWidth: true }
-                    }
-                    Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
-                }
-
                 // Minimap: the whole project, with the visible region highlighted.
                 Item {
                     id: minimap
-                    anchors.top: editBar.bottom
+                    anchors.top: parent.top
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.margins: 12
@@ -1245,7 +1555,9 @@ ApplicationWindow {
                     function secondsAt(x) { return Math.max(0, (x - timelinePanel.origin) / timelinePanel.scale) }
                     WheelHandler {
                         acceptedModifiers: Qt.ControlModifier
-                        onWheel: (event) => event.angleDelta.y > 0 ? actions.zoomIn.trigger() : actions.zoomOut.trigger()
+                        // Mouse-centered (ui-design §7.2): the time under the pointer stays put.
+                        onWheel: (event) => timelinePanel.zoomAround(
+                            timelinePanel.scale * (event.angleDelta.y > 0 ? 1.25 : 0.8), event.x + timelineScroll.contentX)
                     }
                     WheelHandler {
                         acceptedModifiers: Qt.NoModifier
@@ -1262,15 +1574,53 @@ ApplicationWindow {
                         onPressed: (mouse) => session.seek(timelineScroll.secondsAt(mouse.x))
                         onPositionChanged: (mouse) => { if (pressed) session.seek(timelineScroll.secondsAt(mouse.x)) }
                     }
+                    // Library items dropped on the timeline (ui-design §7.3): pictures are inserted at
+                    // the nearest storyline cut, sound lands on the lane under the pointer.
+                    DropArea {
+                        id: mediaDrop
+                        width: timelineScroll.contentWidth
+                        height: timelineScroll.height
+                        keys: ["oma/media"]
+                        readonly property var item: mediaDrag.item
+                        readonly property bool sound: !!item && item.audioOnly
+                        readonly property real seconds: timelineScroll.secondsAt(drag.x)
+                        // The audio lane under the pointer, top first; -1 over the storyline.
+                        readonly property int lane: drag.y < timelinePanel.laneY(0) - timelinePanel.laneGap ? -1
+                            : Math.floor((drag.y - timelinePanel.laneY(0)) / (timelinePanel.laneHeight + timelinePanel.laneGap))
+                        onPositionChanged: if (item && !sound) dropMarker.cut = session.storylineCut(seconds, 0)
+                        onContainsDragChanged: dropMarker.shown = containsDrag && !!item && !sound
+                        onDropped: (drop) => {
+                            dropMarker.shown = false
+                            if (!item) return
+                            session.dropMedia(mediaDrag.index, seconds, lane)
+                            root.libraryOverlay = false
+                            drop.accept()
+                        }
+                        Rectangle { // where dropped sound lands
+                            visible: mediaDrop.containsDrag && mediaDrop.sound
+                            x: timelinePanel.origin + mediaDrop.seconds * timelinePanel.scale
+                            y: timelinePanel.laneY(Math.max(0, Math.min(mediaDrop.lane, timelinePanel.lanes)))
+                            width: (mediaDrop.item ? mediaDrop.item.duration : 0) * timelinePanel.scale
+                            height: timelinePanel.laneHeight
+                            radius: 4
+                            color: "transparent"
+                            border.color: root.accent
+                            border.width: 2
+                        }
+                    }
                     Repeater {
                         model: session.clips
                         delegate: Rectangle {
                             id: clipItem
+                            objectName: "storylineClip"
                             readonly property bool chosen: modelData.id === session.selectedClip
                             // Live feedback while an edge is dragged; committed as one trim on release.
                             property real headDrag: 0
                             property real tailDrag: 0
-                            x: timelinePanel.origin + modelData.start * timelinePanel.scale
+                            property real moveX: 0 // live feedback while the clip is dragged to a new place
+                            x: timelinePanel.origin + modelData.start * timelinePanel.scale + moveX
+                            z: moveX !== 0 ? 2 : 0
+                            opacity: moveX !== 0 ? 0.8 : 1
                             y: 4
                             width: Math.max(6, modelData.duration * timelinePanel.scale - 2 - headDrag + tailDrag)
                             height: timelinePanel.storylineHeight
@@ -1307,20 +1657,68 @@ ApplicationWindow {
                                 anchors.bottomMargin: 4
                                 text: modelData.name
                                 color: root.fg
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 elide: Text.ElideRight
                             }
                             MouseArea {
                                 anchors.fill: parent
-                                // Selects the clip and moves the playhead to the click.
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                preventStealing: true
+                                property real pressX: 0
+                                property bool moving: false
+                                cursorShape: moving ? Qt.ClosedHandCursor : Qt.ArrowCursor
+                                // A click selects the clip and moves the playhead to it; a right
+                                // click opens its menu; a drag moves it to another cut (magnetic).
                                 onPressed: (mouse) => {
                                     session.selectClip(modelData.id)
-                                    session.seek(modelData.start + mouse.x / timelinePanel.scale)
+                                    const at = modelData.start + mouse.x / timelinePanel.scale
+                                    if (mouse.button === Qt.RightButton) {
+                                        storylineMenu.at = at
+                                        storylineMenu.popup()
+                                        return
+                                    }
+                                    pressX = mapToItem(timelineScroll.contentItem, mouse.x, 0).x
+                                    moving = false
+                                    session.seek(at)
                                 }
+                                onPositionChanged: (mouse) => {
+                                    if (!(pressedButtons & Qt.LeftButton)) return
+                                    const x = mapToItem(timelineScroll.contentItem, mouse.x, 0).x
+                                    if (!moving && Math.abs(x - pressX) < 6) return
+                                    moving = true
+                                    clipItem.moveX = x - pressX
+                                    dropMarker.cut = session.storylineCut(timelineScroll.secondsAt(x), modelData.id)
+                                    dropMarker.shown = true
+                                }
+                                function settle() {
+                                    moving = false
+                                    clipItem.moveX = 0
+                                    dropMarker.shown = false
+                                }
+                                onReleased: (mouse) => {
+                                    const seconds = timelineScroll.secondsAt(mapToItem(timelineScroll.contentItem, mouse.x, 0).x)
+                                    const wasMoving = moving
+                                    settle() // before the edit, which rebuilds this delegate
+                                    if (wasMoving) session.reorderClip(modelData.id, seconds)
+                                }
+                                onCanceled: settle()
                             }
-                            TrimEdge { owner: clipItem; clipId: modelData.id; head: true; anchors.left: parent.left }
-                            TrimEdge { owner: clipItem; clipId: modelData.id; head: false; anchors.right: parent.right }
+                            TrimEdge { owner: clipItem; clip: modelData; head: true; anchors.left: parent.left }
+                            TrimEdge { owner: clipItem; clip: modelData; head: false; anchors.right: parent.right }
                         }
+                    }
+                    // The cut where a dragged clip or library item will land on the storyline.
+                    Rectangle {
+                        id: dropMarker
+                        property real cut: 0
+                        property bool shown: false
+                        visible: shown
+                        x: timelinePanel.origin + cut * timelinePanel.scale - width / 2
+                        z: 4
+                        width: 3
+                        height: timelinePanel.storylineHeight + 8
+                        radius: 1.5
+                        color: root.accent
                     }
                     // Cuts between touching storyline clips (ui-design §7.2): the span a transition
                     // covers, and a ⋈ marker that edits it.
@@ -1359,6 +1757,7 @@ ApplicationWindow {
                                 }
                                 MouseArea {
                                     anchors.fill: parent
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
                                     cursorShape: Qt.PointingHandCursor
                                     ToolTip.visible: containsMouse
                                     ToolTip.text: "Transition"
@@ -1401,6 +1800,45 @@ ApplicationWindow {
                                 }
                             }
                         }
+                    }
+                    // Context menus (ui-design §7.3): what applies to the clicked item, through the same
+                    // actions as the bars and shortcuts. `at` is where the click fell, in seconds.
+                    component AdjustItem: MenuItem {
+                        property OmaAction adjustment
+                        property string drawerName
+                        // The adjusted mark the bar used to show, next to the adjustment's name.
+                        readonly property bool adjusted: drawerName === "color" ? !!session.info.colorAdjusted
+                            : drawerName === "crop" ? !!session.info.framingAdjusted
+                            : drawerName === "volume" ? root.audioAdjusted
+                            : drawerName === "effects" ? !!session.info.filtered : false
+                        text: adjustment.text + "…" + (adjusted ? "  ●" : "")
+                        enabled: adjustment.enabled
+                        onTriggered: root.openDrawer(drawerName)
+                    }
+                    Menu {
+                        id: storylineMenu
+                        objectName: "storylineMenu"
+                        property real at: 0
+                        AdjustItem { adjustment: actions.color; drawerName: "color" }
+                        AdjustItem { adjustment: actions.crop; drawerName: "crop" }
+                        AdjustItem { adjustment: actions.volume; drawerName: "volume" }
+                        AdjustItem { adjustment: actions.effects; drawerName: "effects" }
+                        AdjustItem { adjustment: actions.info; drawerName: "info" }
+                        MenuSeparator {}
+                        MenuItem { objectName: "menuSplitHere"; text: "Split here"; onTriggered: { session.seek(storylineMenu.at); session.splitAtPlayhead() } }
+                        MenuItem { action: actions.detachAudio }
+                        MenuSeparator {}
+                        MenuItem { action: actions.remove }
+                        MenuItem { action: actions.lift }
+                    }
+                    Menu {
+                        id: soundMenu
+                        property real at: 0
+                        AdjustItem { adjustment: actions.volume; drawerName: "volume" }
+                        AdjustItem { adjustment: actions.info; drawerName: "info" }
+                        MenuSeparator {}
+                        MenuItem { text: "Split here"; onTriggered: { session.seek(soundMenu.at); session.splitAtPlayhead() } }
+                        MenuItem { text: "Delete"; onTriggered: session.deleteSelected(false) }
                     }
                     // Audio lanes below the storyline: music, voiceover, sound effects.
                     Repeater {
@@ -1460,7 +1898,7 @@ ApplicationWindow {
                                             width: parent.width - 30
                                             text: soundItem.modelData.name
                                             color: root.fg
-                                            font.pixelSize: 10
+                                            font.pixelSize: 11
                                             elide: Text.ElideRight
                                             anchors.verticalCenter: parent.verticalCenter
                                         }
@@ -1471,35 +1909,54 @@ ApplicationWindow {
                                         property bool moving: false
                                         preventStealing: true
                                         cursorShape: moving ? Qt.ClosedHandCursor : Qt.ArrowCursor
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
                                         onPressed: (mouse) => {
+                                            session.selectClip(soundItem.modelData.id)
+                                            const at = soundItem.modelData.start + mouse.x / timelinePanel.scale
+                                            if (mouse.button === Qt.RightButton) {
+                                                soundMenu.at = at
+                                                soundMenu.popup()
+                                                return
+                                            }
                                             pressAt = mapToItem(timelineScroll.contentItem, mouse.x, mouse.y)
                                             moving = false
-                                            session.selectClip(soundItem.modelData.id)
-                                            session.seek(soundItem.modelData.start + mouse.x / timelinePanel.scale)
+                                            session.seek(at)
                                         }
                                         onPositionChanged: (mouse) => {
-                                            if (!pressed) return
+                                            if (!(pressedButtons & Qt.LeftButton)) return
                                             const p = mapToItem(timelineScroll.contentItem, mouse.x, mouse.y)
                                             if (!moving && Math.abs(p.x - pressAt.x) < 4 && Math.abs(p.y - pressAt.y) < 6) return
                                             moving = true
-                                            soundItem.moveX = p.x - pressAt.x
+                                            const m = soundItem.modelData
+                                            const start = timelinePanel.snap(m.start + (p.x - pressAt.x) / timelinePanel.scale, m.duration, m.id)
+                                            soundItem.moveX = (start - m.start) * timelinePanel.scale
                                             soundItem.moveY = p.y - pressAt.y
                                         }
                                         onReleased: {
+                                            if (!moving) return
                                             const lanes = Math.round(soundItem.moveY / (timelinePanel.laneHeight + timelinePanel.laneGap))
                                             const frames = Math.round(soundItem.moveX / timelinePanel.scale * session.frameRate)
                                             soundItem.moveX = 0
                                             soundItem.moveY = 0
+                                            timelinePanel.unsnap()
                                             if (moving && (lanes !== 0 || frames !== 0))
                                                 session.moveClip(soundItem.modelData.id, lanes, frames)
                                             moving = false
                                         }
                                     }
-                                    TrimEdge { owner: soundItem; clipId: soundItem.modelData.id; head: true; anchors.left: parent.left }
-                                    TrimEdge { owner: soundItem; clipId: soundItem.modelData.id; head: false; anchors.right: parent.right }
+                                    TrimEdge { owner: soundItem; clip: soundItem.modelData; head: true; anchors.left: parent.left }
+                                    TrimEdge { owner: soundItem; clip: soundItem.modelData; head: false; anchors.right: parent.right }
                                 }
                             }
                         }
+                    }
+                    Rectangle { // the edge a drag snapped to
+                        visible: timelinePanel.snapLine >= 0
+                        x: timelinePanel.origin + timelinePanel.snapLine * timelinePanel.scale - 0.5
+                        z: 5
+                        width: 1
+                        height: timelineScroll.height
+                        color: colors.yellow || root.fg
                     }
                     // The playhead across the timeline.
                     Rectangle {
@@ -1534,6 +1991,7 @@ ApplicationWindow {
                     anchors.rightMargin: 12
                     height: 36
                     spacing: 2
+                    OmaButton { action: actions.snapping; iconName: "snap"; showLabel: false; selected: root.snapping }
                     OmaButton { action: actions.zoomOut; iconName: "zoomOut"; showLabel: false }
                     Slider {
                         Layout.preferredWidth: 110
@@ -1550,19 +2008,53 @@ ApplicationWindow {
         }
     }
 
+    // A library item on its way to the timeline (ui-design §7.3); the library's MouseArea moves
+    // it and the timeline's DropArea receives it.
+    Rectangle {
+        id: mediaDrag
+        property int index: -1
+        readonly property var item: index >= 0 && index < session.media.length ? session.media[index] : null
+        visible: Drag.active
+        z: 100
+        width: 96
+        height: 54
+        radius: 4
+        color: root.viewerBackground
+        border.color: root.accent
+        border.width: 2
+        opacity: 0.85
+        Drag.keys: ["oma/media"]
+        Drag.hotSpot.y: height / 2
+        Image {
+            anchors.fill: parent
+            anchors.margins: 2
+            fillMode: Image.PreserveAspectFit
+            source: mediaDrag.item ? mediaDrag.item.thumbnail : ""
+        }
+        Icon {
+            anchors.centerIn: parent
+            visible: !!mediaDrag.item && mediaDrag.item.audioOnly
+            name: "music"
+            size: 24
+            color: root.fg
+        }
+    }
+
     // Every action's shortcut, registered in one place.
     Repeater {
         model: [actions.playPause, actions.pause, actions.stop, actions.playForward, actions.playBackward, actions.previousFrame,
                 actions.nextFrame, actions.back10, actions.forward10, actions.toStart, actions.toEnd,
                 actions.append, actions.insert, actions.overwrite, actions.split, actions.remove,
                 actions.lift, actions.detachAudio, actions.addDissolve, actions.undo, actions.redo, actions.importMedia,
-                actions.exportMovie, actions.toggleLibrary, actions.fullViewer, actions.leaveFullViewer,
-                actions.zoomIn, actions.zoomOut, actions.zoomFit, actions.volume, actions.info,
-                actions.color, actions.crop, actions.effects]
+                actions.save, actions.openProject, actions.exportMovie, actions.toggleLibrary, actions.fullViewer, actions.leaveFullViewer,
+                actions.closeDrawer, actions.zoomIn, actions.zoomOut, actions.zoomFit, actions.snapping, actions.volume, actions.info,
+                actions.color, actions.crop, actions.effects, actions.previousClip, actions.nextClip,
+                actions.clipMenu, actions.clipMenuKey]
         delegate: Item {
             Shortcut {
                 sequence: modelData.keys
-                enabled: modelData.enabled && (session.editing || modelData === actions.importMedia)
+                enabled: modelData.enabled && (session.editing || modelData === actions.importMedia
+                                                 || modelData === actions.openProject)
                 onActivated: modelData.trigger()
             }
         }

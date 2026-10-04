@@ -1,5 +1,7 @@
 #pragma once
 
+#include "oma/audio/effect.hpp"
+
 #include <array>
 #include <cstdint>
 #include <span>
@@ -18,7 +20,7 @@ struct EqBands {
     friend bool operator==(const EqBands&, const EqBands&) noexcept = default;
 };
 
-class Equalizer {
+class Equalizer final : public Effect {
 public:
     static constexpr double kLowHz = 120.0;
     static constexpr double kMidHz = 1000.0;
@@ -28,14 +30,11 @@ public:
     // Sets the bands for a sample rate, keeping the filter state (a change in the middle of
     // playback does not click). Gains are clamped to ±24 dB.
     void configure(std::int32_t sample_rate, const EqBands& bands) noexcept;
-    // Forgets the filter state: after a seek, the next sample is not a continuation.
-    void reset() noexcept;
+    void reset() noexcept override;
     // Whether any band changes the sound; a flat equalizer passes samples through untouched.
-    [[nodiscard]] bool active() const noexcept { return active_; }
-
-    // Filters `frames` samples of planar input in place: plane c at samples[c * stride ...].
+    [[nodiscard]] bool active() const noexcept override { return active_; }
     void process(std::span<float> samples, int channels, std::int64_t stride,
-                 std::int64_t frames) noexcept;
+                 std::int64_t frames) noexcept override;
 
 private:
     struct Biquad {

@@ -16,7 +16,14 @@ static_assert(static_cast<int>(tl::FilterKind::BlackAndWhite) ==
 static_assert(static_cast<int>(tl::BlendMode::Screen) == static_cast<int>(oma::compositor::BlendMode::Screen));
 static_assert(static_cast<int>(tl::Fit::Native) == static_cast<int>(oma::compositor::Fit::Native));
 
-oma::compositor::Layer to_layer(const tl::VideoProperties& v, std::size_t input) {
+std::vector<oma::compositor::CurvePoint> to_points(const std::vector<tl::CurvePoint>& points) {
+    std::vector<oma::compositor::CurvePoint> out;
+    out.reserve(points.size());
+    for (const tl::CurvePoint& p : points) out.push_back({.x = p.x, .y = p.y});
+    return out;
+}
+
+oma::compositor::Layer to_layer(const tl::VideoProperties& v, std::size_t input, const LutTables& luts) {
     oma::compositor::Layer layer;
     layer.input = input;
     layer.fit = static_cast<oma::compositor::Fit>(v.fit); // same enumerators, same order
@@ -35,13 +42,23 @@ oma::compositor::Layer to_layer(const tl::VideoProperties& v, std::size_t input)
     layer.filter = {.kind = static_cast<oma::compositor::FilterKind>(v.filter.kind), // same enumerators
                     .amount = v.filter.amount};
     layer.sharpness = v.sharpness;
+    const tl::ColorGrade& g = v.grade;
+    layer.grade.cdl = {.slope = g.cdl.slope, .offset = g.cdl.offset, .power = g.cdl.power, .saturation = g.cdl.saturation};
+    layer.grade.curves = {.master = to_points(g.curves.master),
+                          .red = to_points(g.curves.red),
+                          .green = to_points(g.curves.green),
+                          .blue = to_points(g.curves.blue)};
+    if (const auto lut = luts.find(g.lut.value()); g.lut.valid() && lut != luts.end()) {
+        layer.grade.lut = lut->second;
+        layer.grade.lut_amount = g.lut_amount;
+    }
     return layer;
 }
 
 } // namespace
 
 oma::Result<std::shared_ptr<ViewerFrame>> build_viewer_frame(const tl::Timeline& timeline, const MediaPaths& paths,
-                                                             std::uint32_t width, std::uint32_t height,
+                                                             const LutTables& luts, std::uint32_t width, std::uint32_t height,
                                                              std::int64_t frame, std::int64_t ticks_per_frame,
                                                              FrameSource& frames) {
     const auto at = timeline.at(frame * ticks_per_frame);
@@ -63,7 +80,7 @@ oma::Result<std::shared_ptr<ViewerFrame>> build_viewer_frame(const tl::Timeline&
         if (!picture) {
             return std::unexpected(picture.error());
         }
-        auto composited = to_layer(layer.video, out->pictures.size());
+        auto composited = to_layer(layer.video, out->pictures.size(), luts);
         composited.opacity *= layer.opacity; // a transition fading it
         composited.reveal = layer.reveal;
         out->graph.layers.push_back(composited);

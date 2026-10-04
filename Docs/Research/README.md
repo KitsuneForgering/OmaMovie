@@ -26,11 +26,16 @@ claims; it does not certify the implementation or complete the pending spikes.
 | [Hardware strategy](hardware-strategy.md) | Device ownership, selection, experiments and fallbacks |
 | [Omarchy integration](omarchy-integration.md) | Installed-file observations and version-sensitive adapters |
 | [Premiere](premiere-pro.md) | Editing, color and importer hypotheses |
+| [Final Cut Pro](final-cut-pro.md) | Anchored editing, precise placement, recovery, proxies and bounded FCPXML |
 | [iMovie](imovie.md) | Contextual controls and transferable UX proposals |
 | [Movie Maker / Clipchamp](movie-maker.md) | Historical limits and current documented interactions |
 | [Resolve](davinci-resolve.md) | Versioned codec evidence and limits of competitive inference |
 | [CapCut](capcut.md) | Documented captions/curves; unmeasured audience preferences |
 | [Other editors](other-editors.md) | Credible baselines and bounded comparisons |
+| [GPU effects](gpu-effects.md) | Grading (CDL, curves, 3D LUTs), multi-pass cost, keyframes; measured locally |
+| [Post-production effects and catalog](post-production-effects.md) | Core effect choices from editor research, candidates to remove, and staged third-party marketplace |
+| [Agent-assisted editing with MCP](agentic-mcp.md) | Local project tools, bounded edit proposals, approval, protocol limits and pilot gates |
+| [Long-form editing](long-form-editing.md) | Project size versus duration, timeline/UI scaling, proxies, preview cache, recovery and export gates |
 
 ## Evidence rules
 

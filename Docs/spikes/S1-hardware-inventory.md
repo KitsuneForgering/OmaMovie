@@ -88,7 +88,7 @@ The interop extensions OmaMovie needs are exposed **by default**:
 | `h264_vulkan` (default) | ❌ "Device does not support the VK_KHR_video_encode_queue extension" |
 | `h264_vulkan`, `hevc_vulkan` (+ `ANV_DEBUG`) | ✅ |
 | `ffv1_vulkan` (compute) | ✅ for yuv444p/bgr0; 4:2:0 at 1080p needs `-level 4 -strict experimental` (subsampling with unaligned height) |
-| `prores_ks_vulkan` (compute) | ✅ 4:2:2 10-bit |
+| `prores_ks_vulkan` (compute) | ⚠️ writes a file, but at 1080p it does not decode ([S3](S3-decode-paths.md)) |
 
 ## Findings
 
@@ -103,8 +103,8 @@ The interop extensions OmaMovie needs are exposed **by default**:
 4. **AV1 through Vulkan Video does not initialize even with the flag** (FFmpeg 9 + Mesa 26.2.2,
    8-bit Main, 320×180 and 1920×1080). VA-API and QSV decode AV1 fine. Root cause unknown; not
    blocking because VA-API covers AV1.
-5. **Vulkan compute codecs work without any flag**: ProRes decode/encode and FFv1 encode/decode
-   stay on the GPU. This makes a GPU-resident proxy/intermediate path viable on this machine
+5. **Vulkan compute codecs work without any flag**: ProRes decode and FFv1 encode/decode
+   stay on the GPU (ProRes encode output is invalid at 1080p, see [S3](S3-decode-paths.md)). This makes a GPU-resident proxy/intermediate path viable on this machine
    (`CLAUDE.md` §15), independent of video decode blocks.
 6. **Every interop extension needed for VA-API → Vulkan (DMA-BUF) and timeline semaphores is
    available by default.** Nothing blocks S2.

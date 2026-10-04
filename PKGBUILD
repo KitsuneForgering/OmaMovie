@@ -26,6 +26,7 @@ depends=(
     'vulkan-icd-loader'         # libvulkan (libs/gpu)
     'ffmpeg'                    # libavformat/libavcodec/libavutil/libavfilter/libswresample/libswscale (libs/media)
     'libpipewire'               # PipeWire client (libs/audio)
+    'simdjson'                  # project file parsing (libs/project, ADR-0007)
 )
 makedepends=(
     'git'
@@ -43,6 +44,7 @@ _devdepends=(
     'vulkan-tools'              # vulkaninfo (S1)
     'vulkan-validation-layers'  # validate synchronization in spikes and libs/gpu
     'libva-utils'               # vainfo (S1)
+    'libplacebo'                # S6 (also an ffmpeg dependency; not linked by shipped code)
     'qt6-base'                  # Qt GUI and versioned RHI development headers (S4)
     'qt6-declarative'           # Qt Quick (S4; move to depends when an app ships)
 )

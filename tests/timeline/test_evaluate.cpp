@@ -34,6 +34,30 @@ bool near(double a, double b) {
     return std::abs(a - b) < 1e-6;
 }
 
+// A transform key at camera frame `frame`, moved `x` pixels right and scaled by `scale`.
+TransformKey key(std::int64_t frame, double x, double scale,
+                 Interpolation interpolation = Interpolation::Linear) {
+    Transform t;
+    t.offset_x = x;
+    t.scale_x = scale;
+    t.scale_y = scale;
+    return TransformKey{.at = mf(frame), .value = t, .interpolation = interpolation};
+}
+
+// Clip from camera frame 0 at timeline 0, 60 frames, keyed from x 0 at frame 0 to 100 at 40.
+Fixture keyed(Interpolation interpolation, ClipId* id) {
+    auto fx = make_fixture();
+    *id = place(fx, fx.video, 0, 0, 60);
+    VideoProperties v;
+    v.transform_keys = {key(0, 0, 1, interpolation), key(40, 100, 4)};
+    (void)fx.editor.execute(edit::set_video(*id, v));
+    return fx;
+}
+
+double x_at(const Fixture& fx, std::int64_t frame) {
+    return at(fx, frame).video.at(0).video.transform.offset_x;
+}
+
 } // namespace
 
 void run_transition_tests() {
@@ -116,6 +140,65 @@ void run_transition_tests() {
             expect(fx.editor.undo().has_value()).toBeTruthy();
             expect(at(fx, 31).video.size()).toBe(2U);
         });
+    });
+}
+
+namespace {
+
+void keys_interpolate() {
+    ClipId id;
+    auto fx = keyed(Interpolation::Linear, &id);
+    expect(near(x_at(fx, 0), 0.0)).toBeTruthy();
+    expect(near(x_at(fx, 10), 25.0)).toBeTruthy();
+    expect(near(x_at(fx, 50), 100.0)).toBeTruthy();
+    // Scale moves geometrically: halfway from 1 to 4 is 2, a steady zoom.
+    const Transform half = at(fx, 20).video.at(0).video.transform;
+    expect(near(half.scale_x, 2.0) && near(half.scale_y, 2.0)).toBeTruthy();
+    expect(at(fx, 20).video.at(0).video.transform_keys.empty()).toBeTruthy();
+}
+
+void keys_ease_and_hold() {
+    ClipId id;
+    auto eased = keyed(Interpolation::Ease, &id);
+    expect(near(x_at(eased, 10), 100.0 * 0.15625)).toBeTruthy(); // smoothstep(1/4)
+    expect(near(x_at(eased, 20), 50.0)).toBeTruthy();
+    auto held = keyed(Interpolation::Hold, &id);
+    expect(near(x_at(held, 39), 0.0) && near(x_at(held, 40), 100.0)).toBeTruthy();
+}
+
+void keys_follow_the_picture() {
+    ClipId id;
+    auto fx = keyed(Interpolation::Linear, &id);
+    const double before = x_at(fx, 30);
+    expect(fx.editor.execute(edit::split(id, f(20))).has_value()).toBeTruthy();
+    expect(near(x_at(fx, 30), before)).toBeTruthy();
+    expect(fx.editor.execute(edit::trim_start(id, f(10), false)).has_value()).toBeTruthy();
+    expect(near(x_at(fx, 10), 25.0)).toBeTruthy();
+    // Slipping by 8 frames shows the picture 8 frames later, and its motion with it.
+    expect(fx.editor.execute(edit::slip(id, f(8))).has_value()).toBeTruthy();
+    expect(near(x_at(fx, 10), 45.0)).toBeTruthy();
+}
+
+void keys_are_validated() {
+    auto fx = make_fixture();
+    const ClipId id = place(fx, fx.video, 0, 0, 30);
+    VideoProperties v;
+    v.transform_keys = {key(10, 0, 1), key(10, 5, 1)};
+    expect(fx.editor.execute(edit::set_video(id, v)).has_value()).toBeFalsy();
+    v.transform_keys = {key(0, 0, 1), key(10, 5, 0)};
+    expect(fx.editor.execute(edit::set_video(id, v)).has_value()).toBeFalsy();
+}
+
+} // namespace
+
+void run_keyframe_tests() {
+    describe("timeline keyframes", {
+        it("interpolates the transform between keys and holds it outside them",
+           { keys_interpolate(); });
+        it("eases and holds", { keys_ease_and_hold(); });
+        it("keeps the motion on the picture through split, trim and slip",
+           { keys_follow_the_picture(); });
+        it("rejects keys out of order or with an invalid transform", { keys_are_validated(); });
     });
 }
 

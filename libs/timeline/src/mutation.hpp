@@ -21,6 +21,7 @@ public:
     [[nodiscard]] std::vector<Track>& tracks() noexcept { return t_.tracks_; }
     [[nodiscard]] std::vector<Marker>& markers() noexcept { return t_.markers_; }
     [[nodiscard]] std::vector<MediaInfo>& media() noexcept { return t_.media_; }
+    [[nodiscard]] std::vector<LutInfo>& luts() noexcept { return t_.luts_; }
     [[nodiscard]] std::uint64_t allocate_id() noexcept { return t_.next_id_++; }
 
     [[nodiscard]] Track* track(TrackId id) noexcept;

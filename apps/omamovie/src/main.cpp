@@ -22,6 +22,7 @@
 #include <QColor>
 #include <QElapsedTimer>
 #include <QImage>
+#include <QFile>
 #include <QFileInfo>
 #include <QFont>
 #include <QFontDatabase>
@@ -32,6 +33,7 @@
 #include <QQuickGraphicsDevice>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantMap>
@@ -300,10 +302,19 @@ int main(int argc, char** argv) {
         bool inserted = false, overwritten = false, trimmed = false, audio = false;
         bool volume = false, muted = false, gpu_viewer = false, shuttle = false;
         bool played = false, space = false, escape = false, stepped = false, keys_focused = true;
-        bool controls = false, lanes = false, looks = false, transitions = false;
+        bool controls = false, lanes = false, looks = false, transitions = false, dragdrop = false;
+        bool tab = false, guard = false, grading = false, project = false;
         double after_steps = 0;
     } r;
     const auto clip_count = [&] { return session.clips().size(); };
+    // Save and reopen (UX-04): what the session held before saving, compared after opening.
+    QTemporaryDir project_dir;
+    const QString project_file = project_dir.filePath(QStringLiteral("smoke vlog.omamovie"));
+    struct Saved {
+        qsizetype media = 0, clips = 0, lanes = 0;
+        double duration = 0;
+        QVariantMap first;
+    } saved;
     const auto lane_count = [&] { return session.audioTracks().size(); };
     // The first clip of an audio lane, as QML sees it.
     const auto lane_clip = [&](qsizetype lane) {
@@ -330,6 +341,26 @@ int main(int argc, char** argv) {
         QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, center.toPoint());
         return true;
     };
+    // Presses at `from`, moves to `to` in small steps as a hand would, and releases there.
+    const auto drag_mouse = [&](QPointF from, QPointF to) {
+        QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, from.toPoint());
+        for (int i = 1; i <= 12; ++i) QTest::mouseMove(window, (from + (to - from) * i / 12.0).toPoint(), 10);
+        QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, to.toPoint(), 10);
+    };
+    // Visible items of a QML delegate kind, left to right. Delegates have no QObject parent, so
+    // the visual tree is walked instead of findChildren.
+    const auto items_named = [&](const char* name) {
+        QList<QQuickItem*> items;
+        std::function<void(QQuickItem*)> walk = [&](QQuickItem* item) {
+            if (item->objectName() == QLatin1String(name) && item->isVisible()) items.push_back(item);
+            for (QQuickItem* child : item->childItems()) walk(child);
+        };
+        walk(window->contentItem());
+        std::ranges::sort(items, {}, [](QQuickItem* i) { return i->mapToScene(QPointF()).x(); });
+        return items;
+    };
+    const auto center_of = [](QQuickItem* i) { return i->mapToScene(QPointF(i->width() / 2, i->height() / 2)); };
+    QTemporaryDir scratch; // the LUT file the grading step loads
     std::unique_ptr<SmokeRun> run;
     const auto after = [&](qint64 ms) { return [&run, ms] { return run->elapsed() >= ms; }; };
     run = std::make_unique<SmokeRun>(application, std::vector<SmokeRun::Step>{
@@ -530,6 +561,95 @@ int main(int argc, char** argv) {
              r.looks = r.looks && !session.info().value("colorAdjusted").toBool();
              window->requestActivate();
          }},
+        {"keyframes", after(100), [&] {
+             // Ken Burns keys the first clip from its start to 120% at its end; a key added at the
+             // playhead takes the sliders' transform; undo removes all of it.
+             const QVariantMap first = session.clips().front().toMap();
+             const double end = first.value("start").toDouble() + first.value("duration").toDouble();
+             session.selectClip(first.value("id").toDouble());
+             session.kenBurns();
+             session.seek(0);
+             bool ok = session.motion().value("keys").toInt() == 2 && session.motion().value("keyHere").toBool() &&
+                       std::abs(session.motion().value("scale").toDouble() - 1.0) < 1e-9;
+             session.seek(end);
+             ok = ok && std::abs(session.motion().value("scale").toDouble() - 1.2) < 1e-9;
+             session.seek(end / 2);
+             const double middle = session.motion().value("scale").toDouble();
+             ok = ok && middle > 1.0 && middle < 1.2 && !session.motion().value("keyHere").toBool();
+             session.toggleTransformKey();
+             session.setClipTransform(50, 0, 1.5, 0);
+             ok = ok && session.motion().value("keys").toInt() == 3 && session.motion().value("keyHere").toBool() &&
+                  session.motion().value("posX").toDouble() == 50.0 && session.info().value("framingAdjusted").toBool();
+             r.looks = r.looks && ok;
+             if (!ok) std::printf("GUI smoke: keyframes failed\n");
+             window->setProperty("drawer", QStringLiteral("crop"));
+             window->setProperty("cropMore", true);
+         }},
+        {"keyframes drawer", after(400), [&] {
+             screenshot(window, "OMA_GUI_SMOKE_KEYFRAMES_SCREENSHOT");
+             window->setProperty("drawer", QString());
+             window->setProperty("cropMore", false);
+             for (int i = 0; i < 3; ++i) session.undo();
+             r.looks = r.looks && session.motion().value("keys").toInt() == 0;
+             window->requestActivate();
+         }},
+        {"grading", after(100), [&] {
+             // Wheels round-trip through the CDL, curve points edit one command each, and a .cube
+             // file (a channel rotation) loads in the background onto the selected clip.
+             session.selectClip(session.clips().front().toMap().value("id").toDouble());
+             session.seek(0.1);
+             const QVariantMap wanted{{"lift", QVariantMap{{"x", 0.3}, {"y", -0.2}, {"level", 0.1}}},
+                                      {"gamma", QVariantMap{{"x", 0.0}, {"y", 0.5}, {"level", -0.2}}},
+                                      {"gain", QVariantMap{{"x", -0.4}, {"y", 0.1}, {"level", 0.3}}}};
+             session.setClipWheels(wanted);
+             const QVariantMap got = session.info().value("wheels").toMap();
+             bool ok = session.info().value("graded").toBool();
+             for (const QString& name : {QStringLiteral("lift"), QStringLiteral("gamma"), QStringLiteral("gain")}) {
+                 for (const char* key : {"x", "y", "level"}) {
+                     ok = ok && std::abs(got.value(name).toMap().value(key).toDouble() -
+                                         wanted.value(name).toMap().value(key).toDouble()) < 2e-3;
+                 }
+             }
+             const auto master = [&] { return session.info().value("curves").toMap().value("0").toList(); };
+             session.addCurvePoint(0, 0.5, 0.6);
+             ok = ok && master().size() == 3 && session.curveSamples(0, 3).at(1).toDouble() > 0.59;
+             session.moveCurvePoint(0, 1, 0.5, 0.4);
+             ok = ok && std::abs(master().at(1).toMap().value("y").toDouble() - 0.4) < 1e-9;
+             session.removeCurvePoint(0, 1);
+             ok = ok && master().isEmpty(); // a straight diagonal is no curve
+             session.addCurvePoint(2, 0.3, 0.45);
+             QFile cube(scratch.filePath(QStringLiteral("rotate.cube")));
+             if (cube.open(QIODevice::WriteOnly)) {
+                 cube.write("TITLE \"rotate\"\nLUT_3D_SIZE 2\n");
+                 for (int b = 0; b < 2; ++b)
+                     for (int g = 0; g < 2; ++g)
+                         for (int red = 0; red < 2; ++red) cube.write(QStringLiteral("%1 %2 %3\n").arg(g).arg(b).arg(red).toUtf8());
+                 cube.close();
+             }
+             session.importLut(QUrl::fromLocalFile(cube.fileName()));
+             window->setProperty("drawer", QStringLiteral("color"));
+             window->setProperty("colorMore", true);
+             window->setProperty("gradeTab", QStringLiteral("curves"));
+             window->setProperty("curveChannel", 2);
+             r.grading = ok;
+             if (!ok) std::printf("GUI smoke: wheels or curves failed\n");
+         }},
+        {"lut import", [&] { return session.luts().size() == 1; }, [&] {
+             const QVariantMap info = session.info();
+             r.grading = r.grading && info.value("lut").toDouble() > 0 && info.value("lutAmount").toDouble() == 1.0;
+         }},
+        {"grading drawer", after(400), [&] {
+             screenshot(window, "OMA_GUI_SMOKE_GRADING_SCREENSHOT");
+             window->setProperty("gradeTab", QStringLiteral("wheels"));
+         }},
+        {"grading wheels", after(300), [&] {
+             screenshot(window, "OMA_GUI_SMOKE_WHEELS_SCREENSHOT");
+             for (int i = 0; i < 6; ++i) session.undo(); // wheels, three curve edits, a point, the LUT
+             r.grading = r.grading && !session.info().value("graded").toBool();
+             window->setProperty("drawer", QString());
+             window->setProperty("colorMore", false);
+             window->requestActivate();
+         }},
         {"transition", after(100), [&] {
              // The storyline clips touch at 0.5 s with no media to spare there, so a dissolve
              // stays a plain cut. Trimming 6 frames off each side of the cut gives both clips
@@ -561,6 +681,80 @@ int main(int argc, char** argv) {
              if (!r.transitions) std::printf("GUI smoke: transitions failed (%s)\n", qPrintable(session.status()));
              window->requestActivate();
          }},
+        {"drag and drop", after(100), [&] {
+             // Dragging the first storyline clip past the last cut reorders the two; library items
+             // dropped on the timeline land on the nearest cut (pictures) or the lane under the
+             // pointer, or a new lane when that one is taken (sound).
+             const double a = session.clips().at(0).toMap().value("id").toDouble();
+             const double b = session.clips().at(1).toMap().value("id").toDouble();
+             const double length = session.duration();
+             session.reorderClip(a, length);
+             bool ok = session.clips().at(0).toMap().value("id").toDouble() == b &&
+                       session.clips().at(1).toMap().value("id").toDouble() == a &&
+                       session.undoText() == QStringLiteral("Move") && std::abs(session.duration() - length) < 1e-9;
+             session.undo();
+             ok = ok && session.clips().at(0).toMap().value("id").toDouble() == a && session.storylineCut(0.1, 0) == 0.0;
+             const QVariantList media = session.media();
+             const auto index_of = [&](bool audio) {
+                 for (qsizetype i = 0; i < media.size(); ++i)
+                     if (media[i].toMap().value("audioOnly").toBool() == audio) return static_cast<int>(i);
+                 return -1;
+             };
+             const auto clips = clip_count();
+             session.dropMedia(index_of(false), 0.05, -1);
+             ok = ok && clip_count() == clips + 1 && session.undoText() == QStringLiteral("Insert") &&
+                  session.clips().at(0).toMap().value("id").toDouble() == session.selectedClip();
+             session.undo();
+             const auto lanes = lane_count();
+             session.dropMedia(index_of(true), 0.5, 0);
+             ok = ok && lane_count() == lanes + 1 && session.undoText() == QStringLiteral("Connect Audio");
+             session.undo();
+             // Up and Down step through the storyline clips, moving the playhead to their start.
+             session.selectClip(a);
+             session.selectAdjacentClip(1);
+             ok = ok && session.selectedClip() == b &&
+                  std::abs(session.position() - session.clips().at(1).toMap().value("start").toDouble()) < 1e-9;
+             session.selectAdjacentClip(-1);
+             ok = ok && session.selectedClip() == a && session.position() == 0.0;
+             // Snapping: either end of a dragged span within reach of the cut lands on it.
+             const double cut = session.clips().at(1).toMap().value("start").toDouble();
+             const QVariantMap head = session.snapSpan(cut + 0.02, 0.3, 0, 0.05);
+             const QVariantMap tail = session.snapSpan(cut - 0.29, 0.3, 0, 0.05);
+             const QVariantMap free = session.snapSpan(cut + 0.2, 0, 0, 0.05);
+             ok = ok && head.value("start").toDouble() == cut && head.value("line").toDouble() == cut &&
+                  std::abs(tail.value("start").toDouble() - (cut - 0.3)) < 1e-9 &&
+                  free.value("line").toDouble() == -1 && free.value("start").toDouble() == cut + 0.2;
+             r.dragdrop = ok && clip_count() == clips && lane_count() == lanes;
+             if (!r.dragdrop) std::printf("GUI smoke: drag and drop failed (%s)\n", qPrintable(session.status()));
+             window->setProperty("libraryOverlay", true); // the tiling desktop may make the window narrow
+         }},
+        {"mouse gestures", after(100), [&] {
+             // The same gestures with the mouse: a clip dragged past the last one, a library item
+             // dragged onto the start of the storyline, and a right click opening the clip menu.
+             auto clips = items_named("storylineClip");
+             const auto library = items_named("libraryItem");
+             bool ok = clips.size() == 2 && !library.empty();
+             if (ok) {
+                 const double a = session.clips().at(0).toMap().value("id").toDouble();
+                 const QPointF last_end = clips[1]->mapToScene(QPointF(clips[1]->width() - 2, clips[1]->height() / 2));
+                 drag_mouse(center_of(clips[0]), last_end);
+                 ok = session.clips().at(1).toMap().value("id").toDouble() == a && session.undoText() == QStringLiteral("Move");
+                 session.undo();
+                 clips = items_named("storylineClip");
+                 const auto count = clip_count();
+                 drag_mouse(center_of(library.front()), clips[0]->mapToScene(QPointF(4, clips[0]->height() / 2)));
+                 ok = ok && clip_count() == count + 1 && session.undoText() == QStringLiteral("Insert");
+                 session.undo();
+                 clips = items_named("storylineClip");
+                 QTest::mouseClick(window, Qt::RightButton, Qt::NoModifier, center_of(clips[0]).toPoint());
+                 auto* menu = window->findChild<QObject*>(QStringLiteral("storylineMenu"));
+                 ok = ok && menu != nullptr && menu->property("opened").toBool();
+                 if (menu != nullptr) QMetaObject::invokeMethod(menu, "close");
+             }
+             window->setProperty("libraryOverlay", false);
+             r.dragdrop = r.dragdrop && ok;
+             if (!ok) std::printf("GUI smoke: mouse gestures failed\n");
+         }},
         {"space", after(300), [&] { press(Qt::Key_Space); }},
         {"space again", after(250), [&] {
              r.space = session.playing();
@@ -583,13 +777,17 @@ int main(int argc, char** argv) {
              r.stepped = std::abs(r.after_steps - 3.0 / session.frameRate()) < 1e-9;
              window->resize(820, 620);
          }},
-        {"classic controls", after(400), [&] {
-             // Split acts on the selected clip under the playhead: pick the storyline's first.
-             session.selectClip(session.clips().front().toMap().value("id").toDouble());
-             session.seek(0.25);
-             const int before = clip_count();
-             const bool split_clicked = click_button("editSplit");
-             const bool split = split_clicked && clip_count() == before + 1;
+        {"context menu", after(400), [&] {
+             // Right click inside the first storyline clip; the next step picks "Split here".
+             const auto clips = items_named("storylineClip");
+             if (!clips.empty()) QTest::mouseClick(window, Qt::RightButton, Qt::NoModifier, center_of(clips.front()).toPoint());
+         }},
+        {"classic controls", after(300), [&] {
+             const auto before = clip_count();
+             const auto split_items = items_named("menuSplitHere");
+             if (!split_items.empty()) QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, center_of(split_items.front()).toPoint());
+             const bool split = clip_count() == before + 1;
+             if (!split) std::printf("GUI smoke: Split here from the context menu failed\n");
              if (split) session.undo();
              session.seek(0.5);
              session.togglePlay();
@@ -600,6 +798,65 @@ int main(int argc, char** argv) {
              const bool start_clicked = click_button("transportStart");
              r.controls = split && stopped && at_end && start_clicked && session.position() == 0.0;
          }},
+        {"discard guard", after(300), [&] {
+             // With media in the session, New project asks before discarding anything.
+             session.showProjects();
+         }},
+        {"tab", after(200), [&] {
+             // Buttons take keyboard focus: from the top of Projects, Tab lands on Open project.
+             window->contentItem()->forceActiveFocus();
+             press(Qt::Key_Tab);
+             const QQuickItem* focused = window->activeFocusItem();
+             r.tab = focused != nullptr && focused->objectName() == QStringLiteral("openProject");
+         }},
+        {"discard dialog", after(300), [&] {
+             const auto before = session.media().size();
+             const bool clicked = click_button("newProject");
+             auto* dialog = window->findChild<QObject*>(QStringLiteral("discardDialog"));
+             r.guard = clicked && dialog != nullptr && dialog->property("opened").toBool() && session.media().size() == before;
+             screenshot(window, "OMA_GUI_SMOKE_DISCARD_SCREENSHOT");
+             if (dialog != nullptr) QMetaObject::invokeMethod(dialog, "reject");
+             session.continueProject();
+             if (!r.guard) std::printf("GUI smoke: discard guard failed\n");
+         }},
+        {"save project", after(100), [&] {
+             saved = {.media = session.media().size(), .clips = clip_count(), .lanes = lane_count(),
+                      .duration = session.duration(), .first = session.clips().front().toMap()};
+             r.project = session.dirty() && session.projectName() == QStringLiteral("Untitled project");
+             session.saveProject(QUrl::fromLocalFile(project_file));
+         }},
+        {"saved", [&] { return !session.dirty() || session.failed(); }, [&] {
+             r.project = r.project && !session.failed() && QFile::exists(project_file) &&
+                         session.projectName() == QStringLiteral("smoke vlog");
+             session.openProject(QUrl::fromLocalFile(project_file));
+         }},
+        {"reopened", [&] { return session.media().size() == saved.media || session.failed(); }, [&] {
+             const QVariantMap first = session.clips().isEmpty() ? QVariantMap{} : session.clips().front().toMap();
+             r.project = r.project && !session.failed() && !session.dirty() && clip_count() == saved.clips &&
+                         lane_count() == saved.lanes && std::abs(session.duration() - saved.duration) < 1e-9 &&
+                         first.value("start") == saved.first.value("start") &&
+                         first.value("duration") == saved.first.value("duration") &&
+                         first.value("name") == saved.first.value("name") &&
+                         session.projectPath() == project_file;
+             if (!r.project) std::printf("GUI smoke: save and reopen failed (%s)\n", qPrintable(session.status()));
+         }},
+        {"wide window", after(100), [&] {
+             window->resize(1600, 900);
+         }},
+        {"hide library", after(400), [&] {
+             // Wide windows fold the library sidebar away and give the viewer the whole width.
+             auto* sidebar = window->findChild<QQuickItem*>(QStringLiteral("librarySidebar"));
+             auto* viewer = window->findChild<QQuickItem*>(QStringLiteral("viewerColumn"));
+             const bool shown = sidebar != nullptr && sidebar->isVisible() && viewer != nullptr && viewer->x() > 0;
+             const bool clicked = click_button("toggleLibrary");
+             const bool hidden = clicked && !sidebar->isVisible() && viewer->x() == 0.0 &&
+                                 viewer->width() == window->contentItem()->width();
+             screenshot(window, "OMA_GUI_SMOKE_WIDE_SCREENSHOT");
+             window->setProperty("libraryHidden", false);
+             r.project = r.project && shown && hidden;
+             if (!(shown && hidden)) std::printf("GUI smoke: hiding the library failed\n");
+             window->resize(820, 620); // back to the size of the steps before
+         }},
         {"library", after(500), [&] {
              window->setProperty("libraryOverlay", true);
          }},
@@ -609,17 +866,19 @@ int main(int argc, char** argv) {
              screenshot(window, "OMA_GUI_SMOKE_SCREENSHOT");
              const bool edits = r.imported && r.split && r.undone && r.redone && r.rippled && r.inserted &&
                                 r.overwritten && r.trimmed && r.played && r.audio && r.volume && r.muted &&
-                                r.gpu_viewer && r.shuttle && r.lanes && r.looks && r.transitions;
-             const bool keys = r.space && r.escape && r.stepped;
+                                r.gpu_viewer && r.shuttle && r.lanes && r.looks && r.transitions && r.dragdrop && r.guard &&
+                                r.grading && r.project;
+             const bool keys = r.space && r.escape && r.stepped && r.tab;
              std::printf("GUI smoke: edits %s (import %d, split %d, undo %d, redo %d, ripple delete %d, "
                          "insert %d, overwrite %d, trim %d, play %d, audio %d, volume %d, mute %d, "
-                         "GPU viewer %d, J/K/L %d, audio lanes %d, video looks %d, transitions %d)\n",
+                         "GPU viewer %d, J/K/L %d, audio lanes %d, video looks %d, transitions %d, drag and drop %d, "
+                         "discard guard %d, grading %d, save and reopen %d)\n",
                          edits ? "PASS" : "FAIL", r.imported, r.split, r.undone, r.redone, r.rippled,
                          r.inserted, r.overwritten, r.trimmed, r.played, r.audio, r.volume, r.muted,
-                         r.gpu_viewer, r.shuttle, r.lanes, r.looks, r.transitions);
+                         r.gpu_viewer, r.shuttle, r.lanes, r.looks, r.transitions, r.dragdrop, r.guard, r.grading, r.project);
              if (r.keys_focused) {
-                 std::printf("GUI smoke: keyboard %s (Space %d, Escape %d, Right x3 -> %.4fs)\n",
-                             keys ? "PASS" : "FAIL", r.space, r.escape, r.after_steps);
+                 std::printf("GUI smoke: keyboard %s (Tab %d, Space %d, Escape %d, Right x3 -> %.4fs)\n",
+                             keys ? "PASS" : "FAIL", r.tab, r.space, r.escape, r.after_steps);
              } else {
                  std::printf("GUI smoke: keyboard skipped (window not focused throughout)\n");
              }

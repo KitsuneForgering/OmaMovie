@@ -325,6 +325,40 @@ void gpu_matches_cpu_with_looks() {
     expect(diff.over_tolerance <= cpu->pixels.size() / 4 / 500).toBeTruthy();
 }
 
+// A strong blur on a 640x360 still: its sigma (7.2 px) reduces the source by 2 before the
+// gaussian (src/look.hpp Detail), with a crop so the reduced grid starts off the origin.
+void gpu_matches_cpu_with_reduced_blur() {
+    const oma::gpu::Device* device = compositor_test_device();
+    if (device == nullptr) {
+        return;
+    }
+    auto still = decode_first("still.png");
+    if (!still.frame) {
+        std::printf("    (skipped: fixture still.png missing)\n");
+        return;
+    }
+    const std::array<LayerInput, 1> inputs{still.input()};
+    auto vk = VulkanCompositor::create(*device);
+    expect(vk.has_value()).toBeTruthy();
+    if (!vk) {
+        return;
+    }
+    RenderGraph g = native_graph(640, 360);
+    g.layers[0].sharpness = -1.0;
+    g.layers[0].crop = {.left = 0.05, .top = 0.1, .right = 0.0, .bottom = 0.0};
+    const auto cpu = CpuCompositor{}.render(g, inputs);
+    expect((*vk)->render(g, inputs).has_value()).toBeTruthy();
+    const auto gpu = (*vk)->read_output();
+    expect(cpu && gpu).toBeTruthy();
+    if (!cpu || !gpu) {
+        return;
+    }
+    const auto diff = compare(*gpu, *cpu, kTolerance);
+    std::printf("    max difference %.5f, %zu of %zu pixels over tolerance\n",
+                static_cast<double>(diff.max_abs), diff.over_tolerance, cpu->pixels.size() / 4);
+    expect(diff.over_tolerance <= cpu->pixels.size() / 4 / 500).toBeTruthy();
+}
+
 void gpu_matches_cpu_with_uploads() {
     const oma::gpu::Device* device = compositor_test_device();
     if (device == nullptr) {
@@ -357,6 +391,59 @@ void gpu_matches_cpu_with_uploads() {
                 static_cast<double>(diff.max_abs), diff.over_tolerance, cpu->pixels.size() / 4);
     // Coordinates exactly on a crop edge may round to different sides in float.
     expect(diff.over_tolerance <= cpu->pixels.size() / 4 / 500).toBeTruthy();
+}
+
+// A PNG decodes to planar GBR; both compositors read it as sRGB, pixel for pixel.
+void draws_rgb_images() {
+    auto png = decode_first("still.png");
+    if (!png.frame) {
+        std::printf("    (skipped: fixture still.png missing)\n");
+        return;
+    }
+    expect(png.frame->layout().yuv).toBeFalsy();
+    const auto w = static_cast<std::uint32_t>(png.frame->width());
+    const auto h = static_cast<std::uint32_t>(png.frame->height());
+    std::vector<std::uint8_t> rgba(static_cast<std::size_t>(w) * h * 4);
+    expect(png.frame->copy_rgba(rgba, static_cast<int>(w) * 4).has_value()).toBeTruthy();
+    const std::array<LayerInput, 1> inputs{png.input()};
+    const RenderGraph g = native_graph(w, h);
+    const auto cpu = CpuCompositor{}.render(g, inputs);
+    expect(cpu.has_value()).toBeTruthy();
+    if (!cpu) {
+        return;
+    }
+    const auto linear = [](std::uint8_t v) {
+        const double c = v / 255.0;
+        return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+    };
+    double worst = 0.0;
+    for (std::uint32_t y = 0; y < h; y += 11) {
+        for (std::uint32_t x = 0; x < w; x += 13) {
+            const auto px = cpu->at(x, y);
+            const std::size_t i = ((static_cast<std::size_t>(y) * w) + x) * 4;
+            for (std::size_t c = 0; c < 3; ++c) {
+                worst = std::max(worst, std::abs(static_cast<double>(px[c]) - linear(rgba[i + c])));
+            }
+        }
+    }
+    std::printf("    worst difference from the PNG %.6f\n", worst);
+    expect(worst < 1e-4).toBeTruthy();
+
+    const oma::gpu::Device* device = compositor_test_device();
+    if (device == nullptr) {
+        return;
+    }
+    auto vk = VulkanCompositor::create(*device);
+    expect(vk.has_value()).toBeTruthy();
+    if (!vk) {
+        return;
+    }
+    expect((*vk)->render(g, inputs).has_value()).toBeTruthy();
+    const auto gpu = (*vk)->read_output();
+    expect(gpu.has_value()).toBeTruthy();
+    if (gpu) {
+        expect(compare(*gpu, *cpu, kTolerance).over_tolerance == 0U).toBeTruthy();
+    }
 }
 
 // The sRGB transfer function (IEC 61966-2-1), as the display pass applies it.
@@ -499,9 +586,12 @@ void run_vulkan_compositor_tests() {
         it("matches the CPU reference on uploaded frames", { gpu_matches_cpu_with_uploads(); });
         it("matches the CPU reference with color adjustments and filters",
            { gpu_matches_cpu_with_looks(); });
+        it("matches the CPU reference with a reduced blur",
+           { gpu_matches_cpu_with_reduced_blur(); });
         it("matches the CPU reference on zero-copy GPU frames",
            { gpu_frames_match_cpu_reference(); });
         it("encodes the output for an SDR display", { display_encodes_srgb(); });
+        it("draws RGB images as sRGB", { draws_rgb_images(); });
         it("measures three 1080p layers", { measures_1080p_three_layers(); });
     });
 }

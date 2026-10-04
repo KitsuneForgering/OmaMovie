@@ -10,7 +10,11 @@ AbstractButton {
     property bool selected: false
     property bool activeDot: false
     property string tip: action ? action.text : text
-    focusPolicy: Qt.NoFocus // Space and letters belong to the editor's actions
+    // Tab reaches every button; Enter activates the focused one. Space and letters stay with the
+    // editor's actions: window shortcuts fire before the focused item sees the key.
+    focusPolicy: Qt.TabFocus
+    Keys.onReturnPressed: control.click()
+    Keys.onEnterPressed: control.click()
     hoverEnabled: true
     implicitHeight: 32
     implicitWidth: content.implicitWidth + (showLabel ? 22 : 14)
@@ -19,6 +23,8 @@ AbstractButton {
     ToolTip.delay: 500
     background: Rectangle {
         radius: 6
+        border.width: control.visualFocus ? 2 : 0 // keyboard focus only, not after a click
+        border.color: colors.accent
         color: control.primary && control.enabled ? colors.accent
             : control.selected ? colors.selection_background
             : control.down || (control.hovered && control.enabled) ? colors.lighter_background

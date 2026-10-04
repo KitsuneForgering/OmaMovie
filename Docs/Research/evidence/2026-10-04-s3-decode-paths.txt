@@ -1,0 +1,42 @@
+== Machine
+  deviceName         = Intel(R) Iris(R) Xe Graphics (TGL GT2)
+  driverInfo         = Mesa 26.2.2-arch1.1
+  deviceName         = llvmpipe (LLVM 22.1.8, 256 bits)
+  driverInfo         = Mesa 26.2.2-arch1.1 (LLVM 22.1.8)
+  Driver version: Intel iHD driver for Intel(R) Gen Graphics - 26.2.4 ()
+  ffmpeg version n9.0.1 Copyright (c) 2000-2026 the FFmpeg developers
+  CPU: 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz, 8 threads
+  runs=5, 10s 1080p60 (600 frames)
+
+== Test media
+  generated in <output-dir>
+
+== Decode throughput (median of 5; frames discarded on the GPU)
+  h264.mp4   software            792 fps    568% CPU      n/a J
+  h264.mp4   vaapi               715 fps     24% CPU      n/a J
+  h264.mp4   qsv                 664 fps     17% CPU      n/a J
+  h264.mp4   vulkan+flag         729 fps     23% CPU      n/a J
+  hevc10.mp4 software            676 fps    615% CPU      n/a J
+  hevc10.mp4 vaapi              1255 fps     52% CPU      n/a J
+  hevc10.mp4 qsv                1147 fps     28% CPU      n/a J
+  hevc10.mp4 vulkan+flag        1258 fps     61% CPU      n/a J
+  av1.mkv    software            566 fps    241% CPU      n/a J
+  av1.mkv    vaapi              1085 fps     28% CPU      n/a J
+  av1.mkv    qsv                 998 fps     27% CPU      n/a J
+  av1.mkv    vulkan+flag    fallback (yuv420p)
+
+== Proxy intermediates (from h264.mp4: ProRes LT 4:2:2 10-bit, FFv1 4:2:0 8-bit level 4)
+  prores_ks_vulkan 1080p output does NOT decode
+  proxy_prores.mov   96.9 Mbit/s, PSNR 46.450642 dB vs source
+  proxy_prores.mov software            617 fps    612% CPU      n/a J
+  proxy_prores.mov vulkan              240 fps     27% CPU      n/a J
+  proxy_ffv1.mkv     83.5 Mbit/s, PSNR inf dB vs source
+  proxy_ffv1.mkv software             97 fps    638% CPU      n/a J
+  proxy_ffv1.mkv vulkan               19 fps      3% CPU      n/a J
+
+== Open + first frame vs. seek to the middle + one frame (median of 5, ms, software)
+  h264.mp4         start   95 ms   middle  162 ms
+  hevc10.mp4       start  112 ms   middle  298 ms
+  av1.mkv          start   69 ms   middle  211 ms
+  proxy_prores.mov start   74 ms   middle   86 ms
+  proxy_ffv1.mkv   start  224 ms   middle  554 ms

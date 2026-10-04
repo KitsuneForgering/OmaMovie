@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <format>
+#include <limits>
 #include <numeric>
 #include <unordered_set>
 
@@ -43,6 +44,37 @@ Result<Timeline> Timeline::create(FrameRate rate, Rational timebase) {
                                  timebase.num(), timebase.den()));
     }
     return Timeline(rate, timebase);
+}
+
+Result<Timeline> Timeline::restore(FrameRate rate, Rational timebase, std::vector<Track> tracks,
+                                   std::vector<Marker> markers, std::vector<MediaInfo> media,
+                                   std::vector<LutInfo> luts) {
+    auto t = create(rate, timebase);
+    if (!t) {
+        return t;
+    }
+    std::uint64_t largest = 0;
+    for (const Track& track : tracks) {
+        largest = std::max(largest, track.id.value());
+        for (const Clip& c : track.clips) {
+            largest = std::max(largest, c.id.value());
+        }
+    }
+    for (const Marker& m : markers) {
+        largest = std::max(largest, m.id.value());
+    }
+    if (largest == std::numeric_limits<std::uint64_t>::max()) {
+        return error(ErrorCode::InvalidData, "IDs exhausted");
+    }
+    t->tracks_ = std::move(tracks);
+    t->markers_ = std::move(markers);
+    t->media_ = std::move(media);
+    t->luts_ = std::move(luts);
+    t->next_id_ = largest + 1;
+    if (auto valid = t->validate(); !valid) {
+        return std::unexpected(valid.error());
+    }
+    return t;
 }
 
 Result<Timeline> Timeline::create(FrameRate rate, SampleRate audio_rate) {
@@ -87,6 +119,11 @@ const Track* Timeline::track_of(ClipId id) const noexcept {
         }
     }
     return nullptr;
+}
+
+const LutInfo* Timeline::find_lut(LutId id) const noexcept {
+    const auto it = std::ranges::find(luts_, id, &LutInfo::id);
+    return it == luts_.end() ? nullptr : &*it;
 }
 
 const MediaInfo* Timeline::find_media(MediaId id) const noexcept {
@@ -145,15 +182,64 @@ bool in_unit(double v) {
     return std::isfinite(v) && v >= 0.0 && v < 1.0;
 }
 
+bool curve_ok(const std::vector<CurvePoint>& points) {
+    if (points.empty()) {
+        return true;
+    }
+    if (points.size() < 2 || points.size() > kMaxCurvePoints) {
+        return false;
+    }
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        const CurvePoint& p = points[i];
+        const bool inside = std::isfinite(p.x) && std::isfinite(p.y) && p.x >= 0.0 && p.x <= 1.0 &&
+                            p.y >= 0.0 && p.y <= 1.0;
+        if (!inside || (i > 0 && p.x <= points[i - 1].x)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool grade_ok(const ColorGrade& g) {
+    const auto between = [](double x, double lo, double hi) {
+        return std::isfinite(x) && x >= lo && x <= hi;
+    };
+    for (std::size_t i = 0; i < 3; ++i) {
+        if (!between(g.cdl.slope[i], 0.0, 4.0) || !between(g.cdl.offset[i], -1.0, 1.0) ||
+            !between(g.cdl.power[i], 0.1, 4.0)) {
+            return false;
+        }
+    }
+    return between(g.cdl.saturation, 0.0, 4.0) && between(g.lut_amount, 0.0, 1.0) &&
+           curve_ok(g.curves.master) && curve_ok(g.curves.red) && curve_ok(g.curves.green) &&
+           curve_ok(g.curves.blue);
+}
+
+bool transform_ok(const Transform& tr) {
+    return std::isfinite(tr.offset_x) && std::isfinite(tr.offset_y) && std::isfinite(tr.rotation) &&
+           std::isfinite(tr.scale_x) && std::isfinite(tr.scale_y) && tr.scale_x != 0.0 &&
+           tr.scale_y != 0.0;
+}
+
+bool keys_ok(const std::vector<TransformKey>& keys) {
+    if (keys.size() > kMaxKeys) {
+        return false;
+    }
+    for (std::size_t i = 0; i < keys.size(); ++i) {
+        if (!transform_ok(keys[i].value) || keys[i].interpolation > Interpolation::Ease ||
+            (i > 0 && !(keys[i - 1].at < keys[i].at))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 Result<void> validate_properties(const Clip& c) {
     const VideoProperties& v = c.video;
     const bool crop_ok = in_unit(v.crop.left) && in_unit(v.crop.right) && in_unit(v.crop.top) &&
                          in_unit(v.crop.bottom) && v.crop.left + v.crop.right < 1.0 &&
                          v.crop.top + v.crop.bottom < 1.0;
-    const Transform& tr = v.transform;
-    const bool transform_ok = std::isfinite(tr.offset_x) && std::isfinite(tr.offset_y) &&
-                              std::isfinite(tr.rotation) && std::isfinite(tr.scale_x) &&
-                              std::isfinite(tr.scale_y) && tr.scale_x != 0.0 && tr.scale_y != 0.0;
+    const bool motion_ok = transform_ok(v.transform) && keys_ok(v.transform_keys);
     const bool opacity_ok = std::isfinite(v.opacity) && v.opacity >= 0.0F && v.opacity <= 1.0F;
     const auto within = [](double x, double limit) {
         return std::isfinite(x) && std::abs(x) <= limit;
@@ -163,7 +249,7 @@ Result<void> validate_properties(const Clip& c) {
     const bool filter_ok = std::isfinite(v.filter.amount) && v.filter.amount >= 0.0 &&
                            v.filter.amount <= 1.0 && v.filter.kind <= FilterKind::Vignette &&
                            within(v.sharpness, 1.0);
-    if (!crop_ok || !transform_ok || !opacity_ok || !color_ok || !filter_ok) {
+    if (!crop_ok || !motion_ok || !opacity_ok || !color_ok || !filter_ok || !grade_ok(v.grade)) {
         return error(ErrorCode::InvalidData, "invalid video properties",
                      detail::clip_context(c.id));
     }
@@ -237,6 +323,13 @@ Result<void> Timeline::validate() const {
         }
     }
 
+    std::unordered_set<LutId> lut_ids;
+    for (const LutInfo& l : luts_) {
+        if (!l.id.valid() || !lut_ids.insert(l.id).second) {
+            return error(ErrorCode::InvalidData, "invalid or duplicate LUT ID",
+                         std::format("LUT {}", l.id.value()));
+        }
+    }
     std::unordered_set<TrackId> track_ids;
     std::unordered_set<ClipId> clip_ids;
     for (const Track& t : tracks_) {
@@ -289,6 +382,10 @@ Result<void> Timeline::validate() const {
             }
             if (auto r = validate_properties(c); !r) {
                 return r;
+            }
+            if (c.video.grade.lut.valid() && find_lut(c.video.grade.lut) == nullptr) {
+                return error(ErrorCode::InvalidData, "clip grades with an unknown LUT",
+                             detail::clip_context(c.id));
             }
         }
     }

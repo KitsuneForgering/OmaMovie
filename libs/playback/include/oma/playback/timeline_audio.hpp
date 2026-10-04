@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oma/audio/equalizer.hpp"
+#include "oma/audio/effect.hpp"
 #include "oma/base/error.hpp"
 #include "oma/base/time.hpp"
 #include "oma/media/audio_decoder.hpp"
@@ -40,7 +40,7 @@ private:
     struct Stream {
         std::uint64_t media = 0;             // media ID
         oma::timeline::NoiseReduction noise; // what the decoder was opened with
-        oma::audio::Equalizer eq;
+        oma::audio::EffectChain effects;     // the clip's, configured from its audio properties
         std::unique_ptr<oma::media::AudioDecoder> decoder;
         std::optional<oma::media::AudioBuffer> buffer;
         std::int64_t offset = 0;      // frames of `buffer` already used
@@ -75,7 +75,7 @@ private:
     int channels_;
     std::int64_t ticks_per_sample_ = 1;
     std::unordered_map<std::uint64_t, Stream> streams_; // per clip ID
-    std::vector<float> scratch_; // a clip's samples while they are equalized, reused
+    std::vector<float> scratch_; // a clip's samples while its effects run, reused
     std::uint64_t pass_ = 0;
 };
 

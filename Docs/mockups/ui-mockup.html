@@ -1,8 +1,10 @@
-<title>OmaMovie Mockup</title>
-<meta name="description" content="Interactive OmaMovie UI mockup, based on Docs/ui-design.md">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OmaMovie Editor prototype</title>
+<meta name="description" content="Interactive OmaMovie Editor prototype based on the UI design and UX tasks">
 <style>
 :root{
   --p-bg:#eceef3; --p-fg:#1d2230; --p-muted:#5d6475; --p-line:#d3d7e0; --p-card:#f7f8fb; --p-accent:#3f5bd8;
@@ -67,8 +69,8 @@ button,input,select{font:inherit;color:inherit}
 .export-prog .bar i{display:block;height:100%;width:0;background:var(--accent)}
 
 /* --- edit layout --- */
-.edit-body{flex:1;min-height:0;display:grid;grid-template-rows:minmax(0,var(--upper,56fr)) 7px minmax(0,var(--lower,44fr))}
-.upper{position:relative;min-height:0;display:grid;grid-template-columns:minmax(260px,30%) 1fr}
+.edit-body{flex:1;min-width:0;min-height:0;width:100%;display:grid;grid-template-rows:minmax(0,var(--upper,56fr)) 7px minmax(0,var(--lower,44fr))}
+.upper{position:relative;min-width:0;min-height:0;display:grid;grid-template-columns:minmax(260px,30%) minmax(0,1fr)}
 .app.lib-hidden .upper{grid-template-columns:0 1fr}
 .app.lib-hidden .lib{visibility:hidden}
 .splitter{background:var(--bg);cursor:row-resize;position:relative;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
@@ -88,6 +90,13 @@ button,input,select{font:inherit;color:inherit}
 .tab{padding:6px 9px 7px!important;border-bottom:2px solid transparent;color:var(--fg-d)}
 .tab[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
 .lib-tools{display:flex;align-items:center;gap:8px;padding:7px 10px;color:var(--fg-d);font-size:11px}
+.lib-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 10px 8px;min-height:35px}
+.lib-actions button{padding:5px 8px!important;border:1px solid var(--line)!important;border-radius:5px;white-space:nowrap;font-size:11px}
+.lib-actions .add-selected{background:var(--accent)!important;border-color:var(--accent)!important;color:var(--on-accent)}
+.lib-actions button:disabled{opacity:.45;cursor:default}
+.lib-actions .selected-name{flex-basis:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg-d);font-size:11px}
+.session-notice{padding:6px 12px;background:color-mix(in srgb,var(--yellow) 14%,var(--bg));color:var(--fg);border-bottom:1px solid var(--line);font-size:11px}
+.session-notice strong{color:var(--yellow)}
 .lib-tools .search{flex:1;display:flex;align-items:center;gap:6px;background:var(--bg);border-radius:6px;padding:4px 8px;min-width:0}
 .lib-tools input{border:0;background:none;outline:none;width:100%;font-size:11px}
 .grid{flex:1;overflow:auto;padding:4px 10px 12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--thumb,128px),1fr));gap:10px;align-content:start}
@@ -102,6 +111,7 @@ button,input,select{font:inherit;color:inherit}
 .mi .nm{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mi .du{font-size:10px;color:var(--fg-d);font-variant-numeric:tabular-nums}
 .mi.sel{background:var(--sel)}
+.mi:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .mi.rej{opacity:.38}
 .card{border-radius:6px;padding:10px;background:var(--bg);display:flex;flex-direction:column;gap:6px;cursor:pointer;min-height:84px;border:1px solid transparent}
 .card:hover{border-color:var(--muted)}
@@ -149,6 +159,7 @@ button,input,select{font:inherit;color:inherit}
 .mbox .tag{position:absolute;left:-1px;top:-20px;font-size:10px;background:rgba(0,0,0,.65);color:#fff;padding:1px 6px;border-radius:3px;white-space:nowrap}
 .cropshade{position:absolute;inset:0;pointer-events:none}
 .rt-chip{position:absolute;left:12px;bottom:12px;display:flex;align-items:center;gap:8px;background:rgba(20,20,20,.86);color:#f2d38a;border:1px solid rgba(242,211,138,.4);padding:5px 8px;border-radius:6px;font-size:11px}
+.rt-chip[hidden]{display:none}
 .rt-chip button{color:#fff;text-decoration:underline}
 .transport{height:38px;flex:none;display:flex;align-items:center;gap:6px;padding:0 10px;background:var(--bg);border-top:1px solid var(--line)}
 .tc{font-variant-numeric:tabular-nums;font-size:12px}
@@ -162,7 +173,7 @@ button,input,select{font:inherit;color:inherit}
 .app.viewer-full .edit-body{grid-template-rows:1fr}
 
 /* timeline */
-.lower{min-height:0;display:flex;flex-direction:column;background:var(--bg-dd)}
+.lower{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--bg-dd)}
 .tl-bar{height:34px;flex:none;display:flex;align-items:center;gap:6px;padding:0 10px;border-bottom:1px solid var(--line);background:var(--bg)}
 .tools{display:flex;gap:2px;background:var(--bg-d);border-radius:7px;padding:2px}
 .tool{width:28px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:5px;color:var(--fg-d)}
@@ -229,6 +240,9 @@ button,input,select{font:inherit;color:inherit}
 .wordmark span{color:var(--accent)}
 .pj-sec h3{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--fg-d);margin:0 0 10px;font-weight:600;display:flex;gap:10px;align-items:center}
 .pj-sec h3 em{font-style:normal;text-transform:none;letter-spacing:0;color:var(--fg-d);font-weight:400}
+.session-card{padding:14px 16px;border:1px solid var(--line);border-radius:8px;background:var(--bg-d);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.session-card p{margin:4px 0 0;color:var(--fg-d);font-size:11px}
+.session-card button{margin-left:auto;padding:6px 12px!important;border-radius:6px;background:var(--accent)!important;color:var(--on-accent)}
 .pj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
 .pj{display:flex;flex-direction:column;gap:7px;border-radius:8px;padding:6px;cursor:pointer;text-align:left}
 .pj:hover{background:var(--bg-l)}
@@ -251,6 +265,7 @@ button,input,select{font:inherit;color:inherit}
 .fmt-opt .shape{background:var(--bg-l);border:1.5px solid var(--fg-d);border-radius:3px}
 .fmt-opt small{color:var(--fg-d)}
 .dlg-head{padding:14px 16px 0;font-weight:600}
+.dialog p{padding:0 16px;font-size:12px;color:var(--fg-d)}
 .dlg-foot{display:flex;justify-content:flex-end;gap:8px;padding:0 16px 16px}
 .dlg-foot button{padding:6px 14px!important;border-radius:6px;background:var(--bg-l)!important}
 .dlg-foot .primary{background:var(--accent)!important;color:var(--on-accent)}
@@ -276,7 +291,7 @@ button,input,select{font:inherit;color:inherit}
 
 /* ===== container: half width (tiling) ===== */
 @container app (max-width: 1100px){
-  .upper{grid-template-columns:1fr!important}
+  .upper{grid-template-columns:minmax(0,1fr)!important}
   .lib{position:absolute;z-index:8;left:0;top:0;bottom:0;width:min(420px,88%);transform:translateX(-102%);transition:transform .2s ease;box-shadow:8px 0 30px rgba(0,0,0,.35);visibility:visible!important}
   .app.lib-open .lib{transform:none}
   .libtoggle{display:flex!important}
@@ -293,16 +308,20 @@ button,input,select{font:inherit;color:inherit}
   .tools .tool:nth-child(n+4){display:none}
   .adjbar{gap:0;padding:0 4px}
   .adj{padding:0 6px!important}
+  .topbar{gap:2px;padding:0 5px}.topbar .tb-btn{padding:0 5px!important}.proj-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px}
+  .lib-actions{flex-wrap:wrap}.lib-actions .selected-name{flex-basis:100%}
 }
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 @media (max-width:700px){.app{height:820px}}
 </style>
+</head>
+<body>
 
 <div class="page">
   <header class="page-head">
     <div>
       <h1>OmaMovie · interface mockup</h1>
-      <p>Interactive prototype of <code>Docs/ui-design.md</code>. Sample Omarchy palettes, our own SVG icons, proposed OmaMovie shortcuts. Media and project are fictitious. This prototype explores layout and interactions; engine performance, live platform integration and color accuracy remain unvalidated.</p>
+      <p>Interactive prototype of <code>Docs/ui-design.md</code> and <code>Docs/ui-ux-tddo.md</code>. Media is fictitious. It explores layout and editing flows; it does not save projects, export video, or measure engine performance.</p>
     </div>
     <div class="ctrls">
       <div class="ctrl">Screen
@@ -331,7 +350,11 @@ button,input,select{font:inherit;color:inherit}
             <button class="tb-btn primary" id="btnNew"><span data-ico="plus"></span>New project</button>
           </div>
           <div class="pj-sec">
-            <h3>Recent</h3>
+            <h3>Current session</h3>
+            <div class="session-card"><div><b id="sessionName">No open project</b><p>This prototype keeps work only while the page is open. Save and export are not available yet.</p></div><button id="resumeSession" hidden>Continue editing</button></div>
+          </div>
+          <div class="pj-sec">
+            <h3>Start editing</h3>
             <div class="pj-grid" id="recentGrid"></div>
           </div>
           <div class="pj-sec">
@@ -350,13 +373,13 @@ button,input,select{font:inherit;color:inherit}
           <span class="proj-name" id="projName">Hyprland in 5 minutes</span>
           <span class="proj-meta" id="projMeta">16:9 · 1920×1080 · 30 fps</span>
           <div class="grow"></div>
-          <div class="export-prog" id="exportProg"><span>Exporting…</span><span class="bar"><i></i></span></div>
           <button class="tb-btn" id="btnUndo" title="Undo (Ctrl+Z)"><span data-ico="undo"></span></button>
           <button class="tb-btn" id="btnRedo" title="Redo (Ctrl+Shift+Z)"><span data-ico="redo"></span></button>
           <button class="tb-btn" id="btnPal" title="Command palette (Ctrl+K)"><span data-ico="command"></span></button>
           <button class="tb-btn" id="btnImport" title="Import (Ctrl+I)"><span data-ico="import"></span><span class="lb">Import</span></button>
-          <button class="tb-btn primary" id="btnExport" title="Export (Ctrl+E)"><span data-ico="export"></span><span class="lb">Export</span></button>
+          <button class="tb-btn primary" id="btnExport" title="Export is not available yet"><span data-ico="export"></span><span class="lb">Export</span></button>
         </div>
+        <div class="session-notice"><strong>Temporary session.</strong> Changes disappear when this page closes. Saving and exporting are coming later.</div>
 
         <div class="edit-body" id="editBody">
           <div class="upper">
@@ -365,6 +388,7 @@ button,input,select{font:inherit;color:inherit}
               <div class="lib-main">
                 <div class="tabs" role="tablist" id="tabs"></div>
                 <div class="lib-tools"><div class="search"><span data-ico="search" data-s="14"></span><input id="libSearch" placeholder="Search (Ctrl+F)" aria-label="Search the library"></div><span id="libCount"></span></div>
+                <div class="lib-actions"><span class="selected-name" id="selectedMedia">Select a clip to add</span><button class="add-selected" id="addSelected" disabled>Add to timeline</button><button id="insertSelected" disabled title="Insert at playhead (W)">Insert</button><button id="overwriteSelected" disabled title="Overwrite at playhead (D)">Overwrite</button></div>
                 <div class="grid" id="grid"></div>
               </div>
               <span class="pin" style="left:128px;top:96px" data-n="4" data-tip="§4 Skimming: hover over a thumbnail to scrub through the clip in the viewer without playing.">4</span>
@@ -419,6 +443,13 @@ button,input,select{font:inherit;color:inherit}
           <div class="dlg-foot"><button id="fmtCancel">Cancel</button><button class="primary" id="fmtOk">Create</button></div>
         </div>
       </div>
+      <div class="scrim" id="discardScrim" hidden>
+        <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="discardTitle" aria-describedby="discardText">
+          <div class="dlg-head" id="discardTitle">Discard this session?</div>
+          <p id="discardText">This prototype cannot save your changes. The library and timeline will be lost.</p>
+          <div class="dlg-foot"><button id="discardCancel">Keep editing</button><button class="primary" id="discardOk">Discard and continue</button></div>
+        </div>
+      </div>
       <div class="scrim" id="palScrim" hidden>
         <div class="dialog pal" role="dialog" aria-label="Command palette">
           <input id="palIn" placeholder="Type a command… (e.g. split, speed, export)" aria-label="Search commands">
@@ -438,7 +469,7 @@ button,input,select{font:inherit;color:inherit}
         <li><kbd>Space</kbd> play/pause · <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd> (repeat to speed up) · <kbd>←</kbd> <kbd>→</kbd> frame · <kbd>↑</kbd> <kbd>↓</kbd> previous/next edit</li>
         <li>Click a clip and use the bar above the viewer: Color, Crop (drag the rectangle in the viewer), Speed, Effects</li>
         <li><kbd>Ctrl+B</kbd> splits · <kbd>Delete</kbd> removes and closes the gap · <kbd>Shift+Delete</kbd> leaves a gap · <kbd>Ctrl+Z</kbd> undoes</li>
-        <li>In the library, select an item and press <kbd>E</kbd> (append), <kbd>W</kbd> (insert), <kbd>Q</kbd> (connect as a layer) · <kbd>F</kbd> favorites</li>
+        <li>In the library, select an item and use Add to timeline, Insert, or Overwrite; <kbd>E</kbd>, <kbd>W</kbd>, <kbd>D</kbd> are shortcuts</li>
         <li>Drag clip edges · double click a junction to open the cut editor · <kbd>B</kbd> blade, <kbd>T</kbd> trim, <kbd>A</kbd> select</li>
         <li><kbd>Ctrl+K</kbd> command palette · switch <em>Window</em> to "Half width" to see the tiling layout</li>
         <li>The "Grain" effect shows the non-real-time warning</li>
@@ -753,6 +784,9 @@ function renderLib(){
  $('#sources').innerHTML='<div class="lbl">Sources</div>'+SOURCES.map(s=>`<button class="src" data-src="${s.id}" aria-current="${S.source===s.id}">${ico(s.ico,15)}<span>${s.label}</span>${s.id==='recordings'&&newCount?'<span class="dot" title="New recordings"></span>':''}</button>`).join('')+`<button class="src add" data-src="add">${ico('plus',15)}<span>Folder</span></button>`;
  $('#tabs').innerHTML=TABS.map(t=>`<button class="tab" role="tab" data-tab="${t.id}" aria-selected="${S.tab===t.id}">${t.l}</button>`).join('');
  const g=$('#grid');const used=usedIds();
+ const selected=libMedia(),hasMedia=!!selected;
+ $('#selectedMedia').textContent=selected?selected.short:'Select a clip to add';
+ for(const id of ['addSelected','insertSelected','overwriteSelected'])$('#'+id).disabled=!hasMedia;
  if(S.tab==='media'){
   let list=M.filter(m=>m.kind!=='music'&&m.kind!=='voice');
   if(S.source==='project')list=list.filter(m=>used.has(m.id));
@@ -760,7 +794,7 @@ function renderLib(){
   else list=list.filter(m=>m.src===S.source);
   if(S.search)list=list.filter(m=>(m.short+m.name).toLowerCase().includes(S.search));
   $('#libCount').textContent=list.length+' items';
-  g.innerHTML=list.map(m=>`<div class="mi ${S.libSel===m.id?'sel':''} ${m.rej?'rej':''}" data-mid="${m.id}" tabindex="-1" title="${m.name}"><div class="th"><canvas width="192" height="108"></canvas><span class="skimline"></span>${used.has(m.id)?'<span class="used" style="width:'+(30+rnd(m.hue)*50)+'%"></span>':''}${m.fav?'<span class="star">'+ico('starf',13)+'</span>':''}${m.isNew?'<span class="new">NEW</span>':''}</div><span class="nm">${m.short}</span><span class="du">${mmss(m.dur)}${m.kind==='screen'?' · screen recording':''}</span></div>`).join('')||`<p class="hint" style="grid-column:1/-1">Nothing here yet.</p>`;
+  g.innerHTML=list.map(m=>`<div class="mi ${S.libSel===m.id?'sel':''} ${m.rej?'rej':''}" data-mid="${m.id}" tabindex="0" role="button" aria-label="Select ${m.short}" title="${m.name}"><div class="th"><canvas width="192" height="108"></canvas><span class="skimline"></span>${used.has(m.id)?'<span class="used" style="width:'+(30+rnd(m.hue)*50)+'%"></span>':''}${m.fav?'<span class="star">'+ico('starf',13)+'</span>':''}${m.isNew?'<span class="new">NEW</span>':''}</div><span class="nm">${m.short}</span><span class="du">${mmss(m.dur)}${m.kind==='screen'?' · screen recording':''}</span></div>`).join('')||`<p class="hint" style="grid-column:1/-1">Nothing here yet.</p>`;
   g.querySelectorAll('.mi').forEach(el=>drawThumb(el,mediaById(el.dataset.mid),.35));
  }else if(S.tab==='titles'){
   $('#libCount').textContent='4 styles';
@@ -772,7 +806,7 @@ function renderLib(){
   g.innerHTML=tr.map(([k,l])=>`<div class="card" data-trans="${k}"><div class="pv" style="background:linear-gradient(90deg,#4a6fa5 ${k==='wipe'?'50%':'0'},${k==='dip'?'#000':'#c27c4a'} ${k==='wipe'?'50%':'100%'})"></div><b>${l}</b><small>Applies at the end of the selected clip</small></div>`).join('');
  }else{
   const list=M.filter(m=>m.kind==='music'||m.kind==='voice');$('#libCount').textContent=list.length+' files';
-  g.innerHTML=list.map(m=>`<div class="mi ${S.libSel===m.id?'sel':''}" data-mid="${m.id}" tabindex="-1" title="${m.name}"><div class="th"><canvas width="192" height="108"></canvas><span class="skimline"></span></div><span class="nm">${m.short}</span><span class="du">${mmss(m.dur)} · ${m.kind==='music'?'music':'voice'}</span></div>`).join('')+`<div class="card" style="opacity:.6"><div class="pv">${ico('mic',20)}</div><b>Record voiceover <span class="badge">v0.2</span></b></div>`;
+  g.innerHTML=list.map(m=>`<div class="mi ${S.libSel===m.id?'sel':''}" data-mid="${m.id}" tabindex="0" role="button" aria-label="Select ${m.short}" title="${m.name}"><div class="th"><canvas width="192" height="108"></canvas><span class="skimline"></span></div><span class="nm">${m.short}</span><span class="du">${mmss(m.dur)} · ${m.kind==='music'?'music':'voice'}</span></div>`).join('')+`<div class="card" style="opacity:.6"><div class="pv">${ico('mic',20)}</div><b>Record voiceover <span class="badge">v0.2</span></b></div>`;
   g.querySelectorAll('.mi').forEach(el=>drawThumb(el,mediaById(el.dataset.mid),.35));
  }
 }
@@ -782,10 +816,11 @@ $('#tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)r
 $('#libSearch').addEventListener('input',e=>{S.search=e.target.value.toLowerCase();renderLib()});
 const grid=$('#grid');
 grid.addEventListener('click',e=>{
- const mi=e.target.closest('.mi');if(mi){S.libSel=mi.dataset.mid;S.sel={kind:'media',id:mi.dataset.mid};S.focus='lib';renderLib();renderAdj();renderFocus();status(`${mediaById(mi.dataset.mid).short} selected · E appends, W inserts, Q connects`);return}
+ const mi=e.target.closest('.mi');if(mi){S.libSel=mi.dataset.mid;S.sel={kind:'media',id:mi.dataset.mid};S.focus='lib';renderLib();renderAdj();renderFocus();status(`${mediaById(mi.dataset.mid).short} selected · Add to timeline, Insert or Overwrite`);if(!e.detail)$('#addSelected').focus();return}
  const tc_=e.target.closest('[data-title]');if(tc_){addTitle(tc_.dataset.title);return}
  const tr=e.target.closest('[data-trans]');if(tr){applyTransition(tr.dataset.trans);return}
 });
+grid.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.closest('.mi')){e.preventDefault();e.target.closest('.mi').click()}});
 grid.addEventListener('dblclick',e=>{const mi=e.target.closest('.mi');if(mi){S.libSel=mi.dataset.mid;act('append')}});
 grid.addEventListener('mousemove',e=>{
  if(!S.skimming)return;const mi=e.target.closest('.mi');if(!mi){return}
@@ -1000,12 +1035,35 @@ function delSel(gap){const s=S.sel;if(!s)return toast('Select something to remov
  S.sel=null;S.tool=null;renderAll();toast(gap?'Replaced with a gap':'Removed · gap closed')}
 function libMedia(){const id=S.libSel||(S.sel&&S.sel.kind==='media'&&S.sel.id);return id&&mediaById(id)}
 function newPrimary(m){return{id:nid(),mediaId:m.id,in:0,dur:m.still?4:Math.min(m.dur,10),adj:{},trans:false}}
+function added(){app.classList.remove('lib-open');renderLib();}
 function append(){const m=libMedia();if(!m)return toast('Select an item in the library');snap();
  if(m.kind==='music'||m.kind==='voice'){const lane=m.kind==='music'?'music':'voice';const end=Math.max(0,...S.tl.audio.filter(a=>a.lane===lane).map(a=>a.start+a.dur));S.tl.audio.push({id:nid(),mediaId:m.id,start:end,dur:Math.min(m.dur,30),lane,adj:{}})}
- else S.tl.primary.push(newPrimary(m));renderAll();toast(m.short+' appended to the end')}
-function insert(){const m=libMedia();if(!m||m.kind==='music'||m.kind==='voice')return toast('Select a video in the library');snap();
+ else S.tl.primary.push(newPrimary(m));renderAll();added();toast(m.short+' appended to the end')}
+function insert(){const m=libMedia();if(!m)return toast('Select an item in the library');snap();
+ if(m.kind==='music'||m.kind==='voice'){S.tl.audio.push({id:nid(),mediaId:m.id,start:S.t,dur:Math.min(m.dur,30),lane:m.kind,adj:{}});renderAll();added();toast('Audio inserted at the playhead');return}
  const p=primaryAt(S.t);let idx=S.tl.primary.length;if(p){const loc=S.t-p.start;if(loc>1/FPS&&p.clip.dur-loc>1/FPS){const a=p.clip,b=JSON.parse(JSON.stringify(a));b.id=nid();b.in=a.in+loc*spd(a);b.dur=a.dur-loc;a.dur=loc;b.trans=a.trans;a.trans=false;S.tl.primary.splice(p.i+1,0,b);idx=p.i+1}else idx=p.i}
- const c=newPrimary(m);S.tl.primary.splice(idx,0,c);S.sel={kind:'primary',id:c.id};renderAll();toast('Inserted at the playhead')}
+ const c=newPrimary(m);S.tl.primary.splice(idx,0,c);S.sel={kind:'primary',id:c.id};renderAll();added();toast('Inserted at the playhead')}
+function overwrite(){const m=libMedia();if(!m)return toast('Select an item in the library');snap();
+ if(m.kind==='music'||m.kind==='voice'){
+  const lane=m.kind,dur=Math.min(m.dur,30),end=S.t+dur;
+  S.tl.audio=S.tl.audio.flatMap(a=>{if(a.lane!==lane||a.start>=end||a.start+a.dur<=S.t)return[a];const pieces=[];
+   if(a.start<S.t)pieces.push({...a,dur:S.t-a.start});
+   if(a.start+a.dur>end)pieces.push({...a,id:nid(),start:end,dur:a.start+a.dur-end});
+   return pieces});
+  S.tl.audio.push({id:nid(),mediaId:m.id,start:S.t,dur,lane,adj:{}});
+ }else{
+  const c=newPrimary(m),st=starts(),end=S.t+c.dur,next=[];
+  S.tl.primary.forEach((old,i)=>{const a=st[i],b=a+old.dur;if(b<=S.t||a>=end){next.push(old);return}
+   if(a<S.t)next.push({...old,dur:S.t-a});
+   if(b>end)next.push({...old,id:nid(),in:(old.in||0)+(end-a)*spd(old),dur:b-end});
+  });
+  let index=next.findIndex((_,i)=>next.slice(0,i+1).reduce((t,x)=>t+x.dur,0)>S.t);
+  if(index<0)index=next.length;
+  const before=next.slice(0,index).reduce((t,x)=>t+x.dur,0);
+  if(before<S.t)next.splice(index++,0,{id:nid(),gap:true,dur:S.t-before,adj:{}});
+  next.splice(index,0,c);S.tl.primary=next;S.sel={kind:'primary',id:c.id};
+ }
+ renderAll();added();toast('Overwritten at the playhead')}
 function connect(){const m=libMedia();if(!m||m.kind==='music'||m.kind==='voice')return toast('Select a video in the library');snap();const o={id:nid(),type:'pip',mediaId:m.id,start:S.t,dur:Math.min(m.dur,6),mode:'pip',x:.69,y:.06,w:.27,adj:{}};S.tl.overlays.push(o);S.sel={kind:'overlay',id:o.id};renderAll();toast('Connected as a layer (picture-in-picture)')}
 function addTitle(style){snap();const o={id:nid(),type:'title',start:S.t,dur:4,text:'New title',style,size:8,x:.08,y:style==='lower'?.74:.42,color:'#ffffff',anim:'fade',adj:{}};S.tl.overlays.push(o);S.sel={kind:'overlay',id:o.id};S.tool='text';renderAll();toast('Title added at the playhead')}
 function applyTransition(kind){const s=S.sel;if(kind==='push')return toast('Push arrives in v0.2');let c=s&&s.kind==='primary'&&S.tl.primary.find(x=>x.id===s.id);if(!c){const p=primaryAt(S.t);c=p&&p.clip}
@@ -1032,7 +1090,7 @@ const ACTIONS=[
  ['fprev','Previous frame','←',()=>frameStep(-1)],['fnext','Next frame','→',()=>frameStep(1)],['tprev','10 frames back','Shift+←',()=>frameStep(-10)],['tnext','10 frames forward','Shift+→',()=>frameStep(10)],
  ['eprev','Previous edit','↑',()=>editStep(-1)],['enext','Next edit','↓',()=>editStep(1)],['home','Project start','Home',()=>setT(0)],['end','Project end','End',()=>setT(totalDur())],
  ['split','Split at the playhead','Ctrl+B',()=>splitAt(S.t)],['delete','Remove (close the gap)','Delete',()=>delSel(false)],['gap','Replace with a gap','Shift+Delete',()=>delSel(true)],
- ['append','Append to the end','E',append],['insert','Insert at the playhead','W',insert],['connect','Connect as a layer','Q',connect],['overwrite','Overwrite at the playhead','D',()=>toast('Overwrite: planned, not implemented in the mockup')],
+ ['append','Append to the end','E',append],['insert','Insert at the playhead','W',insert],['connect','Connect as a layer','Q',connect],['overwrite','Overwrite at the playhead','D',overwrite],
  ['marker','Add marker','M',()=>{snap();S.tl.markers.push(S.t);renderTimeline();toast('Marker at '+tc(S.t))}],['duration','Change duration','Ctrl+D',()=>toast('Change duration: numeric field (planned)')],
  ['undo','Undo','Ctrl+Z',undo],['redo','Redo','Ctrl+Shift+Z',redo],
  ['tool-A','Select tool','A',()=>{S.editTool='A';renderTools()}],['tool-B','Blade tool','B',()=>{S.editTool='B';renderTools()}],['tool-T','Trim tool','T',()=>{S.editTool='T';renderTools()}],['tool-P','Position tool','P',()=>{S.editTool='P';renderTools()}],['tool-R','Range tool','R',()=>{S.editTool='R';renderTools()}],
@@ -1044,7 +1102,7 @@ const ACTIONS=[
  ['lib','Show/hide the library','Ctrl+1',()=>{const half=app.getBoundingClientRect().width<=1100;if(half)app.classList.toggle('lib-open');else app.classList.toggle('lib-hidden');setTimeout(fitStage,220)}],
  ['zin','Zoom in the timeline','Ctrl+=',()=>{S.pps=clamp(S.pps*1.3,4,80);$('#zoom').value=S.pps;renderTimeline()}],['zout','Zoom out the timeline','Ctrl+-',()=>{S.pps=clamp(S.pps/1.3,4,80);$('#zoom').value=S.pps;renderTimeline()}],
  ['fit','Fit the project to the width','Shift+Z',()=>{S.pps=clamp((tlScroll.clientWidth-LP-30)/totalDur(),4,80);$('#zoom').value=S.pps;renderTimeline();tlScroll.scrollLeft=0}],
- ['focus','Cycle focus between areas','Tab',()=>{const o=['lib','viewer','timeline'];S.focus=o[(o.indexOf(S.focus)+1)%3];renderFocus()}],
+ ['focus','Cycle focus between areas','',()=>{const o=['lib','viewer','timeline'];S.focus=o[(o.indexOf(S.focus)+1)%3];renderFocus()}],
  ['import','Import media','Ctrl+I',()=>toast('Import: system file picker (xdg-desktop-portal)')],
  ['export','Export','Ctrl+E',startExport],
  ['full','Full-screen viewer','Ctrl+Shift+F',()=>{app.classList.toggle('viewer-full');setTimeout(fitStage,30)}],
@@ -1062,11 +1120,12 @@ function quickSpeed(f){const o=S.sel&&findAny(S.sel.id);if(!o||S.sel.kind!=='pri
 function setAspect(a){S.aspect=a;const res={'16:9':'1920×1080','9:16':'1080×1920','1:1':'1080×1080'}[a];$('#projMeta').textContent=`${a} · ${res} · 30 fps`;fitStage();toast('Format: '+a)}
 const KEYMAP={'Space':'play','J':'rev','K':'pause','L':'fwd','/':'playsel','ArrowLeft':'fprev','ArrowRight':'fnext','Shift+ArrowLeft':'tprev','Shift+ArrowRight':'tnext','ArrowUp':'eprev','ArrowDown':'enext','Home':'home','End':'end',
  'Ctrl+B':'split','Delete':'delete','Backspace':'delete','Shift+Delete':'gap','Shift+Backspace':'gap','E':'append','W':'insert','Q':'connect','D':'overwrite','M':'marker','Ctrl+D':'duration','Ctrl+Z':'undo','Ctrl+Shift+Z':'redo','Ctrl+Y':'redo',
- 'A':'tool-A','B':'tool-B','T':'tool-T','P':'tool-P','R':'tool-R','N':'snap','S':'skim','F':'fav','U':'unrate','Ctrl+F':'search','Ctrl+1':'lib','Ctrl+=':'zin','Ctrl++':'zin','Ctrl+-':'zout','Shift+Z':'fit','Tab':'focus','Ctrl+I':'import','Ctrl+E':'export','Ctrl+Shift+F':'full','Ctrl+K':'palette'};
+ 'A':'tool-A','B':'tool-B','T':'tool-T','P':'tool-P','R':'tool-R','N':'snap','S':'skim','F':'fav','U':'unrate','Ctrl+F':'search','Ctrl+1':'lib','Ctrl+=':'zin','Ctrl++':'zin','Ctrl+-':'zout','Shift+Z':'fit','Ctrl+I':'import','Ctrl+E':'export','Ctrl+Shift+F':'full','Ctrl+K':'palette'};
 app.addEventListener('keydown',e=>{
- if(S.screen!=='edit')return;
+ if(S.screen!=='edit'||!$('#discardScrim').hidden||!$('#fmtScrim').hidden||!$('#palScrim').hidden)return;
  const tag=e.target.tagName;if(tag==='INPUT'&&e.target.type!=='range'||tag==='SELECT')return;
  if(e.target.type==='range'&&e.key.startsWith('Arrow'))return;
+ if((tag==='BUTTON'||e.target.getAttribute('role')==='button')&&(e.key===' '||e.key==='Enter'))return;
  if(e.key==='Escape'){$('.cuted')&&$('.cuted').remove();if(app.classList.contains('viewer-full')){app.classList.remove('viewer-full');setTimeout(fitStage,30)}else if(S.tool){S.tool=null;renderAdj();drawViewer()}else{S.sel=null;renderAll()}return}
  let k=e.key===' '?'Space':e.key.length===1?e.key.toUpperCase():e.key;if(k==='='&&e.shiftKey)k='+';
  const combo=(e.ctrlKey||e.metaKey?'Ctrl+':'')+(e.shiftKey&&!['+','/'].includes(k)?'Shift+':'')+k;
@@ -1087,21 +1146,30 @@ $('#palScrim').addEventListener('pointerdown',e=>{if(e.target.id==='palScrim')cl
 let toastT;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),2200)}
 function status(m){$('#status').textContent=m||''}
 function renderFocus(){app.dataset.focus=S.focus}
-function startExport(){const p=$('#exportProg');if(p.classList.contains('on'))return;p.classList.add('on');const bar=p.querySelector('i');let v=0;toast('Exporting in the background · hardware H.264 (VA-API) · you can keep editing');const iv=setInterval(()=>{v+=4+Math.random()*6;bar.style.width=Math.min(100,v)+'%';if(v>=100){clearInterval(iv);setTimeout(()=>{p.classList.remove('on');bar.style.width='0';toast('Exported: ~/Videos/OmaMovie/'+$('#projName').textContent+'.mp4 · notification sent')},300)}},180)}
+function startExport(){toast('Export is not available yet. This session cannot be saved either.')}
 
 /* ---------- projects screen ---------- */
-const RECENT=[{name:'Hyprland in 5 minutes',meta:'16:9 · 0:51 · edited 2 h ago',fmt:'16:9',m:'r1'},{name:'Weekend trail',meta:'16:9 · 3:12 · edited yesterday',fmt:'16:9',m:'v2'},{name:'Short #12',meta:'9:16 · 0:28 · edited 3 days ago',fmt:'9:16',m:'v1'}];
+const SAMPLE={name:'Hyprland in 5 minutes',meta:'Sample edit · 16:9 · 0:51',fmt:'16:9',m:'r1'};
 function renderProjects(){
- $('#recentGrid').innerHTML=`<button class="newcard" id="newCard">${ico('plus',22)}<span>New project</span></button>`+RECENT.map((r,i)=>`<button class="pj" data-rp="${i}"><div class="th"><canvas width="320" height="180"></canvas><span class="fmt">${r.fmt}</span></div><b>${r.name}</b><small>${r.meta}</small></button>`).join('');
+ $('#sessionName').textContent=S.tl?$('#projName').textContent:'No open project';
+ $('#resumeSession').hidden=!S.tl;
+ $('#recentGrid').innerHTML=`<button class="newcard" id="newCard">${ico('plus',22)}<span>New project</span></button><button class="pj" data-sample="true"><div class="th"><canvas width="320" height="180"></canvas><span class="fmt">${SAMPLE.fmt}</span></div><b>Explore sample edit</b><small>${SAMPLE.meta}</small></button>`;
  $('#recGrid').innerHTML=M.filter(m=>m.src==='recordings').map(m=>`<div class="pj" data-rec="${m.id}"><div class="th"><canvas width="320" height="180"></canvas><span class="fmt">${mmss(m.dur)}</span></div><b>${m.when}</b><small>${m.codec.split(' · ').slice(0,2).join(' · ')}</small><button class="act" data-edit="${m.id}">Edit</button></div>`).join('');
- $$('#recentGrid .pj').forEach(el=>{const r=RECENT[+el.dataset.rp];const c=el.querySelector('canvas');drawMedia(c.getContext('2d'),c.width,c.height,mediaById(r.m),20)});
+ $$('#recentGrid .pj').forEach(el=>{const c=el.querySelector('canvas');drawMedia(c.getContext('2d'),c.width,c.height,mediaById(SAMPLE.m),20)});
  $$('#recGrid .pj').forEach(el=>{const c=el.querySelector('canvas');drawMedia(c.getContext('2d'),c.width,c.height,mediaById(el.dataset.rec),30)});
 }
+function hasWork(){return !!S.tl&&(S.tl.primary.length+S.tl.overlays.length+S.tl.audio.length+S.tl.markers.length>0||S.hist.length>0)}
+let discardNext=null;
+function afterDiscard(action){if(!hasWork())return action();discardNext=action;$('#discardScrim').hidden=false;$('#discardCancel').focus()}
+$('#discardCancel').onclick=()=>{$('#discardScrim').hidden=true;discardNext=null;app.focus()};
+$('#discardOk').onclick=()=>{const action=discardNext;discardNext=null;$('#discardScrim').hidden=true;action&&action()};
+window.addEventListener('beforeunload',e=>{if(hasWork()){e.preventDefault();e.returnValue=''}});
 $('#scrProjects').addEventListener('click',e=>{
- if(e.target.closest('#newCard')||e.target.closest('#btnNew'))return openFmt();
+ if(e.target.closest('#resumeSession'))return go('edit');
+ if(e.target.closest('#newCard')||e.target.closest('#btnNew'))return afterDiscard(openFmt);
  if(e.target.closest('#btnImportP'))return toast('Import: system file picker (xdg-desktop-portal)');
- const ed=e.target.closest('[data-edit]');if(ed){const m=mediaById(ed.dataset.edit);S.tl=recordingTimeline(m.id);S.hist=[];S.fut=[];S.aspect='16:9';$('#projName').textContent='Recording '+m.when.toLowerCase();m.isNew=false;S.source='recordings';go('edit');toast('Project created with the recording on the timeline');return}
- const rp=e.target.closest('[data-rp]');if(rp){const r=RECENT[+rp.dataset.rp];S.tl=demoTimeline();S.hist=[];S.fut=[];S.aspect=r.fmt;$('#projName').textContent=r.name;go('edit')}
+ const ed=e.target.closest('[data-edit]');if(ed)return afterDiscard(()=>{const m=mediaById(ed.dataset.edit);S.tl=recordingTimeline(m.id);S.hist=[];S.fut=[];S.aspect='16:9';$('#projName').textContent='Recording '+m.when.toLowerCase();m.isNew=false;S.source='recordings';go('edit');toast('Project created with the recording on the timeline')});
+ if(e.target.closest('[data-sample]'))return afterDiscard(()=>{S.tl=demoTimeline();S.hist=[];S.fut=[];S.aspect=SAMPLE.fmt;$('#projName').textContent=SAMPLE.name;go('edit')});
 });
 let fmtSel='16:9';
 function openFmt(){fmtSel='16:9';$('#fmtScrim').hidden=false;renderFmt()}
@@ -1124,6 +1192,7 @@ $('#splitter').addEventListener('pointerdown',e=>{const body=$('#editBody').getB
 
 /* buttons */
 $('#btnBack').onclick=()=>go('projects');$('#btnUndo').onclick=undo;$('#btnRedo').onclick=redo;$('#btnPal').onclick=openPal;$('#btnImport').onclick=()=>act('import');$('#btnExport').onclick=startExport;
+$('#addSelected').onclick=append;$('#insertSelected').onclick=insert;$('#overwriteSelected').onclick=overwrite;
 $('#btnPlay').onclick=()=>act('play');$('#btnRew').onclick=()=>jkl('J');$('#btnFf').onclick=()=>jkl('L');$('#btnFull').onclick=()=>act('full');$('#btnFit').onclick=()=>act('fit');
 $('#tglSnap').onclick=()=>act('snap');$('#tglSkim').onclick=()=>act('skim');
 $('#viewer').addEventListener('pointerdown',e=>{S.focus='viewer';renderFocus();if(S.tool==='color'&&e.target.tagName==='CANVAS'){const o=barFor().obj;if(o){snap();o.adj.color={...(o.adj.color||{}),temp:0};renderAll();toast('Eyedropper: white balance neutralized')}}});
@@ -1144,8 +1213,10 @@ renderTools();
 let saved=null;try{saved=localStorage.getItem('omamovie-mock-theme')}catch(_){}
 const dark=document.documentElement.dataset.theme?document.documentElement.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
 const initial=saved&&TH[saved]?saved:(dark?'catppuccin':'catppuccin-latte');ts.value=initial;
-S.tl=null;applyTheme(initial);go('projects');
+S.tl=null;applyTheme(initial);go(new URLSearchParams(location.search).get('screen')==='edit'?'edit':'projects');
 new ResizeObserver(()=>{fitStage();renderMinimap();updateMMView()}).observe($('#viewer'));
-new ResizeObserver(()=>{if(S.screen==='edit'){renderMinimap()}}).observe(app);
+new ResizeObserver(()=>{if(S.screen==='edit'){fitStage();renderMinimap()}}).observe(app);
 })();
 </script>
+</body>
+</html>

@@ -3,6 +3,7 @@
 #include "oma/base/error.hpp"
 #include "oma/base/rational.hpp"
 #include "oma/compositor/geometry.hpp"
+#include "oma/compositor/grade.hpp"
 
 #include <array>
 #include <cstddef>
@@ -86,6 +87,8 @@ struct Layer {
     // The fraction of the output width the layer shows, from the left (a wipe transition); the
     // edge is anti-aliased over one pixel. 1 shows the whole layer.
     double reveal = 1.0;
+    // CDL, curves and LUT after the look (grade.hpp, ADR-0012).
+    Grade grade;
 };
 
 struct RenderGraph {

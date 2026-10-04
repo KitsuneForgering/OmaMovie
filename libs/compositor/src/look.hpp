@@ -33,10 +33,17 @@ struct Look {
 
 [[nodiscard]] Look make_look(const ColorAdjust& color, const Filter& filter);
 
-// Blur and sharpen (Layer::sharpness): a separable gaussian over the source, run as a horizontal
-// then a vertical pass in linear light, its taps clamped to the cropped source like the bilinear
-// sampling. Blur shows the blurred image; sharpen adds amount * (original - blurred).
-inline constexpr int kMaxBlurRadius = 64;
+// Blur and sharpen (Layer::sharpness). The cropped source is linearized once and reduced by
+// `factor` (a factor x factor box average per texel), then a separable gaussian runs across and
+// down on the reduced image, its taps clamped to it; the composite reads it back bilinearly.
+// The gaussian's sigma shrinks with the factor, so the cost no longer grows with the blur radius
+// (Docs/Research/gpu-effects.md). Blur shows the blurred image; sharpen adds
+// amount * (original - blurred).
+// The factor is at least the source pixels per output pixel (a 2160p source shown at 1080p
+// blurs at 1080p), else the reduced sigma stays below 2 * kReducedSigma, so 3 sigma fits the
+// radius.
+inline constexpr double kReducedSigma = 3.0;
+inline constexpr int kMaxBlurRadius = 18;
 
 enum class DetailMode : std::uint8_t {
     None = 0,
@@ -48,9 +55,11 @@ struct Detail {
     DetailMode mode = DetailMode::None;
     double amount = 0.0;                              // sharpen strength
     int radius = 0;                                   // taps on each side of the center
+    int factor = 1;                                   // source texels per reduced texel, per axis
     std::array<double, kMaxBlurRadius + 1> weights{}; // center first, normalized over 2r + 1 taps
 };
 
-[[nodiscard]] Detail make_detail(double sharpness, std::uint32_t source_height);
+[[nodiscard]] Detail make_detail(double sharpness, std::uint32_t source_height,
+                                 double source_per_output);
 
 } // namespace oma::compositor

@@ -9,6 +9,7 @@
 #include <QImage>
 
 #include <cstddef>
+#include <deque>
 #include <list>
 #include <memory>
 #include <optional>
@@ -33,7 +34,9 @@ class FrameSource {
 public:
     // The frame whose PTS is the last one <= `t` (the first frame when `t` precedes it).
     // Moving forward a little reuses the open decoder without seeking, so playback decodes
-    // each frame once.
+    // each frame once. Moving back a little reads the frames decoded last; past them, the
+    // decoder seeks a chunk earlier and decodes forward to `t`, keeping that chunk, so reverse
+    // playback decodes each group of pictures about once instead of once per frame shown.
     [[nodiscard]] oma::Result<Picture> picture_at(const std::string& path, const oma::RationalTime& t);
 
     // The same frame converted to RGBA8 on the CPU (thumbnails, not the viewer).
@@ -46,14 +49,26 @@ private:
         std::shared_ptr<oma::media::VideoFrame> current; // last frame returned (pts <= target)
         std::optional<oma::media::VideoFrame> ahead;     // the frame after it, if decoded
         bool ended = false;                              // no frame after `ahead`/`current`
+        // The frames decoded since the last seek, in order, `current` last; trimmed from the
+        // front to the byte budget shared by all streams, and to kStepBackFrames unless the
+        // stream is stepping back (a backward chunk), so forward playback holds little memory.
+        std::deque<std::shared_ptr<oma::media::VideoFrame>> history;
+        bool backward = false;
     };
 
     // A decoder for `path` that reaches `t` cheapest: one that can decode forward to it, else a
     // new one while the file has fewer than kStreamsPerFile, else the least recently used.
     [[nodiscard]] oma::Result<Stream*> stream(const std::string& path, const oma::RationalTime& t);
     [[nodiscard]] static bool reaches(const Stream& s, const oma::RationalTime& t);
-    [[nodiscard]] static oma::Result<void> seek(Stream& s, const oma::RationalTime& t);
-    [[nodiscard]] static oma::Result<void> advance(Stream& s, const oma::RationalTime& t);
+    [[nodiscard]] oma::Result<void> seek(Stream& s, const oma::RationalTime& t);
+    [[nodiscard]] oma::Result<void> seek_to(Stream& s, const oma::RationalTime& t);
+    [[nodiscard]] oma::Result<void> advance(Stream& s, const oma::RationalTime& t);
+    // `frame` becomes the stream's current frame and the newest in its history.
+    void record(Stream& s, std::shared_ptr<oma::media::VideoFrame> frame);
+    // A frame already decoded that is the one on screen at `t` (a later frame follows it).
+    [[nodiscard]] std::shared_ptr<oma::media::VideoFrame> remembered(const std::string& path,
+                                                                     const oma::RationalTime& t) const;
+    [[nodiscard]] Picture picture_of(const Stream& s, std::shared_ptr<oma::media::VideoFrame> frame) const;
 
     // A few open decoders, most recently used first: cutting between clips of the same files
     // keeps their decoders warm, and two per file let a transition between two parts of one
@@ -62,4 +77,9 @@ private:
     static constexpr std::size_t kMaxStreams = 6;
     static constexpr std::size_t kStreamsPerFile = 2;
     std::list<Stream> streams_;
+    // Decoded frames kept for stepping back, over all streams. ponytail: sized from the luma
+    // plane times 1.5 (4:2:0), so 4:4:4 sources keep up to twice the budget.
+    static constexpr std::size_t kHistoryBytes = std::size_t{384} << 20;
+    static constexpr std::size_t kStepBackFrames = 8;
+    std::size_t history_bytes_ = 0;
 };

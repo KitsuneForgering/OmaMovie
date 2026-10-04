@@ -120,7 +120,7 @@ Look make_look(const ColorAdjust& color, const Filter& filter) {
     return look;
 }
 
-Detail make_detail(double sharpness, std::uint32_t source_height) {
+Detail make_detail(double sharpness, std::uint32_t source_height, double source_per_output) {
     Detail d;
     if (sharpness == 0.0 || source_height == 0) {
         return d;
@@ -136,7 +136,20 @@ Detail make_detail(double sharpness, std::uint32_t source_height) {
         sigma = std::max(0.8, 1.2 * scale);
         d.amount = 1.5 * sharpness;
     }
-    sigma = std::clamp(sigma, 0.3, static_cast<double>(kMaxBlurRadius) / 3.0);
+    // A blur of 2% of the height per unit of strength, at any resolution: the reduction absorbs
+    // what used to be clamped (a 2160p source got half the relative blur of a 1080p one).
+    sigma = std::max(sigma, 0.3);
+    d.factor = std::max({1, static_cast<int>(sigma / kReducedSigma),
+                         static_cast<int>(std::min(source_per_output, 64.0))});
+    if (d.factor > 1) {
+        // The box average (variance (f^2 - 1) / 12 source px^2) and the bilinear read back (a
+        // tent, 1/6 reduced px^2) already blur; the gaussian adds the rest of the variance, or
+        // next to nothing when a large display reduction already blurs more than asked.
+        const double f = d.factor;
+        const double reduced = sigma / f;
+        const double rest = (reduced * reduced) - ((1.0 - (1.0 / (f * f))) / 12.0) - (1.0 / 6.0);
+        sigma = std::sqrt(std::max(rest, 0.09));
+    }
     d.radius = std::min(kMaxBlurRadius, static_cast<int>(std::ceil(3.0 * sigma)));
     double total = 0.0;
     for (int i = 0; i <= d.radius; ++i) {

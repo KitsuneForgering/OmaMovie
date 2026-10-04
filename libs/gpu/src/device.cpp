@@ -32,7 +32,6 @@ Error vk_error(vk::Result r, std::string what) {
 // Extensions OmaMovie enables when the device has them. Interop and synchronization come first;
 // video extensions are only present on drivers that expose Vulkan Video (Docs/spikes/S1-*.md).
 constexpr std::array kFeaturelessExtensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
     VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
     VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
@@ -198,7 +197,15 @@ Result<std::unique_ptr<Device>> Device::create(const DeviceOptions& options) {
     for (const char* name : kFeaturelessExtensions) {
         want(name);
     }
-    want(VK_KHR_INTERNALLY_SYNCHRONIZED_QUEUES_EXTENSION_NAME);
+    // Swapchains need VK_KHR_surface on the instance; a headless device has neither.
+    if (std::ranges::contains(options.instance_extensions, VK_KHR_SURFACE_EXTENSION_NAME)) {
+        want(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    }
+    // FFmpeg and libplacebo ask vkGetDeviceQueue2 for internally synchronized queues whenever
+    // this extension is enabled, so it is enabled only when the queues are created that way.
+    if (options.internally_synchronized_queues) {
+        want(VK_KHR_INTERNALLY_SYNCHRONIZED_QUEUES_EXTENSION_NAME);
+    }
     want(VK_KHR_VIDEO_MAINTENANCE_1_EXTENSION_NAME);
     want(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
     for (const auto& s : impl->extension_storage) {

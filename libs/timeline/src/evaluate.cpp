@@ -3,24 +3,45 @@
 #include "mutation.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <functional>
+#include <iterator>
 #include <limits>
 
 namespace oma::timeline {
+
+Result<RationalTime> source_time(const Timeline& tl, const Clip& c, std::int64_t ticks) {
+    auto offset = c.time_map.media_offset(ticks - c.start_ticks(), tl.timebase());
+    if (!offset) {
+        return std::unexpected(offset.error());
+    }
+    return detail::add_exact(c.source_in, *offset);
+}
 
 namespace {
 
 // The media time at `ticks` inside a clip, rounded down to the media's own timebase.
 Result<RationalTime> media_time(const Timeline& tl, const Clip& c, const MediaInfo& m,
                                 std::int64_t ticks) {
-    auto offset = c.time_map.media_offset(ticks - c.start_ticks(), tl.timebase());
-    if (!offset) {
-        return std::unexpected(offset.error());
-    }
-    auto exact = detail::add_exact(c.source_in, *offset);
+    auto exact = source_time(tl, c, ticks);
     if (!exact) {
         return std::unexpected(exact.error());
     }
     return exact->rescaled(m.start.timebase(), Rounding::Floor);
+}
+
+// The clip's properties at `ticks`, keyframes evaluated (VideoLayer::video).
+Result<VideoProperties> video_at(const Timeline& tl, const Clip& c, std::int64_t ticks) {
+    VideoProperties v = c.video;
+    if (!v.transform_keys.empty()) {
+        auto source = source_time(tl, c, ticks);
+        if (!source) {
+            return std::unexpected(source.error());
+        }
+        v.transform = transform_at(c.video, *source);
+        v.transform_keys.clear();
+    }
+    return v;
 }
 
 // Ticks of sequence time the media past (or before) a clip lasts at the clip's speed, rounded
@@ -122,6 +143,45 @@ std::optional<TransitionWindow> transition_window(const Timeline& timeline, cons
                             .half = half};
 }
 
+Transform transform_at(const VideoProperties& video, const RationalTime& source) {
+    const auto& keys = video.transform_keys;
+    if (keys.empty()) {
+        return video.transform;
+    }
+    // O(log k): the first key after `source`.
+    const auto next = std::ranges::upper_bound(keys, source, std::less{}, &TransformKey::at);
+    if (next == keys.begin()) {
+        return keys.front().value;
+    }
+    if (next == keys.end()) {
+        return keys.back().value;
+    }
+    const TransformKey& a = *std::prev(next);
+    const TransformKey& b = *next;
+    if (a.interpolation == Interpolation::Hold) {
+        return a.value;
+    }
+    // A display-derived fraction; the key times themselves stay exact.
+    const double span = b.at.seconds_approx() - a.at.seconds_approx();
+    double t = std::clamp((source.seconds_approx() - a.at.seconds_approx()) / span, 0.0, 1.0);
+    if (a.interpolation == Interpolation::Ease) {
+        t = t * t * (3.0 - (2.0 * t));
+    }
+    const auto lerp = [t](double x, double y) {
+        return x + ((y - x) * t);
+    };
+    const auto scale = [&](double x, double y) {
+        return x * y > 0.0 ? x * std::pow(y / x, t) : lerp(x, y);
+    };
+    const Transform& x = a.value;
+    const Transform& y = b.value;
+    return {.offset_x = lerp(x.offset_x, y.offset_x),
+            .offset_y = lerp(x.offset_y, y.offset_y),
+            .scale_x = scale(x.scale_x, y.scale_x),
+            .scale_y = scale(x.scale_y, y.scale_y),
+            .rotation = lerp(x.rotation, y.rotation)};
+}
+
 Result<Composition> evaluate(const Timeline& timeline, const RationalTime& at) {
     auto ticks = timeline.to_ticks(at);
     if (!ticks) {
@@ -156,8 +216,12 @@ Result<Composition> evaluate(const Timeline& timeline, const RationalTime& at) {
                 }
             }
             if (!window) {
+                auto video = video_at(timeline, *c, *ticks);
+                if (!video) {
+                    return std::unexpected(video.error());
+                }
                 out.video.push_back(VideoLayer{
-                    .clip = c->id, .media = c->media, .media_time = *t, .video = c->video});
+                    .clip = c->id, .media = c->media, .media_time = *t, .video = *video});
             } else {
                 const Mix mix = mix_of(window->kind, window->progress(*ticks));
                 for (const Clip* layer : {window->from, window->to}) {
@@ -174,10 +238,14 @@ Result<Composition> evaluate(const Timeline& timeline, const RationalTime& at) {
                     if (!lt) {
                         return std::unexpected(lt.error());
                     }
+                    auto video = video_at(timeline, *layer, *ticks);
+                    if (!video) {
+                        return std::unexpected(video.error());
+                    }
                     out.video.push_back(VideoLayer{.clip = layer->id,
                                                    .media = layer->media,
                                                    .media_time = *lt,
-                                                   .video = layer->video,
+                                                   .video = *video,
                                                    .opacity = opacity,
                                                    .reveal = incoming ? mix.reveal : 1.0});
                 }

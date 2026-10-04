@@ -104,7 +104,7 @@ private:
 
 class InsertClip final : public Command {
 public:
-    InsertClip(TrackId track, Clip clip) : track_(track), clip_(clip) {}
+    InsertClip(TrackId track, Clip clip) : track_(track), clip_(std::move(clip)) {}
 
     [[nodiscard]] std::string_view name() const noexcept override { return "Insert Clip"; }
 
@@ -177,7 +177,7 @@ private:
 
 class ReplaceClip final : public Command {
 public:
-    explicit ReplaceClip(Clip clip) : clip_(clip) {}
+    explicit ReplaceClip(Clip clip) : clip_(std::move(clip)) {}
 
     [[nodiscard]] std::string_view name() const noexcept override { return "Change Clip"; }
 
@@ -437,7 +437,7 @@ std::unique_ptr<Command> make_planned(std::string name, Planner planner) {
 }
 
 std::unique_ptr<Command> insert_clip(TrackId track, Clip clip) {
-    return std::make_unique<InsertClip>(track, clip);
+    return std::make_unique<InsertClip>(track, std::move(clip));
 }
 
 std::unique_ptr<Command> erase_clip(ClipId id) {
@@ -445,7 +445,7 @@ std::unique_ptr<Command> erase_clip(ClipId id) {
 }
 
 std::unique_ptr<Command> replace_clip(Clip clip) {
-    return std::make_unique<ReplaceClip>(clip);
+    return std::make_unique<ReplaceClip>(std::move(clip));
 }
 
 std::unique_ptr<Command> shift_clips(TrackId track, std::int64_t from, std::int64_t delta) {

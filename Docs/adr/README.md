@@ -13,11 +13,12 @@ one as superseded.
 | [0004](0004-gpu-frames-sync-decode-policy.md) | GPU frame abstraction, synchronization and decode policy | Accepted |
 | [0005](0005-qt-vulkan-interop.md) | Qt Quick ↔ Vulkan compositor integration | Accepted (S4 import diagnostic; on-screen handoff pending) |
 | 0006 | Working color space and libplacebo | Pending (M1) |
-| 0007 | Native project format | Pending (M7) |
+| [0007](0007-project-format.md) | Native project format: versioned JSON, simdjson | Accepted |
 | 0008 | ProjectIR and preservation of external data | Pending (M9) |
 | 0009 | Cache strategy | Pending (M7) |
 | 0010 | Canvas coordinates | Pending (M8) |
 | [0011](0011-transitions.md) | Transitions between clips | Accepted |
+| [0012](0012-color-grading.md) | Color grading: CDL, curves and 3D LUTs | Accepted |
 
 Template: copy the structure of an existing ADR (Context, Decision, Alternatives, Consequences).
 

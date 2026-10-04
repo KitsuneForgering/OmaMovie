@@ -24,6 +24,8 @@ struct VideoLayer {
     // The media time to show: the clip's exact source time rounded down to the media grid
     // (the frame on screen at t is the last one with PTS <= t).
     RationalTime media_time;
+    // The clip's properties at this instant: keyframed values are evaluated into their plain
+    // fields (transform) and the keys are left out.
     VideoProperties video;
     // Set by a transition: a factor on the clip's opacity, and the fraction of the output width
     // the layer shows, from the left (a wipe). 1 and 1 outside transitions.
@@ -65,6 +67,16 @@ struct TransitionWindow {
 // clip ends where it starts, or there is no media to spare.
 [[nodiscard]] std::optional<TransitionWindow>
 transition_window(const Timeline& timeline, const Track& track, std::size_t index);
+
+// The exact source time (Clip::source_in's terms, not rounded to the media) at sequence `ticks`
+// of clip `c`; ticks outside the clip extrapolate at its speed.
+[[nodiscard]] Result<RationalTime> source_time(const Timeline& timeline, const Clip& c,
+                                               std::int64_t ticks);
+
+// The transform of `video` at exact source time `source`: its transform without keys, the first
+// or last key's value outside them, else the interpolation from the key before. Scale moves
+// geometrically (a steady zoom) when both keys have the same sign, linearly otherwise.
+[[nodiscard]] Transform transform_at(const VideoProperties& video, const RationalTime& source);
 
 // Hidden video tracks contribute no layers, muted tracks and clips no audio. Inside a
 // transition a video track contributes both clips, outgoing first, with their transition

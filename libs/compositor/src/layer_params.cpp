@@ -21,14 +21,54 @@ Error unsupported(std::string message) {
     return {ErrorCode::Unsupported, Category::Compositor, std::move(message)};
 }
 
+void prepare_grade(const Grade& g, LayerParams& p) {
+    std::int32_t stages = 0;
+    if (!g.cdl.identity()) {
+        stages |= kGradeCdl;
+        for (std::size_t i = 0; i < 3; ++i) {
+            p.cdl_slope[i] = static_cast<float>(g.cdl.slope[i]);
+            p.cdl_offset[i] = static_cast<float>(g.cdl.offset[i]);
+            p.cdl_power[i] = static_cast<float>(g.cdl.power[i]);
+        }
+        p.cdl_slope[3] = static_cast<float>(g.cdl.saturation);
+    }
+    if (!g.curves.identity()) {
+        stages |= kGradeCurves;
+        const std::array<const std::vector<CurvePoint>*, 4> curves{&g.curves.master, &g.curves.red,
+                                                                   &g.curves.green, &g.curves.blue};
+        for (std::size_t c = 0; c < curves.size(); ++c) {
+            const auto& points = *curves[c];
+            const auto tangents = curve_tangents(points);
+            p.curve_count[c] = static_cast<std::int32_t>(points.size());
+            for (std::size_t i = 0; i < points.size(); ++i) {
+                p.curve[(c * kMaxCurvePoints) + i] = {static_cast<float>(points[i].x),
+                                                      static_cast<float>(points[i].y),
+                                                      static_cast<float>(tangents[i]), 0.0F};
+            }
+        }
+    }
+    if (g.lut != nullptr && g.lut_amount > 0.0) {
+        stages |= kGradeLut;
+        const Lut3d& lut = *g.lut;
+        p.grade[1] = static_cast<std::int32_t>(lut.size);
+        p.lut_amount[0] = static_cast<float>(g.lut_amount);
+        for (std::size_t i = 0; i < 3; ++i) {
+            p.lut_min[i] = lut.domain_min[i];
+            p.lut_scale[i] =
+                static_cast<float>(lut.size - 1) / (lut.domain_max[i] - lut.domain_min[i]);
+        }
+    }
+    p.grade[0] = stages;
+}
+
 } // namespace
 
 Result<PreparedLayer> prepare_layer(const Layer& layer, const LayerInput& input,
                                     const media::SampleLayout& layout, std::uint32_t source_width,
                                     std::uint32_t source_height, std::uint32_t out_width,
                                     std::uint32_t out_height) {
-    if (!layout.yuv) {
-        return std::unexpected(unsupported("RGB sources are not supported yet"));
+    if (!layout.yuv && layout.planes != 3) {
+        return std::unexpected(unsupported("only planar GBR sources are supported for RGB"));
     }
     if (layout.planes < 2 || layout.planes > 3 ||
         (layout.container_bits != 8 && layout.container_bits != 16)) {
@@ -58,11 +98,25 @@ Result<PreparedLayer> prepare_layer(const Layer& layer, const LayerInput& input,
               static_cast<float>(h * (1.0 - layer.crop.bottom))};
 
     const int height = static_cast<int>(source_height);
-    const YuvToRgb yuv = yuv_to_rgb(input.color, layout.bit_depth, height);
-    p.yuv_r = row(yuv.matrix, 0, yuv.offset[0]);
-    p.yuv_g = row(yuv.matrix, 1, yuv.offset[1]);
-    p.yuv_b = row(yuv.matrix, 2, yuv.offset[2]);
-    const Mat3 gamut = primaries_to_bt709(input.color.primaries, height);
+    if (layout.yuv) {
+        const YuvToRgb yuv = yuv_to_rgb(input.color, layout.bit_depth, height);
+        p.yuv_r = row(yuv.matrix, 0, yuv.offset[0]);
+        p.yuv_g = row(yuv.matrix, 1, yuv.offset[1]);
+        p.yuv_b = row(yuv.matrix, 2, yuv.offset[2]);
+    } else {
+        // Planar GBR (still images, RGB codecs): the planes hold G, B, R at full range, so the
+        // "YUV" matrix is a permutation and the shader path stays the same.
+        p.yuv_r = {0.0F, 0.0F, 1.0F, 0.0F};
+        p.yuv_g = {1.0F, 0.0F, 0.0F, 0.0F};
+        p.yuv_b = {0.0F, 1.0F, 0.0F, 0.0F};
+    }
+    // RGB without tagged primaries is sRGB (BT.709 primaries) at any size; untagged video
+    // follows the resolution rule in primaries_to_bt709.
+    constexpr std::uint8_t kUnspecified = 2;
+    constexpr std::uint8_t kBt709 = 1;
+    const Mat3 gamut = primaries_to_bt709(
+        !layout.yuv && input.color.primaries == kUnspecified ? kBt709 : input.color.primaries,
+        height);
     p.gamut_r = row(gamut, 0);
     p.gamut_g = row(gamut, 1);
     p.gamut_b = row(gamut, 2);
@@ -78,10 +132,14 @@ Result<PreparedLayer> prepare_layer(const Layer& layer, const LayerInput& input,
                            : -1.0F;
     p.misc = {layer.opacity, static_cast<float>(container_max / sample_max), reveal_edge, 0.0F};
 
+    // RGB without a tagged transfer is sRGB (PNG, JPEG); untagged video stays BT.1886.
+    constexpr std::uint8_t kSrgb = 13;
+    const std::uint8_t transfer =
+        !layout.yuv && input.color.transfer == kUnspecified ? kSrgb : input.color.transfer;
     p.mode = {static_cast<std::int32_t>(layout.interleaved_chroma ? ChromaMode::Interleaved
                                                                   : ChromaMode::Planar),
               layout.chroma_shift_x, layout.chroma_shift_y,
-              static_cast<std::int32_t>(resolve_transfer(input.color.transfer))};
+              static_cast<std::int32_t>(resolve_transfer(transfer))};
     p.extra = {static_cast<std::int32_t>(layer.blend), static_cast<std::int32_t>(source_width),
                static_cast<std::int32_t>(source_height), 0};
     p.region = {static_cast<std::int32_t>((*region)[0]), static_cast<std::int32_t>((*region)[1]),
@@ -110,12 +168,16 @@ Result<PreparedLayer> prepare_layer(const Layer& layer, const LayerInput& input,
         p.vignette = {static_cast<float>(look.vignette), static_cast<float>(cx),
                       static_cast<float>(cy), static_cast<float>(1.0 / std::max(corner, 1.0))};
     }
-    const Detail detail = make_detail(layer.sharpness, source_height);
+    // Source pixels per output pixel, from the area scale of the output -> source mapping.
+    const double source_per_output =
+        std::sqrt(std::abs((inverse->a * inverse->d) - (inverse->b * inverse->c)));
+    const Detail detail = make_detail(layer.sharpness, source_height, source_per_output);
     p.detail = {static_cast<float>(detail.mode), static_cast<float>(detail.amount),
-                static_cast<float>(detail.radius), 0.0F};
+                static_cast<float>(detail.radius), static_cast<float>(detail.factor)};
     for (std::size_t i = 0; i < detail.weights.size(); ++i) {
         p.weights[i / 4][i % 4] = static_cast<float>(detail.weights[i]);
     }
+    prepare_grade(layer.grade, p);
     return out;
 }
 

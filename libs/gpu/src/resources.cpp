@@ -2,6 +2,7 @@
 
 #include "oma/gpu/device.hpp"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <utility>
@@ -164,21 +165,22 @@ Result<Image> Image::create(const Device& device, const ImageDesc& desc) {
     Image img;
     img.device_ = device.device();
     img.desc_ = desc;
-    const VkImageCreateInfo info{.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-                                 .pNext = nullptr,
-                                 .flags = 0,
-                                 .imageType = VK_IMAGE_TYPE_2D,
-                                 .format = desc.format,
-                                 .extent = {.width = desc.width, .height = desc.height, .depth = 1},
-                                 .mipLevels = 1,
-                                 .arrayLayers = 1,
-                                 .samples = VK_SAMPLE_COUNT_1_BIT,
-                                 .tiling = VK_IMAGE_TILING_OPTIMAL,
-                                 .usage = desc.usage,
-                                 .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-                                 .queueFamilyIndexCount = 0,
-                                 .pQueueFamilyIndices = nullptr,
-                                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
+    const VkImageCreateInfo info{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .imageType = desc.depth > 0 ? VK_IMAGE_TYPE_3D : VK_IMAGE_TYPE_2D,
+        .format = desc.format,
+        .extent = {.width = desc.width, .height = desc.height, .depth = std::max(desc.depth, 1U)},
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = desc.usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = nullptr,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
     if (const VkResult r = vkCreateImage(img.device_, &info, nullptr, &img.image_);
         r != VK_SUCCESS) {
         return std::unexpected(vk_failure(r, "cannot create an image"));
@@ -205,7 +207,8 @@ Result<Image> Image::create(const Device& device, const ImageDesc& desc) {
                                      .pNext = nullptr,
                                      .flags = 0,
                                      .image = img.image_,
-                                     .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                                     .viewType = desc.depth > 0 ? VK_IMAGE_VIEW_TYPE_3D
+                                                                : VK_IMAGE_VIEW_TYPE_2D,
                                      .format = desc.format,
                                      .components = {},
                                      .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,

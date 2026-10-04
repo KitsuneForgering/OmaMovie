@@ -1,5 +1,7 @@
 #include "oma/playback/timeline_audio.hpp"
 
+#include "clip_effects.hpp"
+
 #include "oma/audio/mix.hpp"
 #include "oma/timeline/evaluate.hpp"
 
@@ -33,14 +35,6 @@ std::int64_t sample_at(const oma::RationalTime& t, std::int64_t ticks, oma::Rati
                         static_cast<Int128>(ticks) * unit.num() * tb.den()) *
                        rate;
     return static_cast<std::int64_t>(floor_div(num, den));
-}
-
-oma::audio::EqBands bands(const tl::Equalizer& eq) {
-    oma::audio::EqBands b;
-    b.low_db = eq.low_db;
-    b.mid_db = eq.mid_db;
-    b.high_db = eq.high_db;
-    return b;
 }
 
 } // namespace
@@ -116,14 +110,14 @@ oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip,
         Stream& s = streams_.insert(std::move(node)).position->second;
         s.finished = false;
         s.used_in = pass_;
-        // Same coefficients or not, the filter state carries over: the samples are contiguous.
-        s.eq.configure(rate_.hz(), bands(clip.audio.eq));
+        // Same settings or not, the effect state carries over: the samples are contiguous.
+        configure_effects(s.effects, clip.audio, rate_.hz());
         return &s;
     }
     Stream& s = streams_[clip.id.value()];
     s.media = clip.media.value();
     s.noise = clip.audio.noise;
-    s.eq.configure(rate_.hz(), bands(clip.audio.eq));
+    configure_effects(s.effects, clip.audio, rate_.hz());
     s.used_in = pass_;
     s.next_sample = -1; // forces the first seek
     const auto path = paths_.find(clip.media.value());
@@ -182,7 +176,7 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, const Span& span
         s.offset = 0;
         s.ended = false;
         s.next_sample = media_sample;
-        s.eq.reset();
+        s.effects.reset();
     }
     const oma::audio::ClipGain gain{
         .gain = clip.audio.gain,
@@ -212,8 +206,8 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, const Span& span
         const std::int64_t n = std::min(to - pos, s.buffer->frames - s.offset);
         const auto at = static_cast<std::size_t>((pos - first) * channels_);
         const auto input = std::span<const float>(s.buffer->samples);
-        if (s.eq.active()) {
-            // Equalize a copy: the buffer may be mixed again after a seek back into it.
+        if (s.effects.active()) {
+            // Process a copy: the buffer may be mixed again after a seek back into it.
             const int ch = s.buffer->channels;
             scratch_.resize(static_cast<std::size_t>(n) * static_cast<std::size_t>(ch));
             for (int c = 0; c < ch; ++c) {
@@ -223,7 +217,7 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, const Span& span
                 std::copy_n(input.begin() + static_cast<std::ptrdiff_t>(src), n,
                             scratch_.begin() + (static_cast<std::ptrdiff_t>(c) * n));
             }
-            s.eq.process(scratch_, ch, n, n);
+            s.effects.process(scratch_, ch, n, n);
             oma::audio::mix_planar(out.subspan(at), channels_, scratch_, ch, n, n, gain, pos - a);
         } else {
             oma::audio::mix_planar(out.subspan(at), channels_,
