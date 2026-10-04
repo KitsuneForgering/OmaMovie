@@ -51,6 +51,8 @@ class Session final : public QObject {
     Q_PROPERTY(QVariantList clips READ clips NOTIFY sequenceChanged)
     // Audio lanes below the storyline, top first: {id, name, clips}.
     Q_PROPERTY(QVariantList audioTracks READ audioTracks NOTIFY sequenceChanged)
+    // Previews of the selected clip under each filter (Effects drawer), FilterKind order.
+    Q_PROPERTY(QVariantList filterPreviews READ filterPreviews NOTIFY filterPreviewsChanged)
     // Waveforms of the library's media, for the timeline's WaveformItems.
     Q_PROPERTY(QObject* waveforms READ waveforms CONSTANT)
     Q_PROPERTY(double selectedClip READ selectedClip NOTIFY selectionChanged)
@@ -58,6 +60,8 @@ class Session final : public QObject {
     Q_PROPERTY(bool hasMedia READ hasMedia NOTIFY sequenceChanged)
     Q_PROPERTY(double duration READ duration NOTIFY sequenceChanged)
     Q_PROPERTY(double frameRate READ frameRate NOTIFY sequenceChanged)
+    Q_PROPERTY(int canvasWidth READ canvasWidth NOTIFY sequenceChanged)
+    Q_PROPERTY(int canvasHeight READ canvasHeight NOTIFY sequenceChanged)
     Q_PROPERTY(bool canUndo READ canUndo NOTIFY sequenceChanged)
     Q_PROPERTY(bool canRedo READ canRedo NOTIFY sequenceChanged)
     Q_PROPERTY(QString undoText READ undoText NOTIFY sequenceChanged)
@@ -95,11 +99,14 @@ public:
     [[nodiscard]] QVariantList clips() const;
     [[nodiscard]] QVariantList audioTracks() const;
     [[nodiscard]] QObject* waveforms() { return &waveforms_; }
+    [[nodiscard]] QVariantList filterPreviews() const { return filter_previews_; }
     [[nodiscard]] double selectedClip() const { return static_cast<double>(selected_clip_.value()); }
     [[nodiscard]] QVariantMap info() const;
     [[nodiscard]] bool hasMedia() const;
     [[nodiscard]] double duration() const;
     [[nodiscard]] double frameRate() const;
+    [[nodiscard]] int canvasWidth() const { return static_cast<int>(canvas_width_); }
+    [[nodiscard]] int canvasHeight() const { return static_cast<int>(canvas_height_); }
     [[nodiscard]] bool canUndo() const { return editor_ && editor_->can_undo(); }
     [[nodiscard]] bool canRedo() const { return editor_ && editor_->can_redo(); }
     [[nodiscard]] QString undoText() const;
@@ -147,6 +154,18 @@ public:
     Q_INVOKABLE void setClipNoise(double amount);
     // Sets the volume so the clip's loudest peak reaches -1 dBFS.
     Q_INVOKABLE void normalizeClip();
+
+    // Video adjustments of the selected clip (ui-design §6), each one command.
+    // Color: exposure in stops, the others in [-1, 1].
+    Q_INVOKABLE void setClipColor(double exposure, double contrast, double saturation, double temperature);
+    // Effects: a FilterKind and its amount in [0, 1].
+    Q_INVOKABLE void setClipFilter(int kind, double amount);
+    // Crop and framing: a Fit mode and the fractions cropped from each edge.
+    Q_INVOKABLE void setClipFraming(int fit, double left, double top, double right, double bottom);
+    // Position in output pixels from the center, uniform scale, clockwise rotation in degrees.
+    Q_INVOKABLE void setClipTransform(double x, double y, double scale, double rotation);
+    // Renders the selected clip's first frame under every filter, in the background.
+    Q_INVOKABLE void requestFilterPreviews();
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
 
@@ -168,6 +187,7 @@ signals:
     void selectionChanged();
     void sequenceChanged();
     void positionChanged();
+    void filterPreviewsChanged();
 
 private:
     struct LibraryItem {
@@ -202,6 +222,7 @@ private:
     };
     [[nodiscard]] std::optional<ClipSound> selectedSound() const;
     void setSelectedAudio(const oma::timeline::AudioProperties& audio);
+    void setSelectedVideo(const oma::timeline::VideoProperties& video);
     void setNotice(const QString& text);
     void fail(const QString& message);
 
@@ -266,5 +287,8 @@ private:
     AudioPlayer audio_;
     WaveformStore waveforms_;
     bool warned_silent_ = false;
+    QVariantList filter_previews_;
+    unsigned previews_ = 0; // filter preview requests, so a stale result is dropped
+    oma::JobHandle previews_job_;
     oma::JobPool workers_{1}; // destroyed first: no job outlives what it touches
 };

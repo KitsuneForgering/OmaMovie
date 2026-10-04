@@ -300,7 +300,7 @@ int main(int argc, char** argv) {
         bool inserted = false, overwritten = false, trimmed = false, audio = false;
         bool volume = false, muted = false, gpu_viewer = false, shuttle = false;
         bool played = false, space = false, escape = false, stepped = false, keys_focused = true;
-        bool controls = false, lanes = false;
+        bool controls = false, lanes = false, looks = false;
         double after_steps = 0;
     } r;
     const auto clip_count = [&] { return session.clips().size(); };
@@ -502,6 +502,34 @@ int main(int argc, char** argv) {
              session.undo();
              window->requestActivate();
          }},
+        {"video adjustments", after(100), [&] {
+             // Color, filter and framing on the first storyline clip, each one history entry.
+             session.selectClip(session.clips().front().toMap().value("id").toDouble());
+             session.seek(0.1);
+             session.setClipColor(0.5, 0.2, -0.3, 0.4);
+             session.setClipFilter(2, 0.8); // sepia
+             session.setClipFraming(1, 0.1, 0, 0.1, 0);
+             const QVariantMap info = session.info();
+             r.looks = info.value("exposure").toDouble() == 0.5 && info.value("filterKind").toInt() == 2 &&
+                       info.value("fit").toInt() == 1 && info.value("cropLeft").toDouble() == 0.1 &&
+                       session.undoText() == QStringLiteral("Video Adjustments");
+             window->setProperty("drawer", QStringLiteral("effects"));
+             session.requestFilterPreviews();
+         }},
+        {"filter previews", [&] { return session.filterPreviews().size() == 7; }, [&] {
+             r.looks = r.looks && std::ranges::all_of(session.filterPreviews(), [](const QVariant& v) {
+                 return !v.toString().isEmpty();
+             });
+         }},
+        {"effects drawer", after(400), [&] {
+             screenshot(window, "OMA_GUI_SMOKE_EFFECTS_SCREENSHOT");
+             window->setProperty("drawer", QString());
+             session.undo();
+             session.undo();
+             session.undo();
+             r.looks = r.looks && !session.info().value("colorAdjusted").toBool();
+             window->requestActivate();
+         }},
         {"space", after(300), [&] { press(Qt::Key_Space); }},
         {"space again", after(250), [&] {
              r.space = session.playing();
@@ -548,14 +576,14 @@ int main(int argc, char** argv) {
              screenshot(window, "OMA_GUI_SMOKE_SCREENSHOT");
              const bool edits = r.imported && r.split && r.undone && r.redone && r.rippled && r.inserted &&
                                 r.overwritten && r.trimmed && r.played && r.audio && r.volume && r.muted &&
-                                r.gpu_viewer && r.shuttle && r.lanes;
+                                r.gpu_viewer && r.shuttle && r.lanes && r.looks;
              const bool keys = r.space && r.escape && r.stepped;
              std::printf("GUI smoke: edits %s (import %d, split %d, undo %d, redo %d, ripple delete %d, "
                          "insert %d, overwrite %d, trim %d, play %d, audio %d, volume %d, mute %d, "
-                         "GPU viewer %d, J/K/L %d, audio lanes %d)\n",
+                         "GPU viewer %d, J/K/L %d, audio lanes %d, video looks %d)\n",
                          edits ? "PASS" : "FAIL", r.imported, r.split, r.undone, r.redone, r.rippled,
                          r.inserted, r.overwritten, r.trimmed, r.played, r.audio, r.volume, r.muted,
-                         r.gpu_viewer, r.shuttle, r.lanes);
+                         r.gpu_viewer, r.shuttle, r.lanes, r.looks);
              if (r.keys_focused) {
                  std::printf("GUI smoke: keyboard %s (Space %d, Escape %d, Right x3 -> %.4fs)\n",
                              keys ? "PASS" : "FAIL", r.space, r.escape, r.after_steps);

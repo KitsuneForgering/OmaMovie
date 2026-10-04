@@ -8,6 +8,14 @@ namespace tl = oma::timeline;
 
 namespace {
 
+// The timeline mirrors the render graph's enumerations (it may not depend on the compositor,
+// CLAUDE.md §5.2); the casts below rely on identical values.
+static_assert(static_cast<int>(tl::FilterKind::Vignette) == static_cast<int>(oma::compositor::FilterKind::Vignette));
+static_assert(static_cast<int>(tl::FilterKind::BlackAndWhite) ==
+              static_cast<int>(oma::compositor::FilterKind::BlackAndWhite));
+static_assert(static_cast<int>(tl::BlendMode::Screen) == static_cast<int>(oma::compositor::BlendMode::Screen));
+static_assert(static_cast<int>(tl::Fit::Native) == static_cast<int>(oma::compositor::Fit::Native));
+
 oma::compositor::Layer to_layer(const tl::VideoProperties& v, std::size_t input) {
     oma::compositor::Layer layer;
     layer.input = input;
@@ -20,6 +28,12 @@ oma::compositor::Layer to_layer(const tl::VideoProperties& v, std::size_t input)
                        .rotation = v.transform.rotation};
     layer.opacity = v.opacity;
     layer.blend = static_cast<oma::compositor::BlendMode>(v.blend);
+    layer.color = {.exposure = v.color.exposure,
+                   .contrast = v.color.contrast,
+                   .saturation = v.color.saturation,
+                   .temperature = v.color.temperature};
+    layer.filter = {.kind = static_cast<oma::compositor::FilterKind>(v.filter.kind), // same enumerators
+                    .amount = v.filter.amount};
     return layer;
 }
 

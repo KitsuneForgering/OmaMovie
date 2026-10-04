@@ -2,6 +2,7 @@
 
 #include "preview_item.hpp"
 
+#include "oma/compositor/compositor.hpp"
 #include "oma/compositor/render_graph.hpp"
 #include "oma/timeline/edit.hpp"
 #include "oma/timeline/evaluate.hpp"
@@ -59,6 +60,8 @@ void Session::newProject() {
     imports_.clear();
     library_.clear();
     waveforms_.clear();
+    filter_previews_.clear();
+    emit filterPreviewsChanged();
     editor_.reset();
     snapshot_.reset();
     refreshPaths();
@@ -589,6 +592,138 @@ void Session::normalizeClip() {
     if (audio.gain >= 4.0F) setNotice(QStringLiteral("The clip is very quiet: volume raised to the maximum"));
 }
 
+void Session::setSelectedVideo(const tl::VideoProperties& video) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr || video == c->video) return;
+    const tl::ClipId id = c->id;
+    run(tl::edit::set_video(id, video));
+}
+
+void Session::setClipColor(double exposure, double contrast, double saturation, double temperature) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr) return;
+    // Two decimals: slider noise does not make a new history entry.
+    const auto snap = [](double v, double limit) {
+        return std::isfinite(v) ? std::clamp(std::round(v * 100.0) / 100.0, -limit, limit) : 0.0;
+    };
+    tl::VideoProperties video = c->video;
+    video.color = {.exposure = snap(exposure, 4.0),
+                   .contrast = snap(contrast, 1.0),
+                   .saturation = snap(saturation, 1.0),
+                   .temperature = snap(temperature, 1.0)};
+    setSelectedVideo(video);
+}
+
+void Session::setClipFilter(int kind, double amount) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr || kind < 0 || kind > static_cast<int>(tl::FilterKind::Vignette) || !std::isfinite(amount)) return;
+    tl::VideoProperties video = c->video;
+    video.filter = {.kind = static_cast<tl::FilterKind>(kind), .amount = std::clamp(std::round(amount * 100.0) / 100.0, 0.0, 1.0)};
+    setSelectedVideo(video);
+}
+
+void Session::setClipFraming(int fit, double left, double top, double right, double bottom) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr || fit < 0 || fit > static_cast<int>(tl::Fit::Native)) return;
+    // Each edge keeps at least a tenth of the picture between them.
+    const auto edge = [](double v) { return std::isfinite(v) ? std::clamp(std::round(v * 1000.0) / 1000.0, 0.0, 0.45) : 0.0; };
+    tl::VideoProperties video = c->video;
+    video.fit = static_cast<tl::Fit>(fit);
+    video.crop = {.left = edge(left), .top = edge(top), .right = edge(right), .bottom = edge(bottom)};
+    setSelectedVideo(video);
+}
+
+void Session::setClipTransform(double x, double y, double scale, double rotation) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(scale) || !std::isfinite(rotation)) return;
+    tl::VideoProperties video = c->video;
+    const double s = std::clamp(std::round(scale * 100.0) / 100.0, 0.1, 4.0);
+    video.transform = {.offset_x = std::round(x),
+                       .offset_y = std::round(y),
+                       .scale_x = s,
+                       .scale_y = s,
+                       .rotation = std::clamp(std::round(rotation * 10.0) / 10.0, -180.0, 180.0)};
+    setSelectedVideo(video);
+}
+
+namespace {
+
+// Linear premultiplied RGBA -> an sRGB-encoded 8-bit image, for previews only.
+QImage to_srgb_image(const oma::compositor::RgbaImage& image) {
+    QImage out(static_cast<int>(image.width), static_cast<int>(image.height), QImage::Format_RGBA8888);
+    const auto encode = [](float linear) {
+        const double x = std::clamp(static_cast<double>(linear), 0.0, 1.0);
+        const double v = x <= 0.0031308 ? 12.92 * x : (1.055 * std::pow(x, 1.0 / 2.4)) - 0.055;
+        return static_cast<int>(std::lround(v * 255.0));
+    };
+    for (std::uint32_t y = 0; y < image.height; ++y) {
+        for (std::uint32_t x = 0; x < image.width; ++x) {
+            const auto p = image.at(x, y);
+            const float a = p[3] > 0.0F ? p[3] : 1.0F;
+            out.setPixelColor(static_cast<int>(x), static_cast<int>(y),
+                              QColor(encode(p[0] / a), encode(p[1] / a), encode(p[2] / a),
+                                     static_cast<int>(std::lround(std::clamp(p[3], 0.0F, 1.0F) * 255.0F))));
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+void Session::requestFilterPreviews() {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    const LibraryItem* source = c != nullptr ? item(c->media) : nullptr;
+    if (c == nullptr || source == nullptr || !source->media.has_video) return;
+    const unsigned request = ++previews_;
+    const unsigned generation = generation_;
+    const std::string path = source->path.toStdString();
+    const oma::RationalTime at = c->source_in;
+    const tl::VideoProperties video = c->video;
+    const std::uint32_t width = 160;
+    const std::uint32_t height = std::max<std::uint32_t>(2, width * canvas_height_ / std::max<std::uint32_t>(1, canvas_width_));
+    const QString dir = thumbnails_.path();
+    previews_job_.cancel(); // an older request still queued would only be thrown away
+    previews_job_ = workers_.submit("filter-previews", [this, request, generation, path, at, video, width, height, dir](oma::JobContext& job) {
+        auto picture = frames_.picture_at(path, at);
+        QVariantList urls;
+        if (picture) {
+            oma::compositor::LayerInput input{.frame = picture->frame.get(),
+                                              .color = picture->color,
+                                              .rotation = picture->rotation,
+                                              .sample_aspect = picture->sample_aspect};
+            const std::array<oma::compositor::LayerInput, 1> inputs{input};
+            for (int kind = 0; kind <= static_cast<int>(tl::FilterKind::Vignette) && !job.is_cancelled(); ++kind) {
+                oma::compositor::RenderGraph graph;
+                graph.width = width;
+                graph.height = height;
+                oma::compositor::Layer layer;
+                layer.fit = static_cast<oma::compositor::Fit>(video.fit);
+                layer.crop = {.left = video.crop.left, .top = video.crop.top, .right = video.crop.right, .bottom = video.crop.bottom};
+                layer.color = {.exposure = video.color.exposure,
+                               .contrast = video.color.contrast,
+                               .saturation = video.color.saturation,
+                               .temperature = video.color.temperature};
+                layer.filter = {.kind = static_cast<oma::compositor::FilterKind>(kind), .amount = 1.0};
+                graph.layers.push_back(layer);
+                // CPU reference: tiny images, and no GPU work leaves the render thread (ADR-0005).
+                auto rendered = oma::compositor::CpuCompositor{}.render(graph, inputs);
+                const QString file = QStringLiteral("%1/filter-%2-%3.png").arg(dir).arg(request).arg(kind);
+                if (rendered && to_srgb_image(*rendered).save(file)) {
+                    urls.push_back(QUrl::fromLocalFile(file).toString());
+                } else {
+                    urls.push_back(QString());
+                }
+            }
+        }
+        QMetaObject::invokeMethod(this, [this, request, generation, urls = std::move(urls)] {
+            if (generation != generation_ || request != previews_) return;
+            filter_previews_ = urls;
+            emit filterPreviewsChanged();
+        }, Qt::QueuedConnection);
+        return oma::Result<void>{};
+    });
+}
+
 void Session::undo() {
     if (!editor_ || !editor_->can_undo()) return;
     pause();
@@ -688,6 +823,27 @@ QVariantMap Session::info() const {
             out.insert("eqMid", static_cast<double>(c->audio.eq.mid_db));
             out.insert("eqHigh", static_cast<double>(c->audio.eq.high_db));
             out.insert("noise", static_cast<double>(c->audio.noise.amount));
+            const tl::Track* track = editor_->timeline().track_of(c->id);
+            out.insert("hasVideo", track != nullptr && track->kind == tl::TrackKind::Video);
+            const tl::VideoProperties& v = c->video;
+            out.insert("exposure", v.color.exposure);
+            out.insert("contrast", v.color.contrast);
+            out.insert("saturation", v.color.saturation);
+            out.insert("temperature", v.color.temperature);
+            out.insert("filterKind", static_cast<int>(v.filter.kind));
+            out.insert("filterAmount", v.filter.amount);
+            out.insert("fit", static_cast<int>(v.fit));
+            out.insert("cropLeft", v.crop.left);
+            out.insert("cropTop", v.crop.top);
+            out.insert("cropRight", v.crop.right);
+            out.insert("cropBottom", v.crop.bottom);
+            out.insert("posX", v.transform.offset_x);
+            out.insert("posY", v.transform.offset_y);
+            out.insert("scale", v.transform.scale_x);
+            out.insert("rotation", v.transform.rotation);
+            out.insert("colorAdjusted", v.color != tl::ColorAdjust{});
+            out.insert("framingAdjusted", v.fit != tl::Fit::Fit || v.crop != tl::Crop{} || v.transform != tl::Transform{});
+            out.insert("filtered", v.filter.kind != tl::FilterKind::None);
         }
     }
     return out;

@@ -46,6 +46,13 @@ ApplicationWindow {
         (session.info.gain !== 1 || session.info.fadeIn > 0 || session.info.fadeOut > 0 || session.info.muted ||
          session.info.eqLow !== 0 || session.info.eqMid !== 0 || session.info.eqHigh !== 0 || session.info.noise > 0)
     property bool volumeMore: false // the Volume drawer's "More" level (ui-design §6)
+    property bool cropMore: false   // the Crop drawer's "More" level: position, scale, rotation
+    readonly property var filterNames: ["None", "Black & White", "Sepia", "Vintage", "Cool", "Warm", "Vignette"]
+    // Keep the filter previews in step with the selection while the Effects drawer is open.
+    Connections {
+        target: session
+        function onSelectionChanged() { if (root.drawer === "effects" && actions.videoClip) session.requestFilterPreviews() }
+    }
     // Equalizer presets (low, mid, high in dB); "Custom" is whatever the sliders say.
     readonly property var eqPresets: [
         { name: "Flat", bands: [0, 0, 0] },
@@ -199,6 +206,22 @@ ApplicationWindow {
             text: "Volume"; keys: "Ctrl+Shift+V"
             enabled: actions.editing && !!session.info.clip && !!session.info.hasAudio
             onTriggered: root.drawer = root.drawer === "volume" ? "" : "volume"
+        }
+        readonly property bool videoClip: actions.editing && !!session.info.clip && !!session.info.hasVideo
+        property OmaAction color: OmaAction {
+            text: "Color"; enabled: actions.videoClip
+            onTriggered: root.drawer = root.drawer === "color" ? "" : "color"
+        }
+        property OmaAction crop: OmaAction {
+            text: "Crop"; enabled: actions.videoClip
+            onTriggered: root.drawer = root.drawer === "crop" ? "" : "crop"
+        }
+        property OmaAction effects: OmaAction {
+            text: "Effects"; enabled: actions.videoClip
+            onTriggered: {
+                root.drawer = root.drawer === "effects" ? "" : "effects"
+                if (root.drawer === "effects") session.requestFilterPreviews()
+            }
         }
         property OmaAction info: OmaAction {
             text: "Info"; keys: "Ctrl+Shift+I"; enabled: actions.editing && !!session.info.name; checkable: true
@@ -470,8 +493,20 @@ ApplicationWindow {
                             anchors.leftMargin: 8
                             anchors.rightMargin: 8
                             spacing: 2
-                            OmaButton { iconName: "color"; text: "Color"; showLabel: !root.compact; enabled: false; tip: "Color (v0.1)" }
-                            OmaButton { iconName: "crop"; text: "Crop"; showLabel: !root.compact; enabled: false; tip: "Crop and framing (v0.1)" }
+                            OmaButton {
+                                action: actions.color
+                                iconName: "color"
+                                showLabel: !root.compact
+                                selected: root.drawer === "color"
+                                activeDot: !!session.info.colorAdjusted
+                            }
+                            OmaButton {
+                                action: actions.crop
+                                iconName: "crop"
+                                showLabel: !root.compact
+                                selected: root.drawer === "crop"
+                                activeDot: !!session.info.framingAdjusted
+                            }
                             OmaButton {
                                 action: actions.volume
                                 iconName: "volume"
@@ -480,7 +515,13 @@ ApplicationWindow {
                                 activeDot: root.audioAdjusted
                             }
                             OmaButton { iconName: "speed"; text: "Speed"; showLabel: !root.compact; enabled: false; tip: "Speed (v0.2)" }
-                            OmaButton { iconName: "effects"; text: "Effects"; showLabel: !root.compact; enabled: false; tip: "Effects (v0.2)" }
+                            OmaButton {
+                                action: actions.effects
+                                iconName: "effects"
+                                showLabel: !root.compact
+                                selected: root.drawer === "effects"
+                                activeDot: !!session.info.filtered
+                            }
                             OmaButton { iconName: "overlay"; text: "Overlay"; showLabel: !root.compact; enabled: false; tip: "Overlay, for layers above the storyline (v0.2)" }
                             OmaButton {
                                 action: actions.info
@@ -671,6 +712,226 @@ ApplicationWindow {
                         Binding { target: highControl.slider; property: "stepSize"; value: 0.5 }
                         Binding { target: highControl.slider; property: "value"; value: session.info.eqHigh || 0; when: !highControl.slider.pressed }
                         Binding { target: noiseControl.slider; property: "value"; value: session.info.noise || 0; when: !noiseControl.slider.pressed }
+                        Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
+                    }
+
+                    // Color drawer (§6): exposure, contrast, saturation and temperature of the clip.
+                    Rectangle {
+                        id: colorDrawer
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 64
+                        visible: !root.viewerOnly && root.drawer === "color" && actions.color.enabled
+                        color: colors.dark_background
+                        function commit() {
+                            session.setClipColor(exposureControl.slider.value, contrastControl.slider.value,
+                                                 saturationControl.slider.value, temperatureControl.slider.value)
+                        }
+                        function signed(v) { return (v > 0 ? "+" : "") + Math.round(v * 100) }
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            spacing: 18
+                            DrawerSlider {
+                                id: exposureControl
+                                label: "EXPOSURE"
+                                readout: (exposureControl.slider.value > 0 ? "+" : "") + exposureControl.slider.value.toFixed(2) + " EV"
+                                onCommitted: colorDrawer.commit()
+                            }
+                            DrawerSlider {
+                                id: contrastControl
+                                label: "CONTRAST"
+                                readout: colorDrawer.signed(contrastControl.slider.value)
+                                onCommitted: colorDrawer.commit()
+                            }
+                            DrawerSlider {
+                                id: saturationControl
+                                label: "SATURATION"
+                                readout: colorDrawer.signed(saturationControl.slider.value)
+                                onCommitted: colorDrawer.commit()
+                            }
+                            DrawerSlider {
+                                id: temperatureControl
+                                label: "TEMPERATURE"
+                                readout: temperatureControl.slider.value < 0 ? "Cooler " + Math.round(-temperatureControl.slider.value * 100)
+                                       : temperatureControl.slider.value > 0 ? "Warmer " + Math.round(temperatureControl.slider.value * 100) : "Neutral"
+                                onCommitted: colorDrawer.commit()
+                            }
+                            OmaButton {
+                                text: "Reset"
+                                enabled: !!session.info.colorAdjusted
+                                onClicked: session.setClipColor(0, 0, 0, 0)
+                            }
+                        }
+                        Binding { target: exposureControl.slider; property: "from"; value: -2 }
+                        Binding { target: exposureControl.slider; property: "to"; value: 2 }
+                        Binding { target: exposureControl.slider; property: "value"; value: session.info.exposure || 0; when: !exposureControl.slider.pressed }
+                        Binding { target: contrastControl.slider; property: "from"; value: -1 }
+                        Binding { target: contrastControl.slider; property: "value"; value: session.info.contrast || 0; when: !contrastControl.slider.pressed }
+                        Binding { target: saturationControl.slider; property: "from"; value: -1 }
+                        Binding { target: saturationControl.slider; property: "value"; value: session.info.saturation || 0; when: !saturationControl.slider.pressed }
+                        Binding { target: temperatureControl.slider; property: "from"; value: -1 }
+                        Binding { target: temperatureControl.slider; property: "value"; value: session.info.temperature || 0; when: !temperatureControl.slider.pressed }
+                        Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
+                    }
+
+                    // Crop drawer (§6): fit mode and edges; "More" adds position, scale and rotation.
+                    Rectangle {
+                        id: cropDrawer
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: root.cropMore ? 124 : 64
+                        visible: !root.viewerOnly && root.drawer === "crop" && actions.crop.enabled
+                        color: colors.dark_background
+                        function commitFraming(fit) {
+                            session.setClipFraming(fit, cropLeft.slider.value, cropTop.slider.value,
+                                                   cropRight.slider.value, cropBottom.slider.value)
+                        }
+                        function commitTransform() {
+                            session.setClipTransform(posX.slider.value, posY.slider.value, scaleControl.slider.value,
+                                                     rotationControl.slider.value)
+                        }
+                        function percent(v) { return Math.round(v * 100) + "%" }
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            anchors.topMargin: 6
+                            anchors.bottomMargin: 6
+                            spacing: 6
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 14
+                                Row {
+                                    spacing: 2
+                                    Repeater {
+                                        model: [{ name: "Fit", fit: 0, tip: "Whole picture, letterboxed" },
+                                                { name: "Fill", fit: 1, tip: "Fill the frame, cropping what overflows" },
+                                                { name: "Stretch", fit: 2, tip: "Fill the frame, changing the proportions" }]
+                                        delegate: OmaButton {
+                                            text: modelData.name
+                                            tip: modelData.tip
+                                            selected: (session.info.fit || 0) === modelData.fit
+                                            onClicked: cropDrawer.commitFraming(modelData.fit)
+                                        }
+                                    }
+                                }
+                                DrawerSlider { id: cropLeft; label: "LEFT"; readout: cropDrawer.percent(cropLeft.slider.value); onCommitted: cropDrawer.commitFraming(session.info.fit || 0) }
+                                DrawerSlider { id: cropRight; label: "RIGHT"; readout: cropDrawer.percent(cropRight.slider.value); onCommitted: cropDrawer.commitFraming(session.info.fit || 0) }
+                                DrawerSlider { id: cropTop; label: "TOP"; readout: cropDrawer.percent(cropTop.slider.value); onCommitted: cropDrawer.commitFraming(session.info.fit || 0) }
+                                DrawerSlider { id: cropBottom; label: "BOTTOM"; readout: cropDrawer.percent(cropBottom.slider.value); onCommitted: cropDrawer.commitFraming(session.info.fit || 0) }
+                                OmaButton {
+                                    text: "More"
+                                    selected: root.cropMore
+                                    tip: "Position, scale and rotation"
+                                    onClicked: root.cropMore = !root.cropMore
+                                }
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                visible: root.cropMore
+                                spacing: 18
+                                DrawerSlider { id: posX; label: "POSITION X"; readout: Math.round(posX.slider.value) + " px"; onCommitted: cropDrawer.commitTransform() }
+                                DrawerSlider { id: posY; label: "POSITION Y"; readout: Math.round(posY.slider.value) + " px"; onCommitted: cropDrawer.commitTransform() }
+                                DrawerSlider { id: scaleControl; label: "SCALE"; readout: Math.round(scaleControl.slider.value * 100) + "%"; onCommitted: cropDrawer.commitTransform() }
+                                DrawerSlider { id: rotationControl; label: "ROTATION"; readout: rotationControl.slider.value.toFixed(1) + "°"; onCommitted: cropDrawer.commitTransform() }
+                                OmaButton {
+                                    text: "Reset"
+                                    enabled: !!session.info.framingAdjusted
+                                    onClicked: { session.setClipFraming(0, 0, 0, 0, 0); session.setClipTransform(0, 0, 1, 0) }
+                                }
+                            }
+                        }
+                        Binding { target: cropLeft.slider; property: "to"; value: 0.45 }
+                        Binding { target: cropLeft.slider; property: "value"; value: session.info.cropLeft || 0; when: !cropLeft.slider.pressed }
+                        Binding { target: cropRight.slider; property: "to"; value: 0.45 }
+                        Binding { target: cropRight.slider; property: "value"; value: session.info.cropRight || 0; when: !cropRight.slider.pressed }
+                        Binding { target: cropTop.slider; property: "to"; value: 0.45 }
+                        Binding { target: cropTop.slider; property: "value"; value: session.info.cropTop || 0; when: !cropTop.slider.pressed }
+                        Binding { target: cropBottom.slider; property: "to"; value: 0.45 }
+                        Binding { target: cropBottom.slider; property: "value"; value: session.info.cropBottom || 0; when: !cropBottom.slider.pressed }
+                        Binding { target: posX.slider; property: "from"; value: -session.canvasWidth }
+                        Binding { target: posX.slider; property: "to"; value: session.canvasWidth }
+                        Binding { target: posX.slider; property: "value"; value: session.info.posX || 0; when: !posX.slider.pressed }
+                        Binding { target: posY.slider; property: "from"; value: -session.canvasHeight }
+                        Binding { target: posY.slider; property: "to"; value: session.canvasHeight }
+                        Binding { target: posY.slider; property: "value"; value: session.info.posY || 0; when: !posY.slider.pressed }
+                        Binding { target: scaleControl.slider; property: "from"; value: 0.1 }
+                        Binding { target: scaleControl.slider; property: "to"; value: 4 }
+                        Binding { target: scaleControl.slider; property: "value"; value: session.info.scale || 1; when: !scaleControl.slider.pressed }
+                        Binding { target: rotationControl.slider; property: "from"; value: -180 }
+                        Binding { target: rotationControl.slider; property: "to"; value: 180 }
+                        Binding { target: rotationControl.slider; property: "value"; value: session.info.rotation || 0; when: !rotationControl.slider.pressed }
+                        Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
+                    }
+
+                    // Effects drawer (§6): one filter per clip, chosen from previews of the clip itself.
+                    Rectangle {
+                        id: effectsDrawer
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 104
+                        visible: !root.viewerOnly && root.drawer === "effects" && actions.effects.enabled
+                        color: colors.dark_background
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            spacing: 14
+                            ListView {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                Layout.topMargin: 8
+                                orientation: ListView.Horizontal
+                                spacing: 8
+                                clip: true
+                                model: root.filterNames
+                                delegate: Item {
+                                    width: 92
+                                    height: 84
+                                    readonly property bool chosen: (session.info.filterKind || 0) === index
+                                    Rectangle {
+                                        id: tile
+                                        width: parent.width
+                                        height: 54
+                                        radius: 4
+                                        color: root.viewerBackground
+                                        border.width: chosen ? 2 : 0
+                                        border.color: root.accent
+                                        Image {
+                                            anchors.fill: parent
+                                            anchors.margins: chosen ? 2 : 0
+                                            fillMode: Image.PreserveAspectFit
+                                            source: session.filterPreviews.length > index ? session.filterPreviews[index] : ""
+                                            asynchronous: true
+                                        }
+                                    }
+                                    Text {
+                                        anchors.top: tile.bottom
+                                        anchors.topMargin: 4
+                                        width: parent.width
+                                        horizontalAlignment: Text.AlignHCenter
+                                        text: modelData
+                                        color: chosen ? root.accent : root.fg
+                                        font.pixelSize: 10
+                                        elide: Text.ElideRight
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: session.setClipFilter(index, index === 0 ? 1 : amountControl.slider.value)
+                                    }
+                                }
+                            }
+                            DrawerSlider {
+                                id: amountControl
+                                Layout.fillWidth: false
+                                Layout.preferredWidth: 160
+                                enabled: (session.info.filterKind || 0) !== 0
+                                label: "AMOUNT"
+                                readout: Math.round(amountControl.slider.value * 100) + "%"
+                                onCommitted: session.setClipFilter(session.info.filterKind || 0, amountControl.slider.value)
+                            }
+                        }
+                        Binding { target: amountControl.slider; property: "value"; value: session.info.filterAmount === undefined ? 1 : session.info.filterAmount; when: !amountControl.slider.pressed }
                         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
                     }
 
@@ -1199,7 +1460,8 @@ ApplicationWindow {
                 actions.append, actions.insert, actions.overwrite, actions.split, actions.remove,
                 actions.lift, actions.detachAudio, actions.undo, actions.redo, actions.importMedia,
                 actions.exportMovie, actions.toggleLibrary, actions.fullViewer, actions.leaveFullViewer,
-                actions.zoomIn, actions.zoomOut, actions.zoomFit, actions.volume, actions.info]
+                actions.zoomIn, actions.zoomOut, actions.zoomFit, actions.volume, actions.info,
+                actions.color, actions.crop, actions.effects]
         delegate: Item {
             Shortcut {
                 sequence: modelData.keys
