@@ -1,5 +1,6 @@
 #pragma once
 
+#include "oma/audio/equalizer.hpp"
 #include "oma/base/error.hpp"
 #include "oma/base/time.hpp"
 #include "oma/media/audio_decoder.hpp"
@@ -11,6 +12,7 @@
 #include <span>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 // Renders the sequence's audio, sample-accurate, at the output rate (CLAUDE.md §6, §12): for each
 // block, every audible clip's media is decoded at the right position and mixed with its gain and
@@ -36,7 +38,9 @@ public:
 
 private:
     struct Stream {
-        std::uint64_t media = 0; // media ID
+        std::uint64_t media = 0;             // media ID
+        oma::timeline::NoiseReduction noise; // what the decoder was opened with
+        oma::audio::Equalizer eq;
         std::unique_ptr<oma::media::AudioDecoder> decoder;
         std::optional<oma::media::AudioBuffer> buffer;
         std::int64_t offset = 0;      // frames of `buffer` already used
@@ -62,6 +66,7 @@ private:
     int channels_;
     std::int64_t ticks_per_sample_ = 1;
     std::unordered_map<std::uint64_t, Stream> streams_; // per clip ID
+    std::vector<float> scratch_; // a clip's samples while they are equalized, reused
     std::uint64_t pass_ = 0;
 };
 

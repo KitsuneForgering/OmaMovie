@@ -25,6 +25,7 @@ namespace tl = oma::timeline;
 inline constexpr int kChannels = 2;
 inline const tl::MediaId kTone{1};   // tone_44100.wav: 2 s of 440 Hz at amplitude 1/8
 inline const tl::MediaId kCamera{2}; // h264_30fps_aac.mp4: 1 s of video with a 440 Hz AAC tone
+inline const tl::MediaId kNoisy{3};  // noisy_tone.wav: 3 s of hiss, the tone from 1 s on (48 kHz)
 
 inline std::filesystem::path fixture(const char* name) {
     const char* dir = std::getenv("OMA_FIXTURES");
@@ -74,6 +75,13 @@ inline Sequence make_sequence() {
                       .has_video = true,
                       .has_audio = true,
                       .still = false});
+    (void)seq.editor.add_media(
+        tl::MediaInfo{.id = kNoisy,
+                      .start = oma::RationalTime::make(0, q(1, 48000)).value(),
+                      .duration = oma::RationalTime::make(144000, q(1, 48000)).value(),
+                      .has_video = false,
+                      .has_audio = true,
+                      .still = false});
     seq.video = seq.editor.new_track_id();
     seq.audio = seq.editor.new_track_id();
     (void)seq.editor.execute(tl::edit::add_track(seq.video, tl::TrackKind::Video, "V1"));
@@ -110,7 +118,8 @@ inline tl::ClipId place_camera(Sequence& seq, std::int64_t at) {
 
 inline std::unordered_map<std::uint64_t, std::string> paths() {
     return {{kTone.value(), fixture("tone_44100.wav").string()},
-            {kCamera.value(), fixture("h264_30fps_aac.mp4").string()}};
+            {kCamera.value(), fixture("h264_30fps_aac.mp4").string()},
+            {kNoisy.value(), fixture("noisy_tone.wav").string()}};
 }
 
 // Renders `frames` sequence samples from `first`, in blocks of `block` frames.
@@ -127,6 +136,29 @@ inline std::vector<float> render(const tl::Timeline& timeline, std::int64_t firs
         }
     }
     return out;
+}
+
+// The whole noisy fixture on the audio track at 0.
+inline tl::ClipId place_noisy(Sequence& seq, tl::AudioProperties audio = {}) {
+    const tl::ClipId id = seq.editor.new_clip_id();
+    const tl::edit::ClipSource source{.media = kNoisy,
+                                      .source_in = oma::RationalTime::make(0, q(1, 48000)).value(),
+                                      .duration = s(144000),
+                                      .time_map = {},
+                                      .video = {},
+                                      .audio = audio};
+    return seq.editor.execute(tl::edit::overwrite(seq.audio, id, s(0), source)) ? id : tl::ClipId{};
+}
+
+// RMS level in dBFS of interleaved frames [from, to).
+inline double level_db(const std::vector<float>& samples, std::int64_t from, std::int64_t to) {
+    double squares = 0.0;
+    for (std::int64_t i = from * kChannels; i < to * kChannels; ++i) {
+        const double v = samples[static_cast<std::size_t>(i)];
+        squares += v * v;
+    }
+    const auto n = static_cast<double>((to - from) * kChannels);
+    return squares > 0.0 ? 10.0 * std::log10(squares / n) : -200.0;
 }
 
 // Largest absolute sample in interleaved frames [from, to).

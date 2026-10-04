@@ -34,6 +34,14 @@ std::int64_t sample_at(const oma::RationalTime& t, std::int64_t ticks, oma::Rati
     return static_cast<std::int64_t>(floor_div(num, den));
 }
 
+oma::audio::EqBands bands(const tl::Equalizer& eq) {
+    oma::audio::EqBands b;
+    b.low_db = eq.low_db;
+    b.mid_db = eq.mid_db;
+    b.high_db = eq.high_db;
+    return b;
+}
+
 } // namespace
 
 TimelineAudio::TimelineAudio(tl::Timeline timeline,
@@ -83,7 +91,7 @@ oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip,
     const auto continued = std::ranges::find_if(streams_, [&](const auto& entry) {
         const Stream& s = entry.second;
         return s.finished && !s.failed && s.media == clip.media.value() &&
-               s.next_sample == media_sample;
+               s.noise == clip.audio.noise && s.next_sample == media_sample;
     });
     if (continued != streams_.end()) {
         auto node = streams_.extract(continued);
@@ -91,10 +99,14 @@ oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip,
         Stream& s = streams_.insert(std::move(node)).position->second;
         s.finished = false;
         s.used_in = pass_;
+        // Same coefficients or not, the filter state carries over: the samples are contiguous.
+        s.eq.configure(rate_.hz(), bands(clip.audio.eq));
         return &s;
     }
     Stream& s = streams_[clip.id.value()];
     s.media = clip.media.value();
+    s.noise = clip.audio.noise;
+    s.eq.configure(rate_.hz(), bands(clip.audio.eq));
     s.used_in = pass_;
     s.next_sample = -1; // forces the first seek
     const auto path = paths_.find(clip.media.value());
@@ -106,6 +118,8 @@ oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip,
     oma::media::AudioDecoderOptions options;
     options.sample_rate = rate_;
     options.channels = channels_;
+    options.denoise = clip.audio.noise.amount;
+    options.noise_floor_db = clip.audio.noise.floor_db;
     auto decoder = oma::media::AudioDecoder::open(std::filesystem::path(path->second), options);
     if (!decoder) {
         s.failed = true;
@@ -150,6 +164,7 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, std::span<float>
         s.offset = 0;
         s.ended = false;
         s.next_sample = media_sample;
+        s.eq.reset();
     }
     const oma::audio::ClipGain gain{
         .gain = clip.audio.gain,
@@ -176,10 +191,25 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, std::span<float>
         }
         const std::int64_t n = std::min(to - pos, s.buffer->frames - s.offset);
         const auto at = static_cast<std::size_t>((pos - first) * channels_);
-        oma::audio::mix_planar(
-            out.subspan(at), channels_,
-            std::span<const float>(s.buffer->samples).subspan(static_cast<std::size_t>(s.offset)),
-            s.buffer->channels, s.buffer->frames, n, gain, pos - a);
+        const auto input = std::span<const float>(s.buffer->samples);
+        if (s.eq.active()) {
+            // Equalize a copy: the buffer may be mixed again after a seek back into it.
+            const int ch = s.buffer->channels;
+            scratch_.resize(static_cast<std::size_t>(n) * static_cast<std::size_t>(ch));
+            for (int c = 0; c < ch; ++c) {
+                const auto src =
+                    (static_cast<std::size_t>(c) * static_cast<std::size_t>(s.buffer->frames)) +
+                    static_cast<std::size_t>(s.offset);
+                std::copy_n(input.begin() + static_cast<std::ptrdiff_t>(src), n,
+                            scratch_.begin() + (static_cast<std::ptrdiff_t>(c) * n));
+            }
+            s.eq.process(scratch_, ch, n, n);
+            oma::audio::mix_planar(out.subspan(at), channels_, scratch_, ch, n, n, gain, pos - a);
+        } else {
+            oma::audio::mix_planar(out.subspan(at), channels_,
+                                   input.subspan(static_cast<std::size_t>(s.offset)),
+                                   s.buffer->channels, s.buffer->frames, n, gain, pos - a);
+        }
         s.offset += n;
         s.next_sample += n;
         pos += n;

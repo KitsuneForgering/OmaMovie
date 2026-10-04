@@ -18,6 +18,19 @@ tl::AudioProperties with_gain(float gain) {
     return a;
 }
 
+tl::AudioProperties mid_cut() {
+    tl::AudioProperties a;
+    a.eq.mid_db = -12.0F;
+    return a;
+}
+
+tl::AudioProperties denoised() {
+    tl::AudioProperties a;
+    a.noise.amount = 1.0F;
+    a.noise.floor_db = -38.7F;
+    return a;
+}
+
 tl::AudioProperties muted() {
     tl::AudioProperties a;
     a.muted = true;
@@ -87,6 +100,36 @@ void run_timeline_audio_tests() {
             const auto b = render(detached.editor.timeline(), 0, 60000);
             expect(peak(a, 4800, 52800) > 0.05F).toBeTruthy();
             expect(a == b).toBeTruthy();
+        });
+
+        it("equalizes a clip's sound", {
+            if (!have_fixture("noisy_tone.wav")) {
+                return;
+            }
+            Sequence flat = make_sequence();
+            expect(place_noisy(flat).valid()).toBeTruthy();
+            Sequence cut = make_sequence();
+            expect(place_noisy(cut, mid_cut()).valid()).toBeTruthy();
+            const auto a = render(flat.editor.timeline(), 96000, 48000);
+            const auto b = render(cut.editor.timeline(), 96000, 48000);
+            // The 440 Hz tone sits on the mid band's skirt: clearly quieter, not silenced.
+            const double drop = level_db(a, 0, 48000) - level_db(b, 0, 48000);
+            expect(drop > 3.0 && drop < 12.0).toBeTruthy();
+        });
+
+        it("reduces steady noise when asked", {
+            if (!have_fixture("noisy_tone.wav")) {
+                return;
+            }
+            Sequence plain = make_sequence();
+            expect(place_noisy(plain).valid()).toBeTruthy();
+            Sequence clean = make_sequence();
+            expect(place_noisy(clean, denoised()).valid()).toBeTruthy();
+            const auto a = render(plain.editor.timeline(), 0, 144000);
+            const auto b = render(clean.editor.timeline(), 0, 144000);
+            expect(level_db(a, 24000, 48000) - level_db(b, 24000, 48000) > 15.0).toBeTruthy();
+            expect(std::abs(level_db(a, 96000, 144000) - level_db(b, 96000, 144000)) < 1.0)
+                .toBeTruthy();
         });
 
         it("renders the same samples from a later start as in one pass", {
