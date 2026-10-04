@@ -132,6 +132,31 @@ void run_timeline_audio_tests() {
                 .toBeTruthy();
         });
 
+        it("crossfades sound across a transition, both clips playing past the cut", {
+            if (!have_fixture("tone_44100.wav")) {
+                return;
+            }
+            // A plays the tone's first half second, B from 1 s; a 0.2 s dissolve into B spans
+            // samples 19200 to 28800. Muting one side at a time shows what the other adds.
+            const auto build = [](bool mute_a, bool mute_b) {
+                Sequence seq = make_sequence();
+                (void)place(seq, 0, 0, 24000, mute_a ? muted() : tl::AudioProperties{});
+                const tl::ClipId b =
+                    place(seq, 24000, 44100, 24000, mute_b ? muted() : tl::AudioProperties{});
+                (void)seq.editor.execute(tl::edit::set_transition(
+                    b, tl::Transition{.kind = tl::TransitionKind::Dissolve, .duration = s(9600)}));
+                return render(seq.editor.timeline(), 0, 48000);
+            };
+            const auto outgoing = build(false, true);
+            expect(peak(outgoing, 24000, 28000) > 0.01F).toBeTruthy(); // A past its end
+            expect(peak(outgoing, 28800, 48000)).toEqual(0.0F);
+            expect(near_tone(peak(outgoing, 0, 19000), 1.0F)).toBeTruthy();
+            const auto incoming = build(true, false);
+            expect(peak(incoming, 0, 19200)).toEqual(0.0F);
+            expect(peak(incoming, 20000, 24000) > 0.01F).toBeTruthy(); // B before its start
+            expect(near_tone(peak(incoming, 29000, 48000), 1.0F)).toBeTruthy();
+        });
+
         it("renders the same samples from a later start as in one pass", {
             if (!have_fixture("tone_44100.wav")) {
                 return;

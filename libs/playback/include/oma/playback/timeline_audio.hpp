@@ -53,8 +53,17 @@ private:
         bool finished = false;
     };
 
-    [[nodiscard]] oma::Result<void> mix_clip(const oma::timeline::Clip& clip, std::span<float> out,
-                                             std::int64_t first);
+    // Samples a clip plays, in sequence samples: [first, end) plus the lead before its first
+    // sample and the tail after its last that transitions add.
+    struct Span {
+        std::int64_t first = 0;
+        std::int64_t end = 0;
+        std::int64_t lead = 0;
+        std::int64_t tail = 0;
+    };
+    [[nodiscard]] Span span_of(const oma::timeline::Track& track, std::size_t index) const;
+    [[nodiscard]] oma::Result<void> mix_clip(const oma::timeline::Clip& clip, const Span& span,
+                                             std::span<float> out, std::int64_t first);
     // The clip's stream: its own, one handed over by a finished clip of the same media that
     // stopped at `media_sample`, or a newly opened decoder.
     [[nodiscard]] oma::Result<Stream*> stream(const oma::timeline::Clip& clip,

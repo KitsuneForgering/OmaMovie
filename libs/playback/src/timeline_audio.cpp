@@ -1,6 +1,7 @@
 #include "oma/playback/timeline_audio.hpp"
 
 #include "oma/audio/mix.hpp"
+#include "oma/timeline/evaluate.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -62,24 +63,40 @@ oma::Result<void> TimelineAudio::render(std::span<float> out, std::int64_t first
         if (track.muted || track.kind == tl::TrackKind::Caption) {
             continue;
         }
-        for (const tl::Clip& clip : track.clips) {
+        for (std::size_t i = 0; i < track.clips.size(); ++i) {
+            const tl::Clip& clip = track.clips[i];
             const tl::MediaInfo* media = timeline_.find_media(clip.media);
             if (media == nullptr || !media->has_audio || clip.audio.muted || clip.audio_detached) {
                 continue;
             }
-            // The clip owns the samples whose start lies inside [start, end).
-            const std::int64_t a = ceil_div(clip.start_ticks(), ticks_per_sample_);
-            const std::int64_t b = ceil_div(clip.end_ticks(), ticks_per_sample_);
-            if (b <= first || a >= first + frames) {
+            const Span span = span_of(track, i);
+            if (span.end + span.tail <= first || span.first - span.lead >= first + frames) {
                 continue;
             }
-            if (auto r = mix_clip(clip, out, first); !r && result) {
+            if (auto r = mix_clip(clip, span, out, first); !r && result) {
                 result = r; // report the first failure; the rest of the mix still plays
             }
         }
     }
     std::erase_if(streams_, [&](const auto& entry) { return entry.second.used_in != pass_; });
     return result;
+}
+
+TimelineAudio::Span TimelineAudio::span_of(const tl::Track& track, std::size_t index) const {
+    const tl::Clip& clip = track.clips[index];
+    // The clip owns the samples whose start lies inside [start, end).
+    Span span{.first = ceil_div(clip.start_ticks(), ticks_per_sample_),
+              .end = ceil_div(clip.end_ticks(), ticks_per_sample_),
+              .lead = 0,
+              .tail = 0};
+    // A transition crossfades over the window around the cut, the same span as the picture.
+    if (const auto in = tl::transition_window(timeline_, track, index)) {
+        span.lead = span.first - ceil_div(in->cut - in->half, ticks_per_sample_);
+    }
+    if (const auto out = tl::transition_window(timeline_, track, index + 1)) {
+        span.tail = ceil_div(out->cut + out->half, ticks_per_sample_) - span.end;
+    }
+    return span;
 }
 
 oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip,
@@ -129,16 +146,17 @@ oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip,
     return &s;
 }
 
-oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, std::span<float> out,
-                                          std::int64_t first) {
+oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, const Span& span,
+                                          std::span<float> out, std::int64_t first) {
     if (clip.time_map.speed() != oma::Rational::literal(1, 1)) {
         return {}; // needs time-stretching (v0.2 speed work)
     }
     const auto frames = static_cast<std::int64_t>(out.size() / static_cast<std::size_t>(channels_));
-    const std::int64_t a = ceil_div(clip.start_ticks(), ticks_per_sample_);
-    const std::int64_t b = ceil_div(clip.end_ticks(), ticks_per_sample_);
-    const std::int64_t from = std::max(a, first);
-    const std::int64_t to = std::min(b, first + frames);
+    const std::int64_t a = span.first;
+    const std::int64_t b = span.end;
+    // Transitions play the media past the clip's edges; the window was checked to have it.
+    const std::int64_t from = std::max(a - span.lead, first);
+    const std::int64_t to = std::min(b + span.tail, first + frames);
     const std::int64_t media_sample =
         sample_at(clip.source_in, (from * ticks_per_sample_) - clip.start_ticks(),
                   timeline_.timebase(), rate_.hz());
@@ -170,7 +188,9 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, std::span<float>
         .gain = clip.audio.gain,
         .length = b - a,
         .fade_in = rate_.time_to_sample(clip.audio.fade_in, oma::Rounding::Floor).value_or(0),
-        .fade_out = rate_.time_to_sample(clip.audio.fade_out, oma::Rounding::Floor).value_or(0)};
+        .fade_out = rate_.time_to_sample(clip.audio.fade_out, oma::Rounding::Floor).value_or(0),
+        .lead = span.lead,
+        .tail = span.tail};
     std::int64_t pos = from;
     while (pos < to) {
         if (!s.buffer || s.offset >= s.buffer->frames) {
@@ -214,7 +234,7 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, std::span<float>
         s.next_sample += n;
         pos += n;
     }
-    s.finished = to == b;
+    s.finished = to == b + span.tail;
     return {};
 }
 
