@@ -1,5 +1,7 @@
 #include "oma/audio/mix.hpp"
 
+#include <cmath>
+
 #include <vector>
 
 #include "oma_test.hpp"
@@ -24,6 +26,15 @@ ClipGain unity(std::int64_t length) {
 
 std::vector<float> mono_planes() {
     return {3, 5};
+}
+
+// A 1000-sample clip crossfading over 100 samples on each side of both ends.
+ClipGain crossfaded() {
+    ClipGain g;
+    g.length = 1000;
+    g.lead = 100;
+    g.tail = 100;
+    return g;
 }
 
 } // namespace
@@ -85,6 +96,26 @@ void run_mix_tests() {
             const auto in = stereo_planes();
             mix_planar(out, 2, in, 2, 4, 4, unity(4), 0);
             expect(out[0] == 1.0F && out[1] == 10.0F).toBeTruthy();
+        });
+    });
+
+    describe("audio::ClipGain crossfades", {
+        it("plays before and after the clip under equal-power ramps", {
+            ClipGain g = crossfaded();
+            expect(g.at(-101)).toBe(0.0F);
+            expect(g.at(-100)).toBe(0.0F); // sin(0)
+            expect(std::abs(g.at(0) - 0.70710678F) < 1e-6F).toBeTruthy();
+            expect(g.at(500)).toBe(1.0F);
+            expect(g.at(1100)).toBe(0.0F);
+            // The outgoing ramp and an incoming ramp at the same instant keep their power.
+            ClipGain next;
+            next.length = 1000;
+            next.lead = 100;
+            for (std::int64_t i = -100; i < 100; i += 37) {
+                const float out = g.at(1000 + i);
+                const float in = next.at(i);
+                expect(std::abs((out * out) + (in * in) - 1.0F) < 1e-5F).toBeTruthy();
+            }
         });
     });
 }

@@ -8,14 +8,19 @@
 
 namespace oma::audio {
 
-// A clip's gain over its length: a constant gain with linear fades at both ends.
+// A clip's gain over its length: a constant gain with linear fades at both ends, and
+// crossfades with its neighbours when transitions join them.
 struct ClipGain {
     float gain = 1.0F;
     std::int64_t length = 0;   // clip length in samples
     std::int64_t fade_in = 0;  // samples
     std::int64_t fade_out = 0; // samples
+    // Transitions: the clip also plays `lead` samples before its first and `tail` after its
+    // last, under equal-power ramps over [-lead, lead) and [length - tail, length + tail).
+    std::int64_t lead = 0;
+    std::int64_t tail = 0;
 
-    // The gain at `sample` (0 = the clip's first sample). Zero outside the clip.
+    // The gain at `sample` (0 = the clip's first sample). Zero outside [-lead, length + tail).
     [[nodiscard]] float at(std::int64_t sample) const noexcept;
 };
 
