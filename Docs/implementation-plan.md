@@ -247,8 +247,8 @@ peak normalize). Not done: linking lane clips to the storyline clip they belong 
 
 Done: Color (exposure, contrast, saturation, temperature), Crop and framing
 (fit, edges, position, scale, rotation), Effects (six filter looks with previews,
-soften/sharpen). Not done: "Auto" color, Ken Burns (keyframes), on-viewer handles,
-LUTs, transitions (below).
+soften/sharpen), transitions (ADR-0011). Not done: "Auto" color, Ken Burns (keyframes),
+on-viewer handles, LUTs, the cut editor (double click on a junction).
 
 ### M6 — UI v0.1
 
@@ -297,7 +297,7 @@ clean Omarchy machine.
 - [ ] Changeable canvas aspect ratio (ADR: normalized coordinates vs. pixels).
 - [ ] Constant speed + speed ramps with named presets (curve from ADR-0002).
 - [ ] Keyframes with interpolation on every animatable parameter; simple dopesheet.
-- [ ] Transitions (dissolve, dip, wipe).
+- [x] Transitions (dissolve, dip, wipe) — ahead of order (2026-10-03, ADR-0011): clip-owned, centered on the cut, limited by media handles, audio crossfade; storyline UI.
 - [ ] Intent presets (PiP, split screen, cutaway) producing editable layers.
 - [ ] Markers in the UI.
 - [ ] Proxies selected by measured storage/seek/quality/compatibility, including compute-decoded candidates, and proxy/original switching.
@@ -331,6 +331,7 @@ clean Omarchy machine.
 | ProjectIR and preservation | M9 | 0008 | `CLAUDE.md` §16 |
 | Cache | M7 | 0009 | Key derived from inputs, `$XDG_CACHE_HOME/omamovie` |
 | Canvas coordinates | M8 | 0010 | Decide before the aspect ratio becomes changeable |
+| Transitions | ahead of M8 | 0011 | **Accepted**: clip-owned, centered on the cut, media handles |
 
 ADR-0004 already records application-owned device/frame/decode choices; do not restart their
 approval as if nothing had been implemented. S4/ADR-0005 cover the shared-device

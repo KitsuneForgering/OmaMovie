@@ -17,6 +17,7 @@ one as superseded.
 | 0008 | ProjectIR and preservation of external data | Pending (M9) |
 | 0009 | Cache strategy | Pending (M7) |
 | 0010 | Canvas coordinates | Pending (M8) |
+| [0011](0011-transitions.md) | Transitions between clips | Accepted |
 
 Template: copy the structure of an existing ADR (Context, Decision, Alternatives, Consequences).
 

@@ -49,6 +49,11 @@ Shell state (2026-10-03), aligned with this document:
   scale and rotation (no Ken Burns yet: it needs keyframes; no on-viewer handles yet).
   Effects: one filter per clip (Black & White, Sepia, Vintage, Cool, Warm, Vignette)
   picked from previews of the clip itself, its amount, and a Soften/Sharpen control.
+- Transitions (ADR-0011): a ⋈ marker on every cut between touching storyline clips opens
+  None / Cross dissolve / Dip to black / Wipe and 0.5, 1 or 2 s; `Ctrl+T` adds a 1 s cross
+  dissolve at the cut nearest the playhead. The span it actually plays is drawn over the cut
+  (shorter when the clips have little media to spare; a notice says when it stays a plain
+  cut). Sound crossfades over the same span.
 - Transport per §5 (timecode `HH:MM:SS:FF`, start/end, previous/next frame,
   reverse, stop/reset, play, forward, full-screen viewer); `K` still pauses in place.
   Failures appear over the viewer,
@@ -291,6 +296,7 @@ Translation rule: **macOS `Cmd` becomes `Ctrl`**, `Option` becomes `Alt`. OmaMov
 | `D` | Overwrite at the playhead |
 | `Ctrl+B` | Split at the playhead (the selected clip, else the storyline clip) |
 | `Ctrl+Shift+S` | Detach audio |
+| `Ctrl+T` | Add a cross dissolve at the nearest cut |
 | `Delete` | Remove and close the gap |
 | `Shift+Delete` | Replace with a gap |
 | `Ctrl+D` | Change duration |
