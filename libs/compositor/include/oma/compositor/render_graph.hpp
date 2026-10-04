@@ -46,6 +46,31 @@ struct Transform {
     double rotation = 0.0; // degrees, clockwise
 };
 
+// Color adjustments of a layer (ui-design §6, Color), applied to the source in linear light
+// before blending, in this order: white balance and exposure, contrast, saturation.
+struct ColorAdjust {
+    double exposure = 0.0;    // stops, in [-4, 4]
+    double contrast = 0.0;    // in [-1, 1]: a power of 2^contrast around 18% grey
+    double saturation = 0.0;  // in [-1, 1]: -1 grey, 0 unchanged, 1 twice the chroma
+    double temperature = 0.0; // in [-1, 1]: cooler (bluer) to warmer, luminance kept
+};
+
+// A clip filter (ui-design §6, Effects): a look applied after the color adjustments.
+enum class FilterKind : std::uint8_t {
+    None,
+    BlackAndWhite,
+    Sepia,
+    Vintage, // faded, warm and less saturated
+    Cool,
+    Warm,
+    Vignette, // darkened corners
+};
+
+struct Filter {
+    FilterKind kind = FilterKind::None;
+    double amount = 1.0; // in [0, 1]: blend between the original and the full look
+};
+
 struct Layer {
     std::size_t input = 0; // index into the inputs given to the compositor
     Fit fit = Fit::Fit;
@@ -53,6 +78,8 @@ struct Layer {
     Transform transform;
     float opacity = 1.0F;
     BlendMode blend = BlendMode::Normal;
+    ColorAdjust color;
+    Filter filter;
 };
 
 struct RenderGraph {
@@ -62,7 +89,7 @@ struct RenderGraph {
     std::vector<Layer> layers;                               // bottom first
 };
 
-// Checks sizes, input indices, crops, scales and opacity.
+// Checks sizes, input indices, crops, scales, opacity, color adjustments and filters.
 [[nodiscard]] Result<void> validate(const RenderGraph& graph, std::size_t input_count);
 
 // What the compositor knows about a source when it renders.

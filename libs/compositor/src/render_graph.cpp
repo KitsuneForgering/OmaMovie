@@ -48,6 +48,18 @@ Result<void> validate(const RenderGraph& graph, std::size_t input_count) {
         if (std::isnan(l.opacity) || l.opacity < 0.0F || l.opacity > 1.0F) {
             return std::unexpected(invalid("opacity outside [0, 1]", where));
         }
+        const ColorAdjust& a = l.color;
+        const auto within = [](double v, double limit) {
+            return std::isfinite(v) && std::abs(v) <= limit;
+        };
+        if (!within(a.exposure, 4.0) || !within(a.contrast, 1.0) || !within(a.saturation, 1.0) ||
+            !within(a.temperature, 1.0)) {
+            return std::unexpected(invalid("color adjustment out of range", where));
+        }
+        if (!std::isfinite(l.filter.amount) || l.filter.amount < 0.0 || l.filter.amount > 1.0 ||
+            l.filter.kind > FilterKind::Vignette) {
+            return std::unexpected(invalid("invalid filter", where));
+        }
     }
     return {};
 }

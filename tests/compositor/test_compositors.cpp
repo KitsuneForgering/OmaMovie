@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <optional>
 #include <vector>
 
 #include "oma_test.hpp"
@@ -60,6 +61,17 @@ RenderGraph busy_graph(std::uint32_t w, std::uint32_t h) {
     overlay.blend = BlendMode::Screen;
     overlay.opacity = 0.35F;
     g.layers = {base, pip, overlay};
+    return g;
+}
+
+// busy_graph with every look stage active: color adjustments on the base, a vignette on the
+// picture-in-picture, vintage on the overlay.
+RenderGraph looked_graph(std::uint32_t w, std::uint32_t h) {
+    RenderGraph g = busy_graph(w, h);
+    g.layers[0].color = {.exposure = 0.5, .contrast = 0.3, .saturation = -0.4, .temperature = 0.6};
+    g.layers[1].filter = {.kind = oma::compositor::FilterKind::Vignette, .amount = 0.8};
+    g.layers[1].color.contrast = -0.5;
+    g.layers[2].filter = {.kind = oma::compositor::FilterKind::Vintage, .amount = 0.7};
     return g;
 }
 
@@ -139,11 +151,127 @@ void opacity_and_blend_modes() {
     expect(static_cast<double>(d[3])).toBeCloseTo(1.0, 1e-6);
 }
 
+// Renders the native test layer with a look and returns the pixel at (x, y), straight alpha.
+std::array<float, 4> looked(const LayerInput& input, const oma::compositor::ColorAdjust& color,
+                            const oma::compositor::Filter& filter, std::uint32_t x,
+                            std::uint32_t y) {
+    RenderGraph g = native_graph(320, 180);
+    g.layers[0].color = color;
+    g.layers[0].filter = filter;
+    const std::array<LayerInput, 1> inputs{input};
+    const auto out = CpuCompositor{}.render(g, inputs);
+    return out ? out->at(x, y) : std::array<float, 4>{};
+}
+
+double luma(const std::array<float, 4>& p) {
+    return (0.2126 * p[0]) + (0.7152 * p[1]) + (0.0722 * p[2]);
+}
+
+void color_adjustments() {
+    // Flat patches, 80 px wide: dark neutral grey, mid neutral grey, vivid orange, white.
+    auto src = decode_first("color_patches.y4m");
+    if (!src.frame) {
+        std::printf("    (skipped: fixture color_patches.y4m missing)\n");
+        return;
+    }
+    using oma::compositor::ColorAdjust;
+    using oma::compositor::Filter;
+    using oma::compositor::FilterKind;
+    const LayerInput in = src.input();
+    const auto at = [&](std::uint32_t x, const ColorAdjust& c, const Filter& f) {
+        return looked(in, c, f, x, 90);
+    };
+    const std::uint32_t dark = 40;
+    const std::uint32_t mid = 120;
+    const std::uint32_t vivid = 200;
+
+    // Exposure scales linear light: +1 stop doubles it (no clipping in the float working space).
+    const auto base = at(mid, {}, {});
+    ColorAdjust brighter;
+    brighter.exposure = 1.0;
+    const auto twice = at(mid, brighter, {});
+    for (int c = 0; c < 3; ++c) {
+        expect(static_cast<double>(twice[c])).toBeCloseTo(2.0 * static_cast<double>(base[c]), 1e-5);
+    }
+    // Temperature tints a neutral without changing its luminance.
+    ColorAdjust warm;
+    warm.temperature = 1.0;
+    const auto w = at(mid, warm, {});
+    expect(w[0] > base[0] && w[2] < base[2]).toBeTruthy();
+    expect(luma(w)).toBeCloseTo(luma(base), 1e-4);
+    // Contrast pivots on 18% grey: below it darker, white brighter.
+    ColorAdjust punchy;
+    punchy.contrast = 0.5;
+    expect(luma(at(dark, punchy, {})) < luma(at(dark, {}, {}))).toBeTruthy();
+    expect(luma(at(280, punchy, {})) > luma(at(280, {}, {}))).toBeTruthy();
+
+    // Saturation -1 and black & white both give the luminance on every channel.
+    const auto color = at(vivid, {}, {});
+    ColorAdjust grey;
+    grey.saturation = -1.0;
+    const auto g = at(vivid, grey, {});
+    expect(std::abs(g[0] - g[1]) < 1e-6F && std::abs(g[1] - g[2]) < 1e-6F).toBeTruthy();
+    expect(static_cast<double>(g[0])).toBeCloseTo(luma(color), 1e-5);
+    const auto bw = at(vivid, {}, Filter{.kind = FilterKind::BlackAndWhite, .amount = 1.0});
+    expect(static_cast<double>(bw[0])).toBeCloseTo(static_cast<double>(g[0]), 1e-6);
+    // Half a sepia is halfway between the original and the full look.
+    const auto sepia = at(vivid, {}, Filter{.kind = FilterKind::Sepia, .amount = 1.0});
+    const auto half = at(vivid, {}, Filter{.kind = FilterKind::Sepia, .amount = 0.5});
+    expect(static_cast<double>(half[0]))
+        .toBeCloseTo((static_cast<double>(color[0]) + static_cast<double>(sepia[0])) / 2.0, 1e-5);
+}
+
+void vignette_darkens_the_corners() {
+    auto src = decode_first("h264_30fps_aac.mp4");
+    if (!src.frame) {
+        return;
+    }
+    using oma::compositor::Filter;
+    using oma::compositor::FilterKind;
+    const LayerInput in = src.input();
+    const Filter vignette{.kind = FilterKind::Vignette, .amount = 1.0};
+    const auto center = looked(in, {}, vignette, 160, 90);
+    const auto corner = looked(in, {}, vignette, 2, 2);
+    expect(center == looked(in, {}, {}, 160, 90)).toBeTruthy();
+    expect(luma(corner) < 0.3 * luma(looked(in, {}, {}, 2, 2))).toBeTruthy();
+}
+
 void rejects_bad_inputs() {
     RenderGraph g = native_graph(16, 16);
     const std::array<LayerInput, 1> empty{LayerInput{}};
     expect(CpuCompositor{}.render(g, empty).has_value()).toBeFalsy();
     expect(CpuCompositor{}.render(g, {}).has_value()).toBeFalsy();
+}
+
+void gpu_matches_cpu_with_looks() {
+    const oma::gpu::Device* device = compositor_test_device();
+    if (device == nullptr) {
+        return;
+    }
+    auto a = decode_first("h264_30fps_aac.mp4");
+    auto b = decode_first("hevc_10bit.mp4");
+    if (!a.frame || !b.frame) {
+        std::printf("    (skipped: fixtures missing)\n");
+        return;
+    }
+    const std::array<LayerInput, 2> inputs{a.input(), b.input()};
+    auto vk = VulkanCompositor::create(*device);
+    expect(vk.has_value()).toBeTruthy();
+    if (!vk) {
+        return;
+    }
+    const RenderGraph g = looked_graph(640, 360);
+    const auto cpu = CpuCompositor{}.render(g, inputs);
+    expect((*vk)->render(g, inputs).has_value()).toBeTruthy();
+    const auto gpu = (*vk)->read_output();
+    expect(cpu && gpu).toBeTruthy();
+    if (!cpu || !gpu) {
+        return;
+    }
+    const auto diff = compare(*gpu, *cpu, kTolerance);
+    std::printf("    max difference %.5f, %zu of %zu pixels over tolerance\n",
+                static_cast<double>(diff.max_abs), diff.over_tolerance, cpu->pixels.size() / 4);
+    expect(diff.over_tolerance <= cpu->pixels.size() / 4 / 500).toBeTruthy();
 }
 
 void gpu_matches_cpu_with_uploads() {
@@ -307,12 +435,17 @@ void run_cpu_compositor_tests() {
            { native_layer_is_opaque_and_shifts_exactly(); });
         it("applies opacity and blend modes", { opacity_and_blend_modes(); });
         it("rejects missing inputs", { rejects_bad_inputs(); });
+        it("adjusts exposure, saturation, temperature, contrast and filters",
+           { color_adjustments(); });
+        it("darkens the corners with a vignette", { vignette_darkens_the_corners(); });
     });
 }
 
 void run_vulkan_compositor_tests() {
     describe("compositor::VulkanCompositor", {
         it("matches the CPU reference on uploaded frames", { gpu_matches_cpu_with_uploads(); });
+        it("matches the CPU reference with color adjustments and filters",
+           { gpu_matches_cpu_with_looks(); });
         it("matches the CPU reference on zero-copy GPU frames",
            { gpu_frames_match_cpu_reference(); });
         it("encodes the output for an SDR display", { display_encodes_srgb(); });

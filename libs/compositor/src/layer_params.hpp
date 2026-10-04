@@ -30,8 +30,15 @@ struct alignas(16) LayerParams {
     std::array<std::int32_t, 4> mode{};   // chroma mode, chroma shift x, chroma shift y, transfer
     std::array<std::int32_t, 4> extra{};  // blend mode, source width, source height
     std::array<std::int32_t, 4> region{}; // output pixels to process: x0, y0, x1, y1
+    // The look (src/look.hpp): gains r, g, b and the contrast power; matrix rows with offsets;
+    // vignette darkening, its center (source pixels) and 1 / the distance to the corners.
+    std::array<float, 4> gains{1.0F, 1.0F, 1.0F, 1.0F};
+    std::array<float, 4> look_r{1.0F, 0.0F, 0.0F, 0.0F};
+    std::array<float, 4> look_g{0.0F, 1.0F, 0.0F, 0.0F};
+    std::array<float, 4> look_b{0.0F, 0.0F, 1.0F, 0.0F};
+    std::array<float, 4> vignette{};
 };
-static_assert(sizeof(LayerParams) == 13U * 16U, "LayerParams must match the std140 block");
+static_assert(sizeof(LayerParams) == 18U * 16U, "LayerParams must match the std140 block");
 
 struct PreparedLayer {
     LayerParams params;

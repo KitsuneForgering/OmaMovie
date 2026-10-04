@@ -24,7 +24,16 @@ layout(std140, set = 0, binding = 4) uniform Layer {
     ivec4 mode;   // chroma mode (1 interleaved, 2 planar), chroma shift x, chroma shift y, transfer
     ivec4 extra;  // blend, source width, source height
     ivec4 region; // output pixels x0, y0, x1, y1
+    vec4 gains;   // look (src/look.hpp): r, g, b gains, contrast power
+    vec4 look_r;  // look matrix rows, offset in w
+    vec4 look_g;
+    vec4 look_b;
+    vec4 vignette; // darkening, center x, center y (source pixels), 1 / corner distance
 } L;
+
+const float kContrastPivot = 0.18;
+const float kVignetteStart = 0.45;
+const float kVignetteEnd = 1.0;
 
 const int kTransferLinear = 0;
 const int kTransferSrgb = 1;
@@ -92,6 +101,20 @@ void main() {
     vec3 c01 = texel(ivec2(p0.x, p1.y));
     vec3 c11 = texel(ivec2(p1.x, p1.y));
     vec3 color = mix(mix(c00, c10, t.x), mix(c01, c11, t.x), t.y);
+
+    // The layer's look, in the order of src/look.hpp.
+    color = max(color * L.gains.rgb, vec3(0.0));
+    if (L.gains.w != 1.0) {
+        color = kContrastPivot * pow(color / kContrastPivot, vec3(L.gains.w));
+    }
+    color = vec3(dot(L.look_r.xyz, color) + L.look_r.w,
+                 dot(L.look_g.xyz, color) + L.look_g.w,
+                 dot(L.look_b.xyz, color) + L.look_b.w);
+    if (L.vignette.x > 0.0) {
+        float d = length(s - L.vignette.yz) * L.vignette.w;
+        color *= 1.0 - L.vignette.x * smoothstep(kVignetteStart, kVignetteEnd, d);
+    }
+    color = max(color, vec3(0.0));
 
     float alpha = L.misc.x;
     vec4 src = vec4(color * alpha, alpha);

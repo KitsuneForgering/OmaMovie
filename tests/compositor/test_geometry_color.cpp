@@ -119,6 +119,14 @@ void validates_graphs() {
     auto r = oma::compositor::validate(g, 1);
     expect(!r && r.error().code() == ErrorCode::InvalidArgument).toBeTruthy();
     g.layers[0].transform.scale_x = 1.0;
+    g.layers[0].color.exposure = 4.5;
+    expect(oma::compositor::validate(g, 1).has_value()).toBeFalsy();
+    g.layers[0].color.exposure = -4.0;
+    g.layers[0].color.saturation = 1.0;
+    expect(oma::compositor::validate(g, 1).has_value()).toBeTruthy();
+    g.layers[0].filter.amount = 1.2;
+    expect(oma::compositor::validate(g, 1).has_value()).toBeFalsy();
+    g.layers[0].filter.amount = 1.0;
     g.width = 0;
     expect(oma::compositor::validate(g, 1).has_value()).toBeFalsy();
 }

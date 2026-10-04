@@ -1,6 +1,7 @@
 #include "oma/compositor/compositor.hpp"
 
 #include "layer_params.hpp"
+#include "look.hpp"
 
 #include "oma/compositor/color.hpp"
 #include "oma/media/video_frame.hpp"
@@ -82,6 +83,35 @@ Rgb mix(const Rgb& a, const Rgb& b, float t) {
         .r = a.r + ((b.r - a.r) * t), .g = a.g + ((b.g - a.g) * t), .b = a.b + ((b.b - a.b) * t)};
 }
 
+float smoothstep(float edge0, float edge1, float x) {
+    const float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0F, 1.0F);
+    return t * t * (3.0F - (2.0F * t));
+}
+
+// The layer's look at source position (sx, sy), in the order of src/look.hpp.
+Rgb apply_look(const LayerParams& p, float sx, float sy, Rgb c) {
+    c = {.r = std::max(c.r * p.gains[0], 0.0F),
+         .g = std::max(c.g * p.gains[1], 0.0F),
+         .b = std::max(c.b * p.gains[2], 0.0F)};
+    if (p.gains[3] != 1.0F) {
+        const auto pivot = static_cast<float>(kContrastPivot);
+        const auto curve = [&](float v) {
+            return pivot * std::pow(v / pivot, p.gains[3]);
+        };
+        c = {.r = curve(c.r), .g = curve(c.g), .b = curve(c.b)};
+    }
+    c = {.r = dot3(p.look_r, c.r, c.g, c.b) + p.look_r[3],
+         .g = dot3(p.look_g, c.r, c.g, c.b) + p.look_g[3],
+         .b = dot3(p.look_b, c.r, c.g, c.b) + p.look_b[3]};
+    if (p.vignette[0] > 0.0F) {
+        const float d = std::hypot(sx - p.vignette[1], sy - p.vignette[2]) * p.vignette[3];
+        const float k = 1.0F - (p.vignette[0] * smoothstep(static_cast<float>(kVignetteStart),
+                                                           static_cast<float>(kVignetteEnd), d));
+        c = {.r = c.r * k, .g = c.g * k, .b = c.b * k};
+    }
+    return {.r = std::max(c.r, 0.0F), .g = std::max(c.g, 0.0F), .b = std::max(c.b, 0.0F)};
+}
+
 // Mirrors main() in shaders/composite.comp.
 void composite(const LayerParams& p, const Planes& planes, RgbaImage& out) {
     const int width = p.extra[1];
@@ -107,8 +137,10 @@ void composite(const LayerParams& p, const Planes& planes, RgbaImage& out) {
             const int y0 = std::clamp(static_cast<int>(by), lo_y, hi_y);
             const int x1 = std::clamp(static_cast<int>(bx) + 1, lo_x, hi_x);
             const int y1 = std::clamp(static_cast<int>(by) + 1, lo_y, hi_y);
-            const Rgb color = mix(mix(texel(p, planes, x0, y0), texel(p, planes, x1, y0), tx),
-                                  mix(texel(p, planes, x0, y1), texel(p, planes, x1, y1), tx), ty);
+            const Rgb color =
+                apply_look(p, sx, sy,
+                           mix(mix(texel(p, planes, x0, y0), texel(p, planes, x1, y0), tx),
+                               mix(texel(p, planes, x0, y1), texel(p, planes, x1, y1), tx), ty));
 
             const float a = p.misc[0];
             const std::array<float, 4> src{color.r * a, color.g * a, color.b * a, a};
