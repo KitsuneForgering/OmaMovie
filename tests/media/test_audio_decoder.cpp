@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <numbers>
 
 #include "oma_test.hpp"
@@ -126,6 +127,81 @@ void seeks_to_the_sample() {
     expect(first_frames + rest.frames).toEqual(88200 - 30000);
 }
 
+// RMS in dBFS of channel 0 over samples [from, to) of a whole decode.
+double level_db(AudioDecoder& d, std::int64_t from, std::int64_t to) {
+    double squares = 0.0;
+    std::int64_t n = 0;
+    for (;;) {
+        auto b = d.next();
+        if (!b || !*b) {
+            break;
+        }
+        const std::int64_t start = (*b)->pts.value();
+        const auto plane = (*b)->channel(0);
+        for (std::int64_t i = 0; i < (*b)->frames; ++i) {
+            const std::int64_t at = start + i;
+            if (at >= from && at < to) {
+                const double v = plane[static_cast<std::size_t>(i)];
+                squares += v * v;
+                ++n;
+            }
+        }
+    }
+    return n > 0 ? 10.0 * std::log10(squares / static_cast<double>(n)) : -200.0;
+}
+
+AudioDecoderOptions denoised(float amount) {
+    AudioDecoderOptions o;
+    o.denoise = amount;
+    o.noise_floor_db = -38.7F; // the fixture's hiss, measured with ffmpeg volumedetect
+    return o;
+}
+
+void denoises_steady_hiss() {
+    if (!have_fixture("noisy_tone.wav")) {
+        return;
+    }
+    // The first second is hiss only; from 2 s the tone dominates.
+    auto plain = AudioDecoder::open(fixture("noisy_tone.wav"));
+    auto clean = AudioDecoder::open(fixture("noisy_tone.wav"), denoised(1.0F));
+    expect(plain.has_value() && clean.has_value()).toBeTruthy();
+    if (!plain || !clean) {
+        return;
+    }
+    const double hiss = level_db(**plain, 24000, 48000);
+    const double reduced = level_db(**clean, 24000, 48000);
+    std::printf("    hiss %.1f dB -> %.1f dB\n", hiss, reduced);
+    expect(hiss - reduced > 15.0).toBeTruthy();
+    auto plain2 = AudioDecoder::open(fixture("noisy_tone.wav"));
+    auto clean2 = AudioDecoder::open(fixture("noisy_tone.wav"), denoised(1.0F));
+    const double tone = level_db(**plain2, 96000, 144000);
+    const double kept = level_db(**clean2, 96000, 144000);
+    expect(std::abs(tone - kept) < 1.0).toBeTruthy();
+}
+
+void denoised_seek_lands_on_the_sample() {
+    if (!have_fixture("noisy_tone.wav")) {
+        return;
+    }
+    auto d = AudioDecoder::open(fixture("noisy_tone.wav"), denoised(0.5F));
+    expect(d.has_value()).toBeTruthy();
+    if (!d) {
+        return;
+    }
+    expect((*d)->seek(*RationalTime::make(100000, oma::Rational::literal(1, 48000))).has_value())
+        .toBeTruthy();
+    const Totals t = drain(**d);
+    expect(t.first_pts).toEqual(100000);
+    expect(t.contiguous).toBeTruthy();
+    expect(t.frames).toEqual(144000 - 100000);
+}
+
+void rejects_bad_denoise_amounts() {
+    AudioDecoderOptions o;
+    o.denoise = 1.5F;
+    expect(AudioDecoder::open(fixture("noisy_tone.wav"), o).has_value()).toBeFalsy();
+}
+
 void rejects_video_only() {
     auto d = AudioDecoder::open(fixture("h264_29.97fps.mp4"));
     expect(d.has_value()).toBeFalsy();
@@ -143,5 +219,9 @@ void run_audio_decoder_tests() {
         it("decodes AAC and Opus", { decodes_aac_and_opus(); });
         it("seeks to an exact sample", { seeks_to_the_sample(); });
         it("fails on files without audio", { rejects_video_only(); });
+        it("reduces steady hiss and keeps the tone", { denoises_steady_hiss(); });
+        it("lands on the exact sample after a denoised seek",
+           { denoised_seek_lands_on_the_sample(); });
+        it("rejects a denoise amount outside [0, 1]", { rejects_bad_denoise_amounts(); });
     });
 }

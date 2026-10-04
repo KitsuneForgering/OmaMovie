@@ -28,6 +28,12 @@ struct AudioDecoderOptions {
     std::optional<int> stream;             // stream index; default: the best audio stream
     std::optional<SampleRate> sample_rate; // output rate; default: the stream's
     std::optional<int> channels; // output channels (default layout); default: the stream's
+    // Noise reduction amount in [0, 1]; 0 turns it off. FFT denoising (FFmpeg's afftdn) of the
+    // noise at about `noise_floor_db` (dBFS RMS, clamped to [-80, -20]): estimate it from the
+    // quiet parts of the material (playback::Waveform::noise_floor_db). A seek decodes a short
+    // stretch before the target to let the filter settle; output still starts at the target.
+    float denoise = 0.0F;
+    float noise_floor_db = -50.0F;
 };
 
 // Decodes one audio stream to planar float32 at a fixed rate and layout (CLAUDE.md §12). Not
