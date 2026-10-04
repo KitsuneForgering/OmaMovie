@@ -175,7 +175,7 @@ measured end-to-end with the audit protocol (`oma-bench` is still a target tool)
 - [x] GLSL shaders → SPIR-V at build time (glslc, embedded).
 - [ ] Persisted pipeline cache (`$XDG_CACHE_HOME/omamovie`).
 - [x] CPU reference compositor (`CpuCompositor`), compared with the GPU output in tests.
-- [ ] `ComputeBackend` interface for effects (`VulkanComputeBackend` + `CpuBackend`), with the first effect; non-real-time sections are reported.
+- [ ] `ComputeBackend` interface for effects (`VulkanComputeBackend` + `CpuBackend`), with the first effect; non-real-time sections are reported. *Partial (2026-10-03)*: the first effects run inside both compositors instead, tested GPU against CPU: per-layer color adjustments and filter looks (`src/look.hpp`) and blur/sharpen as two separable gaussian passes into RGBA32F images. The interface waits for an effect that does not fit the layer pass.
 - [ ] Edge anti-aliasing for rotated layers; chroma siting from the stream (center-sited for now).
 
 **Done when**: the S5 scenario runs on library code; GPU × CPU comparison within tolerance, independent SDR vectors and the declared supported-color contract pass. Record repeated frame times, copies and memory use; end-to-end real-time claims also require M4/S4 presentation measurements.
@@ -242,6 +242,13 @@ ADR-0009 decides the cache), detach audio for J/L-cuts (`edit::detach_audio`,
 `Clip::audio_detached`), Volume "More" (equalizer presets, noise reduction,
 peak normalize). Not done: linking lane clips to the storyline clip they belong to
 (sync-locked ripple), loudness (LUFS) normalization, speed-changed clip audio.
+
+### Video effects ahead of order (2026-10-03)
+
+Done: Color (exposure, contrast, saturation, temperature), Crop and framing
+(fit, edges, position, scale, rotation), Effects (six filter looks with previews,
+soften/sharpen). Not done: "Auto" color, Ken Burns (keyframes), on-viewer handles,
+LUTs, transitions (below).
 
 ### M6 — UI v0.1
 

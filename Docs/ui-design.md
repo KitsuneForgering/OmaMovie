@@ -40,9 +40,15 @@ theme updates remain M6 work.
 Shell state (2026-10-03), aligned with this document:
 - Top bar per §2.1 (back, name, undo/redo, import, export); undo/redo name the
   command they revert ("Undo Split"); export stays disabled until M7.
-- Adjustments bar per §6 with all seven entries; Volume (clips with audio) and Info
-  are enabled, the others show their release in the tooltip. A dot marks a clip
-  whose audio was adjusted. Labels collapse to icons below 1500 px (§2.2).
+- Adjustments bar per §6 with all seven entries; Color, Crop, Effects (video clips),
+  Volume (clips with audio) and Info are enabled; Speed and Overlay show their release
+  in the tooltip. A dot marks what is adjusted on the selected clip. Labels collapse
+  to icons below 1500 px (§2.2).
+- Color: exposure (±2 EV), contrast, saturation and temperature, in linear light
+  (no "Auto" yet). Crop: Fit/Fill/Stretch and the four edges; "More" adds position,
+  scale and rotation (no Ken Burns yet: it needs keyframes; no on-viewer handles yet).
+  Effects: one filter per clip (Black & White, Sepia, Vintage, Cool, Warm, Vignette)
+  picked from previews of the clip itself, its amount, and a Soften/Sharpen control.
 - Transport per §5 (timecode `HH:MM:SS:FF`, start/end, previous/next frame,
   reverse, stop/reset, play, forward, full-screen viewer); `K` still pauses in place.
   Failures appear over the viewer,
