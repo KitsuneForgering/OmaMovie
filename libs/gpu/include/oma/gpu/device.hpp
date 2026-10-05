@@ -31,10 +31,17 @@ struct DeviceInfo {
     std::string name;
     std::string driver_name;
     std::string driver_info;
+    std::string render_node; // "/dev/dri/renderD128"; empty if the driver does not say
     uint32_t vendor_id = 0;
     uint32_t device_id = 0;
     uint32_t api_version = 0;
     VkPhysicalDeviceType type = VK_PHYSICAL_DEVICE_TYPE_OTHER;
+    // Advertised prerequisites, not proof that a particular codec/profile can be decoded.
+    bool dma_buf_import = false;
+    bool drm_modifiers = false;
+    bool external_semaphore_fd = false;
+    bool video_decode_queue = false;
+    VkVideoCodecOperationFlagsKHR advertised_video_codecs = 0;
 };
 
 struct DeviceOptions {

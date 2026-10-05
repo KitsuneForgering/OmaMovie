@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 class QRhiTexture;
@@ -41,8 +42,16 @@ public:
 
     // OmaMovie's device, the one Qt renders with. Set once, before the first frame.
     void setDevice(const oma::gpu::Device* device) { device_ = device; }
+    [[nodiscard]] bool hardwareDecodeAvailable() const;
     // GUI thread. nullptr shows the neutral viewer background.
     void setFrame(std::shared_ptr<const ViewerFrame> frame);
+    // GUI thread: request decode and composition on Qt's render thread, so FFmpeg's Vulkan
+    // work cannot overlap Qt's swapchain teardown or device-idle waits. ponytail: this blocks
+    // presentation during decode; use admitted background decode if full-scene timing requires it.
+    void setRequest(std::shared_ptr<const oma::timeline::Timeline> timeline,
+                    std::shared_ptr<const MediaPaths> paths, std::shared_ptr<const LutTables> luts,
+                    std::uint32_t width, std::uint32_t height, std::int64_t frame,
+                    std::int64_t ticks_per_frame);
 
     // Frames composited and handed to Qt (diagnostics, the smoke check).
     [[nodiscard]] unsigned presentedFrames() const { return presented_; }
@@ -59,6 +68,16 @@ private:
     void waitQueueIdle() const;
 
     const oma::gpu::Device* device_ = nullptr;
+    struct Request {
+        std::shared_ptr<const oma::timeline::Timeline> timeline;
+        std::shared_ptr<const MediaPaths> paths;
+        std::shared_ptr<const LutTables> luts;
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+        std::int64_t frame = 0;
+        std::int64_t ticks_per_frame = 0;
+    };
+    std::optional<Request> request_;
     std::shared_ptr<const ViewerFrame> frame_; // written on the GUI thread, read during sync
     unsigned generation_ = 0;
     std::atomic<unsigned> presented_{0};
@@ -66,9 +85,10 @@ private:
 
     // Render thread only. The scene-graph node owns the texture wrapper (and through it the
     // QRhiTexture borrowing the compositor's display image), so Qt releases its own objects;
-    // the item owns only the compositor.
+    // the item owns the compositor and pilot decoder.
     unsigned composited_ = 0;
     std::unique_ptr<oma::compositor::VulkanCompositor> compositor_;
+    std::unique_ptr<FrameSource> gpu_frames_;
     const void* display_ = nullptr;         // the VkImage of the last encode
     const void* wrapped_ = nullptr;         // the VkImage the node's texture wraps
     QRhiTexture* rhi_texture_ = nullptr;    // owned by the node's QSGTexture

@@ -334,6 +334,8 @@ private:
     void onTick();
     void requestFrame();
     void submitFrame();
+    [[nodiscard]] bool hardwarePreview() const;
+    void requestHardwareFrame(std::int64_t frame);
 
     PreviewItem* preview_ = nullptr;
     bool editing_ = false;

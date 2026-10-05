@@ -15,6 +15,10 @@
 #include <optional>
 #include <string>
 
+namespace oma::gpu {
+class Device;
+}
+
 // A decoded picture and how to interpret it, ready to be a compositor layer input. The frame is
 // shared: the decoder keeps it as its current frame while the viewer composites it.
 struct Picture {
@@ -24,14 +28,15 @@ struct Picture {
     oma::Rational sample_aspect = oma::Rational::literal(1, 1);
 };
 
-// Decodes the frame on screen at a media time, for the viewer and thumbnails. Software decode
-// for now: the viewer's compositor uploads the planes once (CLAUDE.md §7.3 fallback). Hardware
-// frames need the playback scheduler's queue admission first (ADR-0005).
+// Decodes the frame on screen at a media time, for the viewer and thumbnails. Without a device,
+// software decode feeds the compositor's upload path. With a device, the render-thread pilot
+// tries hardware decode first; thumbnails continue to use the CPU path.
 //
-// Threading: owned by the session's single job worker; every call happens on that thread
-// (jobs on a one-thread JobPool never overlap). Pictures handed out are only read elsewhere.
+// Threading: one owner thread per instance (session job worker or Qt render thread). Pictures
+// handed out are only read elsewhere.
 class FrameSource {
 public:
+    explicit FrameSource(const oma::gpu::Device* device = nullptr) : device_(device) {}
     // The frame whose PTS is the last one <= `t` (the first frame when `t` precedes it).
     // Moving forward a little reuses the open decoder without seeking, so playback decodes
     // each frame once. Moving back a little reads the frames decoded last; past them, the
@@ -43,6 +48,7 @@ public:
     [[nodiscard]] oma::Result<QImage> image_at(const std::string& path, const oma::RationalTime& t);
 
 private:
+    const oma::gpu::Device* device_ = nullptr;
     struct Stream {
         std::string path;
         std::unique_ptr<oma::media::VideoDecoder> decoder;

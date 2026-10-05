@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <thread>
@@ -83,8 +84,33 @@ void run_device_tests() {
         it("reports the selected device", {
             expect(d->info().name.empty()).toBeFalsy();
             expect(d->info().api_version >= VK_API_VERSION_1_3).toBeTruthy();
-            std::printf("    device: %s (%s)\n", d->info().name.c_str(),
-                        d->info().driver_info.c_str());
+            std::printf("    device: %s (%s), %s\n", d->info().name.c_str(),
+                        d->info().driver_info.c_str(), d->info().render_node.c_str());
+        });
+
+        it("reports its advertised interop and video prerequisites", {
+            const auto& info = d->info();
+            expect(info.dma_buf_import ==
+                   d->has_extension(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME))
+                .toBeTruthy();
+            expect(info.drm_modifiers ==
+                   d->has_extension(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME))
+                .toBeTruthy();
+            expect(info.external_semaphore_fd ==
+                   d->has_extension(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME))
+                .toBeTruthy();
+            expect(info.video_decode_queue == d->supports_video_decode()).toBeTruthy();
+            expect(info.video_decode_queue || info.advertised_video_codecs == 0).toBeTruthy();
+            std::printf("    interop: DMA-BUF %d, DRM modifiers %d, semaphore fd %d; "
+                        "video decode queue %d, codec flags 0x%x\n",
+                        info.dma_buf_import, info.drm_modifiers, info.external_semaphore_fd,
+                        info.video_decode_queue, info.advertised_video_codecs);
+        });
+
+        it("names a render node that exists, if it reports one", {
+            // VA-API opens this node so decode runs on the compositing GPU (hybrid laptops).
+            const std::string& node = d->info().render_node;
+            expect(node.empty() || std::filesystem::exists(node)).toBeTruthy();
         });
 
         it("exposes valid raw handles for interop", {
@@ -151,6 +177,10 @@ void run_device_tests() {
             const auto& c = **compatible;
             expect(c.internally_synchronized_queues()).toBeFalsy();
             expect(c.queue_create_flags()).toEqual(VkDeviceQueueCreateFlags{0});
+            // FFmpeg and libplacebo request flagged queues whenever this extension is enabled.
+            expect(c.has_extension("VK_KHR_internally_synchronized_queues")).toBeFalsy();
+            // Headless: no surface on the instance, so no swapchain on the device.
+            expect(c.has_extension("VK_KHR_swapchain")).toBeFalsy();
             VkQueue retrieved = VK_NULL_HANDLE;
             vkGetDeviceQueue(c.device(), c.graphics_family(), 0, &retrieved);
             expect(retrieved != VK_NULL_HANDLE).toBeTruthy();

@@ -67,8 +67,6 @@ Error unsupported(std::string message, const std::string& context = {}) {
     return {ErrorCode::Unsupported, Category::Decode, std::move(message), context};
 }
 
-} // namespace
-
 struct SwsFreer {
     void operator()(SwsContext* p) const noexcept { sws_freeContext(p); }
 };
@@ -80,13 +78,15 @@ AVPixelFormat planar_rgb_for(AVPixelFormat format) {
     if (desc == nullptr || (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) != 0) {
         return AV_PIX_FMT_NONE;
     }
-    const bool rgb_like = (desc->flags & (AV_PIX_FMT_FLAG_RGB | AV_PIX_FMT_FLAG_PAL)) != 0 ||
-                          desc->nb_components < 3;
+    const bool rgb_like =
+        (desc->flags & (AV_PIX_FMT_FLAG_RGB | AV_PIX_FMT_FLAG_PAL)) != 0 || desc->nb_components < 3;
     if (!rgb_like || format == AV_PIX_FMT_GBRP || format == AV_PIX_FMT_GBRP16) {
         return AV_PIX_FMT_NONE;
     }
     return desc->comp[0].depth > 8 ? AV_PIX_FMT_GBRP16 : AV_PIX_FMT_GBRP;
 }
+
+} // namespace
 
 struct VideoDecoder::Impl {
     std::filesystem::path file;
@@ -164,11 +164,18 @@ Result<void> VideoDecoder::Impl::open_path(DecodePath candidate) {
         if (!codec_supports(*codec, AV_HWDEVICE_TYPE_VAAPI)) {
             return std::unexpected(unsupported("no VA-API hwaccel for codec", codec->name));
         }
-        // TODO(M2): open the render node of the selected Vulkan device (VK_EXT_physical_device_drm)
-        // so hybrid laptops decode on the same GPU that composites.
+        // Decode on the GPU that composites (hybrid laptops): its render node, when the driver
+        // reports one; otherwise libva's default device, which matches on single-GPU machines.
+        const std::string& node = device->info().render_node;
+        if (node.empty()) {
+            log_warn(Category::Decode,
+                     "{}: Vulkan device has no render node, VA-API uses the "
+                     "default device",
+                     file.filename().string());
+        }
         AVBufferRef* va = nullptr;
-        if (const int err =
-                av_hwdevice_ctx_create(&va, AV_HWDEVICE_TYPE_VAAPI, nullptr, nullptr, 0);
+        if (const int err = av_hwdevice_ctx_create(
+                &va, AV_HWDEVICE_TYPE_VAAPI, node.empty() ? nullptr : node.c_str(), nullptr, 0);
             err < 0) {
             return std::unexpected(ff::av_error(err, Category::Decode, "no VA-API device"));
         }
@@ -357,13 +364,14 @@ Result<VideoFrame> VideoDecoder::Impl::finish(ff::FramePtr frame) {
             return std::unexpected(mapped.error());
         }
         impl->frame = std::move(*mapped);
-    } else if (const AVPixelFormat planar = planar_rgb_for(static_cast<AVPixelFormat>(frame->format));
+    } else if (const AVPixelFormat planar =
+                   planar_rgb_for(static_cast<AVPixelFormat>(frame->format));
                planar != AV_PIX_FMT_NONE) {
         // ponytail: one new frame per conversion; pool it if RGB video ever plays in real time.
-        to_planar_rgb.reset(sws_getCachedContext(
-            to_planar_rgb.release(), frame->width, frame->height,
-            static_cast<AVPixelFormat>(frame->format), frame->width, frame->height, planar,
-            SWS_POINT, nullptr, nullptr, nullptr));
+        to_planar_rgb.reset(
+            sws_getCachedContext(to_planar_rgb.release(), frame->width, frame->height,
+                                 static_cast<AVPixelFormat>(frame->format), frame->width,
+                                 frame->height, planar, SWS_POINT, nullptr, nullptr, nullptr));
         ff::FramePtr out(av_frame_alloc());
         if (!to_planar_rgb || !out) {
             return std::unexpected(unsupported("cannot convert this RGB format", file.string()));
@@ -429,6 +437,14 @@ Result<std::unique_ptr<VideoDecoder>> VideoDecoder::open(const std::filesystem::
     impl->pkt.reset(av_packet_alloc());
     if (!impl->pkt) {
         return make_error(ErrorCode::Internal, Category::Decode, "cannot allocate a packet");
+    }
+
+    // ADR-0006: no tone mapping yet; HDR is shown through the SDR path and said so once.
+    if (impl->info.video && (impl->info.video->color.transfer == AVCOL_TRC_SMPTE2084 ||
+                             impl->info.video->color.transfer == AVCOL_TRC_ARIB_STD_B67)) {
+        log_warn(Category::Decode, "{}: HDR ({}) is shown as SDR without tone mapping",
+                 path.filename().string(),
+                 impl->info.video->color.transfer == AVCOL_TRC_SMPTE2084 ? "PQ" : "HLG");
     }
 
     std::string refusals;

@@ -50,18 +50,62 @@ constexpr std::array kFeaturelessExtensions = {
     VK_KHR_VIDEO_ENCODE_AV1_EXTENSION_NAME,
 };
 
+// The DRM render node of a physical device, so VA-API opens the same GPU (hybrid laptops);
+// empty when the driver does not report one (VK_EXT_physical_device_drm).
+std::string render_node(const vk::raii::PhysicalDevice& pd) {
+    const auto exts = pd.enumerateDeviceExtensionProperties();
+    if (!exts || std::ranges::none_of(*exts, [](const vk::ExtensionProperties& e) {
+            return std::strcmp(e.extensionName.data(), VK_EXT_PHYSICAL_DEVICE_DRM_EXTENSION_NAME) ==
+                   0;
+        })) {
+        return {};
+    }
+    const auto chain =
+        pd.getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceDrmPropertiesEXT>();
+    const auto& drm = chain.get<vk::PhysicalDeviceDrmPropertiesEXT>();
+    return drm.hasRender == vk::True ? std::format("/dev/dri/renderD{}", drm.renderMinor)
+                                     : std::string{};
+}
+
 DeviceInfo to_info(const vk::raii::PhysicalDevice& pd) {
     const auto chain =
         pd.getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceDriverProperties>();
     const auto& p = chain.get<vk::PhysicalDeviceProperties2>().properties;
     const auto& drv = chain.get<vk::PhysicalDeviceDriverProperties>();
+    const auto extensions = pd.enumerateDeviceExtensionProperties();
+    const auto has = [&](const char* name) {
+        return extensions &&
+               std::ranges::any_of(*extensions, [&](const vk::ExtensionProperties& e) {
+                   return std::strcmp(e.extensionName.data(), name) == 0;
+               });
+    };
+    bool video_decode_queue = false;
+    VkVideoCodecOperationFlagsKHR advertised_video_codecs = 0;
+    if (has(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME)) {
+        using QueueChain =
+            vk::StructureChain<vk::QueueFamilyProperties2, vk::QueueFamilyVideoPropertiesKHR>;
+        for (const QueueChain& family : pd.getQueueFamilyProperties2<QueueChain>()) {
+            if ((family.get<vk::QueueFamilyProperties2>().queueFamilyProperties.queueFlags &
+                 vk::QueueFlagBits::eVideoDecodeKHR) != vk::QueueFlags{}) {
+                video_decode_queue = true;
+                advertised_video_codecs |= static_cast<VkVideoCodecOperationFlagsKHR>(
+                    family.get<vk::QueueFamilyVideoPropertiesKHR>().videoCodecOperations);
+            }
+        }
+    }
     return DeviceInfo{.name = p.deviceName.data(),
                       .driver_name = drv.driverName.data(),
                       .driver_info = drv.driverInfo.data(),
+                      .render_node = render_node(pd),
                       .vendor_id = p.vendorID,
                       .device_id = p.deviceID,
                       .api_version = p.apiVersion,
-                      .type = static_cast<VkPhysicalDeviceType>(p.deviceType)};
+                      .type = static_cast<VkPhysicalDeviceType>(p.deviceType),
+                      .dma_buf_import = has(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME),
+                      .drm_modifiers = has(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME),
+                      .external_semaphore_fd = has(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME),
+                      .video_decode_queue = video_decode_queue,
+                      .advertised_video_codecs = advertised_video_codecs};
 }
 
 } // namespace
@@ -303,11 +347,18 @@ Result<std::unique_ptr<Device>> Device::create(const DeviceOptions& options) {
     }
 
     log_info(Category::Gpu,
-             "device: {} ({}, {}), Vulkan {}.{}, {} extensions, internally synchronized queues: {}",
+             "device: {} ({}, {}, {}), Vulkan {}.{}, {} extensions, internally synchronized "
+             "queues: {}",
              impl->info.name, impl->info.driver_name, impl->info.driver_info,
+             impl->info.render_node.empty() ? "no render node" : impl->info.render_node,
              VK_API_VERSION_MAJOR(impl->info.api_version),
              VK_API_VERSION_MINOR(impl->info.api_version), impl->extensions.size(),
              impl->internally_synchronized ? "yes" : "no");
+    log_info(Category::Gpu,
+             "advertised: DMA-BUF {}, DRM modifiers {}, external semaphore fd {}, video decode "
+             "queue {}, video codec operations 0x{:x}",
+             impl->info.dma_buf_import, impl->info.drm_modifiers, impl->info.external_semaphore_fd,
+             impl->info.video_decode_queue, impl->info.advertised_video_codecs);
     return std::unique_ptr<Device>(new Device(std::move(impl)));
 }
 

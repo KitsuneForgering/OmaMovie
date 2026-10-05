@@ -45,7 +45,8 @@ oma::Result<FrameSource::Stream*> FrameSource::stream(const std::string& path, c
         return &streams_.front();
     }
     oma::media::VideoDecoderOptions options;
-    options.paths = {oma::media::DecodePath::Software};
+    options.device = device_;
+    if (device_ == nullptr) options.paths = {oma::media::DecodePath::Software};
     auto decoder = oma::media::VideoDecoder::open(std::filesystem::path(path), options);
     if (!decoder) {
         return std::unexpected(decoder.error());

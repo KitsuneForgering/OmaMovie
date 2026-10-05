@@ -1,5 +1,5 @@
 // OmaMovie editor shell: Qt Quick on OmaMovie's Vulkan device (ADR-0005), the M5 timeline
-// through Session, and a software-frame viewer until M4's GPU handoff and audio clock.
+// through Session, with GPU compositing and an opt-in hardware decode pilot.
 //
 // QtTest drives the --smoke keyboard check. With Qt 6.11 its headers complete classes such as
 // QBitArray after a standard-library SFINAE probe saw them incomplete, which GCC 16 reports
@@ -275,16 +275,19 @@ int main(int argc, char** argv) {
             const bool passed = p99 * 1000.0 <= frame_ms &&
                                 (audit_seconds < 120 || drift * 1000.0 <= frame_ms) &&
                                 underruns == 0;
+            const std::string dropped = preview->hardwareDecodeAvailable()
+                                            ? "unmeasured"
+                                            : std::to_string(session.droppedVideoFrames());
             std::printf("M4 audit: %s, %d s, %s audio, %zu samples, %u composites, "
                         "p99 %.2f ms, max %.2f ms, first/last mean delta %.2f ms, "
-                        "signed range %.2f..%.2f ms, underruns %lld (first %.2f s), dropped video %lld, "
+                        "signed range %.2f..%.2f ms, underruns %lld (first %.2f s), dropped video %s, "
                         "frame interval %.2f ms\n",
                         passed ? "PASS" : "FAIL", audit_seconds,
                         session.audioOnDevice() ? "PipeWire" : "null", errors.size(),
                         preview->presentedFrames(), p99 * 1000.0, maximum * 1000.0,
                         drift * 1000.0, min_signed * 1000.0, max_signed * 1000.0,
                         static_cast<long long>(underruns), first_underrun_at,
-                        static_cast<long long>(session.droppedVideoFrames()), frame_ms);
+                        dropped.c_str(), frame_ms);
             application.exit(passed ? 0 : 1);
         });
         timer.start(10);

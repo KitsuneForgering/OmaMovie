@@ -188,6 +188,15 @@ Result<void> VideoFrame::copy_rgba(std::span<std::uint8_t> destination,
         return make_error(ErrorCode::Unsupported, Category::Decode,
                           "cannot convert this video pixel format to RGBA");
     }
+    // swscale defaults to BT.601 limited range; use the stream's matrix and range, resolving
+    // unspecified values as the compositor does (BT.709 above 576 lines, limited range).
+    AVColorSpace matrix = frame.colorspace;
+    if (matrix == AVCOL_SPC_UNSPECIFIED || matrix == AVCOL_SPC_RESERVED) {
+        matrix = frame.height > 576 ? AVCOL_SPC_BT709 : AVCOL_SPC_SMPTE170M;
+    }
+    const int* coefficients = sws_getCoefficients(matrix);
+    sws_setColorspaceDetails(scale, coefficients, frame.color_range == AVCOL_RANGE_JPEG ? 1 : 0,
+                             coefficients, 1, 0, 1 << 16, 1 << 16);
     const std::array<std::uint8_t*, 4> data{destination.data(), nullptr, nullptr, nullptr};
     const std::array<int, 4> linesize{destination_stride, 0, 0, 0};
     const int rows =
@@ -225,6 +234,17 @@ Result<GpuAccess> VideoFrame::acquire_gpu() {
         images.wait_values[i] = vkf->sem_value[i];
         images.signal_values[i] = vkf->sem_value[i] + 1;
         images.image_count = static_cast<std::uint32_t>(i + 1);
+    }
+    // One image per plane (VA-API import): FFmpeg reports the multi-planar format of the whole
+    // frame for image 0, but each image holds one plane; views need the plane's own format.
+    if (images.image_count > 1) {
+        const SampleLayout l = layout();
+        const bool wide = l.container_bits > 8;
+        for (std::uint32_t i = 0; i < images.image_count; ++i) {
+            const bool pair = i > 0 && l.interleaved_chroma;
+            images.formats[i] = wide ? (pair ? VK_FORMAT_R16G16_UNORM : VK_FORMAT_R16_UNORM)
+                                     : (pair ? VK_FORMAT_R8G8_UNORM : VK_FORMAT_R8_UNORM);
+        }
     }
     return GpuAccess(f, images);
 }

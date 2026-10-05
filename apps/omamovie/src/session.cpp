@@ -1668,7 +1668,11 @@ void Session::startPlayback() {
         }
     }
     // At double and quadruple speed every second or fourth frame is shown.
-    scheduler_.start(snapshot_, paths_, luts_, canvas_width_, canvas_height_, ticksPerFrame(), frame(), speed_, lastFrame());
+    if (hardwarePreview()) {
+        requestHardwareFrame(frame());
+    } else {
+        scheduler_.start(snapshot_, paths_, luts_, canvas_width_, canvas_height_, ticksPerFrame(), frame(), speed_, lastFrame());
+    }
 }
 
 void Session::pause() {
@@ -1722,7 +1726,13 @@ void Session::onTick() {
     }
     const bool at_end = speed_ > 0 ? target >= lastFrame() : target <= 0;
     target = std::clamp<std::int64_t>(target, 0, lastFrame());
-    if (auto shown = scheduler_.take(target)) {
+    if (hardwarePreview()) {
+        if (frame() != target) {
+            playhead_ = target * ticksPerFrame();
+            requestHardwareFrame(target);
+            emit positionChanged();
+        }
+    } else if (auto shown = scheduler_.take(target)) {
         playhead_ = shown->frame * ticksPerFrame();
         if (preview_ != nullptr) preview_->setFrame(std::move(shown->view));
         emit positionChanged();
@@ -1734,8 +1744,24 @@ void Session::onTick() {
 
 void Session::requestFrame() {
     if (playing()) return; // the scheduler feeds the viewer while playing
+    if (hardwarePreview()) {
+        if (!snapshot_) refreshSnapshot();
+        requestHardwareFrame(frame());
+        return;
+    }
     wanted_ = playhead_;
     if (!busy_) submitFrame();
+}
+
+bool Session::hardwarePreview() const {
+    return preview_ != nullptr && preview_->hardwareDecodeAvailable();
+}
+
+void Session::requestHardwareFrame(std::int64_t frame) {
+    if (preview_ != nullptr && snapshot_) {
+        preview_->setRequest(snapshot_, paths_, luts_, canvas_width_, canvas_height_, frame,
+                             ticksPerFrame());
+    }
 }
 
 void Session::submitFrame() {
