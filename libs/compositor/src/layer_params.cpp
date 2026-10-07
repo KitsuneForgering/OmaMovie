@@ -67,10 +67,14 @@ Result<PreparedLayer> prepare_layer(const Layer& layer, const LayerInput& input,
                                     const media::SampleLayout& layout, std::uint32_t source_width,
                                     std::uint32_t source_height, std::uint32_t out_width,
                                     std::uint32_t out_height) {
-    if (!layout.yuv && layout.planes != 3) {
-        return std::unexpected(unsupported("only planar GBR sources are supported for RGB"));
+    // Planar GBR, or GBRA with a straight-alpha fourth plane (ADR-0015).
+    if (!layout.yuv && layout.planes != (layout.alpha ? 4 : 3)) {
+        return std::unexpected(unsupported("only planar GBR(A) sources are supported for RGB"));
     }
-    if (layout.planes < 2 || layout.planes > 3 ||
+    if (layout.yuv && layout.alpha) {
+        return std::unexpected(unsupported("YUV with alpha is not supported"));
+    }
+    if (layout.planes < 2 || layout.planes > (layout.alpha ? 4 : 3) ||
         (layout.container_bits != 8 && layout.container_bits != 16)) {
         return std::unexpected(unsupported("unsupported sample layout"));
     }
@@ -140,12 +144,21 @@ Result<PreparedLayer> prepare_layer(const Layer& layer, const LayerInput& input,
                                                                   : ChromaMode::Planar),
               layout.chroma_shift_x, layout.chroma_shift_y,
               static_cast<std::int32_t>(resolve_transfer(transfer))};
+    const auto sx = static_cast<float>(1U << static_cast<unsigned>(layout.chroma_shift_x));
+    const auto sy = static_cast<float>(1U << static_cast<unsigned>(layout.chroma_shift_y));
+    const auto location = input.color.chroma_location;
+    const bool left = location == 1 || location == 3 || location == 5;
+    const bool top = location == 3 || location == 4;
+    const bool bottom = location == 5 || location == 6;
+    p.chroma = {sx > 1.0F && left ? 0.5F : sx * 0.5F,
+                sy > 1.0F && top ? 0.5F : (sy > 1.0F && bottom ? sy - 0.5F : sy * 0.5F), 0.0F,
+                0.0F};
     p.extra = {static_cast<std::int32_t>(layer.blend), static_cast<std::int32_t>(source_width),
-               static_cast<std::int32_t>(source_height), 0};
+               static_cast<std::int32_t>(source_height), layout.alpha ? 1 : 0};
     p.region = {static_cast<std::int32_t>((*region)[0]), static_cast<std::int32_t>((*region)[1]),
                 static_cast<std::int32_t>((*region)[2]), static_cast<std::int32_t>((*region)[3])};
 
-    const Look look = make_look(layer.color, layer.filter);
+    const Look look = make_look(layer.color, layer.looks);
     p.gains = {static_cast<float>(look.gains[0]), static_cast<float>(look.gains[1]),
                static_cast<float>(look.gains[2]), static_cast<float>(look.power)};
     const auto look_row = [&](std::size_t r) {

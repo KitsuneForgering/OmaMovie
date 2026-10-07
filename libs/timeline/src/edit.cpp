@@ -37,7 +37,29 @@ Result<Clip> with_start(const Timeline& tl, Clip c, std::int64_t new_start) {
         return error(ErrorCode::InvalidArgument, "the clip would be empty",
                      detail::clip_context(c.id));
     }
-    auto offset = c.time_map.media_offset(new_start - c.start.value(), tl.timebase());
+    const std::int64_t moved = new_start - c.start.value();
+    // How far the media position moves to the new first instant. A segmented map (ADR-0013) is
+    // cut there, or grows its first segment outward and is measured back from the old start.
+    Result<RationalTime> offset =
+        std::unexpected(Error(ErrorCode::Internal, Category::Timeline, ""));
+    if (c.time_map.is_constant() || moved >= 0) {
+        offset = c.time_map.media_offset(moved, tl.timebase());
+        if (!c.time_map.is_constant()) {
+            auto cut = c.time_map.slice(moved, c.duration.value());
+            if (!cut) {
+                return std::unexpected(cut.error());
+            }
+            c.time_map = *cut;
+        }
+    } else {
+        auto grown = c.time_map.extended(-moved, 0);
+        if (!grown) {
+            return std::unexpected(grown.error());
+        }
+        auto ahead = grown->media_offset(-moved, tl.timebase());
+        offset = ahead ? RationalTime::make(-ahead->value(), ahead->timebase()) : ahead;
+        c.time_map = *grown;
+    }
     if (!offset) {
         return std::unexpected(offset.error());
     }
@@ -56,7 +78,17 @@ Result<Clip> with_end(const Timeline& tl, Clip c, std::int64_t new_end) {
         return error(ErrorCode::InvalidArgument, "the clip would be empty",
                      detail::clip_context(c.id));
     }
-    c.duration = tl.at(new_end - c.start.value());
+    const std::int64_t length = new_end - c.start.value();
+    if (!c.time_map.is_constant()) {
+        auto resized = length <= c.duration.value()
+                           ? c.time_map.slice(0, length)
+                           : c.time_map.extended(0, length - c.duration.value());
+        if (!resized) {
+            return std::unexpected(resized.error());
+        }
+        c.time_map = *resized;
+    }
+    c.duration = tl.at(length);
     return c;
 }
 
@@ -124,7 +156,9 @@ Result<Clip> new_clip(const Timeline& tl, ClipId id, std::int64_t start, const C
                 .video = source.video,
                 .audio = source.audio,
                 .audio_detached = false,
-                .transition_in = std::nullopt};
+                .transition_in = std::nullopt,
+                .anchor = std::nullopt,
+                .title = source.title};
 }
 
 // A change to a clip plus a shift of the clips after it. Whichever frees space runs first, so
@@ -400,7 +434,8 @@ std::unique_ptr<Command> slip(ClipId id, RationalTime delta) {
         if (!c || !d) {
             return std::unexpected(!c ? c.error() : d.error());
         }
-        auto offset = (*c)->time_map.media_offset(*d, tl.timebase());
+        auto offset = (*c)->time_map.is_constant() ? (*c)->time_map.media_offset(*d, tl.timebase())
+                                                   : RationalTime::make(*d, tl.timebase());
         if (!offset) {
             return std::unexpected(offset.error());
         }
@@ -542,10 +577,18 @@ std::unique_ptr<Command> set_speed(ClipId id, Rational speed, bool ripple) {
         if (!c || !map) {
             return std::unexpected(!c ? c.error() : map.error());
         }
-        auto length = (*c)->time_map.media_offset((*c)->duration.value(), tl.timebase());
+        // The media span the clip covers; a segmented map (freeze, reverse, ramps) becomes
+        // forward playback of that span.
+        auto span = (*c)->time_map.extent((*c)->duration.value(), tl.timebase());
         auto unit = detail::multiply(tl.timebase(), speed);
-        if (!length || !unit) {
-            return std::unexpected(!length ? length.error() : unit.error());
+        if (!span || !unit) {
+            return std::unexpected(!span ? span.error() : unit.error());
+        }
+        auto first = detail::add_exact((*c)->source_in, span->first);
+        auto length = detail::add_exact(
+            span->second, *RationalTime::make(-span->first.value(), span->first.timebase()));
+        if (!first || !length) {
+            return std::unexpected(!first ? first.error() : length.error());
         }
         // Rounding down keeps the source range inside the media.
         auto ticks = rescale(length->value(), length->timebase(), *unit, Rounding::Floor);
@@ -557,6 +600,7 @@ std::unique_ptr<Command> set_speed(ClipId id, Rational speed, bool ripple) {
                          detail::clip_context(id));
         }
         Clip changed = **c;
+        changed.source_in = *first;
         changed.time_map = *map;
         changed.duration = tl.at(*ticks);
         if (!ripple) {
@@ -566,6 +610,141 @@ std::unique_ptr<Command> set_speed(ClipId id, Rational speed, bool ripple) {
         }
         return change_and_shift(changed, tl.track_of(id)->id, (*c)->end_ticks(),
                                 *ticks - (*c)->duration.value());
+    });
+}
+
+std::unique_ptr<Command> connect(ClipId dependent, ClipId primary) {
+    return detail::make_planned("Connect", [=](Timeline& tl) -> Result<Steps> {
+        auto d = get_clip(tl, dependent);
+        auto p = get_clip(tl, primary);
+        if (!d || !p) {
+            return std::unexpected(!d ? d.error() : p.error());
+        }
+        if ((*d)->start_ticks() < (*p)->start_ticks() || (*d)->start_ticks() >= (*p)->end_ticks()) {
+            return error(ErrorCode::InvalidArgument, "the clip does not start on the primary clip",
+                         detail::clip_context(dependent));
+        }
+        auto source = detail::source_at(**p, (*d)->start_ticks(), tl.timebase());
+        if (!source) {
+            return std::unexpected(source.error());
+        }
+        Clip changed = **d;
+        changed.anchor = Anchor{.primary = primary, .source = *source};
+        Steps steps;
+        steps.push_back(detail::replace_clip(std::move(changed))); // validate() checks the rest
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> disconnect(ClipId dependent) {
+    return detail::make_planned("Disconnect", [=](Timeline& tl) -> Result<Steps> {
+        auto d = get_clip(tl, dependent);
+        if (!d) {
+            return std::unexpected(d.error());
+        }
+        Clip changed = **d;
+        changed.anchor.reset();
+        Steps steps;
+        steps.push_back(detail::replace_clip(std::move(changed)));
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> set_time_map(ClipId id, TimeMap map, bool ripple) {
+    return detail::make_planned("Speed", [=, map = std::move(map)](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        if (!c) {
+            return std::unexpected(c.error());
+        }
+        Clip changed = **c;
+        changed.time_map = map;
+        if (!map.is_constant()) {
+            changed.duration = tl.at(map.length());
+        }
+        const std::int64_t grown = changed.duration.value() - (*c)->duration.value();
+        if (!ripple || grown == 0) {
+            Steps steps;
+            steps.push_back(detail::replace_clip(changed));
+            return steps;
+        }
+        return change_and_shift(changed, tl.track_of(id)->id, (*c)->end_ticks(), grown);
+    });
+}
+
+std::unique_ptr<Command> reverse(ClipId id) {
+    return detail::make_planned("Reverse", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        if (!c) {
+            return std::unexpected(c.error());
+        }
+        const std::int64_t duration = (*c)->duration.value();
+        auto map = (*c)->time_map.reversed(duration);
+        auto end = (*c)->time_map.media_offset(duration, tl.timebase());
+        if (!map || !end) {
+            return std::unexpected(!map ? map.error() : end.error());
+        }
+        auto source_in = detail::add_exact((*c)->source_in, *end);
+        if (!source_in) {
+            return std::unexpected(source_in.error());
+        }
+        Clip changed = **c;
+        changed.source_in = *source_in;
+        changed.time_map = *map;
+        Steps steps;
+        steps.push_back(detail::replace_clip(changed));
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> freeze_frame(ClipId id, RationalTime at, RationalTime length,
+                                      bool ripple) {
+    return detail::make_planned("Freeze Frame", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        auto t = tl.to_ticks(at);
+        auto hold = tl.to_ticks(length);
+        if (!c || !t || !hold) {
+            return std::unexpected(!c ? c.error() : (!t ? t.error() : hold.error()));
+        }
+        const std::int64_t local = *t - (*c)->start_ticks();
+        const std::int64_t duration = (*c)->duration.value();
+        if (local < 0 || local >= duration || *hold <= 0) {
+            return error(ErrorCode::InvalidArgument, "freeze frame outside the clip",
+                         detail::clip_context(id));
+        }
+        auto whole = (*c)->time_map.as_segments(duration);
+        if (!whole) {
+            return std::unexpected(whole.error());
+        }
+        std::vector<TimeSegment> segments;
+        if (local > 0) {
+            auto head = whole->slice(0, local);
+            if (!head) {
+                return std::unexpected(head.error());
+            }
+            segments.assign(head->segments().begin(), head->segments().end());
+        }
+        segments.push_back(TimeSegment{.kind = TimeSegment::Kind::Freeze,
+                                       .length = *hold,
+                                       .from = Rational::literal(0, 1),
+                                       .to = Rational::literal(0, 1)});
+        auto tail = whole->slice(local, duration);
+        if (!tail) {
+            return std::unexpected(tail.error());
+        }
+        segments.insert(segments.end(), tail->segments().begin(), tail->segments().end());
+        auto map = TimeMap::segmented(std::move(segments));
+        if (!map) {
+            return std::unexpected(map.error());
+        }
+        Clip changed = **c;
+        changed.time_map = *map;
+        changed.duration = tl.at(map->length());
+        if (!ripple) {
+            Steps steps;
+            steps.push_back(detail::replace_clip(changed));
+            return steps;
+        }
+        return change_and_shift(changed, tl.track_of(id)->id, (*c)->end_ticks(), *hold);
     });
 }
 
@@ -582,6 +761,25 @@ std::unique_ptr<Command> set_video(ClipId id, VideoProperties video) {
                                     steps.push_back(detail::replace_clip(changed));
                                     return steps;
                                 });
+}
+
+std::unique_ptr<Command> set_title(ClipId id, Title title) {
+    return detail::make_planned(
+        "Title", [=, title = std::move(title)](Timeline& tl) -> Result<Steps> {
+            auto c = get_clip(tl, id);
+            if (!c) {
+                return std::unexpected(c.error());
+            }
+            if (!(*c)->title) {
+                return error(ErrorCode::InvalidArgument, "the clip is not a title",
+                             detail::clip_context(id));
+            }
+            Clip changed = **c;
+            changed.title = title;
+            Steps steps;
+            steps.push_back(detail::replace_clip(changed));
+            return steps;
+        });
 }
 
 std::unique_ptr<Command> set_audio(ClipId id, AudioProperties audio) {

@@ -97,7 +97,7 @@ bool Look::identity() const noexcept {
            vignette == 0.0;
 }
 
-Look make_look(const ColorAdjust& color, const Filter& filter) {
+Look make_look(const ColorAdjust& color, std::span<const Filter> looks) {
     Look look;
     const double t = color.temperature;
     const auto wb = tint(1.0 + (0.18 * t), 1.0, 1.0 - (0.18 * t));
@@ -106,16 +106,20 @@ Look make_look(const ColorAdjust& color, const Filter& filter) {
         look.gains[i] = wb[i] * scale;
     }
     look.power = std::exp2(color.contrast);
-    const Matrix full = filter_matrix(filter.kind);
-    Matrix mixed{};
-    for (std::size_t r = 0; r < 3; ++r) {
-        for (std::size_t c = 0; c < 4; ++c) {
-            mixed[r][c] = kIdentity[r][c] + (filter.amount * (full[r][c] - kIdentity[r][c]));
+    look.matrix = saturation(1.0 + color.saturation);
+    for (const Filter& filter : looks) {
+        if (filter.kind == FilterKind::Vignette) {
+            look.vignette = kVignetteDepth * filter.amount; // at most one per layer
+            continue;
         }
-    }
-    look.matrix = multiply(mixed, saturation(1.0 + color.saturation));
-    if (filter.kind == FilterKind::Vignette) {
-        look.vignette = kVignetteDepth * filter.amount;
+        const Matrix full = filter_matrix(filter.kind);
+        Matrix mixed{};
+        for (std::size_t r = 0; r < 3; ++r) {
+            for (std::size_t c = 0; c < 4; ++c) {
+                mixed[r][c] = kIdentity[r][c] + (filter.amount * (full[r][c] - kIdentity[r][c]));
+            }
+        }
+        look.matrix = multiply(mixed, look.matrix);
     }
     return look;
 }

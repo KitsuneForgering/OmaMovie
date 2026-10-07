@@ -5,6 +5,7 @@ import QtQuick.Controls
 AbstractButton {
     id: control
     property string iconName
+    property bool iconFilled: false
     property bool showLabel: true
     property bool primary: false
     property bool selected: false
@@ -43,11 +44,12 @@ AbstractButton {
             Icon {
                 visible: control.iconName !== ""
                 name: control.iconName
+                filled: control.iconFilled
                 color: content.tint
                 opacity: control.enabled ? 1 : 0.55
                 anchors.verticalCenter: parent.verticalCenter
             }
-            Text {
+            UiText {
                 visible: control.showLabel && control.text !== ""
                 text: control.text
                 color: content.tint

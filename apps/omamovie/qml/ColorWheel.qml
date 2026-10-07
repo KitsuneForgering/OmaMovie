@@ -23,7 +23,7 @@ ColumnLayout {
     readonly property real shownY: dragging ? dragY : tintY
     spacing: 2
 
-    Text {
+    UiText {
         Layout.alignment: Qt.AlignHCenter
         text: wheel.label
         color: colors.dark_foreground

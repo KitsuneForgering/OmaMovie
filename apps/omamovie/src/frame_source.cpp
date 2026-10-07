@@ -1,5 +1,7 @@
 #include "frame_source.hpp"
 
+#include "title_raster.hpp"
+
 #include <algorithm>
 #include <cstdint>
 #include <functional>
@@ -7,6 +9,8 @@
 #include <filesystem>
 #include <span>
 #include <utility>
+
+#include <unistd.h>
 
 namespace {
 
@@ -25,6 +29,17 @@ std::size_t bytes_of(const oma::media::VideoFrame& f) {
 }
 
 } // namespace
+
+std::size_t FrameSource::history_budget() {
+    static const std::size_t budget = [] {
+        constexpr std::size_t kMax = std::size_t{384} << 20;
+        const long pages = ::sysconf(_SC_AVPHYS_PAGES);
+        const long page = ::sysconf(_SC_PAGESIZE);
+        if (pages <= 0 || page <= 0) return kMax;
+        return std::min(kMax, static_cast<std::size_t>(pages) * static_cast<std::size_t>(page) / 8);
+    }();
+    return budget;
+}
 
 bool FrameSource::reaches(const Stream& s, const oma::RationalTime& t) {
     // Display-grade seconds only choose between decoding forward and seeking.
@@ -71,8 +86,8 @@ void FrameSource::record(Stream& s, std::shared_ptr<oma::media::VideoFrame> fram
     }
     // Over budget: drop the oldest frames, of the least recently used streams first. Never
     // the current frame of a stream (it is still its decoder's position).
-    for (auto it = streams_.rbegin(); it != streams_.rend() && history_bytes_ > kHistoryBytes; ++it) {
-        while (it->history.size() > 1 && history_bytes_ > kHistoryBytes) {
+    for (auto it = streams_.rbegin(); it != streams_.rend() && history_bytes_ > history_budget(); ++it) {
+        while (it->history.size() > 1 && history_bytes_ > history_budget()) {
             history_bytes_ -= bytes_of(*it->history.front());
             it->history.pop_front();
         }
@@ -99,7 +114,7 @@ oma::Result<void> FrameSource::seek(Stream& s, const oma::RationalTime& t) {
     // so the next steps back find their frames in the history.
     if (s.backward) {
         const std::size_t frame_bytes = std::max<std::size_t>(1, bytes_of(*s.current));
-        const std::size_t frames = std::clamp<std::size_t>(kHistoryBytes / 2 / frame_bytes, 1, kMaxChunkFrames);
+        const std::size_t frames = std::clamp<std::size_t>(history_budget() / 2 / frame_bytes, 1, kMaxChunkFrames);
         // The nominal frame rate only sizes the chunk; frames are still found by PTS.
         const auto& video = s.decoder->stream().video;
         const oma::Rational frame = video && video->frame_rate ? video->frame_rate->frame_duration()
@@ -176,6 +191,27 @@ Picture FrameSource::picture_of(const Stream& s, std::shared_ptr<oma::media::Vid
         picture.sample_aspect = video->sample_aspect;
     }
     return picture;
+}
+
+oma::Result<Picture> FrameSource::title_picture(const oma::timeline::Title& title, std::uint32_t width,
+                                               std::uint32_t height) {
+    const auto it = std::ranges::find_if(titles_, [&](const TitleEntry& e) {
+        return e.width == width && e.height == height && e.title == title;
+    });
+    if (it != titles_.end()) {
+        if (it != titles_.begin()) std::rotate(titles_.begin(), it, std::next(it));
+    } else {
+        auto frame = rasterize_title(title, width, height);
+        if (!frame) return std::unexpected(frame.error());
+        titles_.push_front({.title = title,
+                            .width = width,
+                            .height = height,
+                            .frame = std::make_shared<oma::media::VideoFrame>(std::move(*frame))});
+        if (titles_.size() > kTitleCache) titles_.pop_back();
+    }
+    // Drawn in sRGB, full range (ADR-0006 reads RGB sources as sRGB).
+    return Picture{.frame = titles_.front().frame, .color = {}, .rotation = 0,
+                   .sample_aspect = oma::Rational::literal(1, 1)};
 }
 
 oma::Result<QImage> FrameSource::image_at(const std::string& path, const oma::RationalTime& t) {

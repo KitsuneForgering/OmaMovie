@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -18,7 +19,11 @@
 
 namespace oma::project {
 
-inline constexpr int kFormatVersion = 1;
+// 2 (2026-10-05): clips may carry a segmented `time_map` (ADR-0013) and an `anchor`
+// (ADR-0014). Version 1 files read unchanged: they have neither.
+// 3 (2026-10-06): clips may carry a `title` (ADR-0015).
+// 4 (2026-10-06): a clip's `filter` and `sharpness` became an ordered `effects` list (ADR-0016).
+inline constexpr int kFormatVersion = 4;
 
 // Identifies a media file for relinking: its size and a hash of its first and last 64 KiB.
 // Duration and streams travel in the MediaInfo next to it.
@@ -30,6 +35,15 @@ struct Fingerprint {
 };
 
 [[nodiscard]] Result<Fingerprint> fingerprint_file(const std::filesystem::path& path);
+
+// Where a moved media file went (relink, CLAUDE.md §14): a file under one of `roots` (searched
+// in order, at most kRelinkDepth folders deep and kRelinkEntries entries per root) with the
+// reference's file name, size and fingerprint. A same-named file with other content is not it.
+inline constexpr int kRelinkDepth = 4;
+inline constexpr std::size_t kRelinkEntries = 20000;
+[[nodiscard]] std::optional<std::filesystem::path>
+find_relocated(const std::filesystem::path& original, const Fingerprint& fingerprint,
+               std::span<const std::filesystem::path> roots);
 
 // A library item. `path` is absolute; the file also stores it relative to the project, and
 // load() prefers the relative one when the absolute one is gone (a moved project folder).

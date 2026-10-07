@@ -1,5 +1,7 @@
 #include "oma/project/document.hpp"
 
+#include "oma/timeline/effects.hpp"
+
 #include <simdjson.h>
 
 #include <fcntl.h>
@@ -46,7 +48,9 @@ constexpr std::array kBlends{"normal", "add", "multiply", "screen"};
 constexpr std::array kFilters{"none", "black_and_white", "sepia", "vintage", "cool",
                               "warm", "vignette"};
 constexpr std::array kTransitions{"dissolve", "dip_to_black", "wipe"};
+constexpr std::array kTitlePlacements{"lower_third", "center", "top"};
 constexpr std::array kInterpolations{"hold", "linear", "ease"};
+constexpr std::array kSegmentKinds{"linear", "freeze", "ramp"};
 
 template <typename E, std::size_t N>
 std::string_view name_of(const std::array<const char*, N>& names, E value) {
@@ -250,12 +254,21 @@ void video(Writer& w, const tl::VideoProperties& v) {
     w.field("saturation", v.color.saturation);
     w.field("temperature", v.color.temperature);
     w.end_object();
-    w.key("filter");
-    w.begin_object();
-    w.field("kind", name_of(kFilters, v.filter.kind));
-    w.field("amount", v.filter.amount);
-    w.end_object();
-    w.field("sharpness", v.sharpness);
+    w.key("effects"); // format 4 (ADR-0016)
+    w.begin_array();
+    for (const tl::Effect& e : v.effects) {
+        w.begin_object();
+        w.field("definition", e.definition);
+        w.field("enabled", e.enabled);
+        w.key("params");
+        w.begin_object();
+        for (const tl::EffectParam& p : e.params) {
+            w.field(p.name, p.value);
+        }
+        w.end_object();
+        w.end_object();
+    }
+    w.end_array();
     w.key("grade");
     w.begin_object();
     triple(w, "slope", v.grade.cdl.slope);
@@ -300,10 +313,53 @@ void clip(Writer& w, const tl::Clip& c) {
     time(w, "start", c.start);
     time(w, "duration", c.duration);
     time(w, "source_in", c.source_in);
-    w.field("speed", rational(c.time_map.speed()));
+    if (c.time_map.is_constant()) {
+        w.field("speed", rational(c.time_map.speed()));
+    } else {
+        w.key("time_map");
+        w.begin_array();
+        for (const tl::TimeSegment& s : c.time_map.segments()) {
+            w.begin_object();
+            w.field("kind", name_of(kSegmentKinds, s.kind));
+            w.field("length", s.length);
+            if (s.kind == tl::TimeSegment::Kind::Linear) {
+                w.field("speed", rational(s.from));
+            } else if (s.kind == tl::TimeSegment::Kind::Ramp) {
+                w.field("from", rational(s.from));
+                w.field("to", rational(s.to));
+            }
+            w.end_object();
+        }
+        w.end_array();
+    }
     video(w, c.video);
     audio(w, c.audio);
     w.field("audio_detached", c.audio_detached);
+    if (c.anchor) {
+        w.key("anchor");
+        w.begin_object();
+        w.field("primary", c.anchor->primary.value());
+        time(w, "source", c.anchor->source);
+        w.end_object();
+    }
+    if (c.title) {
+        // Format 3 (ADR-0015).
+        const tl::Title& t = *c.title;
+        w.key("title");
+        w.begin_object();
+        w.field("text", t.text);
+        w.field("font", t.font);
+        w.field("size", t.size);
+        w.key("color");
+        w.begin_object();
+        w.field("r", static_cast<double>(t.color[0]));
+        w.field("g", static_cast<double>(t.color[1]));
+        w.field("b", static_cast<double>(t.color[2]));
+        w.field("a", static_cast<double>(t.color[3]));
+        w.end_object();
+        w.field("placement", name_of(kTitlePlacements, t.placement));
+        w.end_object();
+    }
     if (c.transition_in) {
         w.key("transition_in");
         w.begin_object();
@@ -480,6 +536,11 @@ public:
         }
         return std::move(*r);
     }
+    void fail(const Error& e) {
+        if (!error_) {
+            error_ = e;
+        }
+    }
     [[nodiscard]] bool failed() const noexcept { return error_.has_value(); }
     [[nodiscard]] Error error() const {
         return error_.value_or(Error(ErrorCode::Internal, Category::Project, "no error recorded"));
@@ -595,12 +656,53 @@ Result<tl::VideoProperties> read_video(const Object& clip, std::string_view cont
                    .saturation = r(get_or<double>(c, "saturation", 0.0, ca)),
                    .temperature = r(get_or<double>(c, "temperature", 0.0, ca))};
     }
+    for (const Element item : r(get_array(o, "effects", at, true))) {
+        // Format 4 (ADR-0016); Timeline::restore checks definitions, names and ranges. Names are
+        // bounded here, before they are copied.
+        const std::string ea = where("effects", at);
+        Object eo;
+        Object params;
+        std::string_view definition;
+        if (item.get(eo) != simdjson::SUCCESS || v.effects.size() >= tl::kMaxEffects ||
+            eo.at_key("definition").get(definition) != simdjson::SUCCESS ||
+            definition.size() > tl::kMaxEffectNameBytes) {
+            return std::unexpected(invalid("invalid effect or too many effects", ea));
+        }
+        tl::Effect effect{.definition = std::string(definition),
+                          .enabled = r(get_or<bool>(eo, "enabled", true, ea)),
+                          .params = {}};
+        if (eo.at_key("params").get(params) == simdjson::SUCCESS) {
+            for (const auto [name, value] : params) {
+                double number = 0.0;
+                if (effect.params.size() >= tl::kMaxEffectParams ||
+                    name.size() > tl::kMaxEffectNameBytes ||
+                    value.get(number) != simdjson::SUCCESS) {
+                    return std::unexpected(invalid("invalid effect parameter", ea));
+                }
+                effect.params.push_back({.name = std::string(name), .value = number});
+            }
+        }
+        v.effects.push_back(std::move(effect));
+    }
+    // Migration 3 -> 4 (ADR-0016): the single filter and the sharpness become effects with the
+    // same parameters, so the picture does not change. Version 4 never writes these fields.
     if (Object f; o.at_key("filter").get(f) == simdjson::SUCCESS) {
         const std::string fa = where("filter", at);
-        v.filter = {.kind = r(get_enum(f, "kind", kFilters, tl::FilterKind::None, fa)),
-                    .amount = r(get_or<double>(f, "amount", 1.0, fa))};
+        const auto kind = r(get_enum(f, "kind", kFilters, tl::FilterKind::None, fa));
+        const double amount = r(get_or<double>(f, "amount", 1.0, fa));
+        for (const tl::EffectDefinition& d : tl::effect_definitions()) {
+            if (kind != tl::FilterKind::None && d.look == kind) {
+                v.effects.push_back({.definition = std::string(d.id),
+                                     .enabled = true,
+                                     .params = {{.name = "amount", .value = amount}}});
+            }
+        }
     }
-    v.sharpness = r(get_or<double>(o, "sharpness", 0.0, at));
+    if (const double sharpness = r(get_or<double>(o, "sharpness", 0.0, at)); sharpness != 0.0) {
+        v.effects.insert(v.effects.begin(), {.definition = "oma.detail",
+                                             .enabled = true,
+                                             .params = {{.name = "amount", .value = sharpness}}});
+    }
     if (Object g; o.at_key("grade").get(g) == simdjson::SUCCESS) {
         const std::string ga = where("grade", at);
         v.grade.cdl.slope = r(read_triple(g, "slope", {1.0, 1.0, 1.0}, ga));
@@ -653,6 +755,38 @@ Result<tl::AudioProperties> read_audio(const Object& clip, std::string_view cont
     return a;
 }
 
+Result<tl::TimeMap> read_time_map(const Object& o, std::string_view at) {
+    const std::string ta = where("time_map", at);
+    Reader r;
+    std::vector<tl::TimeSegment> segments;
+    for (const Element e : r(get_array(o, "time_map", at))) {
+        Object so;
+        if (e.get(so) != simdjson::SUCCESS || segments.size() >= tl::kMaxTimeSegments) {
+            return std::unexpected(invalid("invalid or too many time segments", ta));
+        }
+        tl::TimeSegment s{
+            .kind = r(get_enum(so, "kind", kSegmentKinds, tl::TimeSegment::Kind::Linear, ta)),
+            .length = r(get<std::int64_t>(so, "length", ta)),
+            .from = Rational::literal(0, 1),
+            .to = Rational::literal(0, 1)};
+        if (s.kind == tl::TimeSegment::Kind::Linear) {
+            s.from = s.to = r(get_rational(so, "speed", ta));
+        } else if (s.kind == tl::TimeSegment::Kind::Ramp) {
+            s.from = r(get_rational(so, "from", ta));
+            s.to = r(get_rational(so, "to", ta));
+        }
+        segments.push_back(s);
+    }
+    if (r.failed()) {
+        return std::unexpected(r.error());
+    }
+    auto map = tl::TimeMap::segmented(std::move(segments));
+    if (!map) {
+        return std::unexpected(invalid(map.error().message(), ta));
+    }
+    return map;
+}
+
 Result<tl::Clip> read_clip(Element e, std::string_view context) {
     Object o;
     if (e.get(o) != simdjson::SUCCESS) {
@@ -666,14 +800,55 @@ Result<tl::Clip> read_clip(Element e, std::string_view context) {
     c.start = r(get_time(o, "start", at));
     c.duration = r(get_time(o, "duration", at));
     c.source_in = r(get_time(o, "source_in", at));
-    Element speed;
-    if (o.at_key("speed").get(speed) == simdjson::SUCCESS) {
+    if (Element segments; o.at_key("time_map").get(segments) == simdjson::SUCCESS) {
+        // Format 2 (ADR-0013): a segmented map instead of a constant speed.
+        auto read = read_time_map(o, at);
+        if (!read) {
+            return std::unexpected(read.error());
+        }
+        c.time_map = *read;
+    } else if (Element speed; o.at_key("speed").get(speed) == simdjson::SUCCESS) {
+        // Not through Reader: GCC 16 -O2 reports Result<TimeMap>'s moved value as maybe
+        // uninitialized (a false positive) inside its template.
         auto map = tl::TimeMap::constant(r(get_rational(o, "speed", at), Rational::literal(1, 1)));
-        c.time_map = r(std::move(map));
+        if (map) {
+            c.time_map = *map;
+        } else {
+            r.fail(map.error());
+        }
     }
     c.video = r(read_video(o, at));
     c.audio = r(read_audio(o, at));
     c.audio_detached = r(get_or<bool>(o, "audio_detached", false, at));
+    if (Object a; o.at_key("anchor").get(a) == simdjson::SUCCESS) {
+        // Format 2 (ADR-0014); Timeline::restore checks the connection.
+        const std::string aa = where("anchor", at);
+        c.anchor = tl::Anchor{.primary = tl::ClipId(r(get<std::uint64_t>(a, "primary", aa))),
+                              .source = r(get_time(a, "source", aa))};
+    }
+    if (Object t; o.at_key("title").get(t) == simdjson::SUCCESS) {
+        // Format 3 (ADR-0015); Timeline::restore checks sizes and ranges. The text is bounded
+        // here too, before it is copied.
+        const std::string ta = where("title", at);
+        tl::Title title;
+        const std::string_view text = r(get<std::string_view>(t, "text", ta));
+        const std::string_view font =
+            r(get_or<std::string_view>(t, "font", std::string_view{}, ta));
+        if (text.size() > tl::kMaxTitleBytes || font.size() > 256) {
+            return std::unexpected(invalid("title text or font too long", ta));
+        }
+        title.text = std::string(text);
+        title.font = std::string(font);
+        title.size = r(get_or<double>(t, "size", 0.08, ta));
+        if (Object rgba; t.at_key("color").get(rgba) == simdjson::SUCCESS) {
+            const std::string ca = where("color", ta);
+            title.color = {r(get_float(rgba, "r", 1.0F, ca)), r(get_float(rgba, "g", 1.0F, ca)),
+                           r(get_float(rgba, "b", 1.0F, ca)), r(get_float(rgba, "a", 1.0F, ca))};
+        }
+        title.placement =
+            r(get_enum(t, "placement", kTitlePlacements, tl::TitlePlacement::LowerThird, ta));
+        c.title = std::move(title);
+    }
     if (Object t; o.at_key("transition_in").get(t) == simdjson::SUCCESS) {
         const std::string ta = where("transition_in", at);
         c.transition_in = tl::Transition{
@@ -719,6 +894,38 @@ Result<Fingerprint> fingerprint_file(const std::filesystem::path& path) {
         mix(std::max(kSpan, size - kSpan));
     }
     return Fingerprint{.size = size, .hash = hash};
+}
+
+std::optional<std::filesystem::path> find_relocated(const std::filesystem::path& original,
+                                                    const Fingerprint& fingerprint,
+                                                    std::span<const std::filesystem::path> roots) {
+    const auto name = original.filename();
+    if (name.empty()) {
+        return std::nullopt;
+    }
+    for (const std::filesystem::path& root : roots) {
+        std::error_code ec;
+        std::filesystem::recursive_directory_iterator it(
+            root, std::filesystem::directory_options::skip_permission_denied, ec);
+        std::size_t seen = 0;
+        for (; !ec && it != std::filesystem::recursive_directory_iterator(); it.increment(ec)) {
+            if (++seen > kRelinkEntries) {
+                break; // a huge tree: give up on this root rather than stall
+            }
+            if (it.depth() >= kRelinkDepth) {
+                it.disable_recursion_pending();
+            }
+            std::error_code fe;
+            if (it->path().filename() != name || !it->is_regular_file(fe) ||
+                it->file_size(fe) != fingerprint.size) {
+                continue;
+            }
+            if (auto print = fingerprint_file(it->path()); print && *print == fingerprint) {
+                return it->path();
+            }
+        }
+    }
+    return std::nullopt;
 }
 
 Result<std::string> to_json(const Document& doc, const std::filesystem::path& project_dir) {
@@ -857,7 +1064,10 @@ Result<Document> from_json(std::string_view json, const std::filesystem::path& p
     if (version < 1) {
         return std::unexpected(invalid("invalid format_version"));
     }
-    // Migrations vN -> vN+1 chain here once a version 2 exists (ADR-0007).
+    // Migrations vN -> vN+1 (ADR-0007). 1 -> 2 changes nothing: version 2 only adds the optional
+    // `time_map` of a clip (ADR-0013), so a version 1 document already reads as version 2.
+    // 2 -> 3 changes nothing either: version 3 only adds a clip's optional `title` (ADR-0015).
+    // 3 -> 4 turns a clip's `filter` and `sharpness` into `effects` (ADR-0016, read_video).
 
     Document doc;
     const auto resolve = [&](std::string_view relative, std::string_view absolute) {

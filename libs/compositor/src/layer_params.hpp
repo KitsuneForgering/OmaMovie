@@ -30,7 +30,8 @@ struct alignas(16) LayerParams {
     std::array<float, 4> gamut_b{};
     std::array<float, 4> misc{};          // opacity, sample scale
     std::array<std::int32_t, 4> mode{};   // chroma mode, chroma shift x, chroma shift y, transfer
-    std::array<std::int32_t, 4> extra{};  // blend mode, source width, source height
+    std::array<float, 4> chroma{};        // first chroma sample center in luma pixel coordinates
+    std::array<std::int32_t, 4> extra{};  // blend mode, source width, source height, alpha plane
     std::array<std::int32_t, 4> region{}; // output pixels to process: x0, y0, x1, y1
     // The look (src/look.hpp): gains r, g, b and the contrast power; matrix rows with offsets;
     // vignette darkening, its center (source pixels) and 1 / the distance to the corners.
@@ -57,7 +58,7 @@ struct alignas(16) LayerParams {
     std::array<std::int32_t, 4> curve_count{};
     std::array<std::array<float, 4>, 4 * kMaxCurvePoints> curve{};
 };
-static_assert(sizeof(LayerParams) == 96U * 16U, "LayerParams must match the std140 block");
+static_assert(sizeof(LayerParams) == 97U * 16U, "LayerParams must match the std140 block");
 
 // Bits of LayerParams::grade[0].
 enum GradeStage : std::int32_t {

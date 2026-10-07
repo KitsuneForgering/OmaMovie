@@ -23,6 +23,35 @@ oma::Result<oma::playback::Waveform> waveform_of(const char* name, bool cancelle
 
 } // namespace
 
+namespace {
+
+// ADR-0009: the cached form of a waveform reads back exactly; truncated, extended or
+// other-version bytes are errors.
+bool cache_bytes_round_trip() {
+    oma::playback::Waveform w;
+    w.start = oma::RationalTime::make(1024, oma::Rational::make(1, 48000).value()).value();
+    w.sample_rate = 48000;
+    w.bucket_frames = 480;
+    w.peaks = {0.0F, 0.5F, 1.0F};
+    w.rms = {0.0F, 0.25F, 0.5F};
+    const auto bytes = oma::playback::to_bytes(w);
+    const auto back = oma::playback::waveform_from_bytes(bytes);
+    const bool same = back && back->start == w.start && back->sample_rate == w.sample_rate &&
+                      back->bucket_frames == w.bucket_frames && back->peaks == w.peaks &&
+                      back->rms == w.rms;
+    auto shorter = bytes;
+    shorter.pop_back();
+    auto longer = bytes;
+    longer.push_back(0);
+    auto newer = bytes;
+    newer[0] = 99;
+    return same && !oma::playback::waveform_from_bytes(shorter) &&
+           !oma::playback::waveform_from_bytes(longer) &&
+           !oma::playback::waveform_from_bytes(newer) && !oma::playback::waveform_from_bytes({});
+}
+
+} // namespace
+
 void run_waveform_tests() {
     describe("playback::compute_waveform", {
         it("keeps one peak per hundredth of a second", {
@@ -88,5 +117,7 @@ void run_waveform_tests() {
             }
             expect(waveform_of("still.png").has_value()).toBeFalsy();
         });
+        it("round-trips through cache bytes and rejects damaged ones",
+           { expect(cache_bytes_round_trip()).toBeTruthy(); });
     });
 }

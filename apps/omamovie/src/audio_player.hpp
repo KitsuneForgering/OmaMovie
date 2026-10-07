@@ -14,6 +14,10 @@
 #include <unordered_map>
 #include <vector>
 
+namespace oma::playback {
+class TimelineAudio;
+}
+
 // Plays the sequence's audio and provides the playback master clock (CLAUDE.md §12): a pipeline
 // thread renders timeline audio into the output's lock-free ring, the device consumes it, and
 // the audible position comes from the frames the device actually consumed minus its latency.
@@ -84,6 +88,9 @@ private:
     bool running_ = false;
     std::atomic<bool> render_failed_{false};
     std::string render_error_; // written by the pipeline before setting render_failed_
+    // Kept across start() calls so restarts reuse its decoders; only the producer uses it
+    // while playing.
+    std::shared_ptr<oma::playback::TimelineAudio> renderer_;
     oma::JobHandle producer_;
     oma::JobPool pipeline_{1}; // destroyed first: the producer never outlives the output
 };

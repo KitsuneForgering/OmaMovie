@@ -20,14 +20,25 @@ Result<RationalTime> source_time(const Timeline& tl, const Clip& c, std::int64_t
 
 namespace {
 
-// The media time at `ticks` inside a clip, rounded down to the media's own timebase.
+// The media time at `ticks` inside a clip, in the media's own timebase: rounded down, so the
+// frame shown is the one whose span contains the position. Playing backwards (ADR-0013) the
+// position decreases through the instant, so the frame shown is the one ending there: one
+// media tick before the position rounded up (otherwise a reversed clip would start on the
+// frame after its range).
 Result<RationalTime> media_time(const Timeline& tl, const Clip& c, const MediaInfo& m,
                                 std::int64_t ticks) {
     auto exact = source_time(tl, c, ticks);
     if (!exact) {
         return std::unexpected(exact.error());
     }
-    return exact->rescaled(m.start.timebase(), Rounding::Floor);
+    if (!c.time_map.backward(ticks - c.start_ticks())) {
+        return exact->rescaled(m.start.timebase(), Rounding::Floor);
+    }
+    auto up = exact->rescaled(m.start.timebase(), Rounding::Ceil);
+    if (!up) {
+        return up;
+    }
+    return RationalTime::make(up->value() - 1, up->timebase());
 }
 
 // The clip's properties at `ticks`, keyframes evaluated (VideoLayer::video).
@@ -47,6 +58,10 @@ Result<VideoProperties> video_at(const Timeline& tl, const Clip& c, std::int64_t
 // Ticks of sequence time the media past (or before) a clip lasts at the clip's speed, rounded
 // down; `available` is the media duration from the clip edge outward.
 std::int64_t spare_ticks(const Timeline& tl, const Clip& c, const RationalTime& available) {
+    // Segmented maps (ADR-0013) offer no handles: past their edges the motion is undefined.
+    if (!c.time_map.is_constant()) {
+        return 0;
+    }
     auto unit = detail::multiply(tl.timebase(), c.time_map.speed());
     if (!unit || available.value() <= 0) {
         return 0;
@@ -61,6 +76,9 @@ RationalTime negated(const RationalTime& t) {
 
 // Media a clip can show past its last instant.
 std::int64_t spare_after(const Timeline& tl, const Clip& c) {
+    if (c.title) {
+        return std::numeric_limits<std::int64_t>::max(); // generated: no media edge
+    }
     const MediaInfo* m = tl.find_media(c.media);
     if (m == nullptr) {
         return 0;
@@ -79,6 +97,9 @@ std::int64_t spare_after(const Timeline& tl, const Clip& c) {
 
 // Media a clip can show before its first instant.
 std::int64_t spare_before(const Timeline& tl, const Clip& c) {
+    if (c.title) {
+        return std::numeric_limits<std::int64_t>::max(); // generated: no media edge
+    }
     const MediaInfo* m = tl.find_media(c.media);
     if (m == nullptr) {
         return 0;
@@ -193,12 +214,14 @@ Result<Composition> evaluate(const Timeline& timeline, const RationalTime& at) {
         if (c == nullptr) {
             continue;
         }
-        const MediaInfo* m = timeline.find_media(c->media);
-        if (m == nullptr) {
+        const MediaInfo* m = c->title ? nullptr : timeline.find_media(c->media);
+        if (m == nullptr && !c->title) {
             return detail::error(ErrorCode::InvalidData, "clip references unknown media",
                                  detail::clip_context(c->id));
         }
-        auto t = media_time(timeline, *c, *m, *ticks);
+        // A title has no media time; its picture does not depend on one.
+        auto t = m != nullptr ? media_time(timeline, *c, *m, *ticks)
+                              : Result<RationalTime>(RationalTime{});
         if (!t) {
             return std::unexpected(t.error());
         }
@@ -220,8 +243,13 @@ Result<Composition> evaluate(const Timeline& timeline, const RationalTime& at) {
                 if (!video) {
                     return std::unexpected(video.error());
                 }
-                out.video.push_back(VideoLayer{
-                    .clip = c->id, .media = c->media, .media_time = *t, .video = *video});
+                out.video.push_back(VideoLayer{.clip = c->id,
+                                               .media = c->media,
+                                               .media_time = *t,
+                                               .video = *video,
+                                               .opacity = 1.0F,
+                                               .reveal = 1.0,
+                                               .title = c->title});
             } else {
                 const Mix mix = mix_of(window->kind, window->progress(*ticks));
                 for (const Clip* layer : {window->from, window->to}) {
@@ -230,11 +258,13 @@ Result<Composition> evaluate(const Timeline& timeline, const RationalTime& at) {
                     if (opacity <= 0.0F) {
                         continue;
                     }
-                    const MediaInfo* lm = timeline.find_media(layer->media);
-                    auto lt = lm != nullptr ? media_time(timeline, *layer, *lm, *ticks)
-                                            : Result<RationalTime>(std::unexpected(
-                                                  Error(ErrorCode::InvalidData, Category::Timeline,
-                                                        "clip references unknown media")));
+                    const MediaInfo* lm =
+                        layer->title ? nullptr : timeline.find_media(layer->media);
+                    auto lt = layer->title    ? Result<RationalTime>(RationalTime{})
+                              : lm != nullptr ? media_time(timeline, *layer, *lm, *ticks)
+                                              : Result<RationalTime>(std::unexpected(Error(
+                                                    ErrorCode::InvalidData, Category::Timeline,
+                                                    "clip references unknown media")));
                     if (!lt) {
                         return std::unexpected(lt.error());
                     }
@@ -247,21 +277,24 @@ Result<Composition> evaluate(const Timeline& timeline, const RationalTime& at) {
                                                    .media_time = *lt,
                                                    .video = *video,
                                                    .opacity = opacity,
-                                                   .reveal = incoming ? mix.reveal : 1.0});
+                                                   .reveal = incoming ? mix.reveal : 1.0,
+                                                   .title = layer->title});
                 }
             }
         }
         const bool plays_audio =
-            track.kind == TrackKind::Audio ||
-            (track.kind == TrackKind::Video && m->has_audio && !c->audio_detached);
+            m != nullptr &&
+            (track.kind == TrackKind::Audio ||
+             (track.kind == TrackKind::Video && m->has_audio && !c->audio_detached));
         if (plays_audio && !track.muted && !c->audio.muted) {
-            out.audio.push_back(AudioSource{.clip = c->id,
-                                            .media = c->media,
-                                            .media_time = *t,
-                                            .clip_offset = timeline.at(*ticks - c->start_ticks()),
-                                            .clip_duration = c->duration,
-                                            .speed = c->time_map.speed(),
-                                            .audio = c->audio});
+            out.audio.push_back(AudioSource{
+                .clip = c->id,
+                .media = c->media,
+                .media_time = *t,
+                .clip_offset = timeline.at(*ticks - c->start_ticks()),
+                .clip_duration = c->duration,
+                .speed = c->time_map.is_constant() ? c->time_map.speed() : Rational::literal(0, 1),
+                .audio = c->audio});
         }
     }
     return out;

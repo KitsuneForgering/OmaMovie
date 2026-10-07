@@ -2,10 +2,12 @@
 # System dependencies come from the PKGBUILD (`omastore deps`).
 kind = "app"
 name = "OmaMovie"
-summary = "Native video editor for Omarchy: a simple, iMovie-inspired interface on a GPU-first Vulkan pipeline."
+summary = "Native video editor for Omarchy: a simple, iMovie-inspired interface on a GPU-first Vulkan pipeline, exporting to MP4."
 categories = ["AudioVideo", "Video", "AudioVideoEditing"]
 icon = "packaging/icons/omamovie.svg"
 
-# No [linux.<arch>] table yet: there is no app binary to install until M6/M7. Releases will ship
-# omamovie-<version>-<arch>-linux.tar.gz (the pattern the store infers), so the table is only
-# needed if the layout ends up different (see .github/workflows/release.yml).
+# Releases ship omamovie-<version>-x86_64-linux.tar.gz holding the tree `make install` lays out
+# (usr/bin/omamovie finds its QML in usr/share/omamovie/qml); see .github/workflows/release.yml.
+[linux.x86_64]
+asset = "omamovie-{version}-x86_64-linux.tar.gz"
+exec = "usr/bin/omamovie"

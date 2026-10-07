@@ -9,13 +9,20 @@
 #include "oma/media/video_frame.hpp"
 
 #include <algorithm>
+#include <cerrno>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <format>
+#include <fstream>
 #include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include <unistd.h>
 
 namespace oma::compositor {
 
@@ -36,13 +43,91 @@ constexpr VkFormat kOutputFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 // Blur intermediates: half floats halve the bandwidth of the passes (evidence 2026-10-04 §5)
 // and stay within the GPU vs CPU tolerance.
 constexpr VkFormat kBlurFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-constexpr std::size_t kMaxPlanes = 3;
-constexpr std::uint32_t kBindings = 8; // see shaders/composite.comp
+constexpr std::size_t kMaxPlanes = 4;  // three colour planes and straight alpha (gbrap)
+constexpr std::uint32_t kBindings = 9; // see shaders/composite.comp
 // LUT entries: lookups are 32-bit float, read with texelFetch (no filtering needed).
 constexpr VkFormat kLutFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
 // LUT images kept between renders. ponytail: least recently used out past this; a project uses few
 // LUTs.
 constexpr std::size_t kMaxLutImages = 8;
+constexpr std::size_t kMaxPipelineCacheBytes = 16U << 20;
+
+std::filesystem::path pipeline_cache_path(const VkPhysicalDeviceProperties& props) {
+    // Read on the thread creating the compositor; OmaMovie never modifies its environment.
+    const char* xdg = std::getenv("XDG_CACHE_HOME"); // NOLINT(concurrency-mt-unsafe)
+    const char* home = std::getenv("HOME");          // NOLINT(concurrency-mt-unsafe)
+    std::filesystem::path root;
+    if (xdg != nullptr && std::filesystem::path(xdg).is_absolute()) {
+        root = xdg;
+    } else if (home != nullptr && std::filesystem::path(home).is_absolute()) {
+        root = std::filesystem::path(home) / ".cache";
+    } else {
+        return {};
+    }
+    return root / "omamovie" /
+           std::format("pipeline-{:08x}-{:08x}-{:08x}.bin", props.vendorID, props.deviceID,
+                       props.driverVersion);
+}
+
+std::vector<std::uint8_t> load_pipeline_cache(const std::filesystem::path& path,
+                                              const VkPhysicalDeviceProperties& props) {
+    if (path.empty())
+        return {};
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(path, ec);
+    if (ec || size < sizeof(VkPipelineCacheHeaderVersionOne) || size > kMaxPipelineCacheBytes)
+        return {};
+    std::vector<std::uint8_t> data(static_cast<std::size_t>(size));
+    std::ifstream in(path, std::ios::binary);
+    if (!in.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size())))
+        return {};
+    VkPipelineCacheHeaderVersionOne header{.headerSize = 0,
+                                           .headerVersion = VK_PIPELINE_CACHE_HEADER_VERSION_ONE,
+                                           .vendorID = 0,
+                                           .deviceID = 0,
+                                           .pipelineCacheUUID = {}};
+    std::memcpy(&header, data.data(), sizeof header);
+    if (header.headerSize < sizeof header || header.headerSize > data.size() ||
+        header.headerVersion != VK_PIPELINE_CACHE_HEADER_VERSION_ONE ||
+        header.vendorID != props.vendorID || header.deviceID != props.deviceID ||
+        std::memcmp(header.pipelineCacheUUID, props.pipelineCacheUUID, VK_UUID_SIZE) != 0)
+        return {};
+    return data;
+}
+
+void save_pipeline_cache(VkDevice device, VkPipelineCache cache,
+                         const std::filesystem::path& path) {
+    if (path.empty() || cache == VK_NULL_HANDLE)
+        return;
+    std::size_t size = 0;
+    if (vkGetPipelineCacheData(device, cache, &size, nullptr) != VK_SUCCESS ||
+        size < sizeof(VkPipelineCacheHeaderVersionOne) || size > kMaxPipelineCacheBytes)
+        return;
+    std::vector<std::uint8_t> data(size);
+    if (vkGetPipelineCacheData(device, cache, &size, data.data()) != VK_SUCCESS)
+        return;
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    if (ec)
+        return;
+    std::string tmp = path.string() + ".XXXXXX";
+    const int fd = ::mkstemp(tmp.data());
+    if (fd < 0)
+        return;
+    std::size_t written = 0;
+    while (written < size) {
+        const ssize_t n = ::write(fd, data.data() + written, size - written);
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n <= 0)
+            break;
+        written += static_cast<std::size_t>(n);
+    }
+    const int closed = ::close(fd);
+    const bool complete = written == size && closed == 0;
+    if (!complete || ::rename(tmp.c_str(), path.c_str()) != 0)
+        ::unlink(tmp.c_str());
+}
 
 // Descriptor type of each binding of the composite shader.
 constexpr VkDescriptorType binding_type(std::uint32_t b) {
@@ -194,6 +279,7 @@ struct VulkanCompositor::Impl {
     VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
     VkPipelineCache cache = VK_NULL_HANDLE;
+    std::filesystem::path cache_path;
     VkPipeline pipeline = VK_NULL_HANDLE;
     VkSampler sampler = VK_NULL_HANDLE;
     PFN_vkCmdPushDescriptorSetKHR push_descriptors = nullptr;
@@ -232,6 +318,7 @@ struct VulkanCompositor::Impl {
         vkDestroyDescriptorSetLayout(device->device(), display_set_layout, nullptr);
         vkDestroySampler(device->device(), sampler, nullptr);
         vkDestroyPipeline(device->device(), pipeline, nullptr);
+        save_pipeline_cache(device->device(), cache, cache_path);
         vkDestroyPipelineCache(device->device(), cache, nullptr);
         vkDestroyPipelineLayout(device->device(), pipeline_layout, nullptr);
         vkDestroyDescriptorSetLayout(device->device(), set_layout, nullptr);
@@ -321,14 +408,16 @@ Result<void> VulkanCompositor::Impl::create_display_pipeline() {
         r != VK_SUCCESS) {
         return std::unexpected(vk_failure(r, "cannot create the display descriptor layout"));
     }
+    const VkPushConstantRange display_push{
+        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = 4};
     const VkPipelineLayoutCreateInfo layout_info{.sType =
                                                      VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
                                                  .pNext = nullptr,
                                                  .flags = 0,
                                                  .setLayoutCount = 1,
                                                  .pSetLayouts = &display_set_layout,
-                                                 .pushConstantRangeCount = 0,
-                                                 .pPushConstantRanges = nullptr};
+                                                 .pushConstantRangeCount = 1,
+                                                 .pPushConstantRanges = &display_push};
     if (const VkResult r = vkCreatePipelineLayout(device->device(), &layout_info, nullptr,
                                                   &display_pipeline_layout);
         r != VK_SUCCESS) {
@@ -606,17 +695,25 @@ Result<std::unique_ptr<VulkanCompositor>> VulkanCompositor::create(const gpu::De
         r != VK_SUCCESS) {
         return std::unexpected(vk_failure(r, "cannot create the pipeline layout"));
     }
-    // TODO(M3): persist the cache under $XDG_CACHE_HOME/omamovie (CLAUDE.md §9.5).
-    const VkPipelineCacheCreateInfo cache_info{.sType =
-                                                   VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
-                                               .pNext = nullptr,
-                                               .flags = 0,
-                                               .initialDataSize = 0,
-                                               .pInitialData = nullptr};
+    impl->cache_path = pipeline_cache_path(props);
+    const auto cached = load_pipeline_cache(impl->cache_path, props);
+    const VkPipelineCacheCreateInfo cache_info{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .initialDataSize = cached.size(),
+        .pInitialData = cached.empty() ? nullptr : cached.data()};
     if (const VkResult r =
             vkCreatePipelineCache(device.device(), &cache_info, nullptr, &impl->cache);
         r != VK_SUCCESS) {
-        return std::unexpected(vk_failure(r, "cannot create the pipeline cache"));
+        // A disposable cache cannot prevent the editor from starting.
+        VkPipelineCacheCreateInfo empty = cache_info;
+        empty.initialDataSize = 0;
+        empty.pInitialData = nullptr;
+        if (const VkResult fallback =
+                vkCreatePipelineCache(device.device(), &empty, nullptr, &impl->cache);
+            fallback != VK_SUCCESS)
+            return std::unexpected(vk_failure(fallback, "cannot create the pipeline cache"));
     }
 
     const VkShaderModuleCreateInfo module_info{.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -866,7 +963,12 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
                 }
                 const media::GpuImages& img = in.access->images();
                 for (std::uint32_t i = 0; i < img.image_count; ++i) {
-                    gpu::transition(cmd, img.images[i], img.layouts[i], VK_IMAGE_LAYOUT_GENERAL);
+                    if (img.foreign) {
+                        gpu::acquire_foreign(cmd, img.images[i], d.device->graphics_family());
+                    } else {
+                        gpu::transition(cmd, img.images[i], img.layouts[i],
+                                        VK_IMAGE_LAYOUT_GENERAL);
+                    }
                 }
             }
             for (const LutImage& l : d.luts) {
@@ -958,6 +1060,7 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
                                                              : b == 6 ? &blur_target
                                                              : b == 7 ? &lut
                                                              : b == 4 ? nullptr
+                                                             : b == 8 ? &planes[3]
                                                                       : &planes[b - 1];
                         writes[b] = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                                      .pNext = nullptr,
@@ -1000,6 +1103,15 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
                 run_pass(Pass::Composite,
                          static_cast<std::uint32_t>(draw.region[2] - draw.region[0]),
                          static_cast<std::uint32_t>(draw.region[3] - draw.region[1]));
+            }
+            // Imported VA-API surfaces go back to their driver, which reuses them for decoding.
+            for (const auto& [index, in] : bound) {
+                if (in.access && in.access->images().foreign) {
+                    const media::GpuImages& img = in.access->images();
+                    for (std::uint32_t i = 0; i < img.image_count; ++i) {
+                        gpu::release_foreign(cmd, img.images[i], d.device->graphics_family());
+                    }
+                }
             }
         },
         waits, signals);
@@ -1070,7 +1182,7 @@ Result<RgbaImage> VulkanCompositor::read_output() {
     return out;
 }
 
-Result<const gpu::Image*> VulkanCompositor::encode_display() {
+Result<const gpu::Image*> VulkanCompositor::encode_display(Transfer transfer) {
     Impl& d = *impl_;
     if (d.output.handle() == VK_NULL_HANDLE) {
         return make_error(ErrorCode::InvalidArgument, Category::Compositor, "nothing rendered yet");
@@ -1117,6 +1229,9 @@ Result<const gpu::Image*> VulkanCompositor::encode_display() {
         }
         d.push_descriptors(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, d.display_pipeline_layout, 0,
                            static_cast<std::uint32_t>(writes.size()), writes.data());
+        const std::uint32_t bt709 = transfer == Transfer::Bt709 ? 1U : 0U;
+        vkCmdPushConstants(cmd, d.display_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                           sizeof(bt709), &bt709);
         vkCmdDispatch(cmd, (w + kGroupSize - 1) / kGroupSize, (h + kGroupSize - 1) / kGroupSize, 1);
         // Visible to any later reader on the queue (Qt's fragment shader, a copy).
         barrier(cmd,

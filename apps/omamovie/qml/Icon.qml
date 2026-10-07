@@ -2,12 +2,16 @@ import QtQuick
 import QtQuick.Shapes
 
 // Our own monochrome set on a 24 px grid, 1.5 px stroke, tinted at runtime (ui-design §10.2).
-// Drawn as SVG paths with Qt Quick Shapes until SVG files can ship through qt6-svg.
+// Each icon is SVG path data drawn with Qt Quick Shapes: one source for every size and theme,
+// with no SVG module dependency. `filled` is the variant for active states only.
 Item {
     id: icon
     property string name
     property color color: colors.foreground
     property real size: 18
+    property bool filled: false
+    // A misspelt name would draw nothing; say so instead.
+    onNameChanged: if (name !== "" && !paths[name]) console.warn("Icon: no icon named", name)
     implicitWidth: size
     implicitHeight: size
     readonly property var paths: ({
@@ -48,6 +52,11 @@ Item {
         "fit": "M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3",
         "save": "M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6",
         "open": "M3 7h6l2 2h10v10H3z",
+        "settings": "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4",
+        "more": "M7 10l5 5 5-5",
+        "keyframe": "M12 4l8 8-8 8-8-8z",
+        "arrowLeft": "M19 12H5M11 6l-6 6 6 6",
+        "arrowRight": "M5 12h14M13 6l6 6-6 6",
         "snap": "M6 4v8a6 6 0 0 0 12 0V4M6 8h4M14 8h4M10 4v8a2 2 0 0 0 4 0V4"
     })
     Shape {
@@ -59,7 +68,7 @@ Item {
         ShapePath {
             strokeColor: icon.color
             strokeWidth: 1.5
-            fillColor: "transparent"
+            fillColor: icon.filled ? icon.color : "transparent"
             capStyle: ShapePath.RoundCap
             joinStyle: ShapePath.RoundJoin
             PathSvg { path: icon.paths[icon.name] || "" }

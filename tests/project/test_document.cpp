@@ -6,6 +6,7 @@
 
 #include <cstdio>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <string>
 
@@ -74,8 +75,17 @@ Document sample(const fs::path& dir) {
     source.video.opacity = 0.75F;
     source.video.crop.left = 0.125;
     source.video.color.exposure = 0.3;
-    source.video.filter = {.kind = tl::FilterKind::Sepia, .amount = 0.6};
-    source.video.sharpness = -0.4;
+    // In the order a format 3 filter and sharpness migrate to (ADR-0016), then an effect this
+    // build does not know, which must survive the round trip.
+    source.video.effects = {{.definition = "oma.detail",
+                             .enabled = true,
+                             .params = {{.name = "amount", .value = -0.4}}},
+                            {.definition = "oma.look.sepia",
+                             .enabled = true,
+                             .params = {{.name = "amount", .value = 0.6}}},
+                            {.definition = "org.example.glow",
+                             .enabled = false,
+                             .params = {{.name = "radius \"px\"", .value = 3}}}};
     source.video.grade.cdl.slope = {1.1, 0.95, 1.0};
     source.video.grade.curves.master = {{.x = 0.0, .y = 0.05}, {.x = 1.0, .y = 0.9}};
     source.video.grade.lut = lut;
@@ -98,6 +108,43 @@ Document sample(const fs::path& dir) {
         b, tl::Transition{.kind = tl::TransitionKind::Wipe, .duration = f(10)}));
     (void)ed.execute(tl::edit::detach_audio(a, lane, ed.new_clip_id()));
     (void)ed.execute(tl::edit::add_marker(ed.new_marker_id(), f(12), "Intro, \"take 2\"\n"));
+    // A segmented time map (format 2, ADR-0013): ramp 1 -> 2, hold, then back to the start.
+    const tl::ClipId c = ed.new_clip_id();
+    source.source_in = mf(200);
+    source.video.transform_keys.clear();
+    (void)ed.execute(tl::edit::append(video, c, source));
+    using Kind = tl::TimeSegment::Kind;
+    (void)ed.execute(tl::edit::set_time_map(
+        c,
+        tl::TimeMap::segmented(
+            {{.kind = Kind::Ramp, .length = 10, .from = q(1, 1), .to = q(2, 1)},
+             {.kind = Kind::Freeze, .length = 5, .from = q(0, 1), .to = q(0, 1)},
+             {.kind = Kind::Linear, .length = 15, .from = q(-1, 1), .to = q(-1, 1)}})
+            .value(),
+        true));
+    // A title connected to the first storyline clip (format 2, ADR-0014).
+    const tl::TrackId titles = ed.new_track_id();
+    (void)ed.execute(tl::edit::add_track(titles, tl::TrackKind::Video, "Titles"));
+    const tl::ClipId title = ed.new_clip_id();
+    source.source_in = mf(0);
+    (void)ed.execute(tl::edit::overwrite(titles, title, f(20), source));
+    (void)ed.execute(tl::edit::trim_end(title, f(30), false));
+    (void)ed.execute(tl::edit::connect(title, a));
+    // A generated title (format 3, ADR-0015) on the same lane, with text that needs escaping.
+    tl::Title text;
+    text.text = "Chapter \"one\"\nnext line, é";
+    text.font = "Inter";
+    text.size = 0.125;
+    text.color = {1.0F, 0.5F, 0.25F, 0.75F};
+    text.placement = tl::TitlePlacement::Top;
+    (void)ed.execute(tl::edit::overwrite(titles, ed.new_clip_id(), f(80),
+                                         tl::edit::ClipSource{.media = tl::MediaId{},
+                                                              .source_in = f(0),
+                                                              .duration = f(15),
+                                                              .time_map = {},
+                                                              .video = {},
+                                                              .audio = {},
+                                                              .title = text}));
     Document doc;
     doc.media.push_back({.info = info,
                          .path = dir / "media" / "clip one.mp4",
@@ -126,8 +173,18 @@ void round_trips_exactly() {
     }
     expect(*oma::project::to_json(*back, dir)).toBe(*text);
     const tl::Timeline& t = *back->timeline;
-    expect(t.tracks().size()).toBe(2U);
-    expect(t.tracks()[0].clips.size()).toBe(2U);
+    expect(t.tracks().size()).toBe(3U);
+    const tl::Clip& connected = t.tracks()[2].clips.at(0);
+    expect(connected.anchor.has_value()).toBeTruthy();
+    expect(t.tracks()[2].clips.size()).toBe(2U);
+    expect(t.tracks()[2].clips.at(1).title == doc.timeline->tracks()[2].clips.at(1).title)
+        .toBeTruthy();
+    expect(t.tracks()[2].clips.at(1).title->text == "Chapter \"one\"\nnext line, é").toBeTruthy();
+    expect(connected.anchor == doc.timeline->tracks()[2].clips.at(0).anchor).toBeTruthy();
+    expect(t.tracks()[0].clips.size()).toBe(3U);
+    expect(t.tracks()[0].clips[2].time_map == doc.timeline->tracks()[0].clips[2].time_map)
+        .toBeTruthy();
+    expect(t.tracks()[0].clips[2].time_map.segments().size()).toBe(3U);
     const tl::Clip& a = t.tracks()[0].clips[0];
     expect(a.video == doc.timeline->tracks()[0].clips[0].video).toBeTruthy();
     expect(a.audio == doc.timeline->tracks()[0].clips[0].audio).toBeTruthy();
@@ -248,6 +305,152 @@ void fingerprints_tell_files_apart() {
 
 } // namespace
 
+// Format 1 had no `time_map`; a version 1 file reads unchanged (the 1 -> 2 migration is the
+// identity, ADR-0013). The fixture is a version 2 document without segmented maps, which is
+// byte-for-byte what version 1 wrote apart from the version number.
+void reads_format_1() {
+    Document doc = sample("/p");
+    auto t = *doc.timeline;
+    const tl::Clip last = t.tracks()[0].clips.back();
+    const tl::Clip title = t.tracks()[2].clips.back();
+    tl::Editor ed(std::move(t));
+    (void)ed.execute(tl::edit::remove_clip(last.id));
+    (void)ed.execute(tl::edit::remove_clip(title.id));
+    doc.timeline = ed.timeline();
+    std::string text = *oma::project::to_json(doc, "/p");
+    const std::string current = std::format("\"format_version\": {}", oma::project::kFormatVersion);
+    const auto at = text.find(current);
+    expect(at != std::string::npos).toBeTruthy();
+    text.replace(at, current.size(), "\"format_version\": 1");
+    auto back = oma::project::from_json(text, "/p");
+    expect(back.has_value()).toBeTruthy();
+    if (back) {
+        expect(back->timeline->tracks()[0].clips.size()).toBe(2U);
+    }
+}
+
+// Migration 3 -> 4 (ADR-0016): a clip's filter and sharpness read as the same effects.
+void migrates_filters_to_effects() {
+    Document doc = sample("/p");
+    std::string text = *oma::project::to_json(doc, "/p");
+    const std::string current = std::format("\"format_version\": {}", oma::project::kFormatVersion);
+    text.replace(text.find(current), current.size(), "\"format_version\": 3");
+    // Every media clip of the sample has the same effects (an empty list prints as []); write
+    // each list the way format 3 did.
+    std::size_t lists = 0;
+    for (std::size_t at = text.find("\"effects\": [\n"); at != std::string::npos;
+         at = text.find("\"effects\": [\n", at)) {
+        // The unknown effect closes each list, and parameter objects hold no ']'.
+        const std::size_t end = text.find(']', text.find("org.example.glow", at));
+        text.replace(at, end + 1 - at,
+                     "\"filter\": {\"kind\": \"sepia\", \"amount\": 0.6}, \"sharpness\": -0.4");
+        ++lists;
+    }
+    expect(lists > 0U).toBeTruthy();
+    auto back = oma::project::from_json(text, "/p");
+    expect(back.has_value()).toBeTruthy();
+    if (!back) {
+        return;
+    }
+    const auto& clips = back->timeline->tracks()[0].clips;
+    expect(clips.empty()).toBeFalsy();
+    for (const tl::Clip& c : clips) {
+        expect(c.video.effects.size()).toBe(2U);
+        if (c.video.effects.size() == 2U) {
+            const auto expected = std::vector<tl::Effect>(
+                doc.timeline->tracks()[0].clips[0].video.effects.begin(),
+                doc.timeline->tracks()[0].clips[0].video.effects.begin() + 2);
+            expect(c.video.effects == expected).toBeTruthy();
+        }
+    }
+}
+
+// Effect names are bounded before they are copied and validated against the definitions.
+void rejects_bad_effects() {
+    std::string text = *oma::project::to_json(sample("/p"), "/p");
+    const auto broken = [&](std::string_view from, std::string_view to) {
+        std::string t = text;
+        t.replace(t.find(from), from.size(), to);
+        return !oma::project::from_json(t, "/p").has_value();
+    };
+    expect(broken("\"amount\": 0.6", "\"amount\": 1.6")).toBeTruthy();      // out of range
+    expect(broken("\"amount\": 0.6", "\"strength\": 0.6")).toBeTruthy();    // unknown name
+    expect(broken("\"amount\": 0.6", "\"amount\": \"high\"")).toBeTruthy(); // not a number
+    expect(broken("\"oma.look.sepia\"", "\"oma.detail\"")).toBeTruthy();    // applied twice
+    expect(broken("\"org.example.glow\"", "\"" + std::string(100, 'x') + "\"")).toBeTruthy();
+}
+
+// Relink (CLAUDE.md §14): the moved file is found under a root by name and content; a decoy
+// with the same name and size but other bytes is skipped, and nothing is found when it is gone.
+void finds_relocated_media() {
+    const fs::path dir = scratch("relink");
+    fs::create_directories(dir / "old");
+    write_file(dir / "old" / "clip.mp4", std::string(5000, 'a'));
+    const auto print = oma::project::fingerprint_file(dir / "old" / "clip.mp4");
+    expect(print.has_value()).toBeTruthy();
+    if (!print) {
+        return;
+    }
+    fs::create_directories(dir / "new" / "a" / "b");
+    fs::create_directories(dir / "decoy");
+    write_file(dir / "decoy" / "clip.mp4", std::string(5000, 'b')); // same name and size
+    fs::rename(dir / "old" / "clip.mp4", dir / "new" / "a" / "b" / "clip.mp4");
+    const std::array roots{dir / "decoy", dir / "new"};
+    const auto found = oma::project::find_relocated(dir / "old" / "clip.mp4", *print, roots);
+    expect(found.has_value()).toBeTruthy();
+    if (found) {
+        expect(*found == dir / "new" / "a" / "b" / "clip.mp4").toBeTruthy();
+    }
+    fs::remove(dir / "new" / "a" / "b" / "clip.mp4");
+    expect(oma::project::find_relocated(dir / "old" / "clip.mp4", *print, roots).has_value())
+        .toBeFalsy();
+    fs::remove_all(dir);
+}
+
+// A title's text is bounded before it is copied (ADR-0015): a huge one is an error.
+void rejects_oversized_titles() {
+    const Document doc = sample("/p");
+    std::string text = *oma::project::to_json(doc, "/p");
+    const auto at = text.find("Chapter ");
+    expect(at != std::string::npos).toBeTruthy();
+    text.insert(at, std::string(tl::kMaxTitleBytes + 1, 'x'));
+    expect(oma::project::from_json(text, "/p").has_value()).toBeFalsy();
+}
+
+// Segment lists from an untrusted file: bad shapes and too many segments are errors.
+void rejects_bad_time_maps() {
+    const std::string good = *oma::project::to_json(sample("/p"), "/p");
+    // Replaces the segmented clip's whole segment array (segments hold no nested arrays).
+    const auto with = [&](const std::string& replacement) {
+        std::string text = good;
+        const auto key = text.find("\"time_map\"");
+        const auto open = text.find('[', key);
+        const auto close = text.find(']', open);
+        if (key == std::string::npos || open == std::string::npos || close == std::string::npos) {
+            return std::string{};
+        }
+        text.replace(open, close - open + 1, "[" + replacement + "]");
+        return text;
+    };
+    const auto rejected = [](const std::string& text) {
+        return !text.empty() && !oma::project::from_json(text, "/p").has_value();
+    };
+    // The splice itself keeps a valid document when the segments are valid.
+    expect(
+        oma::project::from_json(with(R"({"kind": "linear", "length": 30, "speed": "1/1"})"), "/p")
+            .has_value())
+        .toBeTruthy();
+    expect(rejected(with(R"({"kind": "ramp", "length": 10, "from": "1/1", "to": "-1/1"})")))
+        .toBeTruthy();
+    expect(rejected(with(R"({"kind": "linear", "length": 0, "speed": "1/1"})"))).toBeTruthy();
+    expect(rejected(with(R"({"kind": "sideways", "length": 10})"))).toBeTruthy();
+    std::string many;
+    for (int i = 0; i < 300; ++i) {
+        many += std::string(i == 0 ? "" : ", ") + R"({"kind": "freeze", "length": 1})";
+    }
+    expect(rejected(with(many))).toBeTruthy();
+}
+
 void run_document_tests() {
     describe("project::Document", {
         it("round-trips every saved field exactly", { round_trips_exactly(); });
@@ -258,5 +461,11 @@ void run_document_tests() {
         it("saves atomically and leaves the old file on failure", { saves_atomically(); });
         it("finds media next to a moved project", { finds_media_next_to_a_moved_project(); });
         it("fingerprints files", { fingerprints_tell_files_apart(); });
+        it("reads format 1 projects", { reads_format_1(); });
+        it("rejects malformed time maps", { rejects_bad_time_maps(); });
+        it("rejects oversized titles", { rejects_oversized_titles(); });
+        it("migrates format 3 filters to effects", { migrates_filters_to_effects(); });
+        it("rejects malformed effects", { rejects_bad_effects(); });
+        it("finds moved media by name and fingerprint", { finds_relocated_media(); });
     });
 }

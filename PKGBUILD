@@ -27,6 +27,14 @@ depends=(
     'ffmpeg'                    # libavformat/libavcodec/libavutil/libavfilter/libswresample/libswscale (libs/media)
     'libpipewire'               # PipeWire client (libs/audio)
     'simdjson'                  # project file parsing (libs/project, ADR-0007)
+    'qt6-base'                  # Qt GUI and versioned RHI headers (apps/omamovie)
+    'qt6-declarative'           # Qt Quick, Controls, Dialogs and Shapes (apps/omamovie QML)
+    'hicolor-icon-theme'        # the icon's directory
+    'shared-mime-info'          # the .omamovie project type
+    'desktop-file-utils'        # the desktop entry's MIME cache
+)
+optdepends=(
+    'intel-media-driver: GPU video decoding and export encoding (VA-API) on Intel'
 )
 makedepends=(
     'git'
@@ -45,8 +53,6 @@ _devdepends=(
     'vulkan-validation-layers'  # validate synchronization in spikes and libs/gpu
     'libva-utils'               # vainfo (S1)
     'libplacebo'                # S6 (also an ffmpeg dependency; not linked by shipped code)
-    'qt6-base'                  # Qt GUI and versioned RHI development headers (S4)
-    'qt6-declarative'           # Qt Quick (S4; move to depends when an app ships)
 )
 
 source=("${pkgname}::git+${url}.git")
@@ -65,7 +71,7 @@ build() {
     cd "${pkgname}"
     # The Makefile appends makepkg's CXXFLAGS/LDFLAGS. Warnings from distribution flags must not
     # fail a user's build, so -Werror stays a developer/CI setting.
-    make BUILD=release WERROR=0 libs tests
+    make BUILD=release WERROR=0 libs tests build/release/omamovie
 }
 
 check() {
@@ -75,6 +81,5 @@ check() {
 
 package() {
     cd "${pkgname}"
-    install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
-    # The omamovie executable, desktop entry and icon are installed here once the app exists (M6/M7).
+    make BUILD=release WERROR=0 DESTDIR="${pkgdir}" PREFIX=/usr LICENSE_NAME="${pkgname}" install
 }

@@ -34,7 +34,15 @@ public:
     // be decoded is silent and reported once through the result.
     [[nodiscard]] oma::Result<void> render(std::span<float> out, std::int64_t first);
 
+    // Renders `timeline` from now on, keeping the open decoders of clips that still exist with
+    // the same media and noise reduction: restarting playback after a seek or an edit seeks
+    // them instead of reopening their files.
+    void set_timeline(oma::timeline::Timeline timeline,
+                      std::unordered_map<std::uint64_t, std::string> paths);
+
     [[nodiscard]] int channels() const noexcept { return channels_; }
+    // Clips with an open decoder (tests see reuse through it).
+    [[nodiscard]] std::size_t open_streams() const noexcept { return streams_.size(); }
 
 private:
     struct Stream {

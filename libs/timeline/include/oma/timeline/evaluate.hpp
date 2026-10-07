@@ -31,6 +31,8 @@ struct VideoLayer {
     // the layer shows, from the left (a wipe). 1 and 1 outside transitions.
     float opacity = 1.0F;
     double reveal = 1.0;
+    // A title clip (ADR-0015): no media; the app draws this instead of decoding a picture.
+    std::optional<Title> title = std::nullopt;
 };
 
 struct AudioSource {
@@ -39,7 +41,7 @@ struct AudioSource {
     RationalTime media_time;  // first sample, rounded down to the media grid
     RationalTime clip_offset; // time since the clip start, for fades
     RationalTime clip_duration;
-    Rational speed;
+    Rational speed; // the constant speed; 0 for a segmented map (freeze, reverse, ramps)
     AudioProperties audio;
 };
 

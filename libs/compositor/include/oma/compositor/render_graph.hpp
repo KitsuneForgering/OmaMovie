@@ -56,7 +56,7 @@ struct ColorAdjust {
     double temperature = 0.0; // in [-1, 1]: cooler (bluer) to warmer, luminance kept
 };
 
-// A clip filter (ui-design §6, Effects): a look applied after the color adjustments.
+// A look applied after the color adjustments (ADR-0016): a layer's looks compose in order.
 enum class FilterKind : std::uint8_t {
     None,
     BlackAndWhite,
@@ -80,7 +80,9 @@ struct Layer {
     float opacity = 1.0F;
     BlendMode blend = BlendMode::Normal;
     ColorAdjust color;
-    Filter filter;
+    // In order, at most one per kind and never None; their matrices multiply in this order and
+    // the vignette applies after them (src/look.hpp).
+    std::vector<Filter> looks;
     // In [-1, 1]: below 0 a gaussian blur (up to 2% of the source height in standard
     // deviation), above 0 an unsharp mask that sharpens edges; 0 leaves detail alone.
     double sharpness = 0.0;
@@ -100,6 +102,11 @@ struct RenderGraph {
 
 // Checks sizes, input indices, crops, scales, opacity, color adjustments and filters.
 [[nodiscard]] Result<void> validate(const RenderGraph& graph, std::size_t input_count);
+
+// The same picture at `scale` (0, 1] times the output size, for a reduced-resolution preview:
+// the output size and pixel offsets scale, and native-size layers shrink with the output so
+// the framing is unchanged. Never used for export, which renders the project's size.
+[[nodiscard]] RenderGraph scaled(const RenderGraph& graph, double scale);
 
 // What the compositor knows about a source when it renders.
 struct SourceGeometry {

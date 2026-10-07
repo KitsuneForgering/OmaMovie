@@ -1,5 +1,7 @@
 #include "oma/playback/waveform.hpp"
 
+#include <cstring>
+
 #include "oma/media/audio_decoder.hpp"
 
 #include <algorithm>
@@ -122,6 +124,78 @@ Result<Waveform> compute_waveform(const std::filesystem::path& path, JobContext&
         w.peaks.push_back(bucket);
         w.rms.push_back(rms_of(squares, filled, d.channels()));
     }
+    return w;
+}
+
+namespace {
+
+constexpr std::uint32_t kWaveformBytesVersion = 1;
+
+template <typename T>
+void put(std::vector<std::uint8_t>& out, T v) {
+    const auto* p = reinterpret_cast<const std::uint8_t*>(&v); // NOLINT: plain value bytes
+    out.insert(out.end(), p, p + sizeof v);
+}
+
+template <typename T>
+bool take(std::span<const std::uint8_t>& in, T& v) {
+    if (in.size() < sizeof v)
+        return false;
+    std::memcpy(&v, in.data(), sizeof v);
+    in = in.subspan(sizeof v);
+    return true;
+}
+
+} // namespace
+
+std::vector<std::uint8_t> to_bytes(const Waveform& w) {
+    std::vector<std::uint8_t> out;
+    out.reserve(48 + (w.peaks.size() + w.rms.size()) * sizeof(float));
+    put(out, kWaveformBytesVersion);
+    put(out, w.start.value());
+    put(out, w.start.timebase().num());
+    put(out, w.start.timebase().den());
+    put(out, w.sample_rate);
+    put(out, w.bucket_frames);
+    put(out, static_cast<std::uint64_t>(w.peaks.size()));
+    put(out, static_cast<std::uint64_t>(w.rms.size()));
+    for (const float v : w.peaks)
+        put(out, v);
+    for (const float v : w.rms)
+        put(out, v);
+    return out;
+}
+
+Result<Waveform> waveform_from_bytes(std::span<const std::uint8_t> in) {
+    const auto bad = [] {
+        return make_error(ErrorCode::InvalidData, Category::Cache, "invalid cached waveform");
+    };
+    std::uint32_t version = 0;
+    std::int64_t value = 0;
+    std::int64_t num = 0;
+    std::int64_t den = 0;
+    Waveform w;
+    std::uint64_t peaks = 0;
+    std::uint64_t rms = 0;
+    if (!take(in, version) || version != kWaveformBytesVersion || !take(in, value) ||
+        !take(in, num) || !take(in, den) || !take(in, w.sample_rate) ||
+        !take(in, w.bucket_frames) || !take(in, peaks) || !take(in, rms) ||
+        peaks > kMaxWaveformBuckets || rms > kMaxWaveformBuckets ||
+        in.size() != (peaks + rms) * sizeof(float) || w.sample_rate <= 0 || w.bucket_frames <= 0) {
+        return bad();
+    }
+    const auto timebase = Rational::make(num, den);
+    const auto start = timebase ? RationalTime::make(value, *timebase)
+                                : Result<RationalTime>(std::unexpected(timebase.error()));
+    if (!start)
+        return bad();
+    w.start = *start;
+    w.peaks.resize(peaks);
+    w.rms.resize(rms);
+    for (float& v : w.peaks)
+        (void)take(in, v);
+    for (float& v : w.rms)
+        (void)take(in, v);
     return w;
 }
 

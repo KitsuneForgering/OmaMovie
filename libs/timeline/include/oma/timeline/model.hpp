@@ -11,6 +11,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 // The timeline model (CLAUDE.md §10): plain C++, no Qt, GPU or FFmpeg. Read access is public;
@@ -41,23 +42,64 @@ struct LutInfo {
     std::string name;
 };
 
-// Maps time local to a clip (sequence timebase) to an offset in media time (ADR-0002).
-// v0.1 creates constant-speed maps only. Reverse, freeze and ramps need the complementary
-// interpolation/domain ADR before they exist (ADR-0002, M5 note); the type is already the one
-// the model and the project format use, so adding them needs no structural migration.
+// The most segments one time map holds: ramp presets use a handful; the cap bounds what an
+// untrusted project file can make the model allocate and evaluate (CLAUDE.md §18).
+inline constexpr std::size_t kMaxTimeSegments = 256;
+
+// One piece of a segmented time map (ADR-0013). `length` is in sequence ticks.
+struct TimeSegment {
+    enum class Kind : std::uint8_t {
+        Linear, // constant speed `from` (negative plays backwards, never zero)
+        Freeze, // the media position held
+        Ramp,   // speed changing linearly from `from` to `to`; never changes direction
+    };
+    Kind kind = Kind::Linear;
+    std::int64_t length = 0;
+    Rational from = Rational::literal(1, 1);
+    Rational to = Rational::literal(1, 1);
+
+    friend bool operator==(const TimeSegment&, const TimeSegment&) noexcept = default;
+};
+
+// Maps time local to a clip (sequence timebase) to an offset in media time (ADR-0002,
+// ADR-0013): either one constant speed for the whole clip, or segments covering the clip
+// exactly (freeze, reverse, ramps). Offsets are exact; rounding to a media PTS happens only in
+// `evaluate`.
 class TimeMap {
 public:
     TimeMap() noexcept = default;
 
     // Speed > 0: 1 is normal, 1/2 is half speed (clip twice as long), 2 is double speed.
     [[nodiscard]] static Result<TimeMap> constant(Rational speed);
+    // Segments in order; each one starts where the previous one left the media.
+    [[nodiscard]] static Result<TimeMap> segmented(std::vector<TimeSegment> segments);
 
+    [[nodiscard]] bool is_constant() const noexcept { return segments_.empty(); }
+    // The constant speed; meaningful only when is_constant().
     [[nodiscard]] Rational speed() const noexcept { return speed_; }
+    [[nodiscard]] std::span<const TimeSegment> segments() const noexcept { return segments_; }
+    // Ticks the segments cover (0 for a constant map, which fits any duration).
+    [[nodiscard]] std::int64_t length() const noexcept;
+    // Whether the media position decreases at local tick `t` (a reverse segment).
+    [[nodiscard]] bool backward(std::int64_t t) const noexcept;
 
-    // Media displacement covered by `local_ticks` of sequence time, exact (no rounding): a time
-    // in the unit `sequence_timebase * speed`.
+    // Media displacement after `local_ticks` of sequence time, exact (no rounding).
     [[nodiscard]] Result<RationalTime> media_offset(std::int64_t local_ticks,
                                                     Rational sequence_timebase) const;
+    // The smallest and largest displacement over [0, duration] (the media a clip spans).
+    [[nodiscard]] Result<std::pair<RationalTime, RationalTime>>
+    extent(std::int64_t duration, Rational sequence_timebase) const;
+    // The map of local ticks [from, to), starting at displacement 0 (split and trims).
+    [[nodiscard]] Result<TimeMap> slice(std::int64_t from, std::int64_t to) const;
+    // Grown by `before` ticks at the start and `after` at the end (outward trims): the edge
+    // segment keeps going at its edge speed (a ramp gets a linear or frozen extension).
+    // A constant map is unchanged.
+    [[nodiscard]] Result<TimeMap> extended(std::int64_t before, std::int64_t after) const;
+    // The same motion as segments covering `duration` (a constant map becomes one linear one).
+    [[nodiscard]] Result<TimeMap> as_segments(std::int64_t duration) const;
+    // Played backwards over `duration`: segment order reversed and speeds negated. Starts where
+    // this map ends, so the caller moves source_in to media_offset(duration).
+    [[nodiscard]] Result<TimeMap> reversed(std::int64_t duration) const;
 
     friend bool operator==(const TimeMap&, const TimeMap&) noexcept = default;
 
@@ -65,6 +107,7 @@ private:
     explicit TimeMap(Rational speed) noexcept : speed_(speed) {}
 
     Rational speed_ = Rational::literal(1, 1);
+    std::vector<TimeSegment> segments_;
 };
 
 enum class TrackKind : std::uint8_t {
@@ -118,7 +161,7 @@ struct ColorAdjust {
     friend bool operator==(const ColorAdjust&, const ColorAdjust&) noexcept = default;
 };
 
-// A clip filter (ui-design §6, Effects): one look per clip.
+// The looks a look effect applies (effects.hpp); mirrors compositor::FilterKind.
 enum class FilterKind : std::uint8_t {
     None,
     BlackAndWhite,
@@ -129,11 +172,26 @@ enum class FilterKind : std::uint8_t {
     Vignette,
 };
 
-struct Filter {
-    FilterKind kind = FilterKind::None;
-    double amount = 1.0; // in [0, 1]
+// One video effect of a clip (ADR-0016): a definition named by a stable ID (effects.hpp), a
+// bypass flag and parameter values. A definition this build does not know is kept verbatim so
+// saving writes it back; it is not rendered.
+inline constexpr std::size_t kMaxEffects = 16;
+inline constexpr std::size_t kMaxEffectParams = 16;
+inline constexpr std::size_t kMaxEffectNameBytes = 64;
 
-    friend bool operator==(const Filter&, const Filter&) noexcept = default;
+struct EffectParam {
+    std::string name;
+    double value = 0.0;
+
+    friend bool operator==(const EffectParam&, const EffectParam&) = default;
+};
+
+struct Effect {
+    std::string definition;
+    bool enabled = true;
+    std::vector<EffectParam> params; // unique names; a missing one takes its default
+
+    friend bool operator==(const Effect&, const Effect&) = default;
 };
 
 // Color grading (ADR-0012), applied after the color adjustments and the filter, on the clip's
@@ -199,6 +257,22 @@ struct TransformKey {
     friend bool operator==(const TransformKey&, const TransformKey&) noexcept = default;
 };
 
+// A title clip's text (ADR-0015): drawn by the app over a transparent background at the canvas
+// size, then composited like any picture.
+enum class TitlePlacement : std::uint8_t { LowerThird, Center, Top };
+
+inline constexpr std::size_t kMaxTitleBytes = 1000;
+
+struct Title {
+    std::string text;   // UTF-8, line breaks allowed, at most kMaxTitleBytes
+    std::string font;   // family name; empty: the UI font
+    double size = 0.08; // text height as a fraction of the canvas height, (0, 0.5]
+    std::array<float, 4> color{1.0F, 1.0F, 1.0F, 1.0F}; // straight sRGB RGBA in [0, 1]
+    TitlePlacement placement = TitlePlacement::LowerThird;
+
+    friend bool operator==(const Title&, const Title&) = default;
+};
+
 struct VideoProperties {
     Fit fit = Fit::Fit;
     Crop crop;
@@ -208,11 +282,12 @@ struct VideoProperties {
     float opacity = 1.0F;
     BlendMode blend = BlendMode::Normal;
     ColorAdjust color;
-    Filter filter;
-    double sharpness = 0.0; // in [-1, 1]: below 0 blurred, above 0 sharpened
+    // At most kMaxEffects, each definition at most once; rendered by stage, in this order
+    // within a stage (ADR-0016).
+    std::vector<Effect> effects;
     ColorGrade grade;
 
-    friend bool operator==(const VideoProperties&, const VideoProperties&) noexcept = default;
+    friend bool operator==(const VideoProperties&, const VideoProperties&) = default;
 };
 
 // A three-band equalizer, gains in dB within ±24 (0 is flat).
@@ -262,6 +337,15 @@ struct Transition {
 };
 
 // A clip places a range of a media item on a track. Non-destructive: it only references media.
+// A connected clip's attachment (ADR-0014): its first instant is where the primary clip shows
+// `source`, so it follows the primary's content through moves, ripples, trims and slips.
+struct Anchor {
+    ClipId primary;
+    RationalTime source; // a media position of the primary, exact
+
+    friend bool operator==(const Anchor&, const Anchor&) noexcept = default;
+};
+
 struct Clip {
     ClipId id;
     MediaId media;
@@ -277,6 +361,9 @@ struct Clip {
     // so this clip plays no sound. Always false on other tracks.
     bool audio_detached = false;
     std::optional<Transition> transition_in;
+    std::optional<Anchor> anchor; // connected to a clip on another track (ADR-0014)
+    // A generated title instead of media (ADR-0015): `media` is then 0 and the map 1×.
+    std::optional<Title> title;
 
     // Exact end: start + duration.
     [[nodiscard]] std::int64_t start_ticks() const noexcept { return start.value(); }

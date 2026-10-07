@@ -11,7 +11,7 @@ WaveformStore::~WaveformStore() {
     pool_.shutdown();
 }
 
-void WaveformStore::request(std::uint64_t media, const std::string& path) {
+void WaveformStore::request(std::uint64_t media, const std::string& path, const std::string& identity) {
     if (waveforms_.contains(media) || pending_.contains(media)) return;
     pending_[media] = true;
     std::erase_if(jobs_, [](const oma::JobHandle& h) {
@@ -19,8 +19,19 @@ void WaveformStore::request(std::uint64_t media, const std::string& path) {
         return s != oma::JobState::Pending && s != oma::JobState::Running;
     });
     const unsigned generation = generation_;
-    jobs_.push_back(pool_.submit("waveform", [this, media, path, generation](oma::JobContext& job) {
-        auto computed = oma::playback::compute_waveform(std::filesystem::path(path), job);
+    const oma::DiskCache* cache = cache_;
+    jobs_.push_back(pool_.submit("waveform", [this, media, path, identity, generation, cache](oma::JobContext& job) {
+        const std::string key = "waveform/v1 " + identity;
+        oma::Result<oma::playback::Waveform> computed = std::unexpected(oma::Error(oma::ErrorCode::Internal, oma::Category::Cache, ""));
+        if (const auto bytes = cache != nullptr ? cache->get(key) : std::nullopt) computed = oma::playback::waveform_from_bytes(*bytes);
+        if (!computed) {
+            computed = oma::playback::compute_waveform(std::filesystem::path(path), job);
+            if (computed && cache != nullptr) {
+                if (auto stored = cache->put(key, oma::playback::to_bytes(*computed)); !stored) {
+                    oma::log_warn(oma::Category::Cache, "waveform not cached: {}", stored.error().summary());
+                }
+            }
+        }
         if (!computed) {
             if (computed.error().code() != oma::ErrorCode::Cancelled) {
                 // Degrade visibly in the log, never silently (CLAUDE.md §19): the clip just has no

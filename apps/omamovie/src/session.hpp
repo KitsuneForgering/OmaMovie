@@ -1,11 +1,15 @@
 #pragma once
 
 #include "audio_player.hpp"
+#include "clip_list_model.hpp"
+#include "recent_projects.hpp"
 #include "frame_source.hpp"
 #include "video_scheduler.hpp"
 #include "viewer_frame.hpp"
 #include "waveform_store.hpp"
 
+#include "oma/base/disk_cache.hpp"
+#include "exporter.hpp"
 #include "oma/base/jobs.hpp"
 #include "oma/base/time.hpp"
 #include "oma/media/format.hpp"
@@ -16,15 +20,20 @@
 #include "oma/timeline/model.hpp"
 
 #include <QElapsedTimer>
+#include <QHash>
+#include <QSet>
 #include <QObject>
 #include <QString>
 #include <QTemporaryDir>
+#include <QFileSystemWatcher>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 
 #include <cstdint>
+#include <limits>
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <tuple>
@@ -49,13 +58,34 @@ class Session final : public QObject {
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(bool failed READ failed NOTIFY statusChanged)
     Q_PROPERTY(QString notice READ notice NOTIFY statusChanged)
+    // Export (M7): progress in [0, 1] while an export runs, -1 otherwise; the last finished file.
+    Q_PROPERTY(double exportProgress READ exportProgress NOTIFY exportChanged)
+    Q_PROPERTY(QString exportedFile READ exportedFile NOTIFY exportChanged)
     Q_PROPERTY(QVariantList media READ media NOTIFY libraryChanged)
+    // Omarchy screen recordings, newest first (UX-09): path, name, when, growing.
+    Q_PROPERTY(QVariantList recordings READ recordings NOTIFY recordingsChanged)
+    Q_PROPERTY(QVariantList recentProjects READ recentProjects NOTIFY recentProjectsChanged)
+    Q_PROPERTY(QVariantList recoveredProjects READ recoveredProjects NOTIFY recoveredChanged)
+    Q_PROPERTY(QString recordingsFolder READ recordingsFolder NOTIFY recordingsChanged)
     Q_PROPERTY(int selectedMedia READ selectedMedia NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList clips READ clips NOTIFY sequenceChanged)
+    // The same storyline clips as a model that keeps delegates across edits (long timelines).
+    Q_PROPERTY(QObject* storylineClips READ storylineClips CONSTANT)
+    // More storyline clips in view than delegates make sense for: the timeline draws them as one
+    // strip (storylineClips is then empty). Set from the view's range (setStorylineView).
+    Q_PROPERTY(bool storylineCompact READ storylineCompact NOTIFY storylineViewChanged)
+    // The storyline as [start, duration, ...] seconds, and the selected clip's [start, duration]:
+    // the minimap draws thousands of clips from numbers rather than one map per clip.
+    Q_PROPERTY(QList<double> clipSpans READ clipSpans NOTIFY sequenceChanged)
+    Q_PROPERTY(QList<double> selectedSpan READ selectedSpan NOTIFY selectionChanged)
     // Audio lanes below the storyline, top first: {id, name, clips}.
     Q_PROPERTY(QVariantList audioTracks READ audioTracks NOTIFY sequenceChanged)
-    // Previews of the selected clip under each filter (Effects drawer), FilterKind order.
+    // Video lanes above the storyline, nearest first: titles, cutaways, picture in picture.
+    Q_PROPERTY(QVariantList videoTracks READ videoTracks NOTIFY sequenceChanged)
+    // Previews of the selected clip under each look, in lookEffects order (Effects drawer).
     Q_PROPERTY(QVariantList filterPreviews READ filterPreviews NOTIFY filterPreviewsChanged)
+    // The built-in looks (ADR-0016): {id, name}. QML keeps no effect table of its own.
+    Q_PROPERTY(QVariantList lookEffects READ lookEffects CONSTANT)
     // LUTs loaded in this project (ADR-0012): {id, name}.
     Q_PROPERTY(QVariantList luts READ luts NOTIFY lutsChanged)
     // Waveforms of the library's media, for the timeline's WaveformItems.
@@ -80,6 +110,8 @@ class Session final : public QObject {
     // The selected clip's transform at the playhead (keyframes evaluated): posX, posY, scale,
     // rotation; `keys` how many transform keys it has, `keyHere` whether one is at the playhead.
     Q_PROPERTY(QVariantMap motion READ motion NOTIFY motionChanged)
+    // The selected clip's picture box at its committed transform, normalized to the canvas.
+    Q_PROPERTY(QVariantMap selectedBox READ selectedBox NOTIFY motionChanged)
     Q_PROPERTY(bool playing READ playing NOTIFY positionChanged)
     Q_PROPERTY(int speed READ speed NOTIFY positionChanged)
 
@@ -92,27 +124,77 @@ public:
     Session(Session&&) = delete;
     Session& operator=(Session&&) = delete;
 
-    void setPreview(PreviewItem* preview) { preview_ = preview; }
+    // Also applies the preview quality from OMA_PREVIEW_SCALE: 1 (full), a fraction such as 0.5
+    // (fixed), otherwise automatic (half resolution after sustained drops, M4).
+    void setPreview(PreviewItem* preview);
+    // Settings: "auto", "full", "half" or "quarter"; OMA_PREVIEW_SCALE, when set, wins.
+    void setPreviewQuality(const QString& quality);
+    // Settings: a recordings folder instead of Omarchy's ("" restores it).
+    void setRecordingsFolderOverride(const QString& folder);
     // Automated runs: never play through the speakers.
     void setSilent(bool silent) { audio_.set_silent(silent); }
+    // Desktop notifications (export finished); the smoke and audits turn them off.
+    void setNotifications(bool on) { notifications_ = on; }
+    // From Settings: "auto", "hardware" or "software" for the next exports.
+    void setExportEncoder(const QString& choice) { export_encoder_ = choice; }
     void setOutputMuted(bool muted) { audio_.set_muted(muted); }
     [[nodiscard]] float takeAudioPeak() { return audio_.take_peak(); }
     [[nodiscard]] bool audioRunning() const { return audio_.running(); }
     [[nodiscard]] bool audioOnDevice() const { return audio_.on_device(); }
+    // What the disk caches hold now, for Settings (bytes; directory scans, call off hot paths).
+    [[nodiscard]] std::uint64_t cacheBytes() const { return thumbnail_cache_.size() + waveform_cache_.size(); }
+    [[nodiscard]] QString cacheFolder() const;
+    // ADR-0009 budgets: each store's limit, applied by an eviction pass on the job workers.
+    void setCacheBudget(std::uint64_t bytes_per_store);
+    // Empties both stores on the job workers, then emits cacheCleared.
+    Q_INVOKABLE void clearCache();
     [[nodiscard]] std::int64_t audibleSample() const { return audio_.audible_sample(); }
     [[nodiscard]] std::int64_t audioUnderruns() const { return audio_.underruns(); }
     [[nodiscard]] std::int64_t droppedVideoFrames() const { return scheduler_.dropped(); }
+    // How long the last playback (re)start held the UI thread, in milliseconds (M4 audit).
+    [[nodiscard]] double lastRestartMs() const { return last_restart_ms_; }
+    // M4 audit: how long each playback tick held the UI thread, and the time between ticks (ms).
+    [[nodiscard]] std::pair<std::vector<double>, std::vector<double>> takeTickTimings() {
+        return {std::exchange(tick_ms_, {}), std::exchange(tick_gap_ms_, {})};
+    }
 
     [[nodiscard]] bool editing() const { return editing_; }
     [[nodiscard]] QString status() const { return status_; }
     [[nodiscard]] bool failed() const { return failed_; }
-    [[nodiscard]] QString notice() const { return notice_; }
+    // The latest notice; once the GPU device is lost, its explanation stays when nothing newer shows.
+    [[nodiscard]] QString notice() const;
     [[nodiscard]] QVariantList media() const;
     [[nodiscard]] int selectedMedia() const { return selected_media_; }
     [[nodiscard]] QVariantList clips() const;
     [[nodiscard]] QVariantList audioTracks() const;
+    [[nodiscard]] QVariantList videoTracks() const;
+    [[nodiscard]] QObject* storylineClips() { return &storyline_model_; }
+    [[nodiscard]] QList<double> clipSpans() const;
+    [[nodiscard]] bool storylineCompact() const { return storyline_compact_; }
+    // The seconds the timeline view covers (with its margin): storylineClips holds only the
+    // clips there, so an edit far from the view updates no delegate.
+    Q_INVOKABLE void setStorylineView(double from, double to);
+    // Selects the storyline clip at `seconds` (the compact strip has no delegates to click).
+    Q_INVOKABLE void selectClipAt(double seconds);
+    [[nodiscard]] QList<double> selectedSpan() const;
+    // A clip's {start, duration} in seconds (for drawing); empty when it does not exist.
+    Q_INVOKABLE QList<double> clipSpan(double id) const;
+    // The selected library item at the playhead on a free lane above (video) or below (sound)
+    // the storyline, connected to the storyline clip there (ADR-0014).
+    Q_INVOKABLE void connectSelected();
+    // Titles (ADR-0015): a three-second title at the playhead on a free lane above the
+    // storyline, connected to the storyline clip there; and the selected title's text and style
+    // (size as a fraction of the canvas height, colour as "#rrggbb", placement 0 lower third,
+    // 1 centre, 2 top), one undoable edit.
+    Q_INVOKABLE void addTitle();
+    Q_INVOKABLE void setClipTitle(const QString& text, double size, const QString& color, int placement);
+    // The selected lane clip: connect it to the storyline clip under its start, or disconnect it
+    // (ADR-0014).
+    Q_INVOKABLE void connectSelectedClip();
+    Q_INVOKABLE void disconnectSelectedClip();
     [[nodiscard]] QObject* waveforms() { return &waveforms_; }
     [[nodiscard]] QVariantList filterPreviews() const { return filter_previews_; }
+    [[nodiscard]] static QVariantList lookEffects();
     [[nodiscard]] QVariantList luts() const;
     [[nodiscard]] double selectedClip() const { return static_cast<double>(selected_clip_.value()); }
     [[nodiscard]] QVariantMap info() const;
@@ -139,13 +221,57 @@ public:
     Q_INVOKABLE void newProject();
     Q_INVOKABLE void showProjects();
     Q_INVOKABLE void continueProject();
+    [[nodiscard]] QVariantList recordings() const { return recordings_; }
+    [[nodiscard]] QString recordingsFolder() const { return recordings_folder_; }
+    // Re-reads the recordings folder (also done when it changes on disk).
+    Q_INVOKABLE void refreshRecordings();
+    // Recent project files, kept in `settings_file` (the smoke run passes its own).
+    void setRecentProjectsFile(const QString& settings_file);
+    [[nodiscard]] QVariantList recentProjects() const;
+    Q_INVOKABLE void forgetRecentProject(const QString& path);
+    // Autosave (CLAUDE.md §14): while there are unsaved changes, a copy goes to the state folder
+    // every kAutosaveSeconds; saving or discarding removes it. Copies left by a crash are listed
+    // ({file, name, origin, when}) and can be restored (opened as unsaved changes to `origin`)
+    // or discarded.
+    static constexpr int kAutosaveSeconds = 30;
+    [[nodiscard]] QVariantList recoveredProjects() const;
+    Q_INVOKABLE void restoreRecovered(const QString& file);
+    Q_INVOKABLE void discardRecovered(const QString& file);
+    // Prior versions of a project file, newest first: {file, when}. Restoring opens one as
+    // unsaved changes to that project.
+    Q_INVOKABLE QVariantList projectVersions(const QString& project) const;
+    Q_INVOKABLE void restoreVersion(const QString& file, const QString& project);
+    // The window closes after the user chose to discard: the current autosave goes too.
+    Q_INVOKABLE void discardAutosave();
+    // Writes the autosave now if it is due (also what the timer calls).
+    Q_INVOKABLE void autosave();
+    // An import (or an opened project's re-import) is still running; saving waits for it.
+    [[nodiscard]] bool importsPending() const { return importing(); }
 
     // Import. A file opened with the app goes straight to the end of the storyline (§3.1); one
     // imported from the dialog goes to the library, and to the storyline only when it is empty.
     // A project file (*.omamovie) opens as the project instead.
     Q_INVOKABLE void open(const QString& path);
+    // How the app was opened with files (ui-design §3.1): a project file opens that project;
+    // otherwise a new project gets the files on the storyline in the given order (imported one
+    // after another, since imports finish in any order).
+    Q_INVOKABLE void openFiles(const QStringList& paths);
     // Saves in the background (atomic replacement); an empty url saves to the current file.
     Q_INVOKABLE void saveProject(const QUrl& url);
+    // Renders the sequence to an MP4 file (H.264 + AAC) on the job workers; cancellable.
+    Q_INVOKABLE void exportMovie(const QUrl& url);
+    Q_INVOKABLE void cancelExport();
+    Q_INVOKABLE void clearExported() {
+        exported_file_.clear();
+        emit exportChanged();
+    }
+    [[nodiscard]] double exportProgress() const { return export_progress_; }
+    [[nodiscard]] QString exportedFile() const { return exported_file_; }
+    [[nodiscard]] const ExportStats& lastExportStats() const { return export_stats_; }
+    // Points a missing library item (an opened project's moved file) at `url`, which must hold
+    // the same kind of media at least as long as the clips use; then looks for the project's
+    // other missing files in that folder.
+    Q_INVOKABLE void relinkMedia(int index, const QUrl& url);
     // Replaces the session with a saved project: its library is imported again (thumbnails,
     // details) under the saved IDs, the timeline is restored as saved.
     Q_INVOKABLE void openProject(const QUrl& url);
@@ -186,6 +312,11 @@ public:
     // Detaches the selected storyline clip's sound onto an audio lane (a new one if no lane has
     // room), so picture and sound can be trimmed apart for J- and L-cuts.
     Q_INVOKABLE void detachAudio();
+    // Clip timing (ADR-0013) on the selected clip, rippling the storyline: a constant speed
+    // given as num/den (1/2 slow, 2 fast), a freeze of `seconds` at the playhead, or reverse.
+    Q_INVOKABLE void setClipSpeed(int num, int den);
+    Q_INVOKABLE void freezeFrame(double seconds);
+    Q_INVOKABLE void reverseClip();
     // Volume drawer (ui-design §6): one command per committed change. Fades are snapped to
     // whole frames and clamped so both fit in the clip.
     Q_INVOKABLE void setClipAudio(double gain, double fadeIn, double fadeOut, bool muted);
@@ -200,12 +331,37 @@ public:
     // Video adjustments of the selected clip (ui-design §6), each one command.
     // Color: exposure in stops, the others in [-1, 1].
     Q_INVOKABLE void setClipColor(double exposure, double contrast, double saturation, double temperature);
-    // Effects: a FilterKind and its amount in [0, 1].
-    Q_INVOKABLE void setClipFilter(int kind, double amount);
-    // Blur (below 0) or sharpen (above 0), in [-1, 1].
+    // Effects (ADR-0016), by definition ID, each one command: add (after its stage) or remove,
+    // bypass, a parameter value (adding the effect when absent), and a move within its stage.
+    Q_INVOKABLE void setClipEffect(const QString& definition, bool on);
+    Q_INVOKABLE void setClipEffectEnabled(const QString& definition, bool enabled);
+    Q_INVOKABLE void setClipEffectParam(const QString& definition, const QString& name, double value);
+    Q_INVOKABLE void moveClipEffect(const QString& definition, int step);
+    // Blur (below 0) or sharpen (above 0), in [-1, 1]: the detail effect, removed at 0.
     Q_INVOKABLE void setClipSharpness(double sharpness);
     // Crop and framing: a Fit mode and the fractions cropped from each edge.
     Q_INVOKABLE void setClipFraming(int fit, double left, double top, double right, double bottom);
+    // The selected clip's opacity in [0, 1] (composited over the layers below it).
+    Q_INVOKABLE void setClipOpacity(double opacity);
+    // Direct manipulation in the viewer (UX-07): the selected clip's picture box for a candidate
+    // position/scale, normalized to the canvas ({x, y, w, h}); a preview of a transform that only
+    // the viewer shows; setClipTransform then commits the gesture as one edit.
+    Q_INVOKABLE QVariantMap layerBox(double x, double y, double scale) const;
+    [[nodiscard]] QVariantMap selectedBox() const {
+        const QVariantMap m = motion();
+        return m.isEmpty() ? QVariantMap{}
+                           : layerBox(m.value("posX").toDouble(), m.value("posY").toDouble(), m.value("scale").toDouble());
+    }
+    Q_INVOKABLE void previewClipTransform(double x, double y, double scale, double rotation);
+    // Crop handles in the viewer: the picture box and the canvas point of each edge's middle
+    // ({x, y, w, h, left, top, right, bottom}, normalized) for a candidate crop; the crop
+    // fraction an edge (0 left, 1 top, 2 right, 3 bottom) takes when dragged to a canvas point,
+    // mapped back through the geometry of `from` (the crop when the drag began), so source
+    // rotation and fit are honored; and a preview of a candidate crop. setClipFraming commits.
+    Q_INVOKABLE QVariantMap cropBox(double left, double top, double right, double bottom) const;
+    Q_INVOKABLE double cropEdgeAt(int edge, double x, double y, double left, double top, double right,
+                                  double bottom) const;
+    Q_INVOKABLE void previewClipFraming(double left, double top, double right, double bottom);
     // Position in output pixels from the center, uniform scale, clockwise rotation in degrees.
     // With transform keys (M8 keyframes) it sets the key at the playhead, adding one if needed.
     Q_INVOKABLE void setClipTransform(double x, double y, double scale, double rotation);
@@ -259,9 +415,17 @@ public:
     Q_INVOKABLE void toEnd();
 
 signals:
+    void exportChanged();
+    void cacheCleared();
     void viewChanged();
     void statusChanged();
     void libraryChanged();
+    void recordingsChanged();
+    void recentProjectsChanged();
+    void recoveredChanged();
+    // Another launch handed files to this instance; QML guards unsaved work, then openFiles().
+    void openRequested(const QStringList& paths);
+    void storylineViewChanged();
     void selectionChanged();
     void sequenceChanged();
     void positionChanged();
@@ -283,6 +447,7 @@ private:
         std::uint32_t height = 0;
         QVariantMap details; // codec, resolution, frame rate for the Info drawer
         oma::project::Fingerprint fingerprint; // for relinking (ADR-0007)
+        bool missing = false; // an opened project's file that was not found: Locate… relinks it
     };
 
     // `known`: a library item of an opened project, imported again under its saved ID and
@@ -291,9 +456,10 @@ private:
     void applyProject(oma::project::Document doc, const QString& path);
     // A LUT of an opened project: parsed in the background into the tables under its saved ID.
     void loadLut(const QString& path, oma::timeline::LutId id);
-    // What saving records: timeline, revision, library and LUT counts. Equal to saved_ when
-    // nothing changed since the last save or open.
-    using Marker = std::tuple<bool, std::uint64_t, std::size_t, std::size_t>;
+    // What saving records: timeline, revision, library and LUT counts, and library edits that
+    // keep the count (a relinked file). Equal to saved_ when nothing changed since the last save
+    // or open.
+    using Marker = std::tuple<bool, std::uint64_t, std::size_t, std::size_t, std::uint64_t>;
     [[nodiscard]] Marker savedMarker() const;
     void addToLibrary(LibraryItem item, bool append);
     [[nodiscard]] const LibraryItem* item(oma::timeline::MediaId id) const;
@@ -309,6 +475,12 @@ private:
     [[nodiscard]] std::optional<oma::RationalTime> keyTime(const oma::timeline::Clip& c) const;
     [[nodiscard]] std::int64_t nearestCut(std::int64_t ticks, oma::timeline::ClipId moving) const;
     [[nodiscard]] std::vector<oma::timeline::TrackId> audioLanes() const;
+    // Tracks of `kind` other than the storyline, in timeline order (compositing bottom first).
+    [[nodiscard]] std::vector<oma::timeline::TrackId> lanes(oma::timeline::TrackKind kind) const;
+    [[nodiscard]] static std::string laneName(oma::timeline::TrackKind kind, std::size_t existing);
+    bool placeOnLane(oma::timeline::TrackKind kind, int how, oma::timeline::ClipId id,
+                     const oma::timeline::edit::ClipSource& clip, std::int64_t start,
+                     std::optional<std::size_t> preferred, const char* name = nullptr);
     [[nodiscard]] QVariantMap clipMap(const oma::timeline::Clip& c, const oma::timeline::Track& track,
                                        std::size_t index) const;
     // The selected clip's waveform and the media seconds it shows, if analysed.
@@ -337,12 +509,32 @@ private:
     [[nodiscard]] bool hardwarePreview() const;
     void requestHardwareFrame(std::int64_t frame);
 
+    void rememberProject(const QString& path);
+    [[nodiscard]] oma::project::Document document() const;
+    [[nodiscard]] bool importing() const;
+
+    QTimer autosave_timer_;
+    QString autosave_file_;     // this session's autosave, once written
+    Marker autosaved_{false, 0, 0, 0, 0};
+    std::uint64_t library_revision_ = 0; // only grows
+    // Folders the user pointed at while relinking: later missing files are looked for there too.
+    std::vector<std::filesystem::path> relink_roots_;
+    oma::JobHandle autosave_job_;
+    QString restoring_;         // an autosave being opened by restoreRecovered
+    bool restoring_version_ = false; // ...or a prior version (restoreVersion), which is kept
+    QString restoring_origin_;
+    void importNextQueued(unsigned generation);
+
+    std::unique_ptr<RecentProjects> recent_;
+    QStringList queued_files_; // openFiles() media still to import, in order
+
     PreviewItem* preview_ = nullptr;
     bool editing_ = false;
     QString status_;
     bool failed_ = false;
     QString notice_;
     QTimer notice_timer_;
+    bool device_lost_ = false;
 
     std::vector<LibraryItem> library_;
     int selected_media_ = -1;
@@ -350,7 +542,7 @@ private:
     std::uint64_t next_lut_ = 1;
     std::unordered_map<std::uint64_t, QString> lut_paths_; // LUT ID -> its .cube file
     QString project_path_;
-    Marker saved_{false, 0, 0, 0};
+    Marker saved_{false, 0, 0, 0, 0};
     void setSelectedCurve(int channel, std::vector<oma::timeline::CurvePoint> points);
     // The lift/gamma/gain wheels a CDL corresponds to (the inverse of setClipWheels).
     [[nodiscard]] static QVariantMap wheels_of(const oma::timeline::Cdl& cdl);
@@ -370,6 +562,43 @@ private:
     // clock take over.
     QElapsedTimer clock_;
     std::int64_t play_from_frame_ = 0;
+    mutable std::optional<QVariantList> clips_cache_;
+    ClipListModel storyline_model_;
+    double view_from_ = 0.0;
+    double view_to_ = std::numeric_limits<double>::infinity();
+    bool storyline_compact_ = false;
+    void syncStoryline();
+    QVariantList recordings_;
+    QString recordings_folder_;
+    QFileSystemWatcher recordings_watcher_;
+    QTimer recordings_settle_; // re-reads while a capture is still being written
+    // Whether a finished recording has sound, by "path|mtime"; probed on the job workers.
+    QHash<QString, bool> recording_audio_;
+    QSet<QString> recording_probes_;
+    double last_restart_ms_ = 0.0;
+    bool previewing_ = false; // the snapshot carries an uncommitted gesture
+    // Source pixels → canvas pixels for the selected clip with this crop and transform. The
+    // viewer draws the box unrotated and turns it about its center (the compositor's pivot).
+    struct Framing {
+        oma::compositor::Affine matrix;
+        double width = 0;
+        double height = 0;
+    };
+    [[nodiscard]] std::optional<Framing> framing(const oma::timeline::Crop& crop, double x, double y, double scale,
+                                                 double rotation = 0.0) const;
+    void previewSelectedVideo(const oma::timeline::VideoProperties& video);
+    [[nodiscard]] std::optional<oma::timeline::VideoProperties> transformedVideo(double x, double y, double scale,
+                                                                                double rotation) const;
+    enum class PreviewQuality : std::uint8_t { Full, Fixed, Auto };
+    PreviewQuality preview_quality_ = PreviewQuality::Auto;
+    bool preview_quality_from_env_ = false;
+    QString recordings_override_;
+    std::int64_t adapt_shown_ = 0;
+    std::int64_t adapt_dropped_base_ = 0;
+    void adaptPreview();
+    std::vector<double> tick_ms_;
+    std::vector<double> tick_gap_ms_;
+    QElapsedTimer tick_clock_;
     QTimer tick_;
     VideoScheduler scheduler_;
     // Immutable views shared with the pipelines: the timeline as of the last edit and the
@@ -387,14 +616,27 @@ private:
     std::vector<oma::JobHandle> imports_;
     oma::JobHandle frame_job_;
     oma::JobHandle save_job_; // never cancelled: a save the user asked for completes
+    oma::JobHandle export_job_;
+    double export_progress_ = -1; // UI thread
+    QString exported_file_;
+    ExportStats export_stats_; // of the last finished export (UI thread)
+    std::atomic<std::int64_t> export_done_{0}; // written by the export job, read by a timer
+    std::int64_t export_total_ = 0;
+    QTimer export_timer_;
 
     QTemporaryDir thumbnails_;
+    // Disk caches (ADR-0009), read and filled by the import and waveform workers: declared before
+    // them so they outlive every job.
+    oma::DiskCache thumbnail_cache_;
+    oma::DiskCache waveform_cache_;
     // Accessed only by the import job worker; its lifetime extends past worker shutdown.
     std::unique_ptr<oma::media::MediaImporter> importer_;
     FrameSource frames_;      // job worker only
     AudioPlayer audio_;
     WaveformStore waveforms_;
     bool warned_silent_ = false;
+    bool notifications_ = true;
+    QString export_encoder_ = QStringLiteral("auto");
     QVariantList filter_previews_;
     unsigned previews_ = 0; // filter preview requests, so a stale result is dropped
     oma::JobHandle previews_job_;

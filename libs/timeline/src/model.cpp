@@ -1,5 +1,7 @@
 #include "oma/timeline/model.hpp"
 
+#include "oma/timeline/effects.hpp"
+
 #include "mutation.hpp"
 
 #include <algorithm>
@@ -21,13 +23,257 @@ Result<TimeMap> TimeMap::constant(Rational speed) {
     return TimeMap(speed);
 }
 
-Result<RationalTime> TimeMap::media_offset(std::int64_t local_ticks,
-                                           Rational sequence_timebase) const {
-    auto unit = detail::multiply(sequence_timebase, speed_);
+namespace {
+
+bool is_zero(Rational r) noexcept {
+    return r.num() == 0;
+}
+
+// Ticks of displacement (media ticks at speed 1) -> media time in seconds as a RationalTime.
+Result<RationalTime> to_time(Rational ticks, Rational sequence_timebase) {
+    auto seconds = detail::multiply(ticks, sequence_timebase);
+    if (!seconds) {
+        return std::unexpected(seconds.error());
+    }
+    auto unit = Rational::make(1, seconds->den());
     if (!unit) {
         return std::unexpected(unit.error());
     }
-    return RationalTime::make(local_ticks, *unit);
+    return RationalTime::make(seconds->num(), *unit);
+}
+
+} // namespace
+
+Result<TimeMap> TimeMap::segmented(std::vector<TimeSegment> segments) {
+    if (segments.empty() || segments.size() > kMaxTimeSegments) {
+        return error(ErrorCode::InvalidArgument, "a segmented time map needs 1 to 256 segments");
+    }
+    std::int64_t total = 0;
+    for (const TimeSegment& s : segments) {
+        bool valid = s.length > 0 && !__builtin_add_overflow(total, s.length, &total);
+        switch (s.kind) {
+        case TimeSegment::Kind::Linear:
+            valid = valid && !is_zero(s.from);
+            break;
+        case TimeSegment::Kind::Freeze:
+            break;
+        case TimeSegment::Kind::Ramp:
+            // Monotonic: never changes direction, and not a freeze in disguise.
+            // Same sign or one end zero: the product of the signs is never negative.
+            valid = valid && (!is_zero(s.from) || !is_zero(s.to)) &&
+                    (s.from.num() > 0 ? 1 : (s.from.num() < 0 ? -1 : 0)) *
+                            (s.to.num() > 0 ? 1 : (s.to.num() < 0 ? -1 : 0)) >=
+                        0;
+            break;
+        default:
+            valid = false;
+        }
+        if (!valid) {
+            return error(ErrorCode::InvalidArgument, "invalid time segment",
+                         std::format("length {}", s.length));
+        }
+    }
+    TimeMap map;
+    map.segments_ = std::move(segments);
+    return map;
+}
+
+std::int64_t TimeMap::length() const noexcept {
+    std::int64_t total = 0;
+    for (const TimeSegment& s : segments_)
+        total += s.length; // checked in segmented()
+    return total;
+}
+
+bool TimeMap::backward(std::int64_t t) const noexcept {
+    std::int64_t start = 0;
+    for (const TimeSegment& s : segments_) {
+        if (t < start + s.length || &s == &segments_.back()) {
+            // A ramp never changes direction: either end's sign is its direction.
+            return s.from.num() < 0 || (s.kind == TimeSegment::Kind::Ramp && s.to.num() < 0);
+        }
+        start += s.length;
+    }
+    return false;
+}
+
+Result<RationalTime> TimeMap::media_offset(std::int64_t local_ticks,
+                                           Rational sequence_timebase) const {
+    if (is_constant()) {
+        auto unit = detail::multiply(sequence_timebase, speed_);
+        if (!unit) {
+            return std::unexpected(unit.error());
+        }
+        return RationalTime::make(local_ticks, *unit);
+    }
+    // O(segments): clips have a handful (ramp presets), so no prefix index is kept.
+    Rational moved = Rational::literal(0, 1);
+    std::int64_t left = local_ticks;
+    for (std::size_t i = 0; i < segments_.size() && left > 0; ++i) {
+        const TimeSegment& s = segments_[i];
+        // The last segment extends past its length only for the clip's end instant.
+        const std::int64_t t = (i + 1 == segments_.size()) ? left : std::min(left, s.length);
+        auto d = detail::displacement(s, t);
+        if (!d) {
+            return std::unexpected(d.error());
+        }
+        auto next = detail::add(moved, *d);
+        if (!next) {
+            return std::unexpected(next.error());
+        }
+        moved = *next;
+        left -= t;
+    }
+    return to_time(moved, sequence_timebase);
+}
+
+Result<std::pair<RationalTime, RationalTime>> TimeMap::extent(std::int64_t duration,
+                                                              Rational sequence_timebase) const {
+    auto low = media_offset(0, sequence_timebase);
+    if (!low) {
+        return std::unexpected(low.error());
+    }
+    RationalTime high = *low;
+    // Each segment is monotonic, so the extremes are at segment boundaries or the end.
+    std::int64_t at = 0;
+    const auto consider = [&](std::int64_t ticks) -> Result<void> {
+        auto o = media_offset(ticks, sequence_timebase);
+        if (!o) {
+            return std::unexpected(o.error());
+        }
+        low = std::min(*low, *o);
+        high = std::max(high, *o);
+        return {};
+    };
+    for (const TimeSegment& s : segments_) {
+        at += s.length;
+        if (at >= duration)
+            break;
+        if (auto r = consider(at); !r) {
+            return std::unexpected(r.error());
+        }
+    }
+    if (auto r = consider(duration); !r) {
+        return std::unexpected(r.error());
+    }
+    return std::pair{*low, high};
+}
+
+Result<TimeMap> TimeMap::slice(std::int64_t from, std::int64_t to) const {
+    if (from < 0 || to <= from) {
+        return error(ErrorCode::InvalidArgument, "invalid time map slice",
+                     std::format("[{}, {})", from, to));
+    }
+    if (is_constant()) {
+        return *this;
+    }
+    std::vector<TimeSegment> out;
+    std::int64_t start = 0;
+    for (const TimeSegment& s : segments_) {
+        const std::int64_t end = start + s.length;
+        const std::int64_t a = std::max(from, start);
+        const std::int64_t b = std::min(to, end);
+        if (a < b) {
+            TimeSegment piece = s;
+            piece.length = b - a;
+            if (s.kind == TimeSegment::Kind::Ramp) {
+                // The exact speeds at the cut points keep the slice's motion identical.
+                auto f = detail::speed_at(s, a - start);
+                auto t = detail::speed_at(s, b - start);
+                if (!f || !t) {
+                    return std::unexpected(!f ? f.error() : t.error());
+                }
+                piece.from = *f;
+                piece.to = *t;
+                if (is_zero(*f) && is_zero(*t)) {
+                    piece.kind = TimeSegment::Kind::Freeze;
+                } else if (*f == *t) {
+                    piece.kind = TimeSegment::Kind::Linear;
+                }
+            }
+            out.push_back(piece);
+        }
+        start = end;
+    }
+    if (out.empty() || to > start) {
+        return error(ErrorCode::InvalidArgument, "slice outside the time map",
+                     std::format("[{}, {}) of {}", from, to, start));
+    }
+    return segmented(std::move(out));
+}
+
+namespace {
+
+// A segment continuing at `speed` for `length` ticks.
+TimeSegment steady(Rational speed, std::int64_t length) {
+    return speed.num() == 0 ? TimeSegment{.kind = TimeSegment::Kind::Freeze,
+                                          .length = length,
+                                          .from = speed,
+                                          .to = speed}
+                            : TimeSegment{.kind = TimeSegment::Kind::Linear,
+                                          .length = length,
+                                          .from = speed,
+                                          .to = speed};
+}
+
+Rational negated(Rational r) {
+    return *Rational::make(-r.num(), r.den());
+}
+
+} // namespace
+
+Result<TimeMap> TimeMap::extended(std::int64_t before, std::int64_t after) const {
+    if (before < 0 || after < 0) {
+        return error(ErrorCode::InvalidArgument, "negative time map extension");
+    }
+    if (is_constant() || (before == 0 && after == 0)) {
+        return *this;
+    }
+    std::vector<TimeSegment> out = segments_;
+    const auto grow = [](std::vector<TimeSegment>& v, bool front, std::int64_t by) -> Result<void> {
+        TimeSegment& edge = front ? v.front() : v.back();
+        if (edge.kind != TimeSegment::Kind::Ramp) {
+            if (__builtin_add_overflow(edge.length, by, &edge.length)) {
+                return error(ErrorCode::Overflow, "time map extension overflow");
+            }
+            return {};
+        }
+        const TimeSegment piece = steady(front ? edge.from : edge.to, by);
+        v.insert(front ? v.begin() : v.end(), piece);
+        return {};
+    };
+    if (before > 0) {
+        if (auto r = grow(out, true, before); !r) {
+            return std::unexpected(r.error());
+        }
+    }
+    if (after > 0) {
+        if (auto r = grow(out, false, after); !r) {
+            return std::unexpected(r.error());
+        }
+    }
+    return segmented(std::move(out));
+}
+
+Result<TimeMap> TimeMap::as_segments(std::int64_t duration) const {
+    if (!is_constant()) {
+        return *this;
+    }
+    return segmented({steady(speed_, duration)});
+}
+
+Result<TimeMap> TimeMap::reversed(std::int64_t duration) const {
+    auto segs = as_segments(duration);
+    if (!segs) {
+        return segs;
+    }
+    std::vector<TimeSegment> out(segs->segments_.rbegin(), segs->segments_.rend());
+    for (TimeSegment& s : out) {
+        const Rational from = s.from;
+        s.from = negated(s.to);
+        s.to = negated(from);
+    }
+    return segmented(std::move(out));
 }
 
 Result<Timeline> Timeline::create(FrameRate rate, Rational timebase) {
@@ -246,12 +492,12 @@ Result<void> validate_properties(const Clip& c) {
     };
     const bool color_ok = within(v.color.exposure, 4.0) && within(v.color.contrast, 1.0) &&
                           within(v.color.saturation, 1.0) && within(v.color.temperature, 1.0);
-    const bool filter_ok = std::isfinite(v.filter.amount) && v.filter.amount >= 0.0 &&
-                           v.filter.amount <= 1.0 && v.filter.kind <= FilterKind::Vignette &&
-                           within(v.sharpness, 1.0);
-    if (!crop_ok || !motion_ok || !opacity_ok || !color_ok || !filter_ok || !grade_ok(v.grade)) {
+    if (!crop_ok || !motion_ok || !opacity_ok || !color_ok || !grade_ok(v.grade)) {
         return error(ErrorCode::InvalidData, "invalid video properties",
                      detail::clip_context(c.id));
+    }
+    if (auto r = validate_effects(v.effects); !r) {
+        return error(ErrorCode::InvalidData, r.error().message(), detail::clip_context(c.id));
     }
     const AudioProperties& a = c.audio;
     if (!std::isfinite(a.gain) || a.gain < 0.0F) {
@@ -278,19 +524,50 @@ Result<void> validate_properties(const Clip& c) {
 }
 
 Result<void> validate_source(const Clip& c, const MediaInfo& m, Rational timebase) {
+    if (!c.time_map.is_constant() && c.time_map.length() != c.duration.value()) {
+        return error(ErrorCode::InvalidData, "time map does not cover the clip",
+                     detail::clip_context(c.id));
+    }
     if (m.still) {
         return {};
     }
-    auto end = detail::source_end(c, timebase);
-    if (!end) {
-        return std::unexpected(end.error());
+    // Reverse and freeze segments may go below source_in: check the whole span used.
+    auto span = c.time_map.extent(c.duration.value(), timebase);
+    if (!span) {
+        return std::unexpected(span.error());
+    }
+    auto first = detail::add_exact(c.source_in, span->first);
+    auto end = detail::add_exact(c.source_in, span->second);
+    if (!first || !end) {
+        return std::unexpected(!first ? first.error() : end.error());
     }
     auto media_end = m.start.plus(m.duration);
     if (!media_end) {
         return std::unexpected(media_end.error());
     }
-    if (c.source_in < m.start || *media_end < *end) {
+    if (*first < m.start || *media_end < *end) {
         return error(ErrorCode::InvalidData, "source range outside the media",
+                     detail::clip_context(c.id));
+    }
+    return {};
+}
+
+// ADR-0014: the primary exists on another track, is not connected itself, plays at a constant
+// speed, shows the anchor's source, and the dependent starts exactly where it does.
+// ponytail: find_clip/track_of are linear, so this is O(clips) per connected clip; index the
+// clips if the long-form gate shows validation cost.
+Result<void> validate_anchor(const Timeline& tl, const Track& track, const Clip& c,
+                             const Anchor& anchor) {
+    const Clip* p = tl.find_clip(anchor.primary);
+    const Track* pt = p != nullptr ? tl.track_of(p->id) : nullptr;
+    bool valid = p != nullptr && pt != nullptr && pt->id != track.id && !p->anchor &&
+                 p->time_map.is_constant() && detail::holds(*p, anchor.source, tl.timebase());
+    if (valid) {
+        auto at = detail::attach_tick(*p, anchor.source, tl.timebase());
+        valid = at && *at == c.start_ticks();
+    }
+    if (!valid) {
+        return error(ErrorCode::InvalidData, "invalid connection to a primary clip",
                      detail::clip_context(c.id));
     }
     return {};
@@ -306,6 +583,23 @@ bool media_fits_track(const MediaInfo& m, TrackKind kind) {
         return false; // caption clips are not media clips (v0.2)
     }
     return false;
+}
+
+// A title clip (ADR-0015): no media, a video track, 1×, sound-free, sane text parameters.
+Result<void> validate_title(const Clip& c, const Title& title, const Track& t) {
+    const auto unit = [](float v) {
+        return std::isfinite(v) && v >= 0.0F && v <= 1.0F;
+    };
+    const bool valid = t.kind == TrackKind::Video && !c.media.valid() && c.time_map.is_constant() &&
+                       c.time_map.speed() == Rational::literal(1, 1) && !c.audio_detached &&
+                       title.text.size() <= kMaxTitleBytes && title.font.size() <= 256 &&
+                       std::isfinite(title.size) && title.size > 0.0 && title.size <= 0.5 &&
+                       std::ranges::all_of(title.color, unit) &&
+                       title.placement <= TitlePlacement::Top;
+    if (!valid) {
+        return error(ErrorCode::InvalidData, "invalid title clip", detail::clip_context(c.id));
+    }
+    return {};
 }
 
 } // namespace
@@ -357,8 +651,12 @@ Result<void> Timeline::validate() const {
                 return std::unexpected(end.error());
             }
             previous_end = *end;
-            const MediaInfo* m = find_media(c.media);
-            if (m == nullptr) {
+            const MediaInfo* m = c.title ? nullptr : find_media(c.media);
+            if (c.title) {
+                if (auto r = validate_title(c, *c.title, t); !r) {
+                    return r;
+                }
+            } else if (m == nullptr) {
                 return error(ErrorCode::InvalidData, "clip references unknown media",
                              detail::clip_context(c.id));
             }
@@ -372,16 +670,23 @@ Result<void> Timeline::validate() const {
                 return error(ErrorCode::InvalidData, "only video clips detach their audio",
                              detail::clip_context(c.id));
             }
-            if (!media_fits_track(*m, t.kind)) {
+            if (m != nullptr && !media_fits_track(*m, t.kind)) {
                 return error(ErrorCode::InvalidData, "media kind does not fit the track",
                              std::format("{} on {}", detail::clip_context(c.id),
                                          detail::track_context(t.id)));
             }
-            if (auto r = validate_source(c, *m, timebase_); !r) {
-                return r;
+            if (m != nullptr) {
+                if (auto r = validate_source(c, *m, timebase_); !r) {
+                    return r;
+                }
             }
             if (auto r = validate_properties(c); !r) {
                 return r;
+            }
+            if (c.anchor) {
+                if (auto r = validate_anchor(*this, t, c, *c.anchor); !r) {
+                    return r;
+                }
             }
             if (c.video.grade.lut.valid() && find_lut(c.video.grade.lut) == nullptr) {
                 return error(ErrorCode::InvalidData, "clip grades with an unknown LUT",

@@ -1,25 +1,41 @@
 #include "session.hpp"
 
-#include "preview_item.hpp"
+#include "autosave.hpp"
+#include "exporter.hpp"
+#include "desktop_notify.hpp"
 
+#include "preview_item.hpp"
+#include "platform/omarchy/recordings.hpp"
+
+#include "oma/base/log.hpp"
 #include "oma/compositor/compositor.hpp"
+#include "oma/compositor/geometry.hpp"
 #include "oma/compositor/grade.hpp"
 #include "oma/compositor/render_graph.hpp"
 #include "oma/timeline/edit.hpp"
+#include "oma/timeline/effects.hpp"
 #include "oma/timeline/evaluate.hpp"
 
+#include <QColor>
+#include <QGuiApplication>
+#include <QBuffer>
+#include <QDateTime>
+#include <QLocale>
 #include <QFile>
+#include <QStringList>
 #include <QFileInfo>
 #include <QMetaObject>
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
 #include <numbers>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -28,6 +44,53 @@
 namespace tl = oma::timeline;
 
 namespace {
+
+// ADR-0009 defaults: each store keeps at most this much.
+constexpr std::uint64_t kCacheBudget = std::uint64_t{512} << 20;
+
+std::filesystem::path cache_dir(const char* kind) {
+    const auto root = oma::DiskCache::default_root();
+    return root.empty() ? root : root / kind;
+}
+
+// The content a cache key stands for (ADR-0009): the file, its size and time, and the
+// project fingerprint's partial hash, so an edited or replaced file gets new entries.
+std::string media_identity(const QString& path, const oma::project::Fingerprint& fingerprint) {
+    std::error_code ec;
+    const std::filesystem::path file(path.toStdString());
+    const auto time = std::filesystem::last_write_time(file, ec);
+    const auto ns = ec ? 0 : std::chrono::duration_cast<std::chrono::nanoseconds>(time.time_since_epoch()).count();
+    return std::format("{} {} {} {:016x}", file.string(), fingerprint.size, ns, fingerprint.hash);
+}
+
+} // namespace
+
+namespace {
+
+// What a clip's time map does, for its badge on the timeline (ADR-0013); empty at normal speed.
+QString timingLabel(const tl::TimeMap& map) {
+    if (!map.is_constant()) {
+        bool reverse = false;
+        bool freeze = false;
+        bool other = false;
+        for (const tl::TimeSegment& seg : map.segments()) {
+            reverse = reverse || seg.from.num() < 0 || seg.to.num() < 0;
+            freeze = freeze || seg.kind == tl::TimeSegment::Kind::Freeze;
+            other = other || seg.kind == tl::TimeSegment::Kind::Ramp ||
+                    (seg.kind == tl::TimeSegment::Kind::Linear && seg.from != oma::Rational::literal(1, 1) &&
+                     seg.from != oma::Rational::literal(-1, 1));
+        }
+        QStringList parts;
+        if (reverse) parts << QStringLiteral("Reverse");
+        if (freeze) parts << QStringLiteral("Freeze");
+        if (other) parts << QStringLiteral("Retimed");
+        return parts.join(QStringLiteral(" · "));
+    }
+    const oma::Rational s = map.speed();
+    if (s == oma::Rational::literal(1, 1)) return {};
+    return s.den() == 1 ? QStringLiteral("%1×").arg(s.num()) : QStringLiteral("%1/%2×").arg(s.num()).arg(s.den());
+}
+
 
 constexpr int kNoticeMs = 3500;
 constexpr std::int64_t kStillSeconds = 4; // default length of a picture on the storyline
@@ -44,8 +107,29 @@ Session::Session(QObject* parent)
 
 Session::Session(std::unique_ptr<oma::media::MediaImporter> importer, QObject* parent)
     : QObject(parent),
+      thumbnail_cache_(cache_dir("thumbnails"), kCacheBudget),
+      waveform_cache_(cache_dir("waveforms"), kCacheBudget),
       importer_(importer ? std::move(importer) : std::make_unique<oma::media::FfmpegFormatBackend>()),
       audio_(kSequenceAudioRate) {
+    waveforms_.set_cache(&waveform_cache_);
+    autosave_timer_.setInterval(kAutosaveSeconds * 1000);
+    connect(&autosave_timer_, &QTimer::timeout, this, &Session::autosave);
+    autosave_timer_.start();
+    // ADR-0009: trim what earlier sessions left over the budget, off the UI thread.
+    (void)workers_.submit("cache-evict", [this](oma::JobContext&) {
+        for (const oma::DiskCache* cache : {&thumbnail_cache_, &waveform_cache_}) {
+            if (auto removed = cache->evict(); removed && *removed > 0) {
+                oma::log_info(oma::Category::Cache, "cache trimmed by {} bytes in {}", *removed, cache->dir().string());
+            }
+        }
+        return oma::Result<void>{};
+    });
+    // Export progress crosses threads through one atomic that this timer reads (CLAUDE.md §13).
+    export_timer_.setInterval(200);
+    connect(&export_timer_, &QTimer::timeout, this, [this] {
+        export_progress_ = export_total_ > 0 ? static_cast<double>(export_done_.load()) / static_cast<double>(export_total_) : 0;
+        emit exportChanged();
+    });
     notice_timer_.setSingleShot(true);
     connect(&notice_timer_, &QTimer::timeout, this, [this] {
         notice_.clear();
@@ -53,7 +137,20 @@ Session::Session(std::unique_ptr<oma::media::MediaImporter> importer, QObject* p
     });
     tick_.setTimerType(Qt::PreciseTimer);
     connect(&tick_, &QTimer::timeout, this, &Session::onTick);
+    // Before any QML binding sees the change (connected first).
+    connect(this, &Session::sequenceChanged, this, [this] {
+        clips_cache_.reset();
+        syncStoryline();
+    });
+    connect(this, &Session::libraryChanged, this, [this] {
+        clips_cache_.reset();
+        syncStoryline();
+    });
     connect(this, &Session::positionChanged, this, &Session::motionChanged);
+    recordings_settle_.setInterval(2000);
+    connect(&recordings_settle_, &QTimer::timeout, this, &Session::refreshRecordings);
+    connect(&recordings_watcher_, &QFileSystemWatcher::directoryChanged, this, &Session::refreshRecordings);
+    refreshRecordings();
     connect(this, &Session::selectionChanged, this, &Session::motionChanged);
     connect(this, &Session::libraryChanged, this, &Session::projectChanged);
     connect(this, &Session::sequenceChanged, this, &Session::projectChanged);
@@ -67,7 +164,9 @@ Session::~Session() {
 // ------------------------------------------------------------------- screens
 
 void Session::newProject() {
+    discardAutosave(); // the user chose to leave this work (callers confirm unsaved changes)
     ++generation_;
+    queued_files_.clear();
     pause();
     for (oma::JobHandle& h : imports_) h.cancel();
     imports_.clear();
@@ -81,7 +180,7 @@ void Session::newProject() {
     luts_ = std::make_shared<const LutTables>();
     lut_paths_.clear();
     project_path_.clear();
-    saved_ = {false, 0, 0, 0};
+    saved_ = {false, 0, 0, 0, library_revision_};
     emit lutsChanged();
     primary_ = {};
     selected_clip_ = {};
@@ -118,6 +217,230 @@ void Session::importUrl(const QUrl& url) {
     importFile(url.toLocalFile(), !hasMedia());
 }
 
+void Session::refreshRecordings() {
+    const auto dir = recordings_override_.isEmpty() ? omarchy::recordings_dir()
+                                                    : std::filesystem::path(recordings_override_.toStdString());
+    recordings_folder_ = QString::fromStdString(dir.string());
+    if (!recordings_watcher_.directories().contains(recordings_folder_)) {
+        if (!recordings_watcher_.directories().isEmpty()) {
+            recordings_watcher_.removePaths(recordings_watcher_.directories());
+        }
+        recordings_watcher_.addPath(recordings_folder_); // fails quietly if it does not exist
+    }
+    QVariantList list;
+    bool growing = false;
+    for (const omarchy::Recording& r : omarchy::list_recordings(dir, 12)) {
+        const auto when = QDateTime::fromStdTimePoint(std::chrono::time_point_cast<std::chrono::milliseconds>(
+            std::chrono::clock_cast<std::chrono::system_clock>(r.modified)));
+        const QString name = QString::fromStdString(r.path.filename().string());
+        // The capture script's own names carry nothing beyond the date shown below.
+        const QString title = name.startsWith(QStringLiteral("screenrecording-")) ? QStringLiteral("Screen recording") : name;
+        // The script writes a "-preview.png" next to finished captures; no decode needed then.
+        auto preview = r.path;
+        preview.replace_extension();
+        preview += "-preview.png";
+        std::error_code ec;
+        const QString thumbnail = std::filesystem::exists(preview, ec)
+                                      ? QUrl::fromLocalFile(QString::fromStdString(preview.string())).toString()
+                                      : QString();
+        // Recordings may have no sound (no audio device was selected): say so before editing.
+        const QString path = QString::fromStdString(r.path.string());
+        const QString key = path + QLatin1Char('|') + when.toString(Qt::ISODateWithMs);
+        const auto audio = recording_audio_.constFind(key);
+        if (audio == recording_audio_.constEnd() && !r.growing && !recording_probes_.contains(key)) {
+            recording_probes_.insert(key);
+            (void)workers_.submit("probe-recording", [this, key, file = r.path](oma::JobContext&) {
+                auto probed = importer_->inspect_input(file);
+                const bool has_audio = probed && probed->best_audio.has_value();
+                QMetaObject::invokeMethod(this, [this, key, has_audio] {
+                    recording_audio_.insert(key, has_audio);
+                    refreshRecordings();
+                }, Qt::QueuedConnection);
+                return oma::Result<void>{};
+            });
+        }
+        list.push_back(QVariantMap{{QStringLiteral("path"), path},
+                                   {QStringLiteral("url"), QUrl::fromLocalFile(path)},
+                                   {QStringLiteral("noAudio"), audio != recording_audio_.constEnd() && !*audio},
+                                   {QStringLiteral("name"), name},
+                                   {QStringLiteral("title"), title},
+                                   {QStringLiteral("thumbnail"), thumbnail},
+                                   {QStringLiteral("when"), QLocale().toString(when, QLocale::ShortFormat)},
+                                   {QStringLiteral("growing"), r.growing}});
+        growing = growing || r.growing;
+    }
+    if (growing) {
+        recordings_settle_.start();
+    } else {
+        recordings_settle_.stop();
+    }
+    if (list != recordings_) {
+        recordings_ = std::move(list);
+        emit recordingsChanged();
+    }
+}
+
+void Session::autosave() {
+    if (!editor_ || !dirty() || savedMarker() == autosaved_ || importing() ||
+        autosave_job_.state() == oma::JobState::Pending || autosave_job_.state() == oma::JobState::Running) {
+        return;
+    }
+    const auto folder = autosave::dir();
+    if (folder.empty()) return;
+    if (autosave_file_.isEmpty()) {
+        const QString base = project_path_.isEmpty() ? QStringLiteral("untitled") : QFileInfo(project_path_).completeBaseName();
+        autosave_file_ = QString::fromStdString(
+            (folder / std::format("{}-{}.omamovie", base.toStdString(), QDateTime::currentMSecsSinceEpoch())).string());
+    }
+    const Marker marker = savedMarker();
+    const unsigned generation = generation_;
+    const QString file = autosave_file_;
+    const QByteArray origin = project_path_.toUtf8();
+    autosave_job_ = workers_.submit("autosave", [this, generation, marker, file, origin, doc = document()](oma::JobContext&) {
+        std::error_code ec;
+        std::filesystem::create_directories(std::filesystem::path(file.toStdString()).parent_path(), ec);
+        auto saved = oma::project::save(doc, std::filesystem::path(file.toStdString()));
+        if (QFile sidecar(QString::fromStdString(autosave::origin_of(file.toStdString()).string()));
+            saved && sidecar.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            sidecar.write(origin);
+        }
+        const QString why = saved ? QString() : message(saved.error());
+        QMetaObject::invokeMethod(this, [this, generation, marker, file, why] {
+            if (generation != generation_ || file != autosave_file_) return; // discarded meanwhile
+            if (!why.isEmpty()) {
+                oma::log_warn(oma::Category::Project, "autosave failed: {}", why.toStdString());
+                return;
+            }
+            autosaved_ = marker;
+        }, Qt::QueuedConnection);
+        return oma::Result<void>{};
+    });
+}
+
+void Session::discardAutosave() {
+    if (!autosave_file_.isEmpty()) autosave::remove(autosave_file_.toStdString());
+    autosave_file_.clear();
+    autosaved_ = {false, 0, 0, 0, library_revision_};
+}
+
+QVariantList Session::recoveredProjects() const {
+    QVariantList rows;
+    for (const autosave::Recovered& r : autosave::list(autosave::dir())) {
+        const QString file = QString::fromStdString(r.file.string());
+        if (file == autosave_file_) continue; // this session's own
+        rows.append(QVariantMap{{QStringLiteral("file"), file},
+                                {QStringLiteral("name"), r.origin.isEmpty() ? QStringLiteral("Untitled project")
+                                                                            : QFileInfo(r.origin).completeBaseName()},
+                                {QStringLiteral("origin"), r.origin},
+                                {QStringLiteral("when"), QLocale().toString(r.when, QLocale::ShortFormat)}});
+    }
+    return rows;
+}
+
+void Session::restoreRecovered(const QString& file) {
+    QString origin;
+    for (const autosave::Recovered& r : autosave::list(autosave::dir())) {
+        if (QString::fromStdString(r.file.string()) == file) origin = r.origin;
+    }
+    restoring_ = file;
+    restoring_origin_ = origin;
+    openProject(QUrl::fromLocalFile(file));
+    emit recoveredChanged();
+}
+
+QVariantList Session::projectVersions(const QString& project) const {
+    QVariantList out;
+    for (const autosave::Recovered& r : versions::list(project)) {
+        out.push_back(QVariantMap{{"file", QString::fromStdString(r.file.string())},
+                                  {"when", QLocale().toString(r.when, QLocale::ShortFormat)}});
+    }
+    return out;
+}
+
+void Session::restoreVersion(const QString& file, const QString& project) {
+    // Opens like a recovered autosave: the project's own path, the version's content, unsaved.
+    // The version file itself stays (saving archives the current file as another version).
+    restoring_ = file;
+    restoring_origin_ = project;
+    restoring_version_ = true;
+    openProject(QUrl::fromLocalFile(file));
+}
+
+void Session::discardRecovered(const QString& file) {
+    if (file == autosave_file_) return;
+    autosave::remove(file.toStdString());
+    emit recoveredChanged();
+}
+
+void Session::setCacheBudget(std::uint64_t bytes_per_store) {
+    if (bytes_per_store == thumbnail_cache_.budget() && bytes_per_store == waveform_cache_.budget()) return;
+    thumbnail_cache_.set_budget(bytes_per_store);
+    waveform_cache_.set_budget(bytes_per_store);
+    (void)workers_.submit("cache-evict", [this](oma::JobContext&) {
+        for (const oma::DiskCache* cache : {&thumbnail_cache_, &waveform_cache_}) (void)cache->evict();
+        return oma::Result<void>{};
+    });
+}
+
+void Session::clearCache() {
+    (void)workers_.submit("cache-clear", [this](oma::JobContext&) {
+        std::uint64_t removed = 0;
+        for (const oma::DiskCache* cache : {&thumbnail_cache_, &waveform_cache_}) {
+            if (auto r = cache->clear()) removed += *r;
+        }
+        oma::log_info(oma::Category::Cache, "cache cleared: {} bytes", removed);
+        QMetaObject::invokeMethod(this, [this] { emit cacheCleared(); }, Qt::QueuedConnection);
+        return oma::Result<void>{};
+    });
+}
+
+QString Session::cacheFolder() const {
+    return QString::fromStdString(thumbnail_cache_.dir().parent_path().string());
+}
+
+void Session::setRecentProjectsFile(const QString& settings_file) {
+    recent_ = std::make_unique<RecentProjects>(settings_file);
+    emit recentProjectsChanged();
+}
+
+QVariantList Session::recentProjects() const {
+    return recent_ ? recent_->rows() : QVariantList{};
+}
+
+void Session::forgetRecentProject(const QString& path) {
+    if (!recent_) return;
+    recent_->remove(path);
+    emit recentProjectsChanged();
+}
+
+void Session::rememberProject(const QString& path) {
+    if (!recent_) return;
+    recent_->add(path);
+    emit recentProjectsChanged();
+}
+
+void Session::openFiles(const QStringList& paths) {
+    if (paths.isEmpty()) return;
+    if (paths.front().endsWith(QStringLiteral(".omamovie"))) {
+        openProject(QUrl::fromLocalFile(paths.front()));
+        return;
+    }
+    newProject();
+    queued_files_ = paths;
+    importNextQueued(generation_);
+}
+
+void Session::importNextQueued(unsigned generation) {
+    if (generation != generation_ || queued_files_.isEmpty()) return;
+    const QString next = queued_files_.takeFirst();
+    // A project file among videos is not media; skip it rather than fail the batch.
+    if (next.endsWith(QStringLiteral(".omamovie"))) {
+        importNextQueued(generation);
+        return;
+    }
+    importFile(next, true);
+}
+
 void Session::open(const QString& path) {
     if (path.endsWith(QStringLiteral(".omamovie"))) {
         openProject(QUrl::fromLocalFile(path));
@@ -141,9 +464,23 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
         const auto s = h.state();
         return s != oma::JobState::Pending && s != oma::JobState::Running;
     });
-    imports_.push_back(workers_.submit("import", [this, generation, id, path, thumbnail_path, append,
-                                              known = std::move(known)](oma::JobContext&) {
-        const std::string file = path.toStdString();
+    // Folders where a moved file may be found again (relink): the project's and the file's own.
+    std::vector<std::filesystem::path> roots;
+    if (!project_path_.isEmpty()) roots.push_back(std::filesystem::path(project_path_.toStdString()).parent_path());
+    roots.push_back(std::filesystem::path(path.toStdString()).parent_path().parent_path());
+    roots.insert(roots.end(), relink_roots_.begin(), relink_roots_.end());
+    imports_.push_back(workers_.submit("import", [this, generation, id, requested = path, thumbnail_path, append,
+                                              known = std::move(known), roots = std::move(roots)](oma::JobContext&) {
+        QString source = requested;
+        bool relinked = false;
+        if (known && !QFileInfo::exists(source)) {
+            // An opened project's file moved: the same content by name under nearby folders.
+            if (const auto found = oma::project::find_relocated(source.toStdString(), known->fingerprint, roots)) {
+                source = QString::fromStdString(found->string());
+                relinked = true;
+            }
+        }
+        const std::string file = source.toStdString();
         auto probed = importer_->inspect_input(std::filesystem::path(file));
         if (!probed || (!probed->best_video && !probed->best_audio)) {
             const QString why = probed ? QStringLiteral("no video or audio stream") : message(probed.error());
@@ -153,16 +490,22 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
             if (known) {
                 missing.emplace();
                 missing->media = known->info;
-                missing->path = path;
+                missing->path = source;
                 missing->name = QString::fromStdString(known->name);
                 missing->audio_only = known->audio_only;
                 missing->fingerprint = known->fingerprint;
                 missing->details.insert("decodePath", QStringLiteral("missing file"));
+                missing->missing = true;
             }
-            QMetaObject::invokeMethod(this, [this, generation, path, why, missing = std::move(missing)]() mutable {
+            QMetaObject::invokeMethod(this, [this, generation, source, why, missing = std::move(missing)]() mutable {
                 if (generation != generation_) return;
-                if (missing) addToLibrary(std::move(*missing), false);
-                fail(QStringLiteral("Cannot import %1: %2").arg(QFileInfo(path).fileName(), why));
+                if (missing) {
+                    addToLibrary(std::move(*missing), false);
+                    fail(QStringLiteral("%1 is missing: find it with Locate… in the library").arg(QFileInfo(source).fileName()));
+                } else {
+                    fail(QStringLiteral("Cannot import %1: %2").arg(QFileInfo(source).fileName(), why));
+                }
+                importNextQueued(generation);
             }, Qt::QueuedConnection);
             return oma::Result<void>{};
         }
@@ -172,8 +515,8 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
             probed->streams[static_cast<std::size_t>(audio_only ? *probed->best_audio : *probed->best_video)];
         const oma::Rational tb = stream.timebase;
         LibraryItem item;
-        item.path = path;
-        item.name = QFileInfo(path).fileName();
+        item.path = source;
+        item.name = QFileInfo(source).fileName();
         item.audio_only = audio_only;
         item.media.id = id;
         item.media.start = stream.start.value_or(*oma::RationalTime::make(0, tb));
@@ -213,7 +556,21 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
         item.details.insert("decodePath", audio_only ? QStringLiteral("software (audio)")
                                                      : QStringLiteral("software (preview prototype)"));
         if (known) {
-            // The restored timeline references the saved media range; keep it exactly.
+            // The restored timeline references the saved media range; a file standing in for the
+            // original (relink) must be the same kind and cover that range, or clips would read
+            // past its end. Seconds suffice for this guard; a millisecond absorbs rounding.
+            const double needed = known->info.start.seconds_approx() + known->info.duration.seconds_approx();
+            const double has = item.media.start.seconds_approx() + item.media.duration.seconds_approx();
+            if (audio_only != known->audio_only || (!item.media.still && has + 0.001 < needed)) {
+                const QString why = audio_only != known->audio_only
+                                        ? QStringLiteral("it is not the same kind of media")
+                                        : QStringLiteral("it is shorter than the part the project uses");
+                QMetaObject::invokeMethod(this, [this, generation, source, why] {
+                    if (generation != generation_) return;
+                    setNotice(QStringLiteral("%1 cannot stand in for the missing file: %2").arg(QFileInfo(source).fileName(), why));
+                }, Qt::QueuedConnection);
+                return oma::Result<void>{};
+            }
             item.media = known->info;
             item.name = QString::fromStdString(known->name);
             item.audio_only = known->audio_only;
@@ -223,26 +580,76 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
         }
         // Audio-only media has no picture: the library and the lanes show the sound itself.
         if (!audio_only) {
-            if (auto first = frames_.image_at(file, item.media.start)) {
-                if (first->scaled(256, 144, Qt::KeepAspectRatio, Qt::SmoothTransformation).save(thumbnail_path))
+            // ADR-0009: the cached PNG when this content was seen before, else decode one.
+            const std::string key = "thumbnail/v1 256x144 " + media_identity(source, item.fingerprint);
+            QFile out(thumbnail_path);
+            if (const auto cached = thumbnail_cache_.get(key); cached && out.open(QIODevice::WriteOnly)) {
+                out.write(reinterpret_cast<const char*>(cached->data()), static_cast<qint64>(cached->size()));
+                out.close();
+                item.thumbnail = QUrl::fromLocalFile(thumbnail_path).toString();
+            } else if (auto first = frames_.image_at(file, item.media.start)) {
+                QByteArray png;
+                QBuffer buffer(&png);
+                buffer.open(QIODevice::WriteOnly);
+                if (first->scaled(256, 144, Qt::KeepAspectRatio, Qt::SmoothTransformation).save(&buffer, "PNG") &&
+                    out.open(QIODevice::WriteOnly) && out.write(png) == png.size()) {
+                    out.close();
                     item.thumbnail = QUrl::fromLocalFile(thumbnail_path).toString();
+                    (void)thumbnail_cache_.put(key, std::span(reinterpret_cast<const std::uint8_t*>(png.constData()),
+                                                              static_cast<std::size_t>(png.size())));
+                }
             }
         }
-        QMetaObject::invokeMethod(this, [this, generation, item = std::move(item), append]() mutable {
-            if (generation == generation_) addToLibrary(std::move(item), append);
+        QMetaObject::invokeMethod(this, [this, generation, item = std::move(item), append, relinked]() mutable {
+            if (generation != generation_) return;
+            if (relinked) {
+                oma::log_info(oma::Category::Project, "relinked {} to {}", item.name.toStdString(), item.path.toStdString());
+                setNotice(QStringLiteral("Found %1 in its new place").arg(item.name));
+            }
+            addToLibrary(std::move(item), append);
+            importNextQueued(generation);
         }, Qt::QueuedConnection);
         return oma::Result<void>{};
     }));
 }
 
 void Session::addToLibrary(LibraryItem item, bool append) {
+    // A missing item found again (relink) keeps its place in the library.
+    if (const auto it = std::ranges::find_if(library_, [&](const LibraryItem& i) { return i.media.id == item.media.id; });
+        it != library_.end()) {
+        if (it->path != item.path) ++library_revision_; // the project now points elsewhere: unsaved
+        if (item.media.has_audio) {
+            waveforms_.request(item.media.id.value(), item.path.toStdString(), media_identity(item.path, item.fingerprint));
+        }
+        const bool found = it->missing && !item.missing;
+        *it = std::move(item);
+        if (found) {
+            setNotice(QStringLiteral("Found %1").arg(it->name));
+            // The open reported the missing files; once none is left, so is the error.
+            if (failed_ && std::ranges::none_of(library_, &LibraryItem::missing)) {
+                failed_ = false;
+                status_.clear();
+                emit statusChanged();
+            }
+        }
+        refreshPaths();
+        emit libraryChanged();
+        emit projectChanged();
+        if (editor_) {
+            emit sequenceChanged();
+            requestFrame();
+        }
+        return;
+    }
     if (editor_ && editor_->timeline().find_media(item.media.id) == nullptr) {
         if (auto r = editor_->add_media(item.media); !r) {
             fail(message(r.error()));
             return;
         }
     }
-    if (item.media.has_audio) waveforms_.request(item.media.id.value(), item.path.toStdString());
+    if (item.media.has_audio) {
+        waveforms_.request(item.media.id.value(), item.path.toStdString(), media_identity(item.path, item.fingerprint));
+    }
     library_.push_back(std::move(item));
     refreshPaths();
     selected_media_ = static_cast<int>(library_.size()) - 1;
@@ -256,6 +663,22 @@ void Session::addToLibrary(LibraryItem item, bool append) {
     }
     emit selectionChanged();
     if (append) appendSelected();
+}
+
+void Session::relinkMedia(int index, const QUrl& url) {
+    if (index < 0 || index >= static_cast<int>(library_.size()) || !library_[static_cast<std::size_t>(index)].missing) return;
+    const QString path = url.toLocalFile();
+    if (path.isEmpty()) return;
+    const auto ref = [](const LibraryItem& i) {
+        return oma::project::MediaRef{.info = i.media, .path = i.path.toStdString(), .name = i.name.toStdString(),
+                                      .audio_only = i.audio_only, .fingerprint = i.fingerprint};
+    };
+    relink_roots_.push_back(std::filesystem::path(path.toStdString()).parent_path());
+    importFile(path, false, ref(library_[static_cast<std::size_t>(index)]));
+    // The others moved together, most likely: look for them by name and content there too.
+    for (std::size_t i = 0; i < library_.size(); ++i) {
+        if (static_cast<int>(i) != index && library_[i].missing) importFile(library_[i].path, false, ref(library_[i]));
+    }
 }
 
 const Session::LibraryItem* Session::item(tl::MediaId id) const {
@@ -412,8 +835,16 @@ void Session::placeSelected(int how) {
 // same history entry.
 bool Session::placeAudio(int how, tl::ClipId id, const tl::edit::ClipSource& clip, std::int64_t start,
                          std::optional<std::size_t> preferred) {
+    return placeOnLane(tl::TrackKind::Audio, how, id, clip, start, preferred);
+}
+
+// Puts a clip on a lane of `kind` (how 0 appends to the first lane, 1 places it at `start` on
+// the preferred or first free lane, else overwrites there), adding a lane when none is free.
+// Placed at `start` over a storyline clip, it is connected to it (ADR-0014) in the same edit.
+bool Session::placeOnLane(tl::TrackKind kind, int how, tl::ClipId id, const tl::edit::ClipSource& clip,
+                          std::int64_t start, std::optional<std::size_t> preferred, const char* name) {
     const tl::Timeline& t = editor_->timeline();
-    const auto lanes = audioLanes();
+    const auto all = lanes(kind);
     const std::int64_t end = start + clip.duration.value();
     const auto free = [&](tl::TrackId l) {
         return std::ranges::none_of(t.find_track(l)->clips, [&](const tl::Clip& c) {
@@ -422,32 +853,48 @@ bool Session::placeAudio(int how, tl::ClipId id, const tl::edit::ClipSource& cli
     };
     std::optional<tl::TrackId> lane;
     if (how == 1) {
-        if (preferred && *preferred < lanes.size() && free(lanes[*preferred])) lane = lanes[*preferred];
-        for (const tl::TrackId l : lanes) {
+        if (preferred && *preferred < all.size() && free(all[*preferred])) lane = all[*preferred];
+        for (const tl::TrackId l : all) {
             if (lane) break;
             if (free(l)) lane = l;
         }
-    } else if (!lanes.empty()) {
-        lane = lanes.front();
+    } else if (!all.empty()) {
+        lane = all.front();
     }
     std::vector<std::unique_ptr<tl::Command>> steps;
     if (!lane) {
         lane = editor_->new_track_id();
-        steps.push_back(tl::edit::add_track(*lane, tl::TrackKind::Audio,
-                                            "Audio " + std::to_string(lanes.size() + 1)));
+        steps.push_back(tl::edit::add_track(*lane, kind, laneName(kind, all.size())));
     }
     steps.push_back(how == 0 ? tl::edit::append(*lane, id, clip) : tl::edit::overwrite(*lane, id, t.at(start), clip));
-    return run(tl::edit::transaction(how == 0 ? "Append Audio" : how == 1 ? "Connect Audio" : "Overwrite Audio",
+    if (how == 1) {
+        if (const tl::Clip* primary = t.clip_at(primary_, start); primary != nullptr && primary->time_map.is_constant()) {
+            steps.push_back(tl::edit::connect(id, primary->id));
+        }
+    }
+    const bool audio = kind == tl::TrackKind::Audio;
+    return run(tl::edit::transaction(name != nullptr ? name
+                                     : how == 0 ? (audio ? "Append Audio" : "Append")
+                                     : how == 1 ? (audio ? "Connect Audio" : "Connect")
+                                                : (audio ? "Overwrite Audio" : "Overwrite"),
                                      std::move(steps)));
 }
 
-std::vector<tl::TrackId> Session::audioLanes() const {
-    std::vector<tl::TrackId> lanes;
-    if (!editor_) return lanes;
+std::string Session::laneName(tl::TrackKind kind, std::size_t existing) {
+    return (kind == tl::TrackKind::Audio ? "Audio " : "Video ") + std::to_string(existing + 1);
+}
+
+std::vector<tl::TrackId> Session::lanes(tl::TrackKind kind) const {
+    std::vector<tl::TrackId> out;
+    if (!editor_) return out;
     for (const tl::Track& track : editor_->timeline().tracks()) {
-        if (track.kind == tl::TrackKind::Audio) lanes.push_back(track.id);
+        if (track.kind == kind && track.id != primary_) out.push_back(track.id);
     }
-    return lanes;
+    return out;
+}
+
+std::vector<tl::TrackId> Session::audioLanes() const {
+    return lanes(tl::TrackKind::Audio);
 }
 
 void Session::appendSelected() {
@@ -526,7 +973,7 @@ void Session::moveClip(double id, int lanes, int frames) {
     const tl::Clip* c = t.find_clip(clip);
     const tl::Track* from = t.track_of(clip);
     if (c == nullptr || from == nullptr || from->id == primary_) return; // the storyline reorders by editing
-    const auto all = audioLanes();
+    const auto all = this->lanes(from->kind);
     const auto index = std::ranges::find(all, from->id) - all.begin();
     const auto target = std::max<std::ptrdiff_t>(0, index + lanes);
     const std::int64_t start = std::max<std::int64_t>(0, c->start_ticks() + (static_cast<std::int64_t>(frames) * ticksPerFrame()));
@@ -536,7 +983,7 @@ void Session::moveClip(double id, int lanes, int frames) {
         to = all[static_cast<std::size_t>(target)];
     } else {
         to = editor_->new_track_id();
-        steps.push_back(tl::edit::add_track(to, tl::TrackKind::Audio, "Audio " + std::to_string(all.size() + 1)));
+        steps.push_back(tl::edit::add_track(to, from->kind, laneName(from->kind, all.size())));
     }
     if (to == from->id && start == c->start_ticks()) return;
     steps.push_back(tl::edit::move_clip(clip, to, t.at(start)));
@@ -639,12 +1086,51 @@ void Session::dropMedia(int index, double seconds, int lane) {
     }
     const tl::ClipId id = editor_->new_clip_id();
     const std::int64_t at = ticksAt(seconds);
+    // `lane`: -1 the storyline, 0.. the audio lanes below it, -2 and down the video lanes above it.
     const bool done =
         source.audio_only
             ? placeAudio(1, id, *clip, at, lane >= 0 ? std::optional<std::size_t>(lane) : std::nullopt)
+        : lane <= -2
+            ? placeOnLane(tl::TrackKind::Video, 1, id, *clip, at, static_cast<std::size_t>(-2 - lane))
             : run(tl::edit::insert(primary_, id, editor_->timeline().at(nearestCut(at, {})), *clip));
     if (done) selected_clip_ = id;
     emit selectionChanged();
+}
+
+void Session::setClipSpeed(int num, int den) {
+    if (!editor_ || num <= 0 || den <= 0) return;
+    const tl::Track* track = editor_->timeline().track_of(selected_clip_);
+    auto speed = oma::Rational::make(num, den);
+    if (track == nullptr || !speed) return;
+    if (run(tl::edit::set_speed(selected_clip_, *speed, track->id == primary_)) && num != den) {
+        setNotice(QStringLiteral("Sound plays only at normal speed"));
+    }
+}
+
+void Session::freezeFrame(double seconds) {
+    if (!editor_ || !std::isfinite(seconds) || seconds <= 0) return;
+    const tl::Timeline& t = editor_->timeline();
+    // The selected clip if the playhead is on it, else the storyline clip there.
+    const tl::Clip* c = t.find_clip(selected_clip_);
+    if (c == nullptr || playhead_ < c->start_ticks() || playhead_ >= c->end_ticks()) c = t.clip_at(primary_, playhead_);
+    if (c == nullptr) {
+        setNotice(QStringLiteral("Move the playhead onto a clip to freeze a frame"));
+        return;
+    }
+    const tl::ClipId id = c->id;
+    const bool ripple = t.track_of(id)->id == primary_;
+    if (run(tl::edit::freeze_frame(id, t.at(playhead_), t.at(ticksAt(seconds)), ripple))) {
+        selected_clip_ = id;
+        emit selectionChanged();
+    }
+}
+
+void Session::reverseClip() {
+    if (!editor_ || editor_->timeline().find_clip(selected_clip_) == nullptr) {
+        setNotice(QStringLiteral("Select a clip to reverse"));
+        return;
+    }
+    if (run(tl::edit::reverse(selected_clip_))) setNotice(QStringLiteral("Reversed clips play without sound"));
 }
 
 void Session::detachAudio() {
@@ -996,25 +1482,14 @@ void Session::importLut(const QUrl& url) {
 // ------------------------------------------------------------------- project files (ADR-0007)
 
 Session::Marker Session::savedMarker() const {
-    return {editor_.has_value(), editor_ ? editor_->revision() : 0, library_.size(), lut_paths_.size()};
+    return {editor_.has_value(), editor_ ? editor_->revision() : 0, library_.size(), lut_paths_.size(), library_revision_};
 }
 
 QString Session::projectName() const {
     return project_path_.isEmpty() ? QStringLiteral("Untitled project") : QFileInfo(project_path_).completeBaseName();
 }
 
-void Session::saveProject(const QUrl& url) {
-    QString path = url.isEmpty() ? project_path_ : (url.isLocalFile() ? url.toLocalFile() : url.toString());
-    if (path.isEmpty()) return;
-    if (!path.endsWith(QStringLiteral(".omamovie"))) path += QStringLiteral(".omamovie");
-    // The library is complete only once its imports land (an opened project re-imports all).
-    if (std::ranges::any_of(imports_, [](const oma::JobHandle& h) {
-            const auto st = h.state();
-            return st == oma::JobState::Pending || st == oma::JobState::Running;
-        })) {
-        setNotice(QStringLiteral("Wait for the import to finish, then save"));
-        return;
-    }
+oma::project::Document Session::document() const {
     oma::project::Document doc;
     for (const LibraryItem& i : library_) {
         doc.media.push_back({.info = i.media,
@@ -1033,10 +1508,37 @@ void Session::saveProject(const QUrl& url) {
     }
     doc.canvas_width = canvas_width_;
     doc.canvas_height = canvas_height_;
+    return doc;
+}
+
+bool Session::importing() const {
+    return std::ranges::any_of(imports_, [](const oma::JobHandle& h) {
+        const auto st = h.state();
+        return st == oma::JobState::Pending || st == oma::JobState::Running;
+    });
+}
+
+void Session::saveProject(const QUrl& url) {
+    QString path = url.isEmpty() ? project_path_ : (url.isLocalFile() ? url.toLocalFile() : url.toString());
+    if (path.isEmpty()) return;
+    if (!path.endsWith(QStringLiteral(".omamovie"))) path += QStringLiteral(".omamovie");
+    // The library is complete only once its imports land (an opened project re-imports all).
+    if (std::ranges::any_of(imports_, [](const oma::JobHandle& h) {
+            const auto st = h.state();
+            return st == oma::JobState::Pending || st == oma::JobState::Running;
+        })) {
+        setNotice(QStringLiteral("Wait for the import to finish, then save"));
+        return;
+    }
+    oma::project::Document doc = document();
     const Marker marker = savedMarker();
     const unsigned generation = generation_;
     setNotice(QStringLiteral("Saving…"));
     save_job_ = workers_.submit("save-project", [this, generation, path, marker, doc = std::move(doc)](oma::JobContext&) {
+        // The file about to be replaced becomes a prior version (mistaken-edit recovery).
+        if (!versions::archive(path)) {
+            oma::log_warn(oma::Category::Project, "could not keep the previous version of {}", path.toStdString());
+        }
         auto saved = oma::project::save(doc, std::filesystem::path(path.toStdString()));
         const QString why = saved ? QString() : message(saved.error());
         QMetaObject::invokeMethod(this, [this, generation, path, marker, why] {
@@ -1047,12 +1549,84 @@ void Session::saveProject(const QUrl& url) {
             }
             project_path_ = path;
             saved_ = marker; // edits made while saving keep the project dirty
+            rememberProject(path);
+            if (!dirty()) discardAutosave(); // the file now holds everything the autosave did
             setNotice(QStringLiteral("Saved %1").arg(QFileInfo(path).fileName()));
             emit projectChanged();
         }, Qt::QueuedConnection);
         return oma::Result<void>{};
     });
 }
+
+void Session::exportMovie(const QUrl& url) {
+    QString path = url.isLocalFile() ? url.toLocalFile() : url.toString();
+    if (path.isEmpty() || !editor_ || export_progress_ >= 0) return;
+    if (!path.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive)) path += QStringLiteral(".mp4");
+    if (std::ranges::any_of(library_, &LibraryItem::missing)) {
+        setNotice(QStringLiteral("Locate the missing files first: export would leave gaps where they play"));
+        return;
+    }
+    // Every clip's media must be loaded (an opened project re-imports its library; a finished
+    // import job's result may still be on its way to this thread), or it would render as a gap.
+    for (const tl::Track& track : editor_->timeline().tracks()) {
+        for (const tl::Clip& c : track.clips) {
+            if (!c.title && !paths_->contains(c.media.value())) {
+                setNotice(QStringLiteral("Wait for the media to finish loading, then export"));
+                return;
+            }
+        }
+    }
+    if (!tl::unknown_effects(editor_->timeline()).empty()) {
+        // ADR-0016: never render a different movie silently.
+        setNotice(QStringLiteral("Some effects come from a newer OmaMovie: remove or disable them before exporting"));
+        return;
+    }
+    ExportRequest request{.timeline = editor_->timeline(), .paths = *paths_, .luts = *luts_,
+                          .file = std::filesystem::path(path.toStdString()), .width = canvas_width_ & ~1U,
+                          .height = canvas_height_ & ~1U, .frames = lastFrame() + 1, .ticks_per_frame = ticksPerFrame(),
+                          .audio_rate = kSequenceAudioRate,
+                          .encoder = export_encoder_ == QLatin1String("hardware")   ? ExportRequest::Encoder::Hardware
+                                     : export_encoder_ == QLatin1String("software") ? ExportRequest::Encoder::Software
+                                                                                    : ExportRequest::Encoder::Auto};
+    export_total_ = request.frames;
+    export_done_.store(0);
+    export_progress_ = 0;
+    exported_file_.clear();
+    emit exportChanged();
+    // Progress crosses threads through one atomic; the UI polls it, so the job never waits on
+    // the UI thread (CLAUDE.md §13).
+    export_timer_.start(); // connected in the constructor
+    export_job_ = workers_.submit("export", [this, request = std::move(request), path](oma::JobContext& job) {
+        ExportStats stats;
+        auto done = export_timeline(request, [this, &job](std::int64_t k, std::int64_t) {
+            export_done_.store(k);
+            return !job.is_cancelled();
+        }, &stats);
+        const bool cancelled = !done && done.error().code() == oma::ErrorCode::Cancelled;
+        const QString why = done || cancelled ? QString() : message(done.error());
+        QMetaObject::invokeMethod(this, [this, path, why, cancelled, stats] {
+            export_stats_ = stats;
+            export_timer_.stop();
+            export_progress_ = -1;
+            if (cancelled) {
+                setNotice(QStringLiteral("Export cancelled"));
+            } else if (!why.isEmpty()) {
+                setNotice(QStringLiteral("Cannot export %1: %2").arg(QFileInfo(path).fileName(), why));
+            } else {
+                exported_file_ = path;
+                setNotice(QStringLiteral("Exported %1 · %2").arg(QFileInfo(path).fileName(), QString::fromStdString(stats.encoder)));
+                // The user may have gone elsewhere during a long export (M7: notification).
+                if (QGuiApplication::applicationState() != Qt::ApplicationActive && notifications_) {
+                    notify_desktop(QStringLiteral("Export finished"), QFileInfo(path).fileName());
+                }
+            }
+            emit exportChanged();
+        }, Qt::QueuedConnection);
+        return oma::Result<void>{};
+    });
+}
+
+void Session::cancelExport() { export_job_.cancel(); }
 
 void Session::openProject(const QUrl& url) {
     const QString path = url.isLocalFile() ? url.toLocalFile() : url.toString();
@@ -1084,7 +1658,17 @@ void Session::openProject(const QUrl& url) {
 
 void Session::applyProject(oma::project::Document doc, const QString& path) {
     newProject();
-    project_path_ = path;
+    const bool restoring = !restoring_.isEmpty() && path == restoring_;
+    if (restoring) {
+        // A recovered autosave: the project it belonged to, with everything unsaved.
+        project_path_ = restoring_origin_;
+        if (!restoring_version_) autosave_file_ = restoring_; // a prior version is not consumed
+        restoring_.clear();
+        restoring_version_ = false;
+    } else {
+        project_path_ = path;
+        rememberProject(path);
+    }
     canvas_width_ = doc.canvas_width;
     canvas_height_ = doc.canvas_height;
     if (doc.timeline) {
@@ -1101,7 +1685,9 @@ void Session::applyProject(oma::project::Document doc, const QString& path) {
         loadLut(QString::fromStdString(l.path.string()), l.info.id);
     }
     // Saved as soon as everything it lists is back in the library.
-    saved_ = {editor_.has_value(), editor_ ? editor_->revision() : 0, doc.media.size(), doc.luts.size()};
+    if (!restoring) {
+        saved_ = {editor_.has_value(), editor_ ? editor_->revision() : 0, doc.media.size(), doc.luts.size(), library_revision_};
+    }
     if (editor_) refreshSnapshot();
     emit sequenceChanged();
     emit selectionChanged();
@@ -1178,11 +1764,70 @@ void Session::setClipColor(double exposure, double contrast, double saturation, 
     setSelectedVideo(video);
 }
 
-void Session::setClipFilter(int kind, double amount) {
+QVariantList Session::lookEffects() {
+    QVariantList out;
+    for (const tl::EffectDefinition& d : tl::effect_definitions()) {
+        if (d.stage != tl::EffectStage::Look) continue;
+        out.push_back(QVariantMap{{"id", QString::fromUtf8(d.id.data(), static_cast<qsizetype>(d.id.size()))},
+                                  {"name", QString::fromUtf8(d.name.data(), static_cast<qsizetype>(d.name.size()))}});
+    }
+    return out;
+}
+
+void Session::setClipEffect(const QString& definition, bool on) {
     const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
-    if (c == nullptr || kind < 0 || kind > static_cast<int>(tl::FilterKind::Vignette) || !std::isfinite(amount)) return;
+    if (c == nullptr) return;
+    const std::string id = definition.toStdString();
     tl::VideoProperties video = c->video;
-    video.filter = {.kind = static_cast<tl::FilterKind>(kind), .amount = std::clamp(std::round(amount * 100.0) / 100.0, 0.0, 1.0)};
+    if (on) {
+        const tl::EffectDefinition* d = tl::find_effect_definition(id);
+        if (d == nullptr) return;
+        video.effects = tl::with_effect(std::move(video.effects), *d);
+    } else {
+        std::erase_if(video.effects, [&](const tl::Effect& e) { return e.definition == id; });
+    }
+    setSelectedVideo(video);
+}
+
+void Session::setClipEffectEnabled(const QString& definition, bool enabled) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr) return;
+    tl::VideoProperties video = c->video;
+    const std::string id = definition.toStdString();
+    for (tl::Effect& e : video.effects) {
+        if (e.definition == id) e.enabled = enabled;
+    }
+    setSelectedVideo(video);
+}
+
+void Session::setClipEffectParam(const QString& definition, const QString& name, double value) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    const tl::EffectDefinition* d = tl::find_effect_definition(definition.toStdString());
+    if (c == nullptr || d == nullptr || !std::isfinite(value)) return;
+    const std::string param = name.toStdString();
+    const auto known = std::ranges::find(d->params, param, &tl::ParamDefinition::name);
+    if (known == d->params.end()) return;
+    tl::VideoProperties video = c->video;
+    video.effects = tl::with_effect(std::move(video.effects), *d);
+    // Two decimals: slider noise does not make a new history entry.
+    const double snapped = std::clamp(std::round(value * 100.0) / 100.0, known->min, known->max);
+    for (tl::Effect& e : video.effects) {
+        if (e.definition != d->id) continue;
+        const auto p = std::ranges::find(e.params, param, &tl::EffectParam::name);
+        if (p == e.params.end()) {
+            e.params.push_back({.name = param, .value = snapped});
+        } else {
+            p->value = snapped;
+        }
+    }
+    setSelectedVideo(video);
+}
+
+void Session::moveClipEffect(const QString& definition, int step) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr) return;
+    tl::VideoProperties video = c->video;
+    video.effects = tl::with_effect_moved(std::move(video.effects), definition.toStdString(), step);
     setSelectedVideo(video);
 }
 
@@ -1229,9 +1874,11 @@ void Session::addDissolveAtPlayhead() {
 void Session::setClipSharpness(double sharpness) {
     const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
     if (c == nullptr || !std::isfinite(sharpness)) return;
-    tl::VideoProperties video = c->video;
-    video.sharpness = std::clamp(std::round(sharpness * 100.0) / 100.0, -1.0, 1.0);
-    setSelectedVideo(video);
+    if (std::round(sharpness * 100.0) == 0.0) {
+        setClipEffect(QStringLiteral("oma.detail"), false);
+    } else {
+        setClipEffectParam(QStringLiteral("oma.detail"), QStringLiteral("amount"), sharpness);
+    }
 }
 
 void Session::setClipFraming(int fit, double left, double top, double right, double bottom) {
@@ -1242,12 +1889,155 @@ void Session::setClipFraming(int fit, double left, double top, double right, dou
     tl::VideoProperties video = c->video;
     video.fit = static_cast<tl::Fit>(fit);
     video.crop = {.left = edge(left), .top = edge(top), .right = edge(right), .bottom = edge(bottom)};
+    // A crop gesture's preview leaves the snapshot ahead of the model; the edit replaces it.
+    const bool previewed = std::exchange(previewing_, false);
     setSelectedVideo(video);
+    if (previewed) {
+        refreshSnapshot();
+        requestFrame();
+    }
+}
+
+void Session::setClipOpacity(double opacity) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr || !std::isfinite(opacity)) return;
+    tl::VideoProperties video = c->video;
+    video.opacity = static_cast<float>(std::clamp(std::round(opacity * 100.0) / 100.0, 0.0, 1.0));
+    if (video.opacity != c->video.opacity) setSelectedVideo(video);
 }
 
 void Session::setClipTransform(double x, double y, double scale, double rotation) {
+    if (auto video = transformedVideo(x, y, scale, rotation)) {
+        // A gesture's preview leaves the snapshot ahead of the model; the edit replaces it.
+        previewing_ = false;
+        setSelectedVideo(*video);
+        refreshSnapshot();
+        requestFrame();
+    }
+}
+
+void Session::previewClipTransform(double x, double y, double scale, double rotation) {
+    if (auto video = transformedVideo(x, y, scale, rotation)) previewSelectedVideo(*video);
+}
+
+std::optional<Session::Framing> Session::framing(const tl::Crop& crop, double x, double y, double scale,
+                                                double rotation) const {
     const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
-    if (c == nullptr || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(scale) || !std::isfinite(rotation)) return;
+    const LibraryItem* source = c != nullptr ? item(c->media) : nullptr;
+    // A title is drawn at the canvas size (ADR-0015), so the canvas is its source.
+    const bool title = c != nullptr && c->title.has_value();
+    if ((!title && (source == nullptr || source->width == 0)) || canvas_width_ == 0) return std::nullopt;
+    const std::uint32_t source_width = title ? canvas_width_ : source->width;
+    const std::uint32_t source_height = title ? canvas_height_ : source->height;
+    oma::compositor::Layer layer;
+    layer.fit = static_cast<oma::compositor::Fit>(c->video.fit);
+    layer.crop = {.left = crop.left, .top = crop.top, .right = crop.right, .bottom = crop.bottom};
+    layer.transform = {.offset_x = x, .offset_y = y, .scale_x = scale, .scale_y = scale, .rotation = rotation};
+    const oma::compositor::SourceGeometry geometry{.width = source_width, .height = source_height};
+    // Unclipped: the box may extend past the frame while it is dragged out.
+    return Framing{.matrix = oma::compositor::source_to_output(layer, geometry, canvas_width_, canvas_height_),
+                   .width = static_cast<double>(source_width),
+                   .height = static_cast<double>(source_height)};
+}
+
+QVariantMap Session::layerBox(double x, double y, double scale) const {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr) return {};
+    const auto f = framing(c->video.crop, x, y, scale);
+    if (!f) return {};
+    const tl::Crop& crop = c->video.crop;
+    const auto a = f->matrix.apply(f->width * crop.left, f->height * crop.top);
+    const auto b = f->matrix.apply(f->width * (1 - crop.right), f->height * (1 - crop.bottom));
+    if (!std::isfinite(a[0]) || !std::isfinite(a[1]) || !std::isfinite(b[0]) || !std::isfinite(b[1])) return {};
+    return {{QStringLiteral("x"), std::min(a[0], b[0]) / canvas_width_},
+            {QStringLiteral("y"), std::min(a[1], b[1]) / canvas_height_},
+            {QStringLiteral("w"), std::abs(b[0] - a[0]) / canvas_width_},
+            {QStringLiteral("h"), std::abs(b[1] - a[1]) / canvas_height_}};
+}
+
+namespace {
+
+tl::Crop crop_of(double left, double top, double right, double bottom) {
+    const auto edge = [](double v) { return std::isfinite(v) ? std::clamp(v, 0.0, 0.45) : 0.0; };
+    return {.left = edge(left), .top = edge(top), .right = edge(right), .bottom = edge(bottom)};
+}
+
+} // namespace
+
+QVariantMap Session::cropBox(double left, double top, double right, double bottom) const {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr) return {};
+    const tl::Crop crop = crop_of(left, top, right, bottom);
+    const QVariantMap m = motion(); // the transform shown at the playhead, as the move/scale box uses
+    const double x = m.value("posX").toDouble();
+    const double y = m.value("posY").toDouble();
+    const double scale = m.value("scale", 1.0).toDouble();
+    // The box unrotated (the viewer turns it); the handles where the rotated edges really are.
+    const auto f = framing(crop, x, y, scale);
+    const auto turned = framing(crop, x, y, scale, m.value("rotation").toDouble());
+    if (!f || !turned) return {};
+    const double l = f->width * crop.left;
+    const double r = f->width * (1 - crop.right);
+    const double tp = f->height * crop.top;
+    const double bt = f->height * (1 - crop.bottom);
+    const auto point = [&](double sx, double sy) {
+        const auto p = turned->matrix.apply(sx, sy);
+        return QVariantMap{{QStringLiteral("x"), p[0] / canvas_width_}, {QStringLiteral("y"), p[1] / canvas_height_}};
+    };
+    const auto a = f->matrix.apply(l, tp);
+    const auto b = f->matrix.apply(r, bt);
+    if (!std::isfinite(a[0]) || !std::isfinite(a[1]) || !std::isfinite(b[0]) || !std::isfinite(b[1])) return {};
+    return {{QStringLiteral("x"), std::min(a[0], b[0]) / canvas_width_},
+            {QStringLiteral("y"), std::min(a[1], b[1]) / canvas_height_},
+            {QStringLiteral("w"), std::abs(b[0] - a[0]) / canvas_width_},
+            {QStringLiteral("h"), std::abs(b[1] - a[1]) / canvas_height_},
+            {QStringLiteral("left"), point(l, (tp + bt) / 2)},
+            {QStringLiteral("top"), point((l + r) / 2, tp)},
+            {QStringLiteral("right"), point(r, (tp + bt) / 2)},
+            {QStringLiteral("bottom"), point((l + r) / 2, bt)}};
+}
+
+double Session::cropEdgeAt(int edge, double x, double y, double left, double top, double right, double bottom) const {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    const tl::Crop from = crop_of(left, top, right, bottom);
+    const double current[] = {from.left, from.top, from.right, from.bottom};
+    if (c == nullptr || edge < 0 || edge > 3 || !std::isfinite(x) || !std::isfinite(y)) return edge >= 0 && edge <= 3 ? current[edge] : 0.0;
+    const QVariantMap m = motion();
+    const auto f = framing(from, m.value("posX").toDouble(), m.value("posY").toDouble(), m.value("scale", 1.0).toDouble(),
+                           m.value("rotation").toDouble());
+    const auto inverse = f ? f->matrix.inverse() : std::nullopt;
+    if (!inverse) return current[edge];
+    const auto s = inverse->apply(x * canvas_width_, y * canvas_height_);
+    const double fraction = edge == 0 ? s[0] / f->width
+                          : edge == 1 ? s[1] / f->height
+                          : edge == 2 ? 1 - s[0] / f->width
+                                      : 1 - s[1] / f->height;
+    // Same rounding and range as setClipFraming, so the preview shows what the edit keeps.
+    return std::clamp(std::round(fraction * 1000.0) / 1000.0, 0.0, 0.45);
+}
+
+void Session::previewClipFraming(double left, double top, double right, double bottom) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr) return;
+    tl::VideoProperties video = c->video;
+    video.crop = crop_of(left, top, right, bottom);
+    previewSelectedVideo(video);
+}
+
+void Session::previewSelectedVideo(const tl::VideoProperties& video) {
+    // UX-07: the picture follows a drag without an undo entry per step. The snapshot the
+    // viewer renders gets the change on a copy of the timeline; release commits one edit.
+    tl::Editor scratch(editor_->timeline());
+    if (scratch.execute(tl::edit::set_video(selected_clip_, video))) {
+        snapshot_ = std::make_shared<const tl::Timeline>(scratch.timeline());
+        previewing_ = true;
+        requestFrame();
+    }
+}
+
+std::optional<tl::VideoProperties> Session::transformedVideo(double x, double y, double scale, double rotation) const {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(scale) || !std::isfinite(rotation)) return std::nullopt;
     tl::VideoProperties video = c->video;
     const double s = std::clamp(std::round(scale * 100.0) / 100.0, 0.1, 4.0);
     const tl::Transform transform{.offset_x = std::round(x),
@@ -1266,7 +2056,7 @@ void Session::setClipTransform(double x, double y, double scale, double rotation
             keys.insert(it, tl::TransformKey{.at = *at, .value = transform});
         }
     }
-    setSelectedVideo(video);
+    return video;
 }
 
 std::optional<oma::RationalTime> Session::keyTime(const tl::Clip& c) const {
@@ -1381,7 +2171,9 @@ void Session::requestFilterPreviews() {
                                               .rotation = picture->rotation,
                                               .sample_aspect = picture->sample_aspect};
             const std::array<oma::compositor::LayerInput, 1> inputs{input};
-            for (int kind = 0; kind <= static_cast<int>(tl::FilterKind::Vignette) && !job.is_cancelled(); ++kind) {
+            const auto looks = std::ranges::to<std::vector>(
+                tl::effect_definitions() | std::views::filter([](const tl::EffectDefinition& d) { return d.stage == tl::EffectStage::Look; }));
+            for (std::size_t kind = 0; kind < looks.size() && !job.is_cancelled(); ++kind) {
                 oma::compositor::RenderGraph graph;
                 graph.width = width;
                 graph.height = height;
@@ -1392,7 +2184,7 @@ void Session::requestFilterPreviews() {
                                .contrast = video.color.contrast,
                                .saturation = video.color.saturation,
                                .temperature = video.color.temperature};
-                layer.filter = {.kind = static_cast<oma::compositor::FilterKind>(kind), .amount = 1.0};
+                layer.looks.push_back({.kind = static_cast<oma::compositor::FilterKind>(looks[kind].look), .amount = 1.0});
                 graph.layers.push_back(layer);
                 // CPU reference: tiny images, and no GPU work leaves the render thread (ADR-0005).
                 auto rendered = oma::compositor::CpuCompositor{}.render(graph, inputs);
@@ -1436,7 +2228,8 @@ QVariantList Session::media() const {
                                    {"audioOnly", i.audio_only},
                                    {"name", i.name},
                                    {"duration", i.seconds},
-                                   {"thumbnail", i.thumbnail}});
+                                   {"thumbnail", i.thumbnail},
+                                   {"missing", i.missing}});
     }
     return list;
 }
@@ -1450,6 +2243,11 @@ QVariantMap Session::clipMap(const tl::Clip& c, const tl::Track& track, std::siz
     const bool joined = index > 0 && track.clips[index - 1].end_ticks() == c.start_ticks();
     return QVariantMap{{"id", static_cast<double>(c.id.value())},
                        {"joined", joined},
+                       {"connected", c.anchor.has_value()},
+                       {"primary", c.anchor ? static_cast<double>(c.anchor->primary.value()) : -1.0},
+                       // Anything changed from a plain clip: the timeline marks it.
+                       {"adjusted", c.video != tl::VideoProperties{} || c.audio != tl::AudioProperties{}},
+                       {"timing", timingLabel(c.time_map)},
                        {"transitionKind", window ? static_cast<int>(window->kind) : -1},
                        {"transitionSet", c.transition_in.has_value()},
                        {"transitionSpan", window ? t.at(2 * window->half).seconds_approx() : 0.0},
@@ -1461,7 +2259,10 @@ QVariantMap Session::clipMap(const tl::Clip& c, const tl::Track& track, std::siz
                        {"gain", c.audio.muted ? 0.0 : static_cast<double>(c.audio.gain)},
                        {"start", c.start.seconds_approx()},
                        {"duration", c.duration.seconds_approx()},
-                       {"name", source != nullptr ? source->name : QString()},
+                       {"name", source != nullptr ? source->name
+                                : c.title ? QString::fromStdString(c.title->text).section(QLatin1Char('\n'), 0, 0)
+                                          : QString()},
+                       {"isTitle", c.title.has_value()},
                        {"thumbnail", source != nullptr ? source->thumbnail : QString()},
                        {"fadeIn", c.audio.fade_in.seconds_approx()},
                        {"fadeOut", c.audio.fade_out.seconds_approx()},
@@ -1471,12 +2272,171 @@ QVariantMap Session::clipMap(const tl::Clip& c, const tl::Track& track, std::siz
 }
 
 QVariantList Session::clips() const {
+    // Built once per change: QML reads this from several bindings after every edit (M6 long-form
+    // audit), and each build is O(clips). Invalidated by sequenceChanged and libraryChanged.
+    if (clips_cache_) return *clips_cache_;
     QVariantList list;
     if (!editor_) return list;
     const tl::Track* track = editor_->timeline().find_track(primary_);
     if (track == nullptr) return list;
+    list.reserve(static_cast<qsizetype>(track->clips.size()));
     for (std::size_t i = 0; i < track->clips.size(); ++i) list.push_back(clipMap(track->clips[i], *track, i));
+    clips_cache_ = list;
     return list;
+}
+
+void Session::setStorylineView(double from, double to) {
+    if (!std::isfinite(from) || std::isnan(to) || (from == view_from_ && to == view_to_)) return;
+    view_from_ = from;
+    view_to_ = to;
+    syncStoryline();
+}
+
+// O(log clips + clips in view): only the clips the view can show get rows (and delegates).
+void Session::syncStoryline() {
+    constexpr qsizetype kMaxDelegates = 400;
+    QVariantList rows;
+    const tl::Track* track = editor_ ? editor_->timeline().find_track(primary_) : nullptr;
+    bool compact = false;
+    if (track != nullptr && !track->clips.empty()) {
+        const std::int64_t from = std::max<std::int64_t>(0, std::llround(view_from_ * frameRate())) * ticksPerFrame();
+        const std::int64_t to = std::isfinite(view_to_)
+                                    ? std::llround(view_to_ * frameRate()) * ticksPerFrame()
+                                    : std::numeric_limits<std::int64_t>::max();
+        auto it = std::ranges::upper_bound(track->clips, from, {}, &tl::Clip::end_ticks);
+        for (; it != track->clips.end() && it->start_ticks() <= to; ++it) {
+            if (rows.size() >= kMaxDelegates) {
+                compact = true;
+                break;
+            }
+            rows.push_back(clipMap(*it, *track, static_cast<std::size_t>(it - track->clips.begin())));
+        }
+    }
+    if (compact) rows.clear();
+    storyline_model_.sync(rows);
+    if (compact != storyline_compact_) {
+        storyline_compact_ = compact;
+        emit storylineViewChanged();
+    }
+}
+
+void Session::selectClipAt(double seconds) {
+    if (!editor_ || !std::isfinite(seconds)) return;
+    if (const tl::Clip* c = editor_->timeline().clip_at(primary_, ticksAt(seconds))) {
+        selectClip(static_cast<double>(c->id.value()));
+        seek(seconds);
+    }
+}
+
+QList<double> Session::clipSpans() const {
+    QList<double> out;
+    const tl::Track* track = editor_ ? editor_->timeline().find_track(primary_) : nullptr;
+    if (track == nullptr) return out;
+    out.reserve(static_cast<qsizetype>(track->clips.size() * 2));
+    for (const tl::Clip& c : track->clips) {
+        out.push_back(c.start.seconds_approx());
+        out.push_back(c.duration.seconds_approx());
+    }
+    return out;
+}
+
+QList<double> Session::selectedSpan() const { return clipSpan(static_cast<double>(selected_clip_.value())); }
+
+QList<double> Session::clipSpan(double id) const {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(tl::ClipId(static_cast<std::uint64_t>(id))) : nullptr;
+    if (c == nullptr) return {};
+    return {c->start.seconds_approx(), c->duration.seconds_approx()};
+}
+
+QVariantList Session::videoTracks() const {
+    QVariantList out;
+    for (const tl::TrackId id : lanes(tl::TrackKind::Video)) {
+        const tl::Track* track = editor_->timeline().find_track(id);
+        QVariantList clips;
+        for (std::size_t i = 0; i < track->clips.size(); ++i) clips.push_back(clipMap(track->clips[i], *track, i));
+        out.push_back(QVariantMap{{"id", static_cast<double>(id.value())},
+                                  {"name", QString::fromStdString(track->name)},
+                                  {"clips", clips}});
+    }
+    return out;
+}
+
+void Session::connectSelected() {
+    if (selected_media_ < 0 || selected_media_ >= static_cast<int>(library_.size())) {
+        setNotice(QStringLiteral("Select something in the library to connect"));
+        return;
+    }
+    const LibraryItem& source = library_[static_cast<std::size_t>(selected_media_)];
+    if (!ensureSequence(source)) return;
+    const auto clip = sourceFor(source);
+    if (!clip) return;
+    const tl::ClipId id = editor_->new_clip_id();
+    if (placeOnLane(source.audio_only ? tl::TrackKind::Audio : tl::TrackKind::Video, 1, id, *clip, playhead_, {})) {
+        selected_clip_ = id;
+        emit selectionChanged();
+    }
+}
+
+void Session::addTitle() {
+    if (!editor_) {
+        setNotice(QStringLiteral("Add a video first: a title goes over the storyline"));
+        return;
+    }
+    const tl::Timeline& t = editor_->timeline();
+    const auto seconds = oma::RationalTime::make(3, oma::Rational::literal(1, 1));
+    const auto ticks = seconds ? t.to_ticks(*seconds) : oma::Result<std::int64_t>(std::unexpected(seconds.error()));
+    if (!ticks) return;
+    tl::Title title;
+    title.text = "Title";
+    const tl::edit::ClipSource clip{.media = tl::MediaId{},
+                                    .source_in = t.at(0),
+                                    .duration = t.at(*ticks),
+                                    .time_map = {},
+                                    .video = {},
+                                    .audio = {},
+                                    .title = title};
+    const tl::ClipId id = editor_->new_clip_id();
+    if (placeOnLane(tl::TrackKind::Video, 1, id, clip, playhead_, {}, "Add Title")) {
+        selected_clip_ = id;
+        emit selectionChanged();
+    }
+}
+
+void Session::setClipTitle(const QString& text, double size, const QString& color, int placement) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr || !c->title) return;
+    tl::Title title = *c->title;
+    // Bounded like the format (ADR-0015): long text is cut at a character boundary.
+    QByteArray utf8 = text.toUtf8();
+    while (utf8.size() > static_cast<qsizetype>(tl::kMaxTitleBytes)) {
+        utf8 = QString::fromUtf8(utf8).chopped(1).toUtf8();
+    }
+    title.text = utf8.toStdString();
+    if (std::isfinite(size)) title.size = std::clamp(std::round(size * 1000.0) / 1000.0, 0.02, 0.5);
+    if (const QColor rgb(color); rgb.isValid()) {
+        title.color = {static_cast<float>(rgb.redF()), static_cast<float>(rgb.greenF()), static_cast<float>(rgb.blueF()),
+                       title.color[3]};
+    }
+    if (placement >= 0 && placement <= static_cast<int>(tl::TitlePlacement::Top)) {
+        title.placement = static_cast<tl::TitlePlacement>(placement);
+    }
+    if (title != *c->title) run(tl::edit::set_title(c->id, title));
+}
+
+void Session::connectSelectedClip() {
+    if (!editor_) return;
+    const tl::Timeline& t = editor_->timeline();
+    const tl::Clip* c = t.find_clip(selected_clip_);
+    const tl::Clip* primary = c != nullptr ? t.clip_at(primary_, c->start_ticks()) : nullptr;
+    if (c == nullptr || primary == nullptr || t.track_of(c->id)->id == primary_) {
+        setNotice(QStringLiteral("Place the clip's start over a storyline clip to connect it"));
+        return;
+    }
+    run(tl::edit::connect(c->id, primary->id));
+}
+
+void Session::disconnectSelectedClip() {
+    if (editor_ && editor_->timeline().find_clip(selected_clip_) != nullptr) run(tl::edit::disconnect(selected_clip_));
 }
 
 QVariantList Session::audioTracks() const {
@@ -1494,23 +2454,39 @@ QVariantList Session::audioTracks() const {
 
 QVariantMap Session::info() const {
     const LibraryItem* source = nullptr;
-    if (editor_ && selected_clip_.valid()) {
-        if (const tl::Clip* c = editor_->timeline().find_clip(selected_clip_)) source = item(c->media);
-    }
-    if (source == nullptr && selected_media_ >= 0 && selected_media_ < static_cast<int>(library_.size()))
+    const tl::Clip* selected = editor_ && selected_clip_.valid() ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    const tl::Title* title = selected != nullptr && selected->title ? &*selected->title : nullptr;
+    if (selected != nullptr && title == nullptr) source = item(selected->media);
+    if (source == nullptr && title == nullptr && selected_media_ >= 0 && selected_media_ < static_cast<int>(library_.size()))
         source = &library_[static_cast<std::size_t>(selected_media_)];
-    if (source == nullptr) return {};
-    QVariantMap out = source->details;
-    out.insert("name", source->name);
-    out.insert("duration", source->seconds);
-    out.insert("hasAudio", source->media.has_audio);
+    if (source == nullptr && title == nullptr) return {};
+    QVariantMap out = source != nullptr ? source->details : QVariantMap{};
+    if (title != nullptr) {
+        // A title has no library item (ADR-0015): its text names it.
+        out.insert("name", QString::fromStdString(title->text).section(QLatin1Char('\n'), 0, 0));
+        out.insert("duration", selected->duration.seconds_approx());
+        out.insert("hasAudio", false);
+        out.insert("codec", QStringLiteral("Title"));
+        out.insert("decodePath", QStringLiteral("drawn by OmaMovie"));
+        out.insert("isTitle", true);
+        out.insert("titleText", QString::fromStdString(title->text));
+        out.insert("titleSize", title->size);
+        out.insert("titleColor", QColor::fromRgbF(title->color[0], title->color[1], title->color[2]).name());
+        out.insert("titlePlacement", static_cast<int>(title->placement));
+    } else {
+        out.insert("name", source->name);
+        out.insert("duration", source->seconds);
+        out.insert("hasAudio", source->media.has_audio);
+    }
     if (editor_ && selected_clip_.valid()) {
         if (const tl::Clip* c = editor_->timeline().find_clip(selected_clip_)) {
             out.insert("clip", true);
             // Detached sound is adjusted on its own clip.
             if (c->audio_detached) out.insert("hasAudio", false);
             out.insert("onStoryline", editor_->timeline().track_of(c->id)->id == primary_);
-            out.insert("canDetach", source->media.has_audio && !c->audio_detached &&
+            out.insert("connected", c->anchor.has_value());
+            out.insert("primary", c->anchor ? static_cast<double>(c->anchor->primary.value()) : -1.0);
+            out.insert("canDetach", source != nullptr && source->media.has_audio && !c->audio_detached &&
                                         editor_->timeline().track_of(c->id)->id == primary_);
             out.insert("clipDuration", c->duration.seconds_approx());
             out.insert("gain", static_cast<double>(c->audio.gain));
@@ -1528,9 +2504,24 @@ QVariantMap Session::info() const {
             out.insert("contrast", v.color.contrast);
             out.insert("saturation", v.color.saturation);
             out.insert("temperature", v.color.temperature);
-            out.insert("filterKind", static_cast<int>(v.filter.kind));
-            out.insert("filterAmount", v.filter.amount);
-            out.insert("sharpness", v.sharpness);
+            QVariantList effects; // the stack except detail, which has its own slider
+            double sharpness = 0.0;
+            for (const tl::Effect& e : v.effects) {
+                const tl::EffectDefinition* d = tl::find_effect_definition(e.definition);
+                if (d != nullptr && d->stage == tl::EffectStage::Detail) {
+                    sharpness = tl::effect_param(e, "amount");
+                    continue;
+                }
+                effects.push_back(QVariantMap{
+                    {"id", QString::fromStdString(e.definition)},
+                    {"name", d != nullptr ? QString::fromUtf8(d->name.data(), static_cast<qsizetype>(d->name.size()))
+                                          : QString::fromStdString(e.definition)},
+                    {"known", d != nullptr},
+                    {"enabled", e.enabled},
+                    {"amount", tl::effect_param(e, "amount")}});
+            }
+            out.insert("effects", effects);
+            out.insert("sharpness", sharpness);
             out.insert("fit", static_cast<int>(v.fit));
             out.insert("cropLeft", v.crop.left);
             out.insert("cropTop", v.crop.top);
@@ -1550,9 +2541,10 @@ QVariantMap Session::info() const {
             out.insert("curves", curves);
             out.insert("lut", static_cast<double>(v.grade.lut.value()));
             out.insert("lutAmount", v.grade.lut_amount);
+            out.insert("opacity", static_cast<double>(v.opacity));
             out.insert("framingAdjusted", v.fit != tl::Fit::Fit || v.crop != tl::Crop{} || v.transform != tl::Transform{} ||
-                                              !v.transform_keys.empty());
-            out.insert("filtered", v.filter.kind != tl::FilterKind::None || v.sharpness != 0.0);
+                                              !v.transform_keys.empty() || v.opacity != 1.0F);
+            out.insert("filtered", !v.effects.empty());
         }
     }
     return out;
@@ -1652,6 +2644,8 @@ void Session::setSpeed(int speed) {
 }
 
 void Session::startPlayback() {
+    QElapsedTimer restart;
+    restart.start();
     audio_.stop();
     scheduler_.stop();
     wanted_.reset();
@@ -1667,12 +2661,16 @@ void Session::startPlayback() {
             setNotice(QStringLiteral("No audio device: playing silently"));
         }
     }
-    // At double and quadruple speed every second or fourth frame is shown.
-    if (hardwarePreview()) {
-        requestHardwareFrame(frame());
-    } else {
-        scheduler_.start(snapshot_, paths_, luts_, canvas_width_, canvas_height_, ticksPerFrame(), frame(), speed_, lastFrame());
+    // At double and quadruple speed every second or fourth frame is shown. The hardware pilot
+    // decodes on the scheduler's thread too, admitted around Qt's swapchain changes (ADR-0005).
+    scheduler_.set_device(hardwarePreview() ? preview_->device() : nullptr);
+    if (preview_ != nullptr && preview_quality_ == PreviewQuality::Auto) {
+        preview_->setScale(1.0); // each playback starts at full resolution
     }
+    adapt_shown_ = 0;
+    adapt_dropped_base_ = scheduler_.dropped();
+    scheduler_.start(snapshot_, paths_, luts_, canvas_width_, canvas_height_, ticksPerFrame(), frame(), speed_, lastFrame());
+    last_restart_ms_ = static_cast<double>(restart.nsecsElapsed()) / 1e6;
 }
 
 void Session::pause() {
@@ -1696,11 +2694,92 @@ void Session::refreshSnapshot() {
 
 void Session::refreshPaths() {
     auto paths = std::make_shared<MediaPaths>();
-    for (const LibraryItem& i : library_) paths->emplace(i.media.id.value(), i.path.toStdString());
+    // A missing file's clips play as gaps (a decoder still open on the moved file must not
+    // keep showing it as if nothing were wrong).
+    for (const LibraryItem& i : library_) {
+        if (!i.missing) paths->emplace(i.media.id.value(), i.path.toStdString());
+    }
     paths_ = std::move(paths);
 }
 
+void Session::setPreview(PreviewItem* preview) {
+    preview_ = preview;
+    if (preview_ == nullptr) return;
+    // CLAUDE.md §19: degrade visibly. The project, history and saving live on the CPU and keep
+    // working; only the viewer and hardware decode stop.
+    connect(preview_, &PreviewItem::deviceLost, this, [this] {
+        device_lost_ = true;
+        setNotice(QString()); // replaces an older notice; the explanation then stays (notice())
+    }, Qt::QueuedConnection);
+    const QString quality = qEnvironmentVariable("OMA_PREVIEW_SCALE");
+    bool ok = false;
+    const double fixed = quality.toDouble(&ok);
+    preview_quality_from_env_ = ok && fixed > 0.0 && fixed <= 1.0;
+    if (ok && fixed > 0.0 && fixed < 1.0) {
+        preview_quality_ = PreviewQuality::Fixed;
+        preview_->setScale(fixed);
+    } else if (ok && fixed == 1.0) {
+        preview_quality_ = PreviewQuality::Full;
+    } else {
+        preview_quality_ = PreviewQuality::Auto; // the default since the 2026-10-06 comparison
+    }
+}
+
+void Session::setPreviewQuality(const QString& quality) {
+    if (preview_ == nullptr || preview_quality_from_env_) return;
+    if (quality == QLatin1String("half") || quality == QLatin1String("quarter")) {
+        preview_quality_ = PreviewQuality::Fixed;
+        preview_->setScale(quality == QLatin1String("half") ? 0.5 : 0.25);
+    } else {
+        preview_quality_ = quality == QLatin1String("full") ? PreviewQuality::Full : PreviewQuality::Auto;
+        preview_->setScale(1.0); // automatic starts at full and lowers only after drops
+        adapt_shown_ = 0;
+        adapt_dropped_base_ = scheduler_.dropped();
+    }
+    requestFrame();
+}
+
+void Session::setRecordingsFolderOverride(const QString& folder) {
+    if (folder == recordings_override_) return;
+    recordings_override_ = folder;
+    refreshRecordings();
+}
+
+// M4 adaptive preview (default; OMA_PREVIEW_SCALE=1 keeps full resolution, 0.5 fixes half): when
+// more than 2% of the frames due over two seconds were dropped, composite at half resolution for
+// the rest of this playback. The picture's framing, the timeline and export never change.
+void Session::adaptPreview() {
+    if (preview_ == nullptr || preview_quality_ != PreviewQuality::Auto || preview_->scale() < 1.0) {
+        return;
+    }
+    constexpr std::int64_t kWindowFrames = 120;
+    if (++adapt_shown_ < kWindowFrames) {
+        return;
+    }
+    const std::int64_t dropped = scheduler_.dropped() - adapt_dropped_base_;
+    if (dropped * 50 > adapt_shown_) {
+        preview_->setScale(0.5);
+        oma::log_info(oma::Category::Playback, "preview at half resolution: {} of {} frames dropped", dropped,
+                      adapt_shown_ + dropped);
+    }
+    adapt_shown_ = 0;
+    adapt_dropped_base_ = scheduler_.dropped();
+}
+
 void Session::onTick() {
+    QElapsedTimer took;
+    took.start();
+    if (tick_clock_.isValid() && tick_gap_ms_.size() < 65536) {
+        tick_gap_ms_.push_back(static_cast<double>(tick_clock_.nsecsElapsed()) / 1e6);
+    }
+    tick_clock_.start();
+    struct Record {
+        QElapsedTimer& t;
+        std::vector<double>& out;
+        ~Record() {
+            if (out.size() < 65536) out.push_back(static_cast<double>(t.nsecsElapsed()) / 1e6);
+        }
+    } record{took, tick_ms_};
     if (auto error = audio_.take_error()) setNotice(QString::fromStdString(*error));
     if (auto error = scheduler_.take_error()) {
         pause();
@@ -1726,15 +2805,10 @@ void Session::onTick() {
     }
     const bool at_end = speed_ > 0 ? target >= lastFrame() : target <= 0;
     target = std::clamp<std::int64_t>(target, 0, lastFrame());
-    if (hardwarePreview()) {
-        if (frame() != target) {
-            playhead_ = target * ticksPerFrame();
-            requestHardwareFrame(target);
-            emit positionChanged();
-        }
-    } else if (auto shown = scheduler_.take(target)) {
+    if (auto shown = scheduler_.take(target)) {
         playhead_ = shown->frame * ticksPerFrame();
         if (preview_ != nullptr) preview_->setFrame(std::move(shown->view));
+        adaptPreview();
         emit positionChanged();
     }
     if (at_end && frame() == target) pause();
@@ -1789,6 +2863,14 @@ void Session::submitFrame() {
 }
 
 // ------------------------------------------------------------------- status
+
+QString Session::notice() const {
+    if (notice_.isEmpty() && device_lost_) {
+        return QStringLiteral("The graphics device stopped working, so the viewer is blank. Your project is safe: "
+                              "save it, then restart OmaMovie.");
+    }
+    return notice_;
+}
 
 void Session::setNotice(const QString& text) {
     notice_ = text;

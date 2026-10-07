@@ -1,5 +1,6 @@
 #pragma once
 
+#include "oma/base/disk_cache.hpp"
 #include "oma/base/jobs.hpp"
 #include "oma/playback/waveform.hpp"
 
@@ -11,8 +12,9 @@
 #include <unordered_map>
 #include <vector>
 
-// Waveforms of the library's media (ui-design §7.2), computed in the background and kept for the
-// session. Not a disk cache yet: the cache strategy is ADR-0009's (CLAUDE.md §15).
+// Waveforms of the library's media (ui-design §7.2), computed in the background, kept for the
+// session and in the disk cache (ADR-0009) under the media's identity, so reopening a project
+// does not decode its sound again.
 //
 // Threading: lives on the UI thread. Each waveform is computed by a job on this store's own pool
 // and arrives back through a queued invocation; it is immutable from then on, so the timeline's
@@ -27,8 +29,11 @@ public:
     WaveformStore(WaveformStore&&) = delete;
     WaveformStore& operator=(WaveformStore&&) = delete;
 
+    // The disk cache to read first and fill (may be null; must outlive the store's jobs).
+    void set_cache(const oma::DiskCache* cache) { cache_ = cache; }
     // Starts computing the waveform of `media` unless it exists or is being computed.
-    void request(std::uint64_t media, const std::string& path);
+    // `identity` names the file's content (path, size, time, fingerprint) for the disk cache.
+    void request(std::uint64_t media, const std::string& path, const std::string& identity);
     // Forgets every waveform and cancels the jobs in flight (a new project).
     void clear();
 
@@ -42,5 +47,6 @@ private:
     std::vector<oma::JobHandle> jobs_;
     std::unordered_map<std::uint64_t, bool> pending_;
     unsigned generation_ = 0;
+    const oma::DiskCache* cache_ = nullptr;
     oma::JobPool pool_{1}; // destroyed first: no job outlives the store
 };

@@ -4,14 +4,15 @@
 // in linear BT.709 light:
 //   c = max(c * gains, 0)                         white balance and exposure
 //   c = pivot * (c / pivot) ^ power               contrast around 18% grey (when power != 1)
-//   c = matrix * c + offset                       saturation and the filter's look
-//   c = c * (1 - vignette * smoothstep(...))      the vignette filter
+//   c = matrix * c + offset                       saturation, then the looks in order
+//   c = c * (1 - vignette * smoothstep(...))      the vignette look
 // Keep shaders/composite.comp and the CPU reference (src/cpu_compositor.cpp) in step with this.
 
 #include "oma/compositor/render_graph.hpp"
 
 #include <array>
 #include <cstdint>
+#include <span>
 
 namespace oma::compositor {
 
@@ -31,7 +32,7 @@ struct Look {
     [[nodiscard]] bool identity() const noexcept;
 };
 
-[[nodiscard]] Look make_look(const ColorAdjust& color, const Filter& filter);
+[[nodiscard]] Look make_look(const ColorAdjust& color, std::span<const Filter> looks);
 
 // Blur and sharpen (Layer::sharpness). The cropped source is linearized once and reduced by
 // `factor` (a factor x factor box average per texel), then a separable gaussian runs across and

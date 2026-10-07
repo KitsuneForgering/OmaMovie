@@ -1,8 +1,9 @@
 name: Release
 
 # Tag vX.Y.Z (or vX.Y.Z-rc.N) → release build + tests → GitHub Release with notes generated
-# from Conventional Commits and the source tarball. App binaries are added once the app
-# exists (M6/M7), as <app>-<version>-<arch>-linux.tar.gz, the layout OmaStore expects.
+# from Conventional Commits, the source tarball and the app as omamovie-<version>-x86_64-linux.tar.gz
+# (the tree `make install` lays out under usr/, which omastore.toml points OmaStore at). Qt 6,
+# FFmpeg and Vulkan stay system libraries (Arch packages, PKGBUILD depends).
 on:
   push:
     tags: ['v*.*.*']
@@ -23,7 +24,8 @@ jobs:
           docker run --rm -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
             pacman -Syu --noconfirm >/dev/null
             scripts/deps.sh --install --no-dev --noconfirm >/dev/null
-            make -j"$(nproc)" BUILD=release test
+            make -j"$(nproc)" BUILD=release test build/release/omamovie
+            make BUILD=release DESTDIR=/src/stage PREFIX=/usr install
           '
 
       - name: Release notes and source tarball
@@ -33,6 +35,9 @@ jobs:
           scripts/changelog.sh "$tag" > release-notes.md
           git archive --format=tar.gz --prefix="oma-movie-${version}/" -o "oma-movie-${version}-src.tar.gz" "$tag"
           sha256sum "oma-movie-${version}-src.tar.gz" > "oma-movie-${version}-src.tar.gz.sha256"
+          app="omamovie-${version}-x86_64-linux.tar.gz"
+          tar --owner=0 --group=0 -C stage -czf "$app" usr
+          sha256sum "$app" > "$app.sha256"
           cat release-notes.md
 
       - name: Publish release
@@ -46,4 +51,5 @@ jobs:
           gh release create "$tag" $prerelease \
             --title "OmaMovie ${version}" \
             --notes-file release-notes.md \
-            "oma-movie-${version}-src.tar.gz" "oma-movie-${version}-src.tar.gz.sha256"
+            "oma-movie-${version}-src.tar.gz" "oma-movie-${version}-src.tar.gz.sha256" \
+            "omamovie-${version}-x86_64-linux.tar.gz" "omamovie-${version}-x86_64-linux.tar.gz.sha256"

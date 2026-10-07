@@ -5,6 +5,10 @@ void run_edit_tests();
 void run_evaluate_tests();
 void run_transition_tests();
 void run_keyframe_tests();
+void run_time_map_tests();
+void run_anchor_tests();
+void run_title_tests();
+void run_effect_tests();
 
 int main(int argc, char* argv[]) {
     cest_init(argc, argv);
@@ -13,5 +17,9 @@ int main(int argc, char* argv[]) {
     run_evaluate_tests();
     run_transition_tests();
     run_keyframe_tests();
+    run_time_map_tests();
+    run_anchor_tests();
+    run_title_tests();
+    run_effect_tests();
     return cest_result();
 }

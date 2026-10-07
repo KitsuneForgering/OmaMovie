@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- OmaMovie application icon. Drawn for OmaMovie (MIT, see LICENSE): a viewer frame with a
+     play mark above a three-clip timeline. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="#14161c"/>
+  <rect x="40" y="44" width="176" height="108" rx="14" fill="none" stroke="#e2e5ee" stroke-width="10"/>
+  <path d="M114 74 L150 98 L114 122 Z" fill="#3ee8ff"/>
+  <rect x="40" y="176" width="60" height="28" rx="6" fill="#3ee8ff"/>
+  <rect x="108" y="176" width="44" height="28" rx="6" fill="#e2e5ee"/>
+  <rect x="160" y="176" width="56" height="28" rx="6" fill="#8b91a2"/>
+  <rect x="124" y="166" width="6" height="48" rx="3" fill="#ff6b6b"/>
+</svg>

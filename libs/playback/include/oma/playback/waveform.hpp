@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <vector>
 
 // Waveform peaks of a media file's audio for the timeline (ui-design §7.2). Computed off the UI
@@ -38,6 +39,14 @@ struct Waveform {
 // Buckets per second of media: fine enough for single-frame zoom at 60 fps, small enough to
 // keep an hour of sound under 1.5 MB.
 inline constexpr std::int64_t kWaveformBucketsPerSecond = 100;
+
+// A waveform as bytes for the disk cache (ADR-0009), and back. The bytes carry a version and
+// their own sizes; anything that does not parse exactly (another version, truncation, counts
+// that disagree or exceed kMaxWaveformBuckets) is an error, never a partial waveform.
+inline constexpr std::size_t kMaxWaveformBuckets =
+    std::size_t{100} * 60 * 60 * 24; // a day at 100/s
+[[nodiscard]] std::vector<std::uint8_t> to_bytes(const Waveform& waveform);
+[[nodiscard]] Result<Waveform> waveform_from_bytes(std::span<const std::uint8_t> bytes);
 
 // Decodes the best audio stream at its own rate and keeps one peak per bucket. Reports progress
 // and stops with ErrorCode::Cancelled when the job is cancelled.

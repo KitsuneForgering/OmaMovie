@@ -24,6 +24,8 @@ layout(set = 0, binding = 6, rgba16f) uniform writeonly image2D blur_target;
 // The layer's 3D LUT, red along x (a 1x1x1 placeholder without one). Read with texelFetch and
 // interpolated tetrahedrally, as the CPU reference does.
 layout(set = 0, binding = 7) uniform sampler3D lut;
+// Straight alpha of a GBRA source (ADR-0015), when extra.w is 1; aliases plane 1 otherwise.
+layout(set = 0, binding = 8) uniform sampler2D plane3;
 
 layout(std140, set = 0, binding = 4) uniform Layer {
     vec4 inv0;    // output -> source: a, b, tx
@@ -37,7 +39,8 @@ layout(std140, set = 0, binding = 4) uniform Layer {
     vec4 gamut_b;
     vec4 misc;    // opacity, sample scale, reveal edge in output pixels (negative: none)
     ivec4 mode;   // chroma mode (1 interleaved, 2 planar), chroma shift x, chroma shift y, transfer
-    ivec4 extra;  // blend, source width, source height
+    vec4 chroma;  // first chroma sample center in luma pixel coordinates
+    ivec4 extra;  // blend, source width, source height, alpha plane
     ivec4 region; // output pixels x0, y0, x1, y1
     vec4 gains;   // look (src/look.hpp): r, g, b gains, contrast power
     vec4 look_r;  // look matrix rows, offset in w
@@ -175,17 +178,22 @@ vec3 grade(vec3 c) {
 vec3 texel(ivec2 p) {
     float scale = L.misc.y;
     float y = texelFetch(plane0, p, 0).r * scale;
-    ivec2 c = ivec2(p.x >> L.mode.y, p.y >> L.mode.z);
-    float cb;
-    float cr;
-    if (L.mode.x == 1) {
-        vec2 v = texelFetch(plane1, c, 0).rg;
-        cb = v.x * scale;
-        cr = v.y * scale;
-    } else {
-        cb = texelFetch(plane1, c, 0).r * scale;
-        cr = texelFetch(plane2, c, 0).r * scale;
-    }
+    vec2 step_size = vec2(float(1 << L.mode.y), float(1 << L.mode.z));
+    vec2 pos = (vec2(p) + 0.5 - L.chroma.xy) / step_size;
+    ivec2 base = ivec2(floor(pos));
+    vec2 frac = fract(pos);
+    ivec2 last = max((L.extra.yz + ivec2(step_size) - 1) / ivec2(step_size) - 1, ivec2(0));
+    ivec2 a = clamp(base, ivec2(0), last);
+    ivec2 b = clamp(base + 1, ivec2(0), last);
+    vec2 v00 = texelFetch(plane1, a, 0).rg;
+    vec2 v10 = texelFetch(plane1, ivec2(b.x, a.y), 0).rg;
+    vec2 v01 = texelFetch(plane1, ivec2(a.x, b.y), 0).rg;
+    vec2 v11 = texelFetch(plane1, b, 0).rg;
+    vec2 chroma = mix(mix(v00, v10, frac.x), mix(v01, v11, frac.x), frac.y);
+    float cb = chroma.x * scale;
+    float cr = (L.mode.x == 1 ? chroma.y :
+        mix(mix(texelFetch(plane2, a, 0).r, texelFetch(plane2, ivec2(b.x, a.y), 0).r, frac.x),
+            mix(texelFetch(plane2, ivec2(a.x, b.y), 0).r, texelFetch(plane2, b, 0).r, frac.x), frac.y)) * scale;
     vec3 yuv = vec3(y, cb, cr);
     vec3 nonlinear = vec3(dot(L.yuv_r.xyz, yuv) + L.yuv_r.w,
                           dot(L.yuv_g.xyz, yuv) + L.yuv_g.w,
@@ -318,7 +326,17 @@ void main() {
     vec2 o = vec2(out_px) + 0.5;
     vec2 s = vec2(L.inv0.x * o.x + L.inv0.y * o.y + L.inv0.z,
                   L.inv1.x * o.x + L.inv1.y * o.y + L.inv1.z);
-    if (s.x < L.crop.x || s.y < L.crop.y || s.x >= L.crop.z || s.y >= L.crop.w) {
+    float coverage = 0.0;
+    for (int j = 0; j < 2; ++j) {
+        for (int i = 0; i < 2; ++i) {
+            vec2 d = vec2(float(i) - 0.5, float(j) - 0.5) * 0.5;
+            vec2 q = s + vec2(L.inv0.x * d.x + L.inv0.y * d.y,
+                              L.inv1.x * d.x + L.inv1.y * d.y);
+            coverage += all(greaterThanEqual(q, L.crop.xy)) && all(lessThan(q, L.crop.zw))
+                            ? 0.25 : 0.0;
+        }
+    }
+    if (coverage == 0.0) {
         return;
     }
 
@@ -354,7 +372,15 @@ void main() {
         color = grade(color);
     }
 
-    float alpha = L.misc.x;
+    float alpha = L.misc.x * coverage;
+    if (L.extra.w != 0) {
+        // The source's own alpha, filtered with the colour's taps (mirrors the CPU compositor).
+        float a00 = texelFetch(plane3, ivec2(p0.x, p0.y), 0).r;
+        float a10 = texelFetch(plane3, ivec2(p1.x, p0.y), 0).r;
+        float a01 = texelFetch(plane3, ivec2(p0.x, p1.y), 0).r;
+        float a11 = texelFetch(plane3, ivec2(p1.x, p1.y), 0).r;
+        alpha *= mix(mix(a00, a10, t.x), mix(a01, a11, t.x), t.y) * L.misc.y;
+    }
     if (L.misc.z >= 0.0) {
         alpha *= clamp(L.misc.z - float(out_px.x), 0.0, 1.0); // pixel coverage left of the edge
     }

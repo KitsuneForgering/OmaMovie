@@ -1,5 +1,6 @@
 #include "viewer_frame.hpp"
 
+#include "oma/timeline/effects.hpp"
 #include "oma/timeline/evaluate.hpp"
 
 #include <utility>
@@ -39,9 +40,18 @@ oma::compositor::Layer to_layer(const tl::VideoProperties& v, std::size_t input,
                    .contrast = v.color.contrast,
                    .saturation = v.color.saturation,
                    .temperature = v.color.temperature};
-    layer.filter = {.kind = static_cast<oma::compositor::FilterKind>(v.filter.kind), // same enumerators
-                    .amount = v.filter.amount};
-    layer.sharpness = v.sharpness;
+    // Enabled effects this build knows, by stage (ADR-0016); unknown ones are reported, not drawn.
+    for (const tl::Effect& e : v.effects) {
+        const tl::EffectDefinition* d = e.enabled ? tl::find_effect_definition(e.definition) : nullptr;
+        if (d == nullptr) continue;
+        const double amount = tl::effect_param(e, "amount");
+        if (d->stage == tl::EffectStage::Detail) {
+            layer.sharpness = amount;
+        } else {
+            layer.looks.push_back({.kind = static_cast<oma::compositor::FilterKind>(d->look), // same enumerators
+                                   .amount = amount});
+        }
+    }
     const tl::ColorGrade& g = v.grade;
     layer.grade.cdl = {.slope = g.cdl.slope, .offset = g.cdl.offset, .power = g.cdl.power, .saturation = g.cdl.saturation};
     layer.grade.curves = {.master = to_points(g.curves.master),
@@ -72,11 +82,16 @@ oma::Result<std::shared_ptr<ViewerFrame>> build_viewer_frame(const tl::Timeline&
     out->frame = frame;
     out->seconds = at.seconds_approx();
     for (const tl::VideoLayer& layer : composition->video) {
-        const auto path = paths.find(layer.media.value());
-        if (path == paths.end()) {
-            continue; // media not in the library (cannot happen while the library only grows)
+        oma::Result<Picture> picture = std::unexpected(oma::Error(oma::ErrorCode::Internal, oma::Category::Ui, ""));
+        if (layer.title) {
+            picture = frames.title_picture(*layer.title, width, height); // drawn at the canvas size
+        } else {
+            const auto path = paths.find(layer.media.value());
+            if (path == paths.end()) {
+                continue; // media not in the library (cannot happen while the library only grows)
+            }
+            picture = frames.picture_at(path->second, layer.media_time);
         }
-        auto picture = frames.picture_at(path->second, layer.media_time);
         if (!picture) {
             return std::unexpected(picture.error());
         }

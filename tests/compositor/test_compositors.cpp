@@ -69,9 +69,10 @@ RenderGraph busy_graph(std::uint32_t w, std::uint32_t h) {
 RenderGraph looked_graph(std::uint32_t w, std::uint32_t h) {
     RenderGraph g = busy_graph(w, h);
     g.layers[0].color = {.exposure = 0.5, .contrast = 0.3, .saturation = -0.4, .temperature = 0.6};
-    g.layers[1].filter = {.kind = oma::compositor::FilterKind::Vignette, .amount = 0.8};
+    g.layers[1].looks.push_back({.kind = oma::compositor::FilterKind::Vignette, .amount = 0.8});
     g.layers[1].color.contrast = -0.5;
-    g.layers[2].filter = {.kind = oma::compositor::FilterKind::Vintage, .amount = 0.7};
+    g.layers[2].looks.push_back({.kind = oma::compositor::FilterKind::Vintage, .amount = 0.7});
+    g.layers[2].looks.push_back({.kind = oma::compositor::FilterKind::Cool, .amount = 0.5});
     g.layers[0].sharpness = -0.4; // blurred background
     g.layers[2].sharpness = 0.8;  // sharpened overlay
     g.layers[1].reveal = 0.6;     // a wipe edge through the picture-in-picture
@@ -160,7 +161,9 @@ std::array<float, 4> looked(const LayerInput& input, const oma::compositor::Colo
                             std::uint32_t y) {
     RenderGraph g = native_graph(320, 180);
     g.layers[0].color = color;
-    g.layers[0].filter = filter;
+    if (filter.kind != oma::compositor::FilterKind::None) {
+        g.layers[0].looks.push_back(filter);
+    }
     const std::array<LayerInput, 1> inputs{input};
     const auto out = CpuCompositor{}.render(g, inputs);
     return out ? out->at(x, y) : std::array<float, 4>{};
@@ -222,6 +225,23 @@ void color_adjustments() {
     const auto half = at(vivid, {}, Filter{.kind = FilterKind::Sepia, .amount = 0.5});
     expect(static_cast<double>(half[0]))
         .toBeCloseTo((static_cast<double>(color[0]) + static_cast<double>(sepia[0])) / 2.0, 1e-5);
+
+    // Looks apply in order (ADR-0016): black and white last leaves grey, sepia last tints it.
+    RenderGraph stack = native_graph(320, 180);
+    const Filter to_bw{.kind = FilterKind::BlackAndWhite, .amount = 1.0};
+    const Filter to_sepia{.kind = FilterKind::Sepia, .amount = 1.0};
+    stack.layers[0].looks = {to_sepia, to_bw};
+    const std::array<LayerInput, 1> inputs{in};
+    const auto grey_last = CpuCompositor{}.render(stack, inputs);
+    stack.layers[0].looks = {to_bw, to_sepia};
+    const auto sepia_last = CpuCompositor{}.render(stack, inputs);
+    expect(grey_last.has_value() && sepia_last.has_value()).toBeTruthy();
+    if (grey_last && sepia_last) {
+        const auto a = grey_last->at(vivid, 90);
+        const auto b = sepia_last->at(vivid, 90);
+        expect(std::abs(a[0] - a[2]) < 1e-6F).toBeTruthy();
+        expect(static_cast<double>(b[0])).toBeCloseTo(static_cast<double>(sepia[0]), 1e-5);
+    }
 }
 
 // The native patches layer with a sharpness, pixel (x, 90).
@@ -270,6 +290,48 @@ void reveal_shows_the_left_part() {
     g.layers[0].reveal = 0.2515625; // 80.5 px: pixel 80 half covered
     const auto half = CpuCompositor{}.render(g, inputs);
     expect(half && std::abs(half->at(80, 90)[3] - 0.5F) < 1e-5F).toBeTruthy();
+}
+
+void rotated_edges_have_partial_coverage() {
+    auto src = decode_first("still.png");
+    if (!src.frame) {
+        return;
+    }
+    const std::array<LayerInput, 1> inputs{src.input()};
+    RenderGraph g = native_graph(160, 120);
+    g.background = {0.0F, 0.0F, 0.0F, 0.0F};
+    g.layers[0].transform = {.scale_x = 0.2, .scale_y = 0.2, .rotation = 23.0};
+    const auto cpu = CpuCompositor{}.render(g, inputs);
+    expect(cpu.has_value()).toBeTruthy();
+    if (!cpu) {
+        return;
+    }
+    std::size_t partial = 0;
+    std::size_t opaque = 0;
+    for (std::uint32_t y = 0; y < g.height; ++y) {
+        for (std::uint32_t x = 0; x < g.width; ++x) {
+            const float alpha = cpu->at(x, y)[3];
+            partial += alpha > 0.0F && alpha < 1.0F ? 1U : 0U;
+            opaque += alpha == 1.0F ? 1U : 0U;
+        }
+    }
+    expect(partial > 0 && opaque > 0).toBeTruthy();
+
+    const oma::gpu::Device* device = compositor_test_device();
+    if (device == nullptr) {
+        return;
+    }
+    auto vk = VulkanCompositor::create(*device);
+    expect(vk.has_value()).toBeTruthy();
+    if (!vk) {
+        return;
+    }
+    expect((*vk)->render(g, inputs).has_value()).toBeTruthy();
+    const auto gpu = (*vk)->read_output();
+    expect(gpu.has_value()).toBeTruthy();
+    if (gpu) {
+        expect(compare(*gpu, *cpu, kTolerance).over_tolerance == 0U).toBeTruthy();
+    }
 }
 
 void vignette_darkens_the_corners() {
@@ -393,6 +455,65 @@ void gpu_matches_cpu_with_uploads() {
     expect(diff.over_tolerance <= cpu->pixels.size() / 4 / 500).toBeTruthy();
 }
 
+// A GBRA source (ADR-0015 titles): its straight alpha scales the layer's coverage in both
+// compositors. White text over black: opaque, half and fully transparent columns.
+void straight_alpha_layers() {
+    constexpr int kW = 48;
+    constexpr int kH = 16;
+    std::vector<std::uint8_t> rgba(static_cast<std::size_t>(kW) * kH * 4, 255);
+    for (int y = 0; y < kH; ++y) {
+        for (int x = 0; x < kW; ++x) {
+            rgba[((static_cast<std::size_t>(y) * kW) + x) * 4 + 3] = x < 16   ? 255
+                                                                     : x < 32 ? 128
+                                                                              : 0;
+        }
+    }
+    auto frame = oma::media::VideoFrame::from_rgba(kW, kH, rgba, kW * 4);
+    expect(frame.has_value()).toBeTruthy();
+    if (!frame) {
+        return;
+    }
+    expect(frame->layout().alpha && !frame->layout().yuv && frame->layout().planes == 4)
+        .toBeTruthy();
+    LayerInput input;
+    input.frame = &*frame;
+    const std::array<LayerInput, 1> inputs{input};
+    RenderGraph g = native_graph(kW, kH);
+    g.background = {0.0F, 0.0F, 0.0F, 1.0F};
+    const auto cpu = CpuCompositor{}.render(g, inputs);
+    expect(cpu.has_value()).toBeTruthy();
+    if (!cpu) {
+        std::printf("    %s\n", cpu.error().summary().c_str());
+        return;
+    }
+    const auto near = [](float a, double b) {
+        return std::abs(static_cast<double>(a) - b) < 1e-3;
+    };
+    expect(near(cpu->at(8, 8)[0], 1.0)).toBeTruthy();
+    expect(near(cpu->at(24, 8)[0], 128.0 / 255.0)).toBeTruthy();
+    expect(near(cpu->at(40, 8)[0], 0.0)).toBeTruthy();
+    expect(near(cpu->at(40, 8)[3], 1.0)).toBeTruthy(); // the opaque background shows through
+
+    const oma::gpu::Device* device = compositor_test_device();
+    if (device == nullptr) {
+        return;
+    }
+    auto vk = VulkanCompositor::create(*device);
+    expect(vk.has_value()).toBeTruthy();
+    if (!vk) {
+        return;
+    }
+    expect((*vk)->render(g, inputs).has_value()).toBeTruthy();
+    const auto gpu = (*vk)->read_output();
+    expect(gpu.has_value()).toBeTruthy();
+    if (gpu) {
+        const auto diff = compare(*gpu, *cpu, kTolerance);
+        std::printf("    max difference from the CPU reference %.5f\n",
+                    static_cast<double>(diff.max_abs));
+        expect(diff.over_tolerance).toBe(0U);
+    }
+}
+
 // A PNG decodes to planar GBR; both compositors read it as sRGB, pixel for pixel.
 void draws_rgb_images() {
     auto png = decode_first("still.png");
@@ -446,6 +567,135 @@ void draws_rgb_images() {
     }
 }
 
+// An independent decoded-frame check: FFmpeg's libswscale converts the same YUV frame to
+// nonlinear RGB; the compositor should contain its BT.1886-decoded linear values. The Y4M
+// patches are untagged (BT.601 fallback); the Matroska ones carry BT.709 at both ranges.
+void draws_yuv_against_swscale(const char* fixture) {
+    const oma::gpu::Device* device = compositor_test_device();
+    if (device == nullptr)
+        return;
+    auto src = decode_first(fixture);
+    if (!src.frame) {
+        std::printf("    (skipped: fixture %s missing)\n", fixture);
+        return;
+    }
+    constexpr std::uint32_t w = 320;
+    constexpr std::uint32_t h = 180;
+    std::vector<std::uint8_t> rgba(w * h * 4);
+    const auto converted = src.frame->copy_rgba(rgba, w * 4);
+    expect(converted.has_value()).toBeTruthy();
+    if (!converted)
+        return;
+    auto vk = VulkanCompositor::create(*device);
+    expect(vk.has_value()).toBeTruthy();
+    if (!vk)
+        return;
+    const std::array<LayerInput, 1> inputs{src.input()};
+    expect((*vk)->render(native_graph(w, h), inputs).has_value()).toBeTruthy();
+    const auto out = (*vk)->read_output();
+    expect(out.has_value()).toBeTruthy();
+    if (!out)
+        return;
+    double worst = 0.0;
+    for (const std::uint32_t x : {40U, 120U, 200U, 280U}) {
+        const auto pixel = out->at(x, h / 2);
+        const std::size_t base = ((h / 2 * w) + x) * 4;
+        for (std::size_t c = 0; c < 3; ++c) {
+            const double expected = std::pow(static_cast<double>(rgba[base + c]) / 255.0, 2.4);
+            worst = std::max(worst, std::abs(static_cast<double>(pixel[c]) - expected));
+        }
+    }
+    std::printf("    %s: worst difference from libswscale %.5f\n", fixture, worst);
+    expect(worst < 0.025).toBeTruthy();
+}
+
+// Independent chroma reconstruction for 8-bit 4:2:0 BT.601 limited range, written from the
+// standards rather than the compositor: chroma samples sit at luma x = 2i (left) or 2i + 0.5
+// (center) and halfway between luma rows, are interpolated bilinearly with clamped edges, then
+// converted with the BT.601 equations and decoded with BT.1886. Returns linear red at (x, y).
+double reference_red(const oma::media::VideoFrame& f, int x, int y, bool left_sited) {
+    const auto sample = [&](int index, int cx, int cy) {
+        cx = std::clamp(cx, 0, (f.width() / 2) - 1);
+        cy = std::clamp(cy, 0, (f.height() / 2) - 1);
+        return static_cast<double>(f.plane(
+            index)[(static_cast<std::size_t>(cy) * static_cast<std::size_t>(f.stride(index))) +
+                   static_cast<std::size_t>(cx)]);
+    };
+    const double px = ((x + 0.5) - (left_sited ? 0.5 : 1.0)) / 2.0;
+    const double py = ((y + 0.5) - 1.0) / 2.0;
+    const int x0 = static_cast<int>(std::floor(px));
+    const int y0 = static_cast<int>(std::floor(py));
+    const double fx = px - x0;
+    const double fy = py - y0;
+    const auto bilinear = [&](int index) {
+        const double top = (sample(index, x0, y0) * (1 - fx)) + (sample(index, x0 + 1, y0) * fx);
+        const double bottom =
+            (sample(index, x0, y0 + 1) * (1 - fx)) + (sample(index, x0 + 1, y0 + 1) * fx);
+        return (top * (1 - fy)) + (bottom * fy);
+    };
+    const double luma = static_cast<double>(
+        f.plane(0)[(static_cast<std::size_t>(y) * static_cast<std::size_t>(f.stride(0))) +
+                   static_cast<std::size_t>(x)]);
+    const double yn = (luma - 16.0) / 219.0;
+    const double pr = (bilinear(2) - 128.0) / 224.0;
+    const double red = std::clamp(yn + (1.402 * pr), 0.0, 1.0);
+    return std::pow(red, 2.4);
+}
+
+void chroma_location_changes_color_edges() {
+    auto src = decode_first("color_patches.y4m");
+    if (!src.frame) {
+        return;
+    }
+    auto center = src.input();
+    center.color.chroma_location = 2;
+    // BT.709 primaries keep the gamut conversion out of the siting reference below.
+    center.color.primaries = 1;
+    auto left = center;
+    left.color.chroma_location = 1;
+    const RenderGraph g = native_graph(320, 180);
+    const std::array<LayerInput, 1> centered{center};
+    const std::array<LayerInput, 1> left_sited{left};
+    const auto a = CpuCompositor{}.render(g, centered);
+    const auto b = CpuCompositor{}.render(g, left_sited);
+    expect(a && b).toBeTruthy();
+    if (!a || !b) {
+        return;
+    }
+    // The vivid patch starts at x=160; siting changes the interpolation at its edge.
+    expect(std::abs(a->at(159, 90)[0] - b->at(159, 90)[0]) > 0.002F).toBeTruthy();
+    expect(std::abs(a->at(120, 90)[0] - b->at(120, 90)[0]) < 1e-5F).toBeTruthy();
+    // Both sitings against the independent reconstruction across the edge (the decoded
+    // samples, so the shared chroma positions and interpolation are what is compared).
+    double worst = 0.0;
+    for (int x = 150; x <= 170; ++x) {
+        worst = std::max(worst, std::abs(a->at(static_cast<std::uint32_t>(x), 90)[0] -
+                                         reference_red(*src.frame, x, 90, false)));
+        worst = std::max(worst, std::abs(b->at(static_cast<std::uint32_t>(x), 90)[0] -
+                                         reference_red(*src.frame, x, 90, true)));
+    }
+    std::printf("    worst difference from the reference chroma reconstruction %.5f\n", worst);
+    expect(worst < 0.002).toBeTruthy();
+
+    const oma::gpu::Device* device = compositor_test_device();
+    if (device == nullptr) {
+        return;
+    }
+    auto vk = VulkanCompositor::create(*device);
+    expect(vk.has_value()).toBeTruthy();
+    if (!vk) {
+        return;
+    }
+    for (const auto& [input, expected] : {std::pair{centered, &*a}, std::pair{left_sited, &*b}}) {
+        expect((*vk)->render(g, input).has_value()).toBeTruthy();
+        const auto gpu = (*vk)->read_output();
+        expect(gpu.has_value()).toBeTruthy();
+        if (gpu) {
+            expect(compare(*gpu, *expected, kTolerance).over_tolerance == 0U).toBeTruthy();
+        }
+    }
+}
+
 // The sRGB transfer function (IEC 61966-2-1), as the display pass applies it.
 int srgb_level(float linear) {
     const double x = std::clamp(static_cast<double>(linear), 0.0, 1.0);
@@ -493,6 +743,26 @@ void display_encodes_srgb() {
     }
     std::printf("    worst difference %d of 255\n", worst);
     expect(worst <= 1).toBeTruthy();
+    // The export transfer: BT.709 OETF (ITU-R BT.709-6 1.2), within one 8-bit level too.
+    expect((*vk)->encode_display(oma::compositor::VulkanCompositor::Transfer::Bt709).has_value())
+        .toBeTruthy();
+    const auto video = (*vk)->read_display();
+    expect(video.has_value()).toBeTruthy();
+    if (!video) {
+        return;
+    }
+    int worst709 = 0;
+    for (std::size_t i = 0; i < video->size(); ++i) {
+        if (i % 4 == 3) {
+            continue;
+        }
+        const double l = std::clamp(static_cast<double>(linear->pixels[i]), 0.0, 1.0);
+        const double v = l < 0.018 ? 4.5 * l : (1.099 * std::pow(l, 0.45)) - 0.099;
+        worst709 = std::max(worst709, std::abs(static_cast<int>((*video)[i]) -
+                                               static_cast<int>(std::lround(v * 255.0))));
+    }
+    std::printf("    BT.709 worst difference %d of 255\n", worst709);
+    expect(worst709 <= 1).toBeTruthy();
 }
 
 void gpu_frames_match_cpu_reference() {
@@ -577,7 +847,10 @@ void run_cpu_compositor_tests() {
            { color_adjustments(); });
         it("darkens the corners with a vignette", { vignette_darkens_the_corners(); });
         it("blurs and sharpens edges, leaving flat areas", { blur_and_sharpen(); });
+        it("uses declared chroma siting at color edges",
+           { chroma_location_changes_color_edges(); });
         it("reveals the left part of a layer for wipes", { reveal_shows_the_left_part(); });
+        it("anti-aliases rotated layer edges", { rotated_edges_have_partial_coverage(); });
     });
 }
 
@@ -592,6 +865,13 @@ void run_vulkan_compositor_tests() {
            { gpu_frames_match_cpu_reference(); });
         it("encodes the output for an SDR display", { display_encodes_srgb(); });
         it("draws RGB images as sRGB", { draws_rgb_images(); });
+        it("blends sources with straight alpha like the CPU reference",
+           { straight_alpha_layers(); });
+        it("matches libswscale on decoded YUV patches", {
+            draws_yuv_against_swscale("color_patches.y4m");
+            draws_yuv_against_swscale("color_patches_bt709_tv.mkv");
+            draws_yuv_against_swscale("color_patches_bt709_pc.mkv");
+        });
         it("measures three 1080p layers", { measures_1080p_three_layers(); });
     });
 }

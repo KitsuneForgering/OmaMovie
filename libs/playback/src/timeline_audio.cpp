@@ -48,6 +48,24 @@ TimelineAudio::TimelineAudio(tl::Timeline timeline,
         std::max<std::int64_t>(1, timeline_.to_ticks(rate_.sample_to_time(1)).value_or(1));
 }
 
+void TimelineAudio::set_timeline(tl::Timeline timeline,
+                                 std::unordered_map<std::uint64_t, std::string> paths) {
+    timeline_ = std::move(timeline);
+    paths_ = std::move(paths);
+    ticks_per_sample_ =
+        std::max<std::int64_t>(1, timeline_.to_ticks(rate_.sample_to_time(1)).value_or(1));
+    std::erase_if(streams_, [&](auto& entry) {
+        Stream& s = entry.second;
+        const tl::Clip* clip = timeline_.find_clip(tl::ClipId{entry.first});
+        if (clip == nullptr || s.failed || s.media != clip->media.value() ||
+            !(s.noise == clip->audio.noise)) {
+            return true;
+        }
+        configure_effects(s.effects, clip->audio, rate_.hz());
+        return false;
+    });
+}
+
 oma::Result<void> TimelineAudio::render(std::span<float> out, std::int64_t first) {
     ++pass_;
     std::ranges::fill(out, 0.0F);
@@ -57,14 +75,30 @@ oma::Result<void> TimelineAudio::render(std::span<float> out, std::int64_t first
         if (track.muted || track.kind == tl::TrackKind::Caption) {
             continue;
         }
-        for (std::size_t i = 0; i < track.clips.size(); ++i) {
+        // Clips are sorted and a transition reaches at most one neighbour's duration past a
+        // cut, so clip i only sounds within [start of clip i - 1, end of clip i + 1): start one
+        // clip before the one at `first` and stop once the previous clip starts after the block.
+        // O(log C + clips in the block) per block instead of every clip of the track.
+        const std::int64_t block_start = first * ticks_per_sample_;
+        const std::int64_t block_end = (first + frames) * ticks_per_sample_;
+        const auto at =
+            std::ranges::upper_bound(track.clips, block_start, {}, &tl::Clip::start_ticks);
+        const auto from =
+            static_cast<std::size_t>(std::max<std::ptrdiff_t>(0, (at - track.clips.begin()) - 2));
+        for (std::size_t i = from; i < track.clips.size(); ++i) {
+            if (i > 0 && track.clips[i - 1].start_ticks() >= block_end) {
+                break;
+            }
             const tl::Clip& clip = track.clips[i];
-            const tl::MediaInfo* media = timeline_.find_media(clip.media);
-            if (media == nullptr || !media->has_audio || clip.audio.muted || clip.audio_detached) {
+            if (clip.audio.muted || clip.audio_detached) {
                 continue;
             }
             const Span span = span_of(track, i);
             if (span.end + span.tail <= first || span.first - span.lead >= first + frames) {
+                continue;
+            }
+            const tl::MediaInfo* media = timeline_.find_media(clip.media);
+            if (media == nullptr || !media->has_audio) {
                 continue;
             }
             if (auto r = mix_clip(clip, span, out, first); !r && result) {
@@ -142,8 +176,8 @@ oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip,
 
 oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, const Span& span,
                                           std::span<float> out, std::int64_t first) {
-    if (clip.time_map.speed() != oma::Rational::literal(1, 1)) {
-        return {}; // needs time-stretching (v0.2 speed work)
+    if (!clip.time_map.is_constant() || clip.time_map.speed() != oma::Rational::literal(1, 1)) {
+        return {}; // needs time-stretching (v0.2 speed work); freeze and reverse too (ADR-0013)
     }
     const auto frames = static_cast<std::int64_t>(out.size() / static_cast<std::size_t>(channels_));
     const std::int64_t a = span.first;

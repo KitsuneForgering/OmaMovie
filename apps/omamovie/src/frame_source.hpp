@@ -5,6 +5,7 @@
 #include "oma/base/time.hpp"
 #include "oma/media/probe.hpp"
 #include "oma/media/video_decoder.hpp"
+#include "oma/timeline/model.hpp"
 
 #include <QImage>
 
@@ -44,11 +45,25 @@ public:
     // playback decodes each group of pictures about once instead of once per frame shown.
     [[nodiscard]] oma::Result<Picture> picture_at(const std::string& path, const oma::RationalTime& t);
 
+    // A title clip's picture at the canvas size (ADR-0015), rasterized once per title and size:
+    // the last kTitleCache are kept, most recent first, so playback does not redraw text.
+    [[nodiscard]] oma::Result<Picture> title_picture(const oma::timeline::Title& title, std::uint32_t width,
+                                                     std::uint32_t height);
+
     // The same frame converted to RGBA8 on the CPU (thumbnails, not the viewer).
     [[nodiscard]] oma::Result<QImage> image_at(const std::string& path, const oma::RationalTime& t);
 
 private:
     const oma::gpu::Device* device_ = nullptr;
+    struct TitleEntry {
+        oma::timeline::Title title;
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+        std::shared_ptr<oma::media::VideoFrame> frame;
+    };
+    // A handful of titles on screen at once; a linear scan of a short list beats hashing text.
+    static constexpr std::size_t kTitleCache = 8;
+    std::deque<TitleEntry> titles_;
     struct Stream {
         std::string path;
         std::unique_ptr<oma::media::VideoDecoder> decoder;
@@ -85,7 +100,9 @@ private:
     std::list<Stream> streams_;
     // Decoded frames kept for stepping back, over all streams. ponytail: sized from the luma
     // plane times 1.5 (4:2:0), so 4:4:4 sources keep up to twice the budget.
-    static constexpr std::size_t kHistoryBytes = std::size_t{384} << 20;
+    // At most 384 MB, and at most an eighth of the physical memory available when the first
+    // source is created (M4: bounded by the machine, not only by a constant).
+    [[nodiscard]] static std::size_t history_budget();
     static constexpr std::size_t kStepBackFrames = 8;
     std::size_t history_bytes_ = 0;
 };

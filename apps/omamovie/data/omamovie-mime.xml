@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The native project file (ADR-0007): JSON text, recognised by its extension. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-omamovie-project">
+    <comment>OmaMovie project</comment>
+    <sub-class-of type="application/json"/>
+    <glob pattern="*.omamovie"/>
+    <icon name="omamovie"/>
+  </mime-type>
+</mime-info>

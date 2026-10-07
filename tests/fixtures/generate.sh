@@ -113,6 +113,16 @@ ff -f lavfi -i "color=c=0x303030:size=80x180,format=yuv420p" \
     -filter_complex "[0][1][2][3]hstack=inputs=4,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv" \
     -frames:v 1 -f yuv4mpegpipe "$out/color_patches.y4m"
 note color_patches.y4m
+# The same patches with color tags the decoder reports (Y4M carries none): lossless FFV1 in
+# Matroska, BT.709 matrix at limited and at full range. At 180 lines an untagged frame falls
+# back to BT.601, so a decoder that ignored the tags would shift the orange patch.
+for range in tv pc; do
+    ff -i "$out/color_patches.y4m" \
+        -vf "scale=in_range=tv:out_range=$range:out_color_matrix=bt709,format=yuv420p,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=$range" \
+        -c:v ffv1 -color_range "$range" \
+        "$out/color_patches_bt709_$range.mkv"
+    note "color_patches_bt709_$range.mkv"
+done
 
 echo "Fixtures in $out:"
 printf '  %s\n' "${made[@]}"

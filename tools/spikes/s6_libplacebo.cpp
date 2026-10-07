@@ -214,17 +214,30 @@ int main(int argc, char** argv) {
     pl_tex_download(gpu, &tp);
     int worst = 0;
     std::size_t differ = 0;
-    if (ours) {
+    // Both against the exact IEC 61966-2-1 formula applied to the linear output (opaque).
+    std::array<int, 2> worst_vs_formula{};
+    const auto linear = (*comp)->read_output();
+    if (ours && linear) {
         for (std::size_t i = 0; i < theirs.size(); ++i) {
             const int d = std::abs(int(theirs[i]) - int((*ours)[i]));
             worst = std::max(worst, d);
             differ += d != 0 ? 1 : 0;
+            if (i % 4 == 3) {
+                continue;
+            }
+            const double v = std::clamp(double(linear->pixels[i]), 0.0, 1.0);
+            const double e = v <= 0.0031308 ? 12.92 * v : 1.055 * std::pow(v, 1 / 2.4) - 0.055;
+            const int level = static_cast<int>(std::lround(e * 255.0));
+            worst_vs_formula[0] = std::max(worst_vs_formula[0], std::abs(int((*ours)[i]) - level));
+            worst_vs_formula[1] = std::max(worst_vs_formula[1], std::abs(int(theirs[i]) - level));
         }
     }
     std::printf("== 2. SDR display encode of the 1920x1080 RGBA16F compositor output (median of 20)\n"
                 "  compositor encode_display  %6.2f ms\n  libplacebo (no dither)     %6.2f ms\n"
                 "  max difference %d of 255, %zu of %zu samples differ\n",
                 ours_encode, pl_encode, worst, differ, theirs.size());
+    std::printf("  vs the sRGB formula: compositor %d, libplacebo %d levels at most\n",
+                worst_vs_formula[0], worst_vs_formula[1]);
     pl_tex_destroy(gpu, &src); // the wrapper only; the compositor still owns the image
     pl_tex_destroy(gpu, &dst);
 

@@ -124,9 +124,18 @@ void validates_graphs() {
     g.layers[0].color.exposure = -4.0;
     g.layers[0].color.saturation = 1.0;
     expect(oma::compositor::validate(g, 1).has_value()).toBeTruthy();
-    g.layers[0].filter.amount = 1.2;
+    using oma::compositor::FilterKind;
+    g.layers[0].looks = {{.kind = FilterKind::Sepia, .amount = 1.2}};
     expect(oma::compositor::validate(g, 1).has_value()).toBeFalsy();
-    g.layers[0].filter.amount = 1.0;
+    g.layers[0].looks = {{.kind = FilterKind::Sepia, .amount = 1.0},
+                         {.kind = FilterKind::Sepia, .amount = 0.5}};
+    expect(oma::compositor::validate(g, 1).has_value()).toBeFalsy(); // one look per kind
+    g.layers[0].looks = {{.kind = FilterKind::None, .amount = 1.0}};
+    expect(oma::compositor::validate(g, 1).has_value()).toBeFalsy();
+    g.layers[0].looks = {{.kind = FilterKind::Sepia, .amount = 1.0},
+                         {.kind = FilterKind::Cool, .amount = 0.5}};
+    expect(oma::compositor::validate(g, 1).has_value()).toBeTruthy();
+    g.layers[0].looks.clear();
     g.width = 0;
     expect(oma::compositor::validate(g, 1).has_value()).toBeFalsy();
 }
@@ -164,6 +173,33 @@ void converts_yuv() {
     expect(near(sd.matrix.at(0, 2), hd.matrix.at(0, 2), 1e-3)).toBeFalsy();
 }
 
+void checks_independent_yuv_vectors() {
+    // Quantized primary-colour code values derived from ITU-R BT.601, BT.709 and BT.2020
+    // non-constant-luminance forward equations, rather than from yuv_to_rgb or the CPU shader.
+    struct Vector {
+        std::uint8_t matrix;
+        int bits;
+        int y, cb, cr;
+        std::array<double, 3> rgb;
+    };
+    constexpr std::array vectors{
+        Vector{6, 8, 145, 54, 34, {0, 1, 0}},    // BT.601 green
+        Vector{1, 8, 32, 240, 118, {0, 0, 1}},   // BT.709 blue
+        Vector{9, 10, 294, 387, 960, {1, 0, 0}}, // BT.2020 NCL red
+    };
+    for (const auto& v : vectors) {
+        const oma::media::ColorInfo info{.matrix = v.matrix,
+                                         .range = oma::media::ColorRange::Limited};
+        const double max = static_cast<double>((1 << v.bits) - 1);
+        const auto actual =
+            rgb(oma::compositor::yuv_to_rgb(info, v.bits, 1080), v.y / max, v.cb / max, v.cr / max);
+        for (std::size_t channel = 0; channel < 3; ++channel) {
+            // One code-value rounding in Y/Cb/Cr can move an RGB channel by a few levels.
+            expect(near(actual[channel], v.rgb[channel], 0.012)).toBeTruthy();
+        }
+    }
+}
+
 void converts_primaries_and_transfer() {
     const Mat3 same = oma::compositor::primaries_to_bt709(1, 1080);
     expect(near(same.at(0, 0), 1, 1e-9) && near(same.at(0, 1), 0, 1e-9) &&
@@ -188,6 +224,41 @@ void converts_primaries_and_transfer() {
 
 } // namespace
 
+// A half-resolution preview frames every layer the same way: each covered box is half the
+// full one (within a pixel of rounding), native and offset layers included.
+bool scaled_preview_keeps_framing() {
+    oma::compositor::RenderGraph full;
+    full.width = 1000;
+    full.height = 1000;
+    Layer native;
+    native.fit = Fit::Native;
+    native.transform = {
+        .offset_x = 100, .offset_y = -50, .scale_x = 2, .scale_y = 2, .rotation = 0};
+    Layer fitted;
+    fitted.fit = Fit::Fit;
+    fitted.transform = {
+        .offset_x = -120, .offset_y = 80, .scale_x = 0.5, .scale_y = 0.5, .rotation = 0};
+    full.layers = {native, fitted};
+    const auto half = oma::compositor::scaled(full, 0.5);
+    if (half.width != 500 || half.height != 500) {
+        return false;
+    }
+    const SourceGeometry src{.width = 400, .height = 200};
+    for (std::size_t i = 0; i < full.layers.size(); ++i) {
+        const auto a = oma::compositor::covered_pixels(full.layers[i], src, 1000, 1000);
+        const auto b = oma::compositor::covered_pixels(half.layers[i], src, 500, 500);
+        if (!a || !b) {
+            return false;
+        }
+        for (std::size_t k = 0; k < 4; ++k) {
+            if (std::abs(static_cast<double>((*a)[k]) / 2.0 - static_cast<double>((*b)[k])) > 1.0) {
+                return false;
+            }
+        }
+    }
+    return oma::compositor::scaled(full, 1.0).width == 1000; // full size is unchanged
+}
+
 void run_geometry_tests() {
     describe("compositor geometry", {
         it("composes and inverts affine transforms", { composes_and_inverts(); });
@@ -195,12 +266,16 @@ void run_geometry_tests() {
         it("applies display rotation and pixel aspect", { applies_display_rotation_and_aspect(); });
         it("crops, scales and offsets layers", { crops_and_transforms(); });
         it("validates render graphs", { validates_graphs(); });
+        it("scales a preview without changing its framing",
+           { expect(scaled_preview_keeps_framing()).toBeTruthy(); });
     });
 }
 
 void run_color_tests() {
     describe("compositor color", {
         it("converts limited, full and 10-bit YUV", { converts_yuv(); });
+        it("matches independently quantized YUV primary vectors",
+           { checks_independent_yuv_vectors(); });
         it("converts primaries and decodes transfers", { converts_primaries_and_transfer(); });
     });
 }

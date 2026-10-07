@@ -70,6 +70,11 @@ LDFLAGS_BASE  := -pthread $(filter -fsanitize=%,$(MODE_FLAGS)) $(LDFLAGS)
 LIB_WARNINGS := -Wall -Wextra -Wpedantic -Wshadow -Wnon-virtual-dtor -Wold-style-cast \
                 -Wcast-align -Wconversion -Wsign-conversion -Wnull-dereference \
                 -Wdouble-promotion -Wformat=2 -Wimplicit-fallthrough
+# GCC 16 reports -Wnull-dereference inside libstdc++'s unordered_map::find once
+# -fsanitize=thread instruments it (a false positive); the other builds keep the check.
+ifeq ($(BUILD),tsan)
+  LIB_WARNINGS := $(filter-out -Wnull-dereference,$(LIB_WARNINGS))
+endif
 # Tests expand Cest macros in their own files (C-style casts, implicit conversions).
 TEST_WARNINGS := -Wall -Wextra -Wshadow
 
@@ -152,7 +157,7 @@ $(BUILD_DIR)/obj/%.o: %.cpp $(MAKEFILE_LIST)
 
 -include $(patsubst %.cpp,$(BUILD_DIR)/obj/%.d,$(ALL_SOURCES))
 
-.PHONY: all libs tests test clean distclean compdb format format-check tidy fixtures fuzz spikes run-gui deps help
+.PHONY: install all libs tests test clean distclean compdb format format-check tidy fixtures fuzz spikes run-gui oma-project deps help
 
 # Spikes (tools/spikes/*.cpp): disposable single-file experiments (Docs/spikes/), built only on
 # request because they need the Vulkan and FFmpeg development files. pkg-config runs inside the
@@ -194,8 +199,8 @@ $(BUILD_DIR)/spikes/s4_qt_shared_device: tools/spikes/s4_qt_shared_device.cpp $(
 
 # The app: every source in apps/omamovie/src plus moc output for headers declaring Q_OBJECT.
 # Built in one compiler call; QML is loaded from the source tree at run time.
-APP_SOURCES := $(wildcard apps/omamovie/src/*.cpp)
-APP_HEADERS := $(wildcard apps/omamovie/src/*.hpp)
+APP_SOURCES := $(wildcard apps/omamovie/src/*.cpp apps/omamovie/src/platform/omarchy/*.cpp)
+APP_HEADERS := $(wildcard apps/omamovie/src/*.hpp apps/omamovie/src/platform/omarchy/*.hpp)
 APP_MOC_HEADERS := $(shell grep -l Q_OBJECT $(APP_HEADERS) 2>/dev/null)
 APP_MOCS := $(patsubst apps/omamovie/src/%.hpp,$(BUILD_DIR)/gen/omamovie/moc_%.cpp,$(APP_MOC_HEADERS))
 
@@ -209,14 +214,35 @@ $(BUILD_DIR)/omamovie: $(APP_SOURCES) $(APP_HEADERS) $(APP_MOCS) $(wildcard apps
 	$(call say,GUI,$@)
 	@mkdir -p $(@D)
 	$(Q)$(CXX) $(CXXFLAGS_BASE) -fPIC $(TEST_WARNINGS) $(INC_project) $(INC_playback) $(INC_compositor) -Iapps/omamovie/src \
-		$$(pkg-config --cflags Qt6Quick Qt6Test) \
+		$$(pkg-config --cflags Qt6Quick Qt6Test Qt6DBus) \
 		-isystem $$(pkg-config --variable=includedir Qt6Gui)/QtGui/$$(pkg-config --modversion Qt6Gui)/QtGui \
 		$(APP_SOURCES) $(APP_MOCS) -o $@ $(LINK_project) $(LINK_playback) $(LINK_compositor) \
-		$$(pkg-config --libs Qt6Quick Qt6Test) $(LDFLAGS_BASE)
+		$$(pkg-config --libs Qt6Quick Qt6Test Qt6DBus) $(LDFLAGS_BASE)
+
+# The installed tree (PKGBUILD package() and the release tarball share it): the executable finds
+# its QML in ../share/omamovie/qml. Build with BUILD=release first.
+PREFIX  ?= /usr/local
+DESTDIR ?=
+# The license directory; Arch packages pass their pkgname.
+LICENSE_NAME ?= omamovie
+install: $(BUILD_DIR)/omamovie
+	install -Dm755 $(BUILD_DIR)/omamovie "$(DESTDIR)$(PREFIX)/bin/omamovie"
+	install -Dm644 -t "$(DESTDIR)$(PREFIX)/share/omamovie/qml" apps/omamovie/qml/*.qml
+	install -Dm644 apps/omamovie/data/omamovie.desktop "$(DESTDIR)$(PREFIX)/share/applications/omamovie.desktop"
+	install -Dm644 apps/omamovie/data/omamovie.svg "$(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/omamovie.svg"
+	install -Dm644 apps/omamovie/data/omamovie-mime.xml "$(DESTDIR)$(PREFIX)/share/mime/packages/omamovie.xml"
+	install -Dm644 LICENSE "$(DESTDIR)$(PREFIX)/share/licenses/$(LICENSE_NAME)/LICENSE"
 
 run-gui: $(BUILD_DIR)/omamovie
 	$(if $(filter 1,$(RUN_GUI_SMOKE)),@test -f tests/fixtures/generated/hevc_10bit.mp4 || $(MAKE) fixtures)
 	$(Q)$(BUILD_DIR)/omamovie $(if $(filter 1,$(RUN_GUI_SMOKE)),--smoke,$(GUI_FILE))
+
+$(BUILD_DIR)/tools/oma-project/oma-project: tools/oma-project/main.cpp $(LIB_project) $(LIB_timeline) $(LIB_base) $(MAKEFILE_LIST)
+	$(call say,CLI,$@)
+	@mkdir -p $(@D)
+	$(Q)$(CXX) $(CXXFLAGS_BASE) $(LIB_WARNINGS) $(INC_project) $< -o $@ $(LINK_project) $(LDFLAGS_BASE)
+
+oma-project: $(BUILD_DIR)/tools/oma-project/oma-project
 
 all: libs tests compdb
 
@@ -226,7 +252,7 @@ tests: $(ALL_TESTS)
 
 # FILTER=<pattern> runs only tests whose name contains the pattern (Cest filter).
 # JUNIT_DIR=<dir> writes one JUnit report per test binary (used by CI).
-test: $(ALL_TESTS) $(TEST_PREREQS)
+test: $(ALL_TESTS) $(TEST_PREREQS) $(BUILD_DIR)/tools/oma-project/oma-project
 	@failed=0; \
 	for t in $(ALL_TESTS); do \
 	  printf '\n== %s (%s)\n' "$${t##*/}" "$(BUILD)"; \
@@ -234,6 +260,7 @@ test: $(ALL_TESTS) $(TEST_PREREQS)
 	  if [ -n "$(JUNIT_DIR)" ]; then mkdir -p "$(JUNIT_DIR)"; junit="--junit $(JUNIT_DIR)/$${t##*/}-$(BUILD).xml"; fi; \
 	  env $(TEST_ENV) "$$t" $$junit $(FILTER) || failed=1; \
 	done; \
+	if [ -z "$(FILTER)" ]; then sh tests/project/test_cli.sh $(BUILD_DIR)/tools/oma-project/oma-project || failed=1; fi; \
 	exit $$failed
 
 clean:
@@ -313,7 +340,9 @@ help:
 	@echo '  fixtures      generate test media in tests/fixtures/generated (needs ffmpeg)'
 	@echo '  fuzz          run the parser fuzz targets with clang (libFuzzer) [FUZZ_RUNS=n]'
 	@echo '  spikes        build the M1 spikes in tools/spikes (Vulkan + FFmpeg + Qt Quick/RHI)'
+	@echo '  install       install the app tree [DESTDIR=dir PREFIX=/usr/local] (BUILD=release)'
 	@echo '  run-gui       open the Qt editor shell [GUI_FILE=path; RUN_GUI_SMOKE=1]'
+	@echo '  oma-project   build the native project inspect/validate/dump CLI'
 	@echo '  deps          install the dependencies declared in the PKGBUILD (uses sudo pacman)'
 	@echo '  clean         remove build/$$BUILD   | distclean     remove all of build/'
 	@echo 'Variables: BUILD=debug|release|asan|tsan  CXX=g++|clang++  WERROR=1|0  V=1 (verbose)'

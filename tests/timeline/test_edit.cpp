@@ -1,5 +1,6 @@
 #include "fixture.hpp"
 
+#include "oma/timeline/effects.hpp"
 #include "oma/timeline/evaluate.hpp"
 
 #include <array>
@@ -11,6 +12,13 @@
 using namespace timeline_test;
 
 namespace {
+
+// An effect from a newer build: its values are kept, never checked or rendered (ADR-0016).
+Effect unknown_effect() {
+    return {.definition = "org.example.glow",
+            .enabled = false,
+            .params = {{.name = "radius", .value = 40.0}}};
+}
 
 bool ok(Fixture& fx, std::unique_ptr<Command> command) {
     return fx.editor.execute(std::move(command)).has_value();
@@ -388,19 +396,28 @@ void run_edit_tests() {
             expect(ok(fx, edit::set_video(id, v))).toBeFalsy();
             v.opacity = 1.0F;
             v.color.exposure = 1.5;
-            v.filter.kind = FilterKind::Sepia;
-            v.filter.amount = 0.5;
+            v.effects = {make_effect(*find_effect_definition("oma.look.sepia"))};
+            v.effects[0].params[0].value = 0.5;
             expect(ok(fx, edit::set_video(id, v))).toBeTruthy();
             v.color.saturation = -1.5;
             expect(ok(fx, edit::set_video(id, v))).toBeFalsy();
             v.color.saturation = 0.0;
-            v.filter.amount = 2.0;
+            v.effects[0].params[0].value = 2.0;
             expect(ok(fx, edit::set_video(id, v))).toBeFalsy();
-            v.filter.amount = 1.0;
-            v.sharpness = -1.0;
+            v.effects[0].params[0].value = 1.0;
+            v.effects.push_back(make_effect(*find_effect_definition("oma.detail")));
+            v.effects[1].params[0].value = -1.0;
             expect(ok(fx, edit::set_video(id, v))).toBeTruthy();
-            v.sharpness = 1.1;
+            v.effects[1].params[0].value = 1.1;
             expect(ok(fx, edit::set_video(id, v))).toBeFalsy();
+            v.effects[1] = v.effects[0]; // a definition at most once per clip
+            expect(ok(fx, edit::set_video(id, v))).toBeFalsy();
+            // Unknown definitions are kept with their values; unknown names on known ones are not.
+            v.effects[1] = unknown_effect();
+            expect(ok(fx, edit::set_video(id, v))).toBeTruthy();
+            v.effects[0].params[0].name = "strength";
+            expect(ok(fx, edit::set_video(id, v))).toBeFalsy();
+            v.effects.clear();
             AudioProperties a;
             a.fade_in = f(4);
             a.fade_out = f(6);

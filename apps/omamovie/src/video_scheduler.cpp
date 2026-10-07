@@ -1,5 +1,7 @@
 #include "video_scheduler.hpp"
 
+#include "oma/gpu/device.hpp"
+
 #include <utility>
 
 VideoScheduler::~VideoScheduler() {
@@ -21,7 +23,6 @@ void VideoScheduler::start(std::shared_ptr<const oma::timeline::Timeline> timeli
                                                     paths = std::move(paths), luts = std::move(luts), width, height,
                                                     ticks_per_frame,
                                                     from, stride, last](oma::JobContext& ctx) {
-        FrameSource frames; // this pipeline's own decoders
         std::int64_t next = from;
         while (!ctx.is_cancelled()) {
             // Never prepare a frame the clock has already passed.
@@ -32,7 +33,11 @@ void VideoScheduler::start(std::shared_ptr<const oma::timeline::Timeline> timeli
             if (next < 0 || next > last) {
                 break; // the end in this direction; the clock's owner stops playback
             }
-            auto view = build_viewer_frame(*timeline, *paths, *luts, width, height, next, ticks_per_frame, frames);
+            if (device_ != nullptr && !device_->admit([&] { return ctx.is_cancelled(); })) {
+                break; // cancelled while Qt held admission
+            }
+            auto view = build_viewer_frame(*timeline, *paths, *luts, width, height, next, ticks_per_frame, frames_);
+            if (device_ != nullptr) device_->leave();
             if (!view) {
                 const std::scoped_lock lock(error_mutex_);
                 error_ = view.error().summary();
@@ -45,6 +50,14 @@ void VideoScheduler::start(std::shared_ptr<const oma::timeline::Timeline> timeli
         }
         return oma::Result<void>{};
     });
+}
+
+void VideoScheduler::set_device(const oma::gpu::Device* device) {
+    if (device == device_) return;
+    stop();
+    // The old decoders (and any GPU frames they own) go before the new source is used.
+    frames_ = FrameSource(device);
+    device_ = device;
 }
 
 void VideoScheduler::stop() noexcept {

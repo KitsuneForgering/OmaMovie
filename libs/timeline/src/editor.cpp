@@ -1,5 +1,6 @@
 #include "oma/timeline/editor.hpp"
 
+#include "anchors.hpp"
 #include "mutation.hpp"
 
 #include <format>
@@ -10,8 +11,30 @@ Result<void> Editor::execute(std::unique_ptr<Command> command) {
     if (!command) {
         return detail::error(ErrorCode::InvalidArgument, "no command");
     }
+    // Connected clips follow their primaries (ADR-0014): their moves join this edit's undo entry.
+    const bool anchored = detail::has_anchors(timeline_);
+    const detail::Places before = anchored ? detail::places(timeline_) : detail::Places{};
     if (auto r = command->apply(timeline_); !r) {
         return r;
+    }
+    if (anchored) {
+        auto fixes = detail::reattach(timeline_, before);
+        if (!fixes) {
+            command->revert(timeline_);
+            return std::unexpected(fixes.error());
+        }
+        if (!fixes->empty()) {
+            auto follow = detail::make_transaction("Follow connections", std::move(*fixes));
+            if (auto r = follow->apply(timeline_); !r) {
+                command->revert(timeline_);
+                return r;
+            }
+            const std::string name(command->name());
+            detail::Steps both;
+            both.push_back(std::move(command));
+            both.push_back(std::move(follow));
+            command = detail::make_transaction(name, std::move(both)); // both already applied
+        }
     }
     // Commands check their local preconditions (overlaps, edges); the timeline-wide rules
     // (media kinds, source ranges, properties) are checked once here. Rejecting an edit is a

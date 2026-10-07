@@ -18,8 +18,8 @@ namespace {
 // The source planes of a software frame, read like the shader's texelFetch: raw / (2^bits - 1)
 // of the container.
 struct Planes {
-    std::array<const std::uint8_t*, 3> data{};
-    std::array<int, 3> stride{};
+    std::array<const std::uint8_t*, 4> data{}; // a fourth plane is straight alpha (gbrap)
+    std::array<int, 4> stride{};
     int container_bytes = 1;
     float container_max = 255.0F;
 
@@ -72,17 +72,30 @@ struct Rgb {
 Rgb texel(const LayerParams& p, const Planes& planes, int x, int y) {
     const float scale = p.misc[1];
     const float luma = planes.fetch(0, x, y, 0, 1) * scale;
-    const int cx = static_cast<int>(static_cast<unsigned>(x) >> static_cast<unsigned>(p.mode[1]));
-    const int cy = static_cast<int>(static_cast<unsigned>(y) >> static_cast<unsigned>(p.mode[2]));
-    float cb = 0.0F;
-    float cr = 0.0F;
-    if (p.mode[0] == static_cast<std::int32_t>(ChromaMode::Interleaved)) {
-        cb = planes.fetch(1, cx, cy, 0, 2) * scale;
-        cr = planes.fetch(1, cx, cy, 1, 2) * scale;
-    } else {
-        cb = planes.fetch(1, cx, cy, 0, 1) * scale;
-        cr = planes.fetch(2, cx, cy, 0, 1) * scale;
-    }
+    const int sx = 1 << p.mode[1];
+    const int sy = 1 << p.mode[2];
+    const float fx = (static_cast<float>(x) + 0.5F - p.chroma[0]) / static_cast<float>(sx);
+    const float fy = (static_cast<float>(y) + 0.5F - p.chroma[1]) / static_cast<float>(sy);
+    const int x0 = static_cast<int>(std::floor(fx));
+    const int y0 = static_cast<int>(std::floor(fy));
+    const float tx = fx - static_cast<float>(x0);
+    const float ty = fy - static_cast<float>(y0);
+    const int last_x = ((p.extra[1] + sx - 1) / sx) - 1;
+    const int last_y = ((p.extra[2] + sy - 1) / sy) - 1;
+    const int ax = std::clamp(x0, 0, last_x);
+    const int bx = std::clamp(x0 + 1, 0, last_x);
+    const int ay = std::clamp(y0, 0, last_y);
+    const int by = std::clamp(y0 + 1, 0, last_y);
+    const auto sample = [&](int plane, int component, int components) {
+        const float a = std::lerp(planes.fetch(plane, ax, ay, component, components),
+                                  planes.fetch(plane, bx, ay, component, components), tx);
+        const float b = std::lerp(planes.fetch(plane, ax, by, component, components),
+                                  planes.fetch(plane, bx, by, component, components), tx);
+        return std::lerp(a, b, ty) * scale;
+    };
+    const bool interleaved = p.mode[0] == static_cast<std::int32_t>(ChromaMode::Interleaved);
+    const float cb = sample(1, 0, interleaved ? 2 : 1);
+    const float cr = sample(interleaved ? 1 : 2, interleaved ? 1 : 0, interleaved ? 2 : 1);
     const float r = to_linear(dot3(p.yuv_r, luma, cb, cr) + p.yuv_r[3], p.mode[3]);
     const float g = to_linear(dot3(p.yuv_g, luma, cb, cr) + p.yuv_g[3], p.mode[3]);
     const float b = to_linear(dot3(p.yuv_b, luma, cb, cr) + p.yuv_b[3], p.mode[3]);
@@ -368,7 +381,20 @@ void composite(const LayerParams& p, const Planes& planes, const Lut3d* lut, Rgb
             const float fy = static_cast<float>(oy) + 0.5F;
             const float sx = (p.inv0[0] * fx) + (p.inv0[1] * fy) + p.inv0[2];
             const float sy = (p.inv1[0] * fx) + (p.inv1[1] * fy) + p.inv1[2];
-            if (sx < p.crop[0] || sy < p.crop[1] || sx >= p.crop[2] || sy >= p.crop[3]) {
+            // A 2x2 coverage grid smooths transformed and cropped edges. Color is still
+            // evaluated once at the pixel center, with source taps clamped to the crop.
+            float coverage = 0.0F;
+            for (const float dy : {-0.25F, 0.25F}) {
+                for (const float dx : {-0.25F, 0.25F}) {
+                    const float sample_x = sx + (p.inv0[0] * dx) + (p.inv0[1] * dy);
+                    const float sample_y = sy + (p.inv1[0] * dx) + (p.inv1[1] * dy);
+                    coverage += sample_x >= p.crop[0] && sample_y >= p.crop[1] &&
+                                        sample_x < p.crop[2] && sample_y < p.crop[3]
+                                    ? 0.25F
+                                    : 0.0F;
+                }
+            }
+            if (coverage == 0.0F) {
                 continue;
             }
             const float bx = std::floor(sx - 0.5F);
@@ -389,7 +415,17 @@ void composite(const LayerParams& p, const Planes& planes, const Lut3d* lut, Rgb
                 color = apply_grade(p, lut, color);
             }
 
-            float a = p.misc[0];
+            float a = p.misc[0] * coverage;
+            if (p.extra[3] != 0) {
+                // The source's own alpha, filtered with the same taps as its colour. The colour of
+                // fully transparent pixels still bleeds in at edges; title rasterizing fills them
+                // with the text colour so that bleed is invisible.
+                const auto alpha = [&](int x, int y) {
+                    return planes.fetch(3, x, y, 0, 1) * p.misc[1];
+                };
+                a *= std::lerp(std::lerp(alpha(x0, y0), alpha(x1, y0), tx),
+                               std::lerp(alpha(x0, y1), alpha(x1, y1), tx), ty);
+            }
             if (p.misc[2] >= 0.0F) {
                 a *= std::clamp(p.misc[2] - static_cast<float>(ox), 0.0F, 1.0F);
             }
@@ -471,7 +507,7 @@ Result<RgbaImage> CpuCompositor::render(const RenderGraph& graph,
         Planes planes;
         planes.container_bytes = layout.container_bits / 8;
         planes.container_max = static_cast<float>(std::ldexp(1.0, layout.container_bits) - 1.0);
-        for (int i = 0; i < layout.planes && i < 3; ++i) {
+        for (int i = 0; i < layout.planes && i < 4; ++i) {
             planes.data[static_cast<std::size_t>(i)] = frame.plane(i).data();
             planes.stride[static_cast<std::size_t>(i)] = frame.stride(i);
         }

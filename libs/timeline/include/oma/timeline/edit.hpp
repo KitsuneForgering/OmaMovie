@@ -29,6 +29,8 @@ struct ClipSource {
     TimeMap time_map;
     VideoProperties video;
     AudioProperties audio;
+    // A title instead of media (ADR-0015): `media` stays 0.
+    std::optional<Title> title = std::nullopt;
 };
 
 // Inserts the track at `index` (default: on top of the tracks of its kind order, i.e. last).
@@ -68,7 +70,7 @@ struct ClipSource {
 // Moves the edit point between a clip and the clip that starts exactly at its end.
 [[nodiscard]] std::unique_ptr<Command> roll(ClipId left, RationalTime edit_point);
 // Shows different media through the same timeline range: source in moves by `delta` of
-// timeline time (scaled by the clip's speed).
+// timeline time (scaled by the clip's constant speed; at speed 1 for a segmented map).
 [[nodiscard]] std::unique_ptr<Command> slip(ClipId id, RationalTime delta);
 // Moves a clip by `delta` between its neighbours: an adjacent previous clip's end and an
 // adjacent next clip's start follow; gaps absorb the move otherwise.
@@ -84,8 +86,25 @@ struct ClipSource {
 // Changes a constant speed keeping the same source range; the duration becomes
 // source length / speed, rounded down to the sequence grid. With ripple, later clips follow.
 [[nodiscard]] std::unique_ptr<Command> set_speed(ClipId id, Rational speed, bool ripple);
+// Connects `dependent` to `primary` on another track (ADR-0014): from now on it follows the
+// primary's content. Its start must lie on the primary, which plays at a constant speed and is
+// not connected itself.
+[[nodiscard]] std::unique_ptr<Command> connect(ClipId dependent, ClipId primary);
+// Ends a connection; the clip stays where it is.
+[[nodiscard]] std::unique_ptr<Command> disconnect(ClipId dependent);
+// Replaces a clip's time map (ADR-0013); a segmented map sets the duration to its length.
+// source_in stays the media position at the clip's first instant.
+[[nodiscard]] std::unique_ptr<Command> set_time_map(ClipId id, TimeMap map, bool ripple);
+// Plays the clip backwards over the same media and duration.
+[[nodiscard]] std::unique_ptr<Command> reverse(ClipId id);
+// Holds the frame at `at` (sequence time inside the clip) for `length`, then continues; the
+// clip grows by `length`. With ripple, later clips follow.
+[[nodiscard]] std::unique_ptr<Command> freeze_frame(ClipId id, RationalTime at, RationalTime length,
+                                                    bool ripple);
 [[nodiscard]] std::unique_ptr<Command> set_video(ClipId id, VideoProperties video);
 [[nodiscard]] std::unique_ptr<Command> set_audio(ClipId id, AudioProperties audio);
+// Replaces a title clip's text and style (ADR-0015); fails on a media clip.
+[[nodiscard]] std::unique_ptr<Command> set_title(ClipId id, Title title);
 // Sets or removes (std::nullopt) the transition into a clip from the clip before it.
 [[nodiscard]] std::unique_ptr<Command> set_transition(ClipId id,
                                                       std::optional<Transition> transition);

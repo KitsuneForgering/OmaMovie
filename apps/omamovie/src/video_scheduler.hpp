@@ -21,7 +21,8 @@
 // Threading: start/stop/take run on the UI thread. The producer runs on this scheduler's own
 // one-thread JobPool (the playback pipeline of ADR-0003) with its own decoders, works on an
 // immutable timeline snapshot, and blocks when the queue is full (backpressure). stop() closes
-// the queue and joins the producer, so cancellation on seek or speed change is immediate.
+// the queue and joins the producer, so cancellation on seek or speed change waits for at most
+// the frame being prepared.
 class VideoScheduler {
 public:
     struct Frame {
@@ -45,6 +46,10 @@ public:
                std::shared_ptr<const LutTables> luts, std::uint32_t width, std::uint32_t height, std::int64_t ticks_per_frame, std::int64_t from,
                int step, std::int64_t last);
     void stop() noexcept;
+    // Decode with this device (hardware where possible) instead of in software; nullptr goes
+    // back to software. Stopped scheduler only. With a device, each frame is prepared under
+    // the device's admission (ADR-0005): the producer waits while Qt changes its swapchain.
+    void set_device(const oma::gpu::Device* device);
 
     // The newest prepared frame at or before `target` in the playback direction, if any is new;
     // older prepared frames are dropped. Also tells the producer where the clock is, so a late
@@ -67,6 +72,11 @@ private:
     std::atomic<std::int64_t> dropped_{0};
     std::mutex error_mutex_;
     std::optional<std::string> error_;
+    // This pipeline's own decoders. Only the producer touches them, and stop() joins it before
+    // the next start(), so play/seek restarts keep the decoders open and their frame history
+    // (reverse steps) instead of reopening every file.
+    FrameSource frames_;
+    const oma::gpu::Device* device_ = nullptr;
     oma::JobHandle producer_;
     oma::JobPool pipeline_{1}; // destroyed first: the producer never outlives what it uses
 };

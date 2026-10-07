@@ -54,6 +54,34 @@ void run_timeline_audio_tests() {
             expect(peak(out, 28800, 48000)).toEqual(0.0F);
         });
 
+        it("keeps decoders across timeline changes that leave their clip alone", {
+            if (!have_fixture("tone_44100.wav")) {
+                return;
+            }
+            Sequence seq = make_sequence();
+            const tl::ClipId clip = place(seq, 0, 0, 48000);
+            oma::playback::TimelineAudio audio(seq.editor.timeline(), paths(), rate(), kChannels);
+            std::vector<float> block(static_cast<std::size_t>(1024 * kChannels));
+            expect(audio.render(block, 0).has_value()).toBeTruthy();
+            expect(audio.open_streams()).toEqual(std::size_t{1});
+            // A gain change keeps the decoder and takes effect, from a new position (a seek).
+            expect(seq.editor.execute(tl::edit::set_audio(clip, with_gain(0.5F))).has_value())
+                .toBeTruthy();
+            audio.set_timeline(seq.editor.timeline(), paths());
+            expect(audio.open_streams()).toEqual(std::size_t{1});
+            expect(audio.render(block, 24000).has_value()).toBeTruthy();
+            expect(near_tone(peak(block, 0, 1024), 0.5F)).toBeTruthy();
+            // Noise reduction is a decoder setting: a new decoder.
+            expect(seq.editor.execute(tl::edit::set_audio(clip, denoised())).has_value())
+                .toBeTruthy();
+            audio.set_timeline(seq.editor.timeline(), paths());
+            expect(audio.open_streams()).toEqual(std::size_t{0});
+            expect(audio.render(block, 0).has_value()).toBeTruthy();
+            expect(seq.editor.execute(tl::edit::remove_clip(clip)).has_value()).toBeTruthy();
+            audio.set_timeline(seq.editor.timeline(), paths());
+            expect(audio.open_streams()).toEqual(std::size_t{0});
+        });
+
         it("applies the clip's gain and mute", {
             if (!have_fixture("tone_44100.wav")) {
                 return;
@@ -155,6 +183,22 @@ void run_timeline_audio_tests() {
             expect(peak(incoming, 0, 19200)).toEqual(0.0F);
             expect(peak(incoming, 20000, 24000) > 0.01F).toBeTruthy(); // B before its start
             expect(near_tone(peak(incoming, 29000, 48000), 1.0F)).toBeTruthy();
+        });
+
+        it("plays a transition's tail when rendering starts past the cut, clips earlier", {
+            if (!have_fixture("tone_44100.wav")) {
+                return;
+            }
+            // A muted clip first, then A and B with a 0.2 s dissolve at 48000: starting a block
+            // after the cut must still find A, two clips before the one under the playhead.
+            Sequence seq = make_sequence();
+            (void)place(seq, 0, 0, 24000, muted());
+            (void)place(seq, 24000, 0, 24000);
+            const tl::ClipId b = place(seq, 48000, 44100, 24000, muted());
+            (void)seq.editor.execute(tl::edit::set_transition(
+                b, tl::Transition{.kind = tl::TransitionKind::Dissolve, .duration = s(9600)}));
+            const auto out = render(seq.editor.timeline(), 48000, 4000);
+            expect(peak(out, 0, 4000) > 0.01F).toBeTruthy();
         });
 
         it("renders the same samples from a later start as in one pass", {

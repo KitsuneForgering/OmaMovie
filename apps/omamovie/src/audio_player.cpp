@@ -75,7 +75,14 @@ oma::Result<void> AudioPlayer::start(oma::timeline::Timeline timeline,
     live_output_.store(output_.get(), std::memory_order_release);
     render_failed_.store(false, std::memory_order_relaxed);
     render_error_.clear();
-    auto renderer = std::make_shared<oma::playback::TimelineAudio>(std::move(timeline), std::move(paths), rate_, kChannels);
+    // The producer was joined by stop(), so the renderer (and its open decoders) is ours again.
+    if (renderer_) {
+        renderer_->set_timeline(std::move(timeline), std::move(paths));
+    } else {
+        renderer_ = std::make_shared<oma::playback::TimelineAudio>(std::move(timeline), std::move(paths), rate_,
+                                                                   kChannels);
+    }
+    auto renderer = renderer_;
     oma::audio::SampleRing& ring = output_->ring();
     const auto ahead = static_cast<std::size_t>(kAheadSeconds * rate_.hz());
     producer_ = pipeline_.submit("playback-audio", [this, renderer, &ring, ahead, from](oma::JobContext& ctx) {
@@ -123,9 +130,8 @@ oma::Result<void> AudioPlayer::start(oma::timeline::Timeline timeline,
 
 void AudioPlayer::stop() noexcept {
     // Order matters for the single-producer/single-consumer ring: the producer is joined first,
-    // then the device itself drops the queued frames (a flush on an active output runs in its
-    // callback, which on PipeWire's data thread may still be running), and only then the device
-    // stops pulling.
+    // then the device is asked to drop what is queued so far (asynchronously: its consumer does
+    // it at the next pull, keeping what the next start writes), and the device stops pulling.
     if (producer_.valid()) {
         producer_.cancel();
         (void)producer_.wait();
@@ -144,8 +150,10 @@ std::int64_t AudioPlayer::audible_sample() const noexcept {
         return anchor_sample_.load(std::memory_order_relaxed);
     }
     // PlaybackClock's rule (oma/audio/clock.hpp), on the atomic copies of its anchor.
-    const std::int64_t played = out->frames_consumed() - anchor_consumed_.load(std::memory_order_relaxed) -
-                                out->latency_frames();
+    const std::int64_t now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                    std::chrono::steady_clock::now().time_since_epoch())
+                                    .count();
+    const std::int64_t played = out->frames_played(now_ns) - anchor_consumed_.load(std::memory_order_relaxed);
     return anchor_sample_.load(std::memory_order_relaxed) + std::max<std::int64_t>(played, 0);
 }
 
