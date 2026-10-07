@@ -18,6 +18,7 @@ enum class ErrorCode : std::uint16_t {
     IoError,
     InvalidData,
     Internal,
+    DeviceLost, // the GPU device stopped working; nothing more can run on it
 };
 
 [[nodiscard]] std::string_view to_string(ErrorCode code) noexcept;

@@ -6,6 +6,7 @@ void run_error_tests();
 void run_log_tests();
 void run_job_tests();
 void run_bounded_queue_tests();
+void run_disk_cache_tests();
 
 int main(int argc, char* argv[]) {
     cest_init(argc, argv);
@@ -15,5 +16,6 @@ int main(int argc, char* argv[]) {
     run_log_tests();
     run_job_tests();
     run_bounded_queue_tests();
+    run_disk_cache_tests();
     return cest_result();
 }
