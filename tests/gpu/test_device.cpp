@@ -1,3 +1,4 @@
+#include "oma/gpu/commands.hpp"
 #include "oma/gpu/device.hpp"
 
 #include <atomic>
@@ -63,6 +64,58 @@ bool queue_lock_is_recursive_and_exclusive(const Device& d) {
     return excluded_while_held && still_excluded && other_got_it.load();
 }
 
+// ADR-0005 admission: open by default; a closed gate holds new work until it opens, lets a
+// cancelled waiter go without admission, and closing waits for admitted work to leave.
+bool admission_gates_work(const Device& d) {
+    const auto never = [] {
+        return false;
+    };
+    if (!d.admit(never)) {
+        return false;
+    }
+    d.leave();
+
+    d.close_admission();
+    std::atomic<bool> admitted{false};
+    std::thread waiter([&] {
+        if (d.admit(never)) {
+            admitted.store(true);
+            d.leave();
+        }
+    });
+    std::atomic<bool> cancel{false};
+    std::atomic<int> cancelled_result{-1};
+    std::thread cancelled(
+        [&] { cancelled_result.store(d.admit([&] { return cancel.load(); }) ? 1 : 0); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    const bool held = !admitted.load();
+    cancel.store(true);
+    cancelled.join();
+    d.open_admission();
+    waiter.join();
+    const bool waiter_ran = admitted.load();
+
+    // Closing waits for admitted work.
+    std::atomic<bool> inside{false};
+    std::atomic<bool> left{false};
+    std::thread worker([&] {
+        if (d.admit(never)) {
+            inside.store(true);
+            std::this_thread::sleep_for(std::chrono::milliseconds(30));
+            left.store(true);
+            d.leave();
+        }
+    });
+    while (!inside.load()) {
+        std::this_thread::yield();
+    }
+    d.close_admission();
+    const bool waited = left.load();
+    d.open_admission();
+    worker.join();
+    return held && cancelled_result.load() == 0 && waiter_ran && waited;
+}
+
 bool family_has(const Device& d, uint32_t family, VkQueueFlags flag) {
     for (const auto& f : d.queue_families()) {
         if (f.index == family) {
@@ -70,6 +123,34 @@ bool family_has(const Device& d, uint32_t family, VkQueueFlags flag) {
         }
     }
     return false;
+}
+
+// Device loss is final: a lost device refuses admission (releasing a waiter held by a closed
+// gate) and new submissions, instead of letting producers retry on it.
+bool loss_stops_work() {
+    auto fresh = Device::create(); // its own device: the shared one must stay usable
+    if (!fresh) {
+        return false;
+    }
+    const Device& d = **fresh;
+    const auto never = [] {
+        return false;
+    };
+    auto runner = oma::gpu::CommandRunner::create(d, d.graphics_family());
+    if (!runner || !runner->run([](VkCommandBuffer) {}, {}, {})) {
+        return false;
+    }
+    d.close_admission();
+    std::atomic<int> waiter{-1};
+    std::thread t([&] { waiter.store(d.admit(never) ? 1 : 0); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    const bool held = waiter.load() == -1;
+    d.mark_lost();
+    t.join();
+    d.open_admission();
+    const auto refused = runner->run([](VkCommandBuffer) {}, {}, {});
+    return held && waiter.load() == 0 && d.lost() && !d.admit(never) && !refused &&
+           refused.error().code() == oma::ErrorCode::DeviceLost;
 }
 
 } // namespace
@@ -167,6 +248,12 @@ void run_device_tests() {
             }
             expect(true).toBeTruthy();
         });
+
+        it("admits work outside Qt's swapchain changes (ADR-0005)",
+           { expect(admission_gates_work(*d)).toBeTruthy(); });
+
+        it("stops admitting and submitting once the device is lost",
+           { expect(loss_stops_work()).toBeTruthy(); });
 
         it("can create zero-flag queues for consumers using vkGetDeviceQueue", {
             auto compatible = Device::create({.internally_synchronized_queues = false});

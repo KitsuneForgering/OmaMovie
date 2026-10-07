@@ -5,6 +5,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -101,6 +102,27 @@ public:
     // The lock is recursive: a thread that already holds a queue may submit to it again.
     void lock_queue(uint32_t family, uint32_t index) const;
     void unlock_queue(uint32_t family, uint32_t index) const;
+
+    // Admission for work that may submit from threads other than the Qt render thread
+    // (ADR-0005). Qt creates, resizes and destroys its swapchain, and waits for the device to
+    // idle, between frames, where these hooks cannot reach; the bridge closes admission there
+    // and opens it for each frame. Admission is open by default, so headless users see no
+    // change.
+    //
+    // admit() waits while admission is closed and returns false, without admission, once
+    // `cancelled` returns true (checked every few milliseconds). Pair a true result with
+    // leave(). close_admission() stops new admissions and waits for the admitted work to leave;
+    // a waiting close takes precedence over new admissions.
+    [[nodiscard]] bool admit(const std::function<bool()>& cancelled) const;
+    // Device loss (VK_ERROR_DEVICE_LOST) is final for a VkDevice: every later call may fail.
+    // The first submitter that sees it marks the device; from then on admit() refuses, so
+    // producers stop, and the owner shows the loss instead of retrying. Recovery needs a new
+    // device (and, for a device shared with Qt, a new window). Any thread.
+    [[nodiscard]] bool lost() const noexcept;
+    void mark_lost() const; // logs once
+    void leave() const;
+    void close_admission() const;
+    void open_admission() const;
 
 private:
     struct Impl;

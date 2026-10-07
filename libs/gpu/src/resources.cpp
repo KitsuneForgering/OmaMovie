@@ -1,5 +1,9 @@
 #include "oma/gpu/resources.hpp"
 
+#include <bit>
+
+#include <unistd.h>
+
 #include "oma/gpu/device.hpp"
 
 #include <algorithm>
@@ -12,7 +16,8 @@ namespace oma::gpu {
 namespace {
 
 Error vk_failure(VkResult r, std::string what) {
-    return {r == VK_ERROR_OUT_OF_DEVICE_MEMORY || r == VK_ERROR_OUT_OF_HOST_MEMORY
+    return {r == VK_ERROR_DEVICE_LOST ? ErrorCode::DeviceLost
+            : r == VK_ERROR_OUT_OF_DEVICE_MEMORY || r == VK_ERROR_OUT_OF_HOST_MEMORY
                 ? ErrorCode::Unsupported
                 : ErrorCode::Internal,
             Category::Gpu, std::move(what), "VkResult " + std::to_string(static_cast<int>(r))};
@@ -255,6 +260,135 @@ void Image::reset() noexcept {
     device_ = VK_NULL_HANDLE;
     image_ = VK_NULL_HANDLE;
     view_ = VK_NULL_HANDLE;
+    memory_ = VK_NULL_HANDLE;
+}
+
+Result<DmaBufImage> DmaBufImage::import(const Device& device, const DmaBufPlane& plane) {
+    if (plane.fd < 0 || plane.width == 0 || plane.height == 0 || plane.pitch == 0) {
+        return make_error(ErrorCode::InvalidArgument, Category::Gpu, "invalid DMA-BUF plane");
+    }
+    DmaBufImage img;
+    img.device_ = device.device();
+    img.format_ = plane.format;
+    const VkSubresourceLayout layout{.offset = plane.offset,
+                                     .size = 0, // ignored for explicit modifiers
+                                     .rowPitch = plane.pitch,
+                                     .arrayPitch = 0,
+                                     .depthPitch = 0};
+    const VkImageDrmFormatModifierExplicitCreateInfoEXT modifier{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT,
+        .pNext = nullptr,
+        .drmFormatModifier = plane.modifier,
+        .drmFormatModifierPlaneCount = 1,
+        .pPlaneLayouts = &layout};
+    const VkExternalMemoryImageCreateInfo external{
+        .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
+        .pNext = &modifier,
+        .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
+    const VkImageCreateInfo info{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .pNext = &external,
+        .flags = 0,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = plane.format,
+        .extent = {.width = plane.width, .height = plane.height, .depth = 1},
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = nullptr,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
+    if (const VkResult r = vkCreateImage(img.device_, &info, nullptr, &img.image_);
+        r != VK_SUCCESS) {
+        return std::unexpected(vk_failure(r, "cannot create an image for a DMA-BUF"));
+    }
+    const auto get_fd_properties = reinterpret_cast<PFN_vkGetMemoryFdPropertiesKHR>(
+        vkGetDeviceProcAddr(img.device_, "vkGetMemoryFdPropertiesKHR"));
+    if (get_fd_properties == nullptr) {
+        return make_error(ErrorCode::Unsupported, Category::Gpu, "DMA-BUF import is unavailable");
+    }
+    VkMemoryFdPropertiesKHR fd_props{
+        .sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR, .pNext = nullptr, .memoryTypeBits = 0};
+    if (const VkResult r = get_fd_properties(
+            img.device_, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, plane.fd, &fd_props);
+        r != VK_SUCCESS) {
+        return std::unexpected(vk_failure(r, "cannot query DMA-BUF memory"));
+    }
+    VkMemoryRequirements req{};
+    vkGetImageMemoryRequirements(img.device_, img.image_, &req);
+    const std::uint32_t types = req.memoryTypeBits & fd_props.memoryTypeBits;
+    if (types == 0) {
+        return make_error(ErrorCode::Unsupported, Category::Gpu,
+                          "no memory type can hold this DMA-BUF image");
+    }
+    // Vulkan owns the descriptor once the import succeeds; the caller keeps its own.
+    const int fd = ::dup(plane.fd);
+    if (fd < 0) {
+        return make_error(ErrorCode::IoError, Category::Gpu,
+                          "cannot duplicate a DMA-BUF descriptor");
+    }
+    const VkMemoryDedicatedAllocateInfo dedicated{
+        .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
+        .pNext = nullptr,
+        .image = img.image_,
+        .buffer = VK_NULL_HANDLE};
+    const VkImportMemoryFdInfoKHR import_info{.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
+                                              .pNext = &dedicated,
+                                              .handleType =
+                                                  VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+                                              .fd = fd};
+    const VkMemoryAllocateInfo alloc{.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                                     .pNext = &import_info,
+                                     .allocationSize = req.size,
+                                     .memoryTypeIndex =
+                                         static_cast<std::uint32_t>(std::countr_zero(types))};
+    if (const VkResult r = vkAllocateMemory(img.device_, &alloc, nullptr, &img.memory_);
+        r != VK_SUCCESS) {
+        ::close(fd); // not taken on failure
+        return std::unexpected(vk_failure(r, "cannot import DMA-BUF memory"));
+    }
+    if (const VkResult r = vkBindImageMemory(img.device_, img.image_, img.memory_, 0);
+        r != VK_SUCCESS) {
+        return std::unexpected(vk_failure(r, "cannot bind DMA-BUF memory"));
+    }
+    return img;
+}
+
+DmaBufImage::DmaBufImage(DmaBufImage&& other) noexcept
+    : device_(std::exchange(other.device_, VK_NULL_HANDLE)),
+      image_(std::exchange(other.image_, VK_NULL_HANDLE)),
+      memory_(std::exchange(other.memory_, VK_NULL_HANDLE)), format_(other.format_) {}
+
+DmaBufImage& DmaBufImage::operator=(DmaBufImage&& other) noexcept {
+    if (this != &other) {
+        reset();
+        device_ = std::exchange(other.device_, VK_NULL_HANDLE);
+        image_ = std::exchange(other.image_, VK_NULL_HANDLE);
+        memory_ = std::exchange(other.memory_, VK_NULL_HANDLE);
+        format_ = other.format_;
+    }
+    return *this;
+}
+
+DmaBufImage::~DmaBufImage() {
+    reset();
+}
+
+void DmaBufImage::reset() noexcept {
+    if (device_ == VK_NULL_HANDLE) {
+        return;
+    }
+    if (image_ != VK_NULL_HANDLE) {
+        vkDestroyImage(device_, image_, nullptr);
+    }
+    if (memory_ != VK_NULL_HANDLE) {
+        vkFreeMemory(device_, memory_, nullptr);
+    }
+    device_ = VK_NULL_HANDLE;
+    image_ = VK_NULL_HANDLE;
     memory_ = VK_NULL_HANDLE;
 }
 

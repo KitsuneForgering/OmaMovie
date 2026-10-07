@@ -84,4 +84,42 @@ private:
     ImageDesc desc_;
 };
 
+// One plane of a DMA-BUF (a Linux buffer shared between drivers), described the way an exporter
+// such as VA-API reports it.
+struct DmaBufPlane {
+    int fd = -1;                // not taken: import duplicates it
+    std::uint64_t offset = 0;   // bytes to the first row
+    std::uint64_t pitch = 0;    // bytes per row
+    std::uint64_t modifier = 0; // DRM format modifier (tiling/compression)
+    VkFormat format = VK_FORMAT_UNDEFINED;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+};
+
+// A single-plane image over imported DMA-BUF memory (VK_EXT_external_memory_dma_buf with an
+// explicit DRM format modifier): zero-copy access to another driver's surface. The exporter
+// keeps writing the memory between uses, so consumers acquire it from
+// VK_QUEUE_FAMILY_FOREIGN_EXT before reading and release it afterwards (ADR-0004).
+class DmaBufImage {
+public:
+    DmaBufImage() = default;
+    [[nodiscard]] static Result<DmaBufImage> import(const Device& device, const DmaBufPlane& plane);
+    DmaBufImage(DmaBufImage&& other) noexcept;
+    DmaBufImage& operator=(DmaBufImage&& other) noexcept;
+    DmaBufImage(const DmaBufImage&) = delete;
+    DmaBufImage& operator=(const DmaBufImage&) = delete;
+    ~DmaBufImage();
+
+    [[nodiscard]] VkImage handle() const noexcept { return image_; }
+    [[nodiscard]] VkFormat format() const noexcept { return format_; }
+
+private:
+    void reset() noexcept;
+
+    VkDevice device_ = VK_NULL_HANDLE;
+    VkImage image_ = VK_NULL_HANDLE;
+    VkDeviceMemory memory_ = VK_NULL_HANDLE;
+    VkFormat format_ = VK_FORMAT_UNDEFINED;
+};
+
 } // namespace oma::gpu

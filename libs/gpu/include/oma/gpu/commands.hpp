@@ -47,6 +47,12 @@ private:
     VkFence fence_ = VK_NULL_HANDLE;
 };
 
+// Ownership of another driver's image (an imported DMA-BUF) for one submission: acquire from
+// VK_QUEUE_FAMILY_FOREIGN_EXT before reading it on `family`, release back after. The layout stays
+// GENERAL, the layout external memory is shared in.
+void acquire_foreign(VkCommandBuffer cmd, VkImage image, std::uint32_t family);
+void release_foreign(VkCommandBuffer cmd, VkImage image, std::uint32_t family);
+
 // Records a full-subresource layout transition of a color image (synchronization2).
 void transition(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImageLayout to,
                 VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT);

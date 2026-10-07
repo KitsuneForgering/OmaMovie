@@ -11,8 +11,20 @@ namespace oma::gpu {
 namespace {
 
 Error vk_failure(VkResult r, std::string what) {
-    return {r == VK_ERROR_DEVICE_LOST ? ErrorCode::Unsupported : ErrorCode::Internal, Category::Gpu,
+    return {r == VK_ERROR_DEVICE_LOST ? ErrorCode::DeviceLost : ErrorCode::Internal, Category::Gpu,
             std::move(what), "VkResult " + std::to_string(static_cast<int>(r))};
+}
+
+// A failed submission or wait; a lost device is marked so producers stop (Device::lost).
+Error submit_failure(const Device& device, VkResult r, std::string what) {
+    if (r == VK_ERROR_DEVICE_LOST) {
+        device.mark_lost();
+    }
+    return vk_failure(r, std::move(what));
+}
+
+Error lost_device() {
+    return {ErrorCode::DeviceLost, Category::Gpu, "the GPU device was lost"};
 }
 
 std::vector<VkSemaphoreSubmitInfo> to_infos(std::span<const SemaphoreSubmit> in) {
@@ -98,6 +110,9 @@ void CommandRunner::reset() noexcept {
 Result<void> CommandRunner::run(const std::function<void(VkCommandBuffer)>& record,
                                 std::span<const SemaphoreSubmit> waits,
                                 std::span<const SemaphoreSubmit> signals) {
+    if (device_->lost()) {
+        return std::unexpected(lost_device()); // a lost device accepts no more work
+    }
     vkResetCommandBuffer(cmd_, 0);
     const VkCommandBufferBeginInfo begin{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                                          .pNext = nullptr,
@@ -130,14 +145,57 @@ Result<void> CommandRunner::run(const std::function<void(VkCommandBuffer)>& reco
     const VkResult submitted = vkQueueSubmit2(queue_, 1, &submit, fence_);
     device_->unlock_queue(family_, 0);
     if (submitted != VK_SUCCESS) {
-        return std::unexpected(vk_failure(submitted, "queue submission failed"));
+        return std::unexpected(submit_failure(*device_, submitted, "queue submission failed"));
     }
     const VkResult waited = vkWaitForFences(device_->device(), 1, &fence_, VK_TRUE, UINT64_MAX);
     vkResetFences(device_->device(), 1, &fence_);
     if (waited != VK_SUCCESS) {
-        return std::unexpected(vk_failure(waited, "waiting for the GPU failed"));
+        return std::unexpected(submit_failure(*device_, waited, "waiting for the GPU failed"));
     }
     return {};
+}
+
+namespace {
+
+void foreign_barrier(VkCommandBuffer cmd, VkImage image, std::uint32_t from, std::uint32_t to,
+                     bool acquire) {
+    const VkImageMemoryBarrier2 barrier{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .pNext = nullptr,
+        .srcStageMask = acquire ? VK_PIPELINE_STAGE_2_NONE : VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+        .srcAccessMask = acquire ? VK_ACCESS_2_NONE : VK_ACCESS_2_MEMORY_READ_BIT,
+        .dstStageMask = acquire ? VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT : VK_PIPELINE_STAGE_2_NONE,
+        .dstAccessMask = acquire ? VK_ACCESS_2_MEMORY_READ_BIT : VK_ACCESS_2_NONE,
+        .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+        .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+        .srcQueueFamilyIndex = from,
+        .dstQueueFamilyIndex = to,
+        .image = image,
+        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                             .baseMipLevel = 0,
+                             .levelCount = 1,
+                             .baseArrayLayer = 0,
+                             .layerCount = 1}};
+    const VkDependencyInfo dep{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                               .pNext = nullptr,
+                               .dependencyFlags = 0,
+                               .memoryBarrierCount = 0,
+                               .pMemoryBarriers = nullptr,
+                               .bufferMemoryBarrierCount = 0,
+                               .pBufferMemoryBarriers = nullptr,
+                               .imageMemoryBarrierCount = 1,
+                               .pImageMemoryBarriers = &barrier};
+    vkCmdPipelineBarrier2(cmd, &dep);
+}
+
+} // namespace
+
+void acquire_foreign(VkCommandBuffer cmd, VkImage image, std::uint32_t family) {
+    foreign_barrier(cmd, image, VK_QUEUE_FAMILY_FOREIGN_EXT, family, true);
+}
+
+void release_foreign(VkCommandBuffer cmd, VkImage image, std::uint32_t family) {
+    foreign_barrier(cmd, image, family, VK_QUEUE_FAMILY_FOREIGN_EXT, false);
 }
 
 void transition(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImageLayout to,

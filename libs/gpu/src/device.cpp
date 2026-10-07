@@ -13,6 +13,9 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstring>
 #include <format>
 #include <mutex>
@@ -23,7 +26,9 @@ namespace oma::gpu {
 namespace {
 
 Error vk_error(vk::Result r, std::string what) {
-    return {r == vk::Result::eErrorInitializationFailed || r == vk::Result::eErrorIncompatibleDriver
+    return {r == vk::Result::eErrorDeviceLost ? ErrorCode::DeviceLost
+            : r == vk::Result::eErrorInitializationFailed ||
+                    r == vk::Result::eErrorIncompatibleDriver
                 ? ErrorCode::Unsupported
                 : ErrorCode::Internal,
             Category::Gpu, std::move(what), vk::to_string(r)};
@@ -34,6 +39,7 @@ Error vk_error(vk::Result r, std::string what) {
 constexpr std::array kFeaturelessExtensions = {
     VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
     VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
+    VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME, // acquire/release of imported DMA-BUFs
     VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
     VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
     VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME,
@@ -126,6 +132,13 @@ struct Device::Impl {
     // Recursive: the Qt bridge holds the graphics queue for a whole frame (ADR-0005), and work
     // recorded on the render thread inside that frame (the viewer's compositor) submits again.
     mutable std::vector<std::vector<std::recursive_mutex>> queue_mutexes;
+
+    // Admission (ADR-0005): `closed` blocks new admissions, `admitted` counts work inside.
+    mutable std::mutex admission_mutex;
+    mutable std::condition_variable admission_changed;
+    mutable bool closed = false;
+    mutable int admitted = 0;
+    std::atomic<bool> lost{false};
 
     // Enabled feature chain; FFmpeg keeps pointers into it, so Impl never moves (unique_ptr).
     vk::PhysicalDeviceFeatures2 features2{};
@@ -426,6 +439,52 @@ void Device::unlock_queue(uint32_t family, uint32_t index) const {
     if (!impl_->internally_synchronized) {
         impl_->queue_mutexes.at(family).at(index).unlock();
     }
+}
+
+bool Device::lost() const noexcept {
+    return impl_->lost.load(std::memory_order_acquire);
+}
+
+void Device::mark_lost() const {
+    if (!impl_->lost.exchange(true, std::memory_order_acq_rel)) {
+        log_error(Category::Gpu, "GPU device lost; GPU work stops until OmaMovie restarts");
+        impl_->admission_changed.notify_all();
+    }
+}
+
+bool Device::admit(const std::function<bool()>& cancelled) const {
+    std::unique_lock lock(impl_->admission_mutex);
+    while (impl_->closed || lost()) {
+        if (lost() || cancelled()) {
+            return false;
+        }
+        // Timed: cancellation is a plain flag nobody notifies us about.
+        impl_->admission_changed.wait_for(lock, std::chrono::milliseconds(5));
+    }
+    ++impl_->admitted;
+    return true;
+}
+
+void Device::leave() const {
+    {
+        const std::scoped_lock lock(impl_->admission_mutex);
+        --impl_->admitted;
+    }
+    impl_->admission_changed.notify_all();
+}
+
+void Device::close_admission() const {
+    std::unique_lock lock(impl_->admission_mutex);
+    impl_->closed = true;
+    impl_->admission_changed.wait(lock, [&] { return impl_->admitted == 0; });
+}
+
+void Device::open_admission() const {
+    {
+        const std::scoped_lock lock(impl_->admission_mutex);
+        impl_->closed = false;
+    }
+    impl_->admission_changed.notify_all();
 }
 
 } // namespace oma::gpu
