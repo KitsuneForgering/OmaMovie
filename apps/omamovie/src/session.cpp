@@ -158,6 +158,8 @@ Session::Session(std::unique_ptr<oma::media::MediaImporter> importer, QObject* p
 }
 
 Session::~Session() {
+    export_job_.cancel(); // stops at the next frame; the temporary output is removed
+    export_pool_.shutdown();
     workers_.shutdown();
 }
 
@@ -1679,7 +1681,7 @@ void Session::exportMovie(const QUrl& url) {
     // Progress crosses threads through one atomic; the UI polls it, so the job never waits on
     // the UI thread (CLAUDE.md §13).
     export_timer_.start(); // connected in the constructor
-    export_job_ = workers_.submit("export", [this, request = std::move(request), path](oma::JobContext& job) {
+    export_job_ = export_pool_.submit("export", [this, request = std::move(request), path](oma::JobContext& job) {
         ExportStats stats;
         auto done = export_timeline(request, [this, &job](std::int64_t k, std::int64_t) {
             export_done_.store(k);

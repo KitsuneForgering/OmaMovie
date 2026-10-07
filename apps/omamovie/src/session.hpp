@@ -678,5 +678,9 @@ private:
     QVariantList filter_previews_;
     unsigned previews_ = 0; // filter preview requests, so a stale result is dropped
     oma::JobHandle previews_job_;
-    oma::JobPool workers_{1}; // destroyed first: no job outlives what it touches
+    oma::JobPool workers_{1}; // destroyed late: no job outlives what it touches
+    // Exports run for minutes; on the shared worker they held up saving, autosave, imports and
+    // the software viewer until they ended. An export owns its decoders and device, so it needs
+    // nothing from `workers_`. Declared last: destroyed (and drained) first.
+    oma::JobPool export_pool_{1};
 };

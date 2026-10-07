@@ -729,6 +729,7 @@ int main(int argc, char** argv) {
         qsizetype clips_before_source = 0;
         double export_seconds = 0;
         bool export_started = false;
+        bool saved_while_exporting = false;
         qsizetype media = 0, clips = 0, lanes = 0;
         double duration = 0;
         QVariantMap first;
@@ -1970,8 +1971,17 @@ int main(int argc, char** argv) {
         // Export (M7): the sequence becomes an MP4 with picture and sound of its length.
         {"export", after(100), [&] {
              saved.export_seconds = session.duration();
+             // An unsaved change, then export and save at once: the save must not wait for the export.
+             session.selectClip(session.clips().front().toMap().value("id").toDouble());
+             session.setClipOpacity(0.9);
              session.exportMovie(QUrl::fromLocalFile(project_dir.filePath(QStringLiteral("movie.mp4"))));
              saved.export_started = session.exportProgress() >= 0;
+             session.saveProject(QUrl());
+         }},
+        {"saved during export", [&] { return !session.dirty() || session.exportProgress() < 0 || run->elapsed() > 10000; }, [&] {
+             saved.saved_while_exporting = !session.dirty() && session.exportProgress() >= 0;
+             if (!saved.saved_while_exporting) std::printf("GUI smoke: saving waited for the export (dirty %d, progress %.2f)\n",
+                                                           session.dirty(), session.exportProgress());
          }},
         {"exporting", after(400), [&] { screenshot(window, "OMA_GUI_SMOKE_EXPORT_SCREENSHOT"); }},
         {"exported", [&] { return session.exportProgress() < 0 || run->elapsed() > 120000; }, [&] {
@@ -1986,7 +1996,7 @@ int main(int argc, char** argv) {
              // The notice names the encoder used (Settings: automatic here).
              const bool named = session.notice().contains(QStringLiteral("VA-API")) || session.notice().contains(QStringLiteral("libx264"));
              if (!named) std::printf("GUI smoke: export notice does not name the encoder (%s)\n", qPrintable(session.notice()));
-             r.project = r.project && ok && named;
+             r.project = r.project && ok && named && saved.saved_while_exporting;
              if (const QString keep = qEnvironmentVariable("OMA_GUI_SMOKE_EXPORT_COPY"); !keep.isEmpty()) QFile::copy(file, keep);
              session.clearExported();
          }},
