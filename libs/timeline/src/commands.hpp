@@ -35,5 +35,7 @@ using Planner = std::function<Result<Steps>(Timeline&)>;
 [[nodiscard]] std::unique_ptr<Command> set_flags(TrackId id, bool muted, bool hidden);
 [[nodiscard]] std::unique_ptr<Command> insert_marker(Marker marker);
 [[nodiscard]] std::unique_ptr<Command> erase_marker(MarkerId id);
+// Swaps the timeline's captions for `captions`; revert restores the previous list.
+[[nodiscard]] std::unique_ptr<Command> replace_captions(std::vector<Caption> captions);
 
 } // namespace oma::timeline::detail

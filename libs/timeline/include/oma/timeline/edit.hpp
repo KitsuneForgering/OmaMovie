@@ -115,6 +115,13 @@ struct ClipSource {
 
 [[nodiscard]] std::unique_ptr<Command> add_marker(MarkerId id, RationalTime at, std::string name);
 [[nodiscard]] std::unique_ptr<Command> remove_marker(MarkerId id);
+// Captions (ADR-0017). Times are sequence times on the grid; overlapping or off-grid captions
+// are refused by validation, never moved or rounded.
+[[nodiscard]] std::unique_ptr<Command> add_caption(Caption caption);
+[[nodiscard]] std::unique_ptr<Command> set_caption(Caption caption); // the caption with its ID
+[[nodiscard]] std::unique_ptr<Command> remove_caption(CaptionId id);
+// The whole list at once (an import), one undo entry.
+[[nodiscard]] std::unique_ptr<Command> replace_captions(std::vector<Caption> captions);
 
 // Several commands as one history entry, applied in order; each sees the state left by the
 // previous ones. All or nothing.

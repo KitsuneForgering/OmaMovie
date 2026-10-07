@@ -472,4 +472,33 @@ std::unique_ptr<Command> erase_marker(MarkerId id) {
     return std::make_unique<EraseMarker>(id);
 }
 
+namespace {
+
+// One step for every caption edit (ADR-0017): the whole list is swapped, so undo is exact.
+// O(captions) per edit; at most kMaxCaptions.
+class ReplaceCaptions final : public Command {
+public:
+    explicit ReplaceCaptions(std::vector<Caption> captions) : next_(std::move(captions)) {}
+
+    [[nodiscard]] std::string_view name() const noexcept override { return "Captions"; }
+
+    [[nodiscard]] Result<void> apply(Timeline& timeline) override {
+        std::ranges::stable_sort(next_, {}, [](const Caption& c) { return c.start.value(); });
+        previous_ = std::exchange(Mutation(timeline).captions(), next_);
+        return {};
+    }
+
+    void revert(Timeline& timeline) noexcept override { Mutation(timeline).captions() = previous_; }
+
+private:
+    std::vector<Caption> next_;
+    std::vector<Caption> previous_;
+};
+
+} // namespace
+
+std::unique_ptr<Command> replace_captions(std::vector<Caption> captions) {
+    return std::make_unique<ReplaceCaptions>(std::move(captions));
+}
+
 } // namespace oma::timeline::detail

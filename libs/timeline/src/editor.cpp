@@ -126,4 +126,8 @@ MarkerId Editor::new_marker_id() noexcept {
     return MarkerId(detail::Mutation(timeline_).allocate_id());
 }
 
+CaptionId Editor::new_caption_id() noexcept {
+    return CaptionId(detail::Mutation(timeline_).allocate_id());
+}
+
 } // namespace oma::timeline

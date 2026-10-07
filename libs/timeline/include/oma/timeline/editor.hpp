@@ -69,6 +69,7 @@ public:
     [[nodiscard]] TrackId new_track_id() noexcept;
     [[nodiscard]] ClipId new_clip_id() noexcept;
     [[nodiscard]] MarkerId new_marker_id() noexcept;
+    [[nodiscard]] CaptionId new_caption_id() noexcept;
 
     // Increases on every change (execute, undo, redo), so views know when to refresh.
     [[nodiscard]] std::uint64_t revision() const noexcept { return revision_; }

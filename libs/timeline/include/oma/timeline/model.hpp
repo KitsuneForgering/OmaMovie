@@ -381,6 +381,20 @@ struct Track {
     std::vector<Clip> clips; // sorted by start, never overlapping
 };
 
+// Timed text shown under the picture and written as SRT/VTT (ADR-0017). Sequence time, on the
+// grid; captions are kept sorted and never overlap.
+inline constexpr std::size_t kMaxCaptions = 10000;
+inline constexpr std::size_t kMaxCaptionBytes = 1000;
+
+struct Caption {
+    CaptionId id;
+    RationalTime start;    // sequence timebase
+    RationalTime duration; // sequence timebase, > 0
+    std::string text;      // UTF-8, line breaks allowed, at most kMaxCaptionBytes
+
+    friend bool operator==(const Caption&, const Caption&) = default;
+};
+
 struct Marker {
     MarkerId id;
     RationalTime time; // sequence timebase
@@ -404,13 +418,15 @@ public:
     // fresh history (Editor::clear_history is implicit in a new Editor).
     [[nodiscard]] static Result<Timeline>
     restore(FrameRate rate, Rational timebase, std::vector<Track> tracks,
-            std::vector<Marker> markers, std::vector<MediaInfo> media, std::vector<LutInfo> luts);
+            std::vector<Marker> markers, std::vector<MediaInfo> media, std::vector<LutInfo> luts,
+            std::vector<Caption> captions = {});
 
     [[nodiscard]] FrameRate frame_rate() const noexcept { return rate_; }
     [[nodiscard]] Rational timebase() const noexcept { return timebase_; }
 
     [[nodiscard]] std::span<const Track> tracks() const noexcept { return tracks_; }
     [[nodiscard]] std::span<const Marker> markers() const noexcept { return markers_; }
+    [[nodiscard]] std::span<const Caption> captions() const noexcept { return captions_; }
     [[nodiscard]] std::span<const MediaInfo> media() const noexcept { return media_; }
     [[nodiscard]] std::span<const LutInfo> luts() const noexcept { return luts_; }
 
@@ -445,6 +461,7 @@ private:
     Rational timebase_;
     std::vector<Track> tracks_; // video tracks bottom first, then any order for audio
     std::vector<Marker> markers_;
+    std::vector<Caption> captions_; // sorted by start, not overlapping (ADR-0017)
     std::vector<MediaInfo> media_;
     std::vector<LutInfo> luts_;
     // IDs only grow, even across undo, so an ID is never reused for another object.

@@ -294,7 +294,7 @@ Result<Timeline> Timeline::create(FrameRate rate, Rational timebase) {
 
 Result<Timeline> Timeline::restore(FrameRate rate, Rational timebase, std::vector<Track> tracks,
                                    std::vector<Marker> markers, std::vector<MediaInfo> media,
-                                   std::vector<LutInfo> luts) {
+                                   std::vector<LutInfo> luts, std::vector<Caption> captions) {
     auto t = create(rate, timebase);
     if (!t) {
         return t;
@@ -309,11 +309,15 @@ Result<Timeline> Timeline::restore(FrameRate rate, Rational timebase, std::vecto
     for (const Marker& m : markers) {
         largest = std::max(largest, m.id.value());
     }
+    for (const Caption& c : captions) {
+        largest = std::max(largest, c.id.value());
+    }
     if (largest == std::numeric_limits<std::uint64_t>::max()) {
         return error(ErrorCode::InvalidData, "IDs exhausted");
     }
     t->tracks_ = std::move(tracks);
     t->markers_ = std::move(markers);
+    t->captions_ = std::move(captions);
     t->media_ = std::move(media);
     t->luts_ = std::move(luts);
     t->next_id_ = largest + 1;
@@ -702,6 +706,23 @@ Result<void> Timeline::validate() const {
             return error(ErrorCode::InvalidData, "invalid marker",
                          std::format("marker {}", m.id.value()));
         }
+    }
+    if (captions_.size() > kMaxCaptions) {
+        return error(ErrorCode::InvalidData, "too many captions");
+    }
+    std::unordered_set<CaptionId> caption_ids;
+    std::int64_t previous_end = 0;
+    for (const Caption& c : captions_) {
+        const bool timed =
+            c.start.timebase() == timebase_ && c.duration.timebase() == timebase_ &&
+            c.start.value() >= 0 && c.duration.value() > 0 &&
+            c.start.value() <= std::numeric_limits<std::int64_t>::max() - c.duration.value();
+        if (!c.id.valid() || !caption_ids.insert(c.id).second || !timed ||
+            c.start.value() < previous_end || c.text.size() > kMaxCaptionBytes) {
+            return error(ErrorCode::InvalidData, "invalid or overlapping caption",
+                         std::format("caption {}", c.id.value()));
+        }
+        previous_end = c.start.value() + c.duration.value();
     }
     return {};
 }

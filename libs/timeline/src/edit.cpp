@@ -864,6 +864,102 @@ std::unique_ptr<Command> remove_marker(MarkerId id) {
     return single("Remove Marker", detail::erase_marker(id));
 }
 
+namespace {
+
+// Sequence times on the grid, rebuilt in the sequence timebase (so equal times compare equal).
+Result<Caption> on_grid(const Timeline& tl, Caption c) {
+    auto start = tl.to_ticks(c.start);
+    auto duration = tl.to_ticks(c.duration);
+    if (!start) {
+        return std::unexpected(start.error());
+    }
+    if (!duration) {
+        return std::unexpected(duration.error());
+    }
+    c.start = tl.at(*start);
+    c.duration = tl.at(*duration);
+    return c;
+}
+
+// A caption edit as one step on the whole list; `change` edits a copy of the current list.
+std::unique_ptr<Command>
+caption_edit(std::string name,
+             std::function<Result<void>(const Timeline&, std::vector<Caption>&)> change) {
+    return detail::make_planned(
+        std::move(name), [change = std::move(change)](Timeline& tl) -> Result<Steps> {
+            std::vector<Caption> next(tl.captions().begin(), tl.captions().end());
+            if (auto r = change(tl, next); !r) {
+                return std::unexpected(r.error());
+            }
+            Steps steps;
+            steps.push_back(detail::replace_captions(std::move(next)));
+            return steps;
+        });
+}
+
+} // namespace
+
+std::unique_ptr<Command> add_caption(Caption caption) {
+    return caption_edit("Add Caption",
+                        [caption = std::move(caption)](const Timeline& tl,
+                                                       std::vector<Caption>& list) -> Result<void> {
+                            if (!caption.id.valid() ||
+                                std::ranges::find(list, caption.id, &Caption::id) != list.end()) {
+                                return error(ErrorCode::InvalidArgument,
+                                             "caption ID is invalid or in use");
+                            }
+                            auto c = on_grid(tl, caption);
+                            if (!c) {
+                                return std::unexpected(c.error());
+                            }
+                            list.push_back(std::move(*c));
+                            return {};
+                        });
+}
+
+std::unique_ptr<Command> set_caption(Caption caption) {
+    return caption_edit("Edit Caption",
+                        [caption = std::move(caption)](const Timeline& tl,
+                                                       std::vector<Caption>& list) -> Result<void> {
+                            const auto it = std::ranges::find(list, caption.id, &Caption::id);
+                            if (it == list.end()) {
+                                return error(ErrorCode::InvalidArgument, "no such caption");
+                            }
+                            auto c = on_grid(tl, caption);
+                            if (!c) {
+                                return std::unexpected(c.error());
+                            }
+                            *it = std::move(*c);
+                            return {};
+                        });
+}
+
+std::unique_ptr<Command> remove_caption(CaptionId id) {
+    return caption_edit(
+        "Remove Caption", [id](const Timeline&, std::vector<Caption>& list) -> Result<void> {
+            if (std::erase_if(list, [&](const Caption& c) { return c.id == id; }) == 0) {
+                return error(ErrorCode::InvalidArgument, "no such caption");
+            }
+            return {};
+        });
+}
+
+std::unique_ptr<Command> replace_captions(std::vector<Caption> captions) {
+    return caption_edit("Import Captions",
+                        [captions = std::move(captions)](
+                            const Timeline& tl, std::vector<Caption>& list) -> Result<void> {
+                            list.clear();
+                            for (const Caption& caption : captions) {
+                                auto c = on_grid(tl, caption);
+                                if (!c) {
+                                    return std::unexpected(c.error());
+                                }
+                                list.push_back(std::move(*c));
+                            }
+                            return {};
+                        });
+}
+
 std::unique_ptr<Command> transaction(std::string name,
                                      std::vector<std::unique_ptr<Command>> commands) {
     return detail::make_transaction(std::move(name), std::move(commands));

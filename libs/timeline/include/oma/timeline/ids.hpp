@@ -28,6 +28,7 @@ using MediaId = Id<struct MediaTag>;
 using ClipId = Id<struct ClipTag>;
 using TrackId = Id<struct TrackTag>;
 using MarkerId = Id<struct MarkerTag>;
+using CaptionId = Id<struct CaptionTag>;
 using LutId = Id<struct LutTag>;
 
 } // namespace oma::timeline

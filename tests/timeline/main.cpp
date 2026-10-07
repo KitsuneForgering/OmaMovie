@@ -9,6 +9,7 @@ void run_time_map_tests();
 void run_anchor_tests();
 void run_title_tests();
 void run_effect_tests();
+void run_caption_tests();
 
 int main(int argc, char* argv[]) {
     cest_init(argc, argv);
@@ -21,5 +22,6 @@ int main(int argc, char* argv[]) {
     run_anchor_tests();
     run_title_tests();
     run_effect_tests();
+    run_caption_tests();
     return cest_result();
 }
