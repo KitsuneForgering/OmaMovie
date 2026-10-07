@@ -10,8 +10,8 @@ rules, architectural invariants, priorities and conventions. It is not user docu
 
 ## 0. Repository status
 
-- **M0 done** (2026-10-02); `base`, `gpu`, `media` and `compositor` now exist. M2/M3 are partial, S1/S2 have prior experiment reports; `audio` (PipeWire/null output, master clock) and the M5 `timeline` core (model, commands, undo/redo, evaluation) exist and are tested; the GUI storyline edits through the timeline `Editor`, and playback follows the audio clock (timeline audio mixed by `libs/playback`). Audio lanes, waveforms, detach audio, equalizer/noise reduction/normalize, color/crop/filter/blur effects, transitions (ADR-0011) and color grading (CDL, curves, 3D LUTs; ADR-0012) were built ahead of M7 by maintainer choice. M7 started: `libs/project` saves and loads the native format (ADR-0007), not yet wired to the app; export is still missing. The final app and several target tools remain pending. See the plan for deliverables.
-- **Evidence review** (2026-10-03): `Docs/Research/skeptical-review.md`. Research recommendations are provisional; accepted decisions remain in their ADRs. S4's same-device compositor-image import is verified by the offscreen diagnostic (`Docs/spikes/S4-qt-shared-device.md`, ADR-0005). `make run-gui` now runs a Qt Quick editor shell (timeline edits with undo/redo, audio-clock playback) whose viewer composites on the GPU and hands the image to Qt without readback (ADR-0005); hardware-decoded frames and swapchain admission for other threads remain M4. Independent color validation remains S6/ADR-0006.
+- **M0 done** (2026-10-02); `base`, `gpu`, `media` and `compositor` now exist. M2/M3 are partial, S1/S2 have prior experiment reports; `audio` (PipeWire/null output, master clock) and the M5 `timeline` core (model, commands, undo/redo, evaluation) exist and are tested; the GUI storyline edits through the timeline `Editor`, and playback follows the audio clock (timeline audio mixed by `libs/playback`). Audio lanes, waveforms, detach audio, equalizer/noise reduction/normalize, color/crop/filter/blur effects, transitions (ADR-0011) and color grading (CDL, curves, 3D LUTs; ADR-0012) were built ahead of M7 by maintainer choice; video effects are an ordered per-clip stack of built-in operations (ADR-0016, native format 4). M7 started: `libs/project` saves and loads the native format (ADR-0007), not yet wired to the app; export is still missing. The final app and several target tools remain pending. See the plan for deliverables.
+- **Evidence review** (2026-10-03): `Docs/Research/skeptical-review.md`. Research recommendations are provisional; accepted decisions remain in their ADRs. S4's same-device compositor-image import is verified by the offscreen diagnostic (`Docs/spikes/S4-qt-shared-device.md`, ADR-0005). `make run-gui` now runs a Qt Quick editor shell (timeline edits with undo/redo, audio-clock playback) whose viewer composites on the GPU and hands the image to Qt without readback (ADR-0005). Since 2026-10-06 the viewer decodes in hardware by default on Intel (VA-API surfaces imported by OmaMovie, ADR-0004 amendment; decode thread admitted around Qt's swapchain changes, ADR-0005), with automatic preview quality; `OMA_PREVIEW_HARDWARE` and `OMA_PREVIEW_SCALE` override them. M4 and M5 are closed (M4 for Intel; device loss open). S1–S6 are done on Intel (ADR-0006 accepted: linear BT.709 working space, sRGB display, own shaders, libplacebo deferred, HDR degraded with a warning); independent SDR color vectors, a libswscale oracle and a chroma-siting reference pass.
 - The structure, commands and decisions below are the **target**. When creating something
   this document describes, follow it. When diverging, record why in an ADR (§20) and
   update this file in the same commit.
@@ -82,6 +82,11 @@ make fixtures                  # regenerate test media in tests/fixtures/generat
 make fuzz                      # libFuzzer targets for untrusted-file parsers (clang); FUZZ_RUNS=n
 make spikes                    # M1 spikes in tools/spikes (Docs/spikes/)
 make run-gui                   # Qt/Vulkan editor shell; GUI_FILE=path or RUN_GUI_SMOKE=1
+build/release/omamovie --m4-audit FILE SECONDS    # A/V sync, per-stage timing (opens a window)
+build/release/omamovie --m4-seek-audit FILE SEEKS # seek UI blocking and first-frame latency
+build/release/omamovie --export-audit FILE OUT.mp4 # export one file, per-phase timing (opens a window)
+make oma-project               # build the native project inspect/validate/dump CLI
+make BUILD=release DESTDIR=dir PREFIX=/usr install  # the installed tree (PKGBUILD, release tarball)
 makepkg -si                    # build and install the Arch package from the PKGBUILD
 ```
 
@@ -107,9 +112,6 @@ Target commands, not available yet:
 ```sh
 # Run
 ./build/debug/apps/omamovie/omamovie
-
-# Project CLI
-./build/debug/tools/oma-project/oma-project inspect <file>
 
 # Benchmarks
 ./build/release/tools/bench/oma-bench --scenario <name> --json out.json

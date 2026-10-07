@@ -31,7 +31,7 @@ measured from the clip's quietest tenth) and normalize (loudest peak to −1 dBF
 loudness matching). Sound files import to **audio lanes** below the storyline (§7.1):
 append/insert/overwrite place them there, clips drag between lanes and in time, edges
 trim without ripple, and a lane disappears with its last clip. **Detach audio**
-(`Ctrl+Shift+S`) moves a storyline clip's sound to a lane for J- and L-cuts. Clips with
+(`Ctrl+Alt+S`) moves a storyline clip's sound to a lane for J- and L-cuts. Clips with
 sound show their waveform. There is no project persistence, connected video layer,
 snapping or link between a lane clip and the storyline clip above it (lanes do not
 follow storyline ripples) yet. The Omarchy palette and font are read at startup; live
@@ -333,8 +333,10 @@ Translation rule: **macOS `Cmd` becomes `Ctrl`**, `Option` becomes `Alt`. OmaMov
 | `Q` | Connect as a layer above, at the playhead |
 | `D` | Overwrite at the playhead |
 | `Ctrl+B` | Split at the playhead (the selected clip, else the storyline clip) |
-| `Ctrl+Shift+S` | Detach audio |
+| `Ctrl+Alt+S` | Detach audio |
+| `Ctrl+S` / `Ctrl+Shift+S` / `Ctrl+O` | Save / Save As / Open project |
 | `Ctrl+T` | Add a cross dissolve at the nearest cut |
+| `Ctrl+Alt+T` | Add a title at the playhead (ADR-0015) |
 | `Delete` | Remove and close the gap |
 | `Shift+Delete` | Replace with a gap |
 | `Ctrl+D` | Change duration |
@@ -359,21 +361,30 @@ Translation rule: **macOS `Cmd` becomes `Ctrl`**, `Option` becomes `Alt`. OmaMov
 | `Ctrl+=` / `Ctrl+-` / `Shift+Z` | Timeline zoom / fit the project |
 | `Ctrl+1` | Show/hide the library |
 | `Tab` / `Shift+Tab` | Move keyboard focus through the controls (a ring marks it); `Enter` activates. A focused slider or list keeps the arrow keys |
-| `Shift+F10` / `Menu` | Context menu of the selected clip |
+| `Shift+F10` / `Menu` | Context menu of the selected clip; with nothing selected, of the cut under the playhead (transitions) or of the timeline |
+| `Ctrl+Shift+A` | Deselect (Final Cut's Deselect All) |
 | `Ctrl+I` | Import |
 | `Ctrl+E` | Export |
 | `Ctrl+Shift+F` | Full-screen viewer |
 | `Ctrl+K` | **Command palette** |
 
-- Every shortcut comes from the central action system and will be remappable.
+- Every shortcut comes from the central action system and is remappable from the command palette (`Ctrl+Enter` on an action); overrides persist in `$XDG_CONFIG_HOME/omamovie/shortcuts.ini`.
 - These are **OmaMovie assignments**, originally compiled from memory of the convention. Check action meaning, focus conflicts, accessibility and compositor shortcuts before implementation; do not advertise exact Apple compatibility.
 - `Ctrl+K` is the keyword editor in Final Cut; OmaMovie has no keywords, so the palette takes
   the shortcut.
+
+**Audit (2026-10-06).**
+- *Conflicts.* Detach audio and Save As both had `Ctrl+Shift+S`; Qt fires neither of two enabled shortcuts with the same keys, so both were dead. Save As keeps it (the desktop convention); Detach audio moved to `Ctrl+Alt+S`. The only shared default left is `Escape` (close the drawer / leave the full-screen viewer), never enabled together; the GUI smoke fails on any other shared default.
+- *Compositor.* Omarchy's Hyprland binds outside `SUPER` are `Alt+Tab` (and Shift/Ctrl variants), `Ctrl+Alt+Delete`, `Print`/`Alt+Print` and media/brightness keys (`hyprctl binds`); none is an OmaMovie shortcut.
+- *Focus.* Text fields keep printable keys and their editing keys; a focused slider, colour wheel or list keeps the arrows, Home/End (and Space where it toggles); the command palette takes the keyboard while open. Everything else reaches the window's shortcuts.
+- *Not assigned yet* (their features do not exist): `/`, `S`, `I`/`O`, `X`, `Ctrl+D`, `M`, the tool keys, the library's `F`/`U`/`Ctrl+F`. Each gets its key when its feature lands, through the same registry.
+- Accessibility beyond keyboard reach (screen readers, sticky keys) was not tested.
 
 ### 8.2 Command palette (`Ctrl+K`)
 - Lists **every** app action, searchable by name ("speed 50%", "export 1080p", "add marker").
 - It is disclosure "level 3": any capability is reachable without an on-screen button.
 - Matches Omarchy's style (search-driven launcher and menus).
+- `Enter` runs the highlighted action (disabled ones are listed dimmed and do not run); `Ctrl+Enter` or its shortcut button records a new shortcut (`Backspace` removes it, `Escape` cancels); a shortcut another action uses is refused with that action's name.
 
 ---
 
@@ -411,7 +422,7 @@ There are no separate "simple" and "pro" modes: a mode hides capability and forc
 
 ### 10.1 Typography (decided)
 
-- **The Omarchy font across the whole UI**, read by the platform adapter when available and updated live by a verified watcher. Retain the last valid font during incomplete updates. Fallback outside Omarchy: the system's default monospace
+- **The Omarchy font across the whole UI**, read by the platform adapter when available and updated live by a verified watcher (`omarchy::Theme`; QML text uses `UiText`, never a bare `Text`, so it follows the change). Retain the last valid font during incomplete updates. Fallback outside Omarchy: the system's default monospace
   font (`fontconfig`).
 - Consequences of a usually monospaced font:
   - labels take more width: prefer short labels and icons with tooltips in the adjustments bar;
@@ -429,9 +440,10 @@ There are no separate "simple" and "pro" modes: a mode hides capability and forc
   - **monochrome**: a single color applied at runtime from the theme (normal color, `accent` when active, `dark_foreground` when disabled);
   - filled variant only for active states (e.g. favorite);
   - legible at 16 px.
-- Implementation: SVGs in `apps/omamovie/resources/icons/`, loaded through the Qt Resource
-  System; tinted through the Qt Quick Controls icon mechanism (`icon.source` + `icon.color`)
-  **(verify the behavior with monochrome SVGs in Qt 6.11)**.
+- Implementation (2026-10-06): each icon is SVG path data in `apps/omamovie/qml/Icon.qml`,
+  drawn with Qt Quick Shapes and tinted at runtime. This keeps one source for every size and
+  theme without the Qt SVG module; separate `.svg` files would only be needed for places that
+  take image files (menu item icons).
 - License: the project's own (MIT), with a credits file if any icon derives from another free set.
 - The glyphs used in this document's wireframes (◐ ⬚ ♪ ...) are **placeholders only**.
 

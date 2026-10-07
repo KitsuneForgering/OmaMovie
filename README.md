@@ -1,6 +1,6 @@
 # OmaMovie
 
-OmaMovie is a video editor under development for Omarchy. Its current editor shell lets you import local videos and pictures, arrange clips on a timeline, preview the result, and adjust clip audio. It is useful for trying the editing workflow; it cannot yet save a project or export a movie.
+OmaMovie is a video editor under development for Omarchy. Its current editor shell lets you import local videos and pictures, arrange clips on a timeline, preview the result, and adjust clip audio. It saves and opens projects and exports the movie to MP4 (H.264 and AAC).
 
 ## Try the editor
 
@@ -19,7 +19,7 @@ You can also open a file directly:
 make run-gui GUI_FILE=/path/to/video.mp4
 ```
 
-The imported media stays on disk. The current session is temporary: closing the app loses timeline edits. The Export control is disabled until the render and project work in M7 is implemented.
+The imported media stays on disk and is never modified. Save with `Ctrl+S` (an `.omamovie` file) and reopen it later with `Ctrl+O`. `Ctrl+K` opens the command palette, which lists every action and lets you change its shortcut. `Ctrl+E` exports the movie as MP4: H.264 at the project's size and frame rate with AAC sound, using the GPU's encoder on Intel (VA-API) and x264 elsewhere (Settings can choose).
 
 ## What works today
 
@@ -28,7 +28,21 @@ The imported media stays on disk. The current session is temporary: closing the 
 - Preview the timeline with Vulkan compositing and audio clock playback; adjust clip gain, fades, and mute.
 - Use visible transport and edit controls, or their keyboard shortcuts, in the editor shell.
 
-The GUI currently uses software video decoding for its viewer. Hardware decode exists in the media library but is not yet connected to GUI playback. Project persistence, video export, external project interchange, and installable application packaging are planned work, not current capabilities.
+The viewer decodes in hardware on Intel (VA-API) and in software elsewhere; `OMA_PREVIEW_HARDWARE=0` forces software. External project interchange (OTIO, FCPXML) is planned work, not a current capability.
+
+## Install
+
+`makepkg -si` builds the package from the [PKGBUILD](PKGBUILD) and installs `omamovie`, its launcher entry, icon and the `.omamovie` file type. The editor follows the active Omarchy theme and font while it runs.
+
+### Full opacity on Hyprland
+
+Omarchy makes ordinary windows slightly translucent, which blends the wallpaper into the viewer. OmaMovie's window class (Wayland app_id) is `omamovie`. To keep it opaque, as Omarchy does for DaVinci Resolve, add this to `~/.config/hypr/windows.lua`:
+
+```lua
+o.window("^omamovie$", { tag = "-default-opacity", opacity = "1 1" })
+```
+
+The package does not install this rule. It uses the Lua window-rule syntax of current Omarchy (`default/hypr/apps/davinci-resolve.lua`); older Hyprland configurations need their own syntax. Full opacity only stops the blending: it does not calibrate the display.
 
 ## Build and development
 
