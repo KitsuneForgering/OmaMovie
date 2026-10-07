@@ -31,3 +31,21 @@ S5 raw output (2026-10-04, release build, Iris Xe, Mesa 26.2.2, FFmpeg n9.0.1). 
   composite (3 layers)   p50   5.48  p95   7.06  p99   7.47  max  18.37 ms
   decode + composite     p50   8.31  p95   9.95  p99  12.27  max  21.44 ms
   frames over 16.67 ms: 4 of 600
+
+== AV1 (added 2026-10-04 for the M2 done criterion): two av1.mkv streams (1080p60, SVT-AV1) + the PNG, hardware, two runs
+-- run 1
+  input 0: 1920x1080, path VA-API to Vulkan
+  input 1: 1920x1080, path VA-API to Vulkan
+  input 2: 1920x1080, path software
+  decode A + B           p50   2.15  p95  10.51  p99  11.66  max  12.67 ms
+  composite (3 layers)   p50   5.10  p95   5.31  p99   5.44  max   5.70 ms
+  decode + composite     p50   7.16  p95  15.65  p99  16.81  max  17.86 ms
+  frames over 16.67 ms: 10 of 600
+-- run 2
+  input 0: 1920x1080, path VA-API to Vulkan
+  input 1: 1920x1080, path VA-API to Vulkan
+  input 2: 1920x1080, path software
+  decode A + B           p50   2.12  p95  10.48  p99  11.54  max  12.15 ms
+  composite (3 layers)   p50   5.06  p95   5.25  p99   5.41  max   5.55 ms
+  decode + composite     p50   7.09  p95  15.57  p99  16.54  max  17.11 ms
+  frames over 16.67 ms: 5 of 600

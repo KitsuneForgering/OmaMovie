@@ -1,0 +1,45 @@
+M6 long-form timeline interaction (2026-10-06)
+
+Machine: Intel Iris Xe (TigerLake), Mesa 26.2.2, Qt 6.11, 1600x900 window. BUILD=release.
+Command: build/release/omamovie --m6-timeline-audit N  (OMA_AUDIT_ZOOM=60 for a working zoom)
+The audit imports tests/fixtures/generated/h264_30fps_aac.mp4, saves, builds a storyline of N
+clips of 5 frames with the timeline's own commands, saves it with libs/project, opens it in
+the editor and times 20 rounds of seek, select, split, ripple delete and undo (two undos per
+round), each from the call to the end of the first Qt frame that began after it. Proposed
+gate (implementation plan §5): p95 < 100 ms and no routine edit stall > 250 ms at 5,000 clips.
+
+Before (one delegate per storyline clip, rebuilt from a QVariantList on every edit):
+  500 clips: split p50 327 / p95 463, ripple delete p50 401 / p95 575, undo p50 361 / max
+  662 ms; RSS 3.7 GB. 2,000 clips ran the machine out of memory (stopped by the system).
+  Per edit, the C++ side cost 0.4 ms (command) + 1.9 ms (list); QML ~203 ms.
+
+Steps, each measured:
+  1. Incremental model (ClipListModel: keeps rows whose clip ID did not move): 500 clips
+     split p50 60, ripple 83, undo 68 ms; RSS 424 MB. 2,000 clips: 0.9-1.7 s per action,
+     render thread busy in the driver.
+  2. Level of detail (thumbnail, waveform, label, fades, trim edges only on clips >= 24 px)
+     and junction markers only near the view and with room: 2,000 clips seek p50 19,
+     split p50 69 / p95 87, ripple p50 223, undo p95 296 ms.
+  3. Whole-list JS conversions removed (actions read the model's count, the minimap paints a
+     flat [start, duration] list): 5,000 clips split p50 164, ripple p50 520 ms.
+  4. The model holds only clips near the view (pages of the view width), and more than 400
+     in view draw as one strip (Canvas) with click-to-select:
+
+5,000 clips, whole sequence fitted (compact strip):
+  seek         p50      5.1  p95      6.5  max      6.5 ms
+  select       p50      9.6  p95     14.5  max     14.5 ms
+  split        p50     22.3  p95     25.3  max     25.3 ms
+  ripple del   p50     14.9  p95     20.2  max     20.2 ms
+  undo         p50     16.5  p95     17.9  max     19.0 ms
+  RSS 328 MB
+5,000 clips, 60 px/s (clip delegates in view):
+  seek         p50      7.5  p95     11.9  max     11.9 ms
+  select       p50      8.6  p95     10.4  max     10.4 ms
+  split        p50     19.9  p95     30.7  max     30.7 ms
+  ripple del   p50     16.2  p95     59.5  max     59.5 ms
+  undo         p50     16.6  p95     29.5  max     59.9 ms
+  RSS 386 MB
+
+Not covered: drag/trim gestures and scrolling (only command-driven edits), audio/video lanes
+with thousands of clips, a two-hour source, project open/save phases (the "open" figure is
+dominated by the reimport and is not a phase breakdown), repeated runs.

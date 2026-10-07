@@ -1,0 +1,22 @@
+M7 — autosave recovery after the process is killed (2026-10-07)
+
+Machine: Intel Iris Xe (TGL GT2), Mesa 26.2.2, Arch/Omarchy. Build: debug.
+Isolation: XDG_STATE_HOME, XDG_CONFIG_HOME, XDG_CACHE_HOME and XDG_RUNTIME_DIR in a scratch folder.
+
+Steps
+1. build/debug/omamovie take.mp4   (a copy of tests/fixtures/generated/h264_30fps_aac.mp4)
+   The file is imported onto the storyline: an unsaved session.
+2. Wait 40 s (autosave runs every 30 s with unsaved changes).
+3. kill -9 <pid>   (no shutdown code runs)
+4. Inspect $XDG_STATE_HOME/omamovie/autosave/
+
+Result
+- untitled-<ms>.omamovie (3,295 bytes) and its .origin sidecar (empty: the session had no
+  project file) remained after the kill.
+- oma-project validate: valid. oma-project inspect: format_version 4, 1 media, 1 track, 1 clip.
+- The media reference holds the absolute path of take.mp4 besides the relative one.
+- The GUI smoke already checks that a copy left this way is listed on Projects and restores
+  as unsaved changes; that listing was not re-checked by hand here.
+
+Not covered: a kill during the autosave write itself (the write is atomic: temporary file,
+fsync, rename, directory fsync), power loss, and kills on other filesystems.

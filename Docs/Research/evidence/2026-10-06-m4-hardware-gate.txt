@@ -1,0 +1,120 @@
+M4 hardware decode pilot gate, first full run (2026-10-06)
+
+Machine: Intel Iris Xe (TigerLake), Mesa 26.2.2, FFmpeg 9.0.1, PipeWire 1.6.8, eDP-1
+1920x1080 @ 60 Hz (no VRR). BUILD=release, working tree after the own VA-API DMA-BUF import
+(ADR-0004 amendment). Hardware path: VA-API decode imported into Vulkan, decoded on the
+scheduler thread under ADR-0005 admission. Software path: FFmpeg CPU decode + one upload.
+Sources (synthetic, 70 s, generated in the scratchpad, not committed):
+  testsrc2 + 440 Hz sine; H.264 1080p60 (x264 ultrafast, GOP 120), HEVC 10-bit 1080p60
+  (x265 ultrafast, GOP 120), AV1 1080p60 (SVT-AV1 preset 12 -> M11, GOP 120),
+  H.264 2160p30 (x264 ultrafast, GOP 60).
+Per file and path: two `--m4-audit FILE 60` runs and one `--m4-seek-audit FILE 40`.
+The audit's error is audible time minus the last composited frame (composition, not Qt's
+presentation); the pass rule is p99 <= one frame interval, no underruns (and drift for >= 120 s).
+
+Results (lines as printed, PipeWire output muted):
+h264_1080p60.mp4 software run1: M4 audit: FAIL, 60 s, software decode, PipeWire audio, 5650 samples, 2808 composites, p99 20.67 ms, max 20.67 ms, first/last mean delta 0.00 ms, signed range -16.67..20.67 ms, underruns 0 (first -1.00 s), dropped video 787, frame interval 16.67 ms
+h264_1080p60.mp4 software run2: M4 audit: FAIL, 60 s, software decode, PipeWire audio, 5656 samples, 2808 composites, p99 20.67 ms, max 20.67 ms, first/last mean delta 0.00 ms, signed range -16.67..20.67 ms, underruns 0 (first -1.00 s), dropped video 788, frame interval 16.67 ms
+h264_1080p60.mp4 software seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 12.63 p95 24.30 max 24.81 ms, first composited frame p50 80.15 p95 179.48 max 194.35 ms, 0 without a frame in 500 ms
+h264_1080p60.mp4 hardware run1: M4 audit: FAIL, 60 s, hardware pilot decode, PipeWire audio, 5801 samples, 2810 composites, p99 20.67 ms, max 20.67 ms, first/last mean delta 0.00 ms, signed range -16.67..20.67 ms, underruns 0 (first -1.00 s), dropped video 788, frame interval 16.67 ms
+h264_1080p60.mp4 hardware run2: M4 audit: FAIL, 60 s, hardware pilot decode, PipeWire audio, 5797 samples, 2807 composites, p99 20.00 ms, max 20.67 ms, first/last mean delta 0.00 ms, signed range -16.67..20.67 ms, underruns 0 (first -1.00 s), dropped video 788, frame interval 16.67 ms
+h264_1080p60.mp4 hardware seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 14.82 p95 24.49 max 25.15 ms, first composited frame p50 128.38 p95 277.86 max 285.76 ms, 0 without a frame in 500 ms
+hevc10_1080p60.mp4 software run1: M4 audit: FAIL, 60 s, software decode, PipeWire audio, 5593 samples, 2806 composites, p99 20.67 ms, max 20.67 ms, first/last mean delta 0.00 ms, signed range -16.67..20.67 ms, underruns 0 (first -1.00 s), dropped video 787, frame interval 16.67 ms
+hevc10_1080p60.mp4 software run2: M4 audit: FAIL, 60 s, software decode, PipeWire audio, 5602 samples, 2805 composites, p99 20.67 ms, max 20.67 ms, first/last mean delta 0.00 ms, signed range -16.67..20.67 ms, underruns 0 (first -1.00 s), dropped video 789, frame interval 16.67 ms
+hevc10_1080p60.mp4 software seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 19.81 p95 24.52 max 25.91 ms, first composited frame p50 145.38 p95 225.58 max 241.80 ms, 0 without a frame in 500 ms
+hevc10_1080p60.mp4 hardware run1: M4 audit: FAIL, 60 s, hardware pilot decode, PipeWire audio, 5800 samples, 2809 composites, p99 20.00 ms, max 20.67 ms, first/last mean delta 0.00 ms, signed range -16.67..20.67 ms, underruns 0 (first -1.00 s), dropped video 787, frame interval 16.67 ms
+hevc10_1080p60.mp4 hardware run2: M4 audit: FAIL, 60 s, hardware pilot decode, PipeWire audio, 5795 samples, 2809 composites, p99 20.00 ms, max 20.67 ms, first/last mean delta 0.00 ms, signed range -16.67..20.67 ms, underruns 0 (first -1.00 s), dropped video 787, frame interval 16.67 ms
+hevc10_1080p60.mp4 hardware seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 13.59 p95 25.35 max 26.26 ms, first composited frame p50 100.10 p95 167.57 max 175.54 ms, 0 without a frame in 500 ms
+av1_1080p60.mkv software run1: M4 audit: FAIL, 60 s, software decode, PipeWire audio, 5648 samples, 2808 composites, p99 20.00 ms, max 20.67 ms, first/last mean delta 0.00 ms, signed range -16.67..20.67 ms, underruns 0 (first -1.00 s), dropped video 789, frame interval 16.67 ms
+av1_1080p60.mkv software run2: M4 audit: FAIL, 60 s, software decode, PipeWire audio, 5630 samples, 2808 composites, p99 20.00 ms, max 20.67 ms, first/last mean delta 0.00 ms, signed range -16.67..20.67 ms, underruns 0 (first -1.00 s), dropped video 789, frame interval 16.67 ms
+av1_1080p60.mkv software seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 15.26 p95 24.23 max 37.58 ms, first composited frame p50 199.16 p95 342.54 max 356.15 ms, 0 without a frame in 500 ms
+av1_1080p60.mkv hardware run1: M4 audit: FAIL, 60 s, hardware pilot decode, PipeWire audio, 5793 samples, 2804 composites, p99 20.67 ms, max 20.67 ms, first/last mean delta 0.00 ms, signed range -16.67..20.67 ms, underruns 0 (first -1.00 s), dropped video 794, frame interval 16.67 ms
+av1_1080p60.mkv hardware run2: M4 audit: FAIL, 60 s, hardware pilot decode, PipeWire audio, 5793 samples, 2806 composites, p99 20.00 ms, max 20.67 ms, first/last mean delta 0.00 ms, signed range -16.67..20.67 ms, underruns 0 (first -1.00 s), dropped video 790, frame interval 16.67 ms
+av1_1080p60.mkv hardware seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 18.01 p95 24.98 max 26.37 ms, first composited frame p50 121.49 p95 221.48 max 226.49 ms, 0 without a frame in 500 ms
+h264_2160p30.mp4 software run1: M4 audit: PASS, 60 s, software decode, PipeWire audio, 4181 samples, 1798 composites, p99 32.00 ms, max 33.33 ms, first/last mean delta 0.00 ms, signed range -33.33..20.00 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 33.33 ms
+h264_2160p30.mp4 software run2: M4 audit: PASS, 60 s, software decode, PipeWire audio, 4197 samples, 1794 composites, p99 32.00 ms, max 33.33 ms, first/last mean delta 0.00 ms, signed range -33.33..22.67 ms, underruns 0 (first -1.00 s), dropped video 3, frame interval 33.33 ms
+h264_2160p30.mp4 software seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 14.05 p95 23.82 max 26.13 ms, first composited frame p50 148.94 p95 220.93 max 222.07 ms, 0 without a frame in 500 ms
+h264_2160p30.mp4 hardware run1: M4 audit: PASS, 60 s, hardware pilot decode, PipeWire audio, 5402 samples, 1801 composites, p99 33.33 ms, max 33.33 ms, first/last mean delta 0.00 ms, signed range -33.33..20.00 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 33.33 ms
+h264_2160p30.mp4 hardware run2: M4 audit: PASS, 60 s, hardware pilot decode, PipeWire audio, 5371 samples, 1799 composites, p99 33.33 ms, max 33.33 ms, first/last mean delta 0.00 ms, signed range -33.33..20.00 ms, underruns 0 (first -1.00 s), dropped video 2, frame interval 33.33 ms
+h264_2160p30.mp4 hardware seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 16.81 p95 25.21 max 26.00 ms, first composited frame p50 205.77 p95 334.77 max 355.05 ms, 0 without a frame in 500 ms
+
+Finding from the first run: every codec and both paths composited ~2808 of 3600 frames at
+1080p60 (~47 fps on a 60 Hz panel), so decode was not the limit. Per-stage timing added to
+the audit (`M4 audit stages/UI/Qt frame` lines) showed composites of 3.5 ms (hardware) and
+8 ms (software), Qt frames of 4.7 ms and UI ticks every 8 ms, but composites only every
+~23 ms: the audio clock advanced only at PipeWire callbacks (about 21 ms of audio each), so
+video following it jumped one or two frames per step. PipeWireOutput::frames_played now
+interpolates between callbacks with the steady clock, capped at one quantum.
+
+Second run (2026-10-06, same machine and files, interpolated clock):
+h264_1080p60.mp4 software run1: M4 audit: FAIL, 60 s, software decode, PipeWire audio, 5743 samples, 3558 composites, p99 17.21 ms, max 22.96 ms, first/last mean delta 0.00 ms, signed range -8.44..22.96 ms, underruns 0 (first -1.00 s), dropped video 3, frame interval 16.67 ms
+h264_1080p60.mp4 software run2: M4 audit: PASS, 60 s, software decode, PipeWire audio, 5766 samples, 3585 composites, p99 9.00 ms, max 23.40 ms, first/last mean delta 0.00 ms, signed range -8.83..23.40 ms, underruns 0 (first -1.00 s), dropped video 4, frame interval 16.67 ms
+h264_1080p60.mp4 software seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 15.46 p95 24.90 max 25.18 ms, first composited frame p50 87.97 p95 154.36 max 156.95 ms, 0 without a frame in 500 ms
+h264_1080p60.mp4 hardware run1: M4 audit: PASS, 60 s, hardware pilot decode, PipeWire audio, 5800 samples, 3588 composites, p99 9.33 ms, max 9.79 ms, first/last mean delta 0.00 ms, signed range -7.56..9.79 ms, underruns 0 (first -1.00 s), dropped video 5, frame interval 16.67 ms
+h264_1080p60.mp4 hardware run2: M4 audit: PASS, 60 s, hardware pilot decode, PipeWire audio, 5799 samples, 3586 composites, p99 12.37 ms, max 12.77 ms, first/last mean delta 0.00 ms, signed range -12.10..12.77 ms, underruns 0 (first -1.00 s), dropped video 6, frame interval 16.67 ms
+h264_1080p60.mp4 hardware seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 17.91 p95 25.39 max 25.82 ms, first composited frame p50 135.50 p95 255.67 max 277.54 ms, 0 without a frame in 500 ms
+hevc10_1080p60.mp4 software run1: M4 audit: FAIL, 60 s, software decode, PipeWire audio, 5655 samples, 3479 composites, p99 19.83 ms, max 22.35 ms, first/last mean delta 0.00 ms, signed range -9.65..22.35 ms, underruns 0 (first -1.00 s), dropped video 42, frame interval 16.67 ms
+hevc10_1080p60.mp4 software run2: M4 audit: FAIL, 60 s, software decode, PipeWire audio, 5633 samples, 3472 composites, p99 18.50 ms, max 20.29 ms, first/last mean delta 0.00 ms, signed range -9.92..20.29 ms, underruns 0 (first -1.00 s), dropped video 32, frame interval 16.67 ms
+hevc10_1080p60.mp4 software seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 15.09 p95 23.94 max 24.51 ms, first composited frame p50 146.64 p95 227.97 max 231.59 ms, 0 without a frame in 500 ms
+hevc10_1080p60.mp4 hardware run1: M4 audit: PASS, 60 s, hardware pilot decode, PipeWire audio, 5777 samples, 3588 composites, p99 15.83 ms, max 16.56 ms, first/last mean delta 0.00 ms, signed range -12.08..16.56 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 16.67 ms
+hevc10_1080p60.mp4 hardware run2: M4 audit: PASS, 60 s, hardware pilot decode, PipeWire audio, 5783 samples, 3571 composites, p99 15.77 ms, max 16.12 ms, first/last mean delta 0.00 ms, signed range -12.44..16.12 ms, underruns 0 (first -1.00 s), dropped video 0, frame interval 16.67 ms
+hevc10_1080p60.mp4 hardware seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 15.67 p95 25.38 max 26.36 ms, first composited frame p50 102.65 p95 163.66 max 170.95 ms, 0 without a frame in 500 ms
+av1_1080p60.mkv software run1: M4 audit: PASS, 60 s, software decode, PipeWire audio, 5771 samples, 3576 composites, p99 15.46 ms, max 23.44 ms, first/last mean delta 0.00 ms, signed range -8.04..23.44 ms, underruns 0 (first -1.00 s), dropped video 4, frame interval 16.67 ms
+av1_1080p60.mkv software run2: M4 audit: PASS, 60 s, software decode, PipeWire audio, 5772 samples, 3589 composites, p99 11.90 ms, max 12.50 ms, first/last mean delta 0.00 ms, signed range -10.40..12.50 ms, underruns 0 (first -1.00 s), dropped video 2, frame interval 16.67 ms
+av1_1080p60.mkv software seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 14.11 p95 25.31 max 31.64 ms, first composited frame p50 180.76 p95 353.83 max 371.80 ms, 0 without a frame in 500 ms
+av1_1080p60.mkv hardware run1: M4 audit: PASS, 60 s, hardware pilot decode, PipeWire audio, 5787 samples, 3580 composites, p99 8.35 ms, max 20.17 ms, first/last mean delta 0.00 ms, signed range -11.12..20.17 ms, underruns 0 (first -1.00 s), dropped video 8, frame interval 16.67 ms
+av1_1080p60.mkv hardware run2: M4 audit: PASS, 60 s, hardware pilot decode, PipeWire audio, 5794 samples, 3587 composites, p99 7.87 ms, max 22.04 ms, first/last mean delta 0.00 ms, signed range -10.75..22.04 ms, underruns 0 (first -1.00 s), dropped video 8, frame interval 16.67 ms
+av1_1080p60.mkv hardware seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 17.64 p95 27.25 max 29.67 ms, first composited frame p50 130.88 p95 220.60 max 222.98 ms, 0 without a frame in 500 ms
+h264_2160p30.mp4 software run1: M4 audit: PASS, 60 s, software decode, PipeWire audio, 3875 samples, 1796 composites, p99 15.75 ms, max 16.96 ms, first/last mean delta 0.00 ms, signed range -16.96..16.67 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 33.33 ms
+h264_2160p30.mp4 software run2: M4 audit: PASS, 60 s, software decode, PipeWire audio, 3797 samples, 1796 composites, p99 15.54 ms, max 17.10 ms, first/last mean delta 0.00 ms, signed range -17.10..16.42 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 33.33 ms
+h264_2160p30.mp4 software seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 13.75 p95 26.31 max 27.03 ms, first composited frame p50 149.70 p95 228.89 max 270.33 ms, 0 without a frame in 500 ms
+h264_2160p30.mp4 hardware run1: M4 audit: PASS, 60 s, hardware pilot decode, PipeWire audio, 5378 samples, 1799 composites, p99 20.81 ms, max 21.67 ms, first/last mean delta 0.00 ms, signed range -21.67..17.83 ms, underruns 0 (first -1.00 s), dropped video 3, frame interval 33.33 ms
+h264_2160p30.mp4 hardware run2: M4 audit: PASS, 60 s, hardware pilot decode, PipeWire audio, 5312 samples, 1801 composites, p99 20.98 ms, max 21.71 ms, first/last mean delta 0.00 ms, signed range -21.71..17.37 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 33.33 ms
+h264_2160p30.mp4 hardware seek: M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 13.20 p95 24.27 max 26.42 ms, first composited frame p50 207.54 p95 335.80 max 339.04 ms, 0 without a frame in 500 ms
+drift_1080p30 hardware 600 s: M4 audit: PASS, 600 s, hardware pilot decode, PipeWire audio, 59800 samples, 18000 composites, p99 27.56 ms, max 29.75 ms, first/last mean delta 0.03 ms, signed range -29.75..16.92 ms, underruns 0 (first -1.00 s), dropped video 0, frame interval 33.33 ms
+
+Memory (separate 300 s hardware run of drift_1080p30.mp4, editor's VmRSS every 30 s; the
+sampling inside the second run measured the 'timeout' process and is discarded):
+t=30s VmRSS:	  322912 kB
+t=60s VmRSS:	  322756 kB
+t=90s VmRSS:	  322784 kB
+t=120s VmRSS:	  323112 kB
+t=150s VmRSS:	  322944 kB
+t=180s VmRSS:	  322936 kB
+t=210s VmRSS:	  322948 kB
+t=240s VmRSS:	  323164 kB
+t=270s VmRSS:	  322984 kB
+M4 audit: PASS, 300 s, hardware pilot decode, PipeWire audio, 29795 samples, 8995 composites, p99 27.81 ms, max 29.44 ms, first/last mean delta 0.48 ms, signed range -29.44..16.62 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 33.33 ms
+
+Decision under the predeclared gate: hardware decode passed every 1080p60 codec (H.264,
+10-bit HEVC, AV1: 2 of 2 each), 2160p30 H.264 and the 10-minute 1080p30 run (drift 0.03 ms, no
+drops), with stable memory; software failed 10-bit HEVC 1080p60 twice and H.264 1080p60 once.
+Hardware decode becomes the viewer default on Intel (the tested driver); other vendors stay on
+software until S7/S8. Seek-to-first-frame is slower with hardware for H.264 (p50 136 vs 88 ms)
+and 2160p (208 vs 150 ms), faster for HEVC and AV1. Not covered: two-layer scenes, other
+GOP structures, hybrid machines.
+
+Adaptive preview comparison (2026-10-06, software decode forced with OMA_PREVIEW_HARDWARE=0,
+40 s audits; "auto" halves the preview resolution for the rest of a playback after more than
+2% of the frames due in two seconds are dropped; 0.5 is a fixed half-resolution preview).
+H.264 2160p60 (x264 ultrafast, GOP 120, 50 s) was added as an overloaded scene.
+hevc10_1080p60.mp4 software full: M4 audit stages: composite p50 8.68 p95 10.49 p99 11.64 ms, interval p50 16.75 p95 19.60 p99 21.98 ms
+hevc10_1080p60.mp4 software full: M4 audit: PASS, 40 s, software decode, PipeWire audio, 3743 samples, 2393 composites, p99 8.88 ms, max 12.90 ms, first/last mean delta 0.00 ms, signed range -9.19..12.90 ms, underruns 0 (first -1.00 s), dropped video 0, frame interval 16.67 ms
+hevc10_1080p60.mp4 software auto: M4 audit stages: composite p50 8.73 p95 10.53 p99 12.08 ms, interval p50 16.64 p95 19.10 p99 27.32 ms
+hevc10_1080p60.mp4 software auto: M4 audit: PASS, 40 s, software decode, PipeWire audio, 3758 samples, 2389 composites, p99 13.85 ms, max 18.17 ms, first/last mean delta 0.00 ms, signed range -10.27..18.17 ms, underruns 0 (first -1.00 s), dropped video 3, frame interval 16.67 ms
+hevc10_1080p60.mp4 software 0.5: M4 audit stages: composite p50 4.45 p95 5.33 p99 6.04 ms, interval p50 16.64 p95 29.00 p99 30.02 ms
+hevc10_1080p60.mp4 software 0.5: M4 audit: PASS, 40 s, software decode, PipeWire audio, 3799 samples, 2390 composites, p99 13.62 ms, max 14.40 ms, first/last mean delta 0.00 ms, signed range -12.71..14.40 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 16.67 ms
+h264_2160p60.mp4 software full: M4 audit stages: composite p50 16.50 p95 17.71 p99 18.39 ms, interval p50 17.45 p95 19.16 p99 30.40 ms
+h264_2160p60.mp4 software full: M4 audit: FAIL, 40 s, software decode, PipeWire audio, 2197 samples, 2226 composites, p99 22.00 ms, max 25.44 ms, first/last mean delta 0.00 ms, signed range 0.73..25.44 ms, underruns 0 (first -1.00 s), dropped video 104, frame interval 16.67 ms
+h264_2160p60.mp4 software auto: 09:57:08.888 INFO  playback   preview at half resolution: 15 of 135 frames dropped (session.cpp:1738)
+h264_2160p60.mp4 software auto: M4 audit stages: composite p50 9.65 p95 15.92 p99 17.55 ms, interval p50 16.05 p95 35.95 p99 39.23 ms
+h264_2160p60.mp4 software auto: M4 audit: FAIL, 40 s, software decode, PipeWire audio, 3512 samples, 2254 composites, p99 20.38 ms, max 30.65 ms, first/last mean delta 0.00 ms, signed range -8.27..30.65 ms, underruns 0 (first -1.00 s), dropped video 99, frame interval 16.67 ms
+h264_2160p60.mp4 software 0.5: M4 audit stages: composite p50 10.04 p95 12.76 p99 14.88 ms, interval p50 16.76 p95 19.93 p99 34.39 ms
+h264_2160p60.mp4 software 0.5: M4 audit: FAIL, 40 s, software decode, PipeWire audio, 3573 samples, 2368 composites, p99 17.00 ms, max 30.35 ms, first/last mean delta 0.00 ms, signed range -8.02..30.35 ms, underruns 0 (first -1.00 s), dropped video 12, frame interval 16.67 ms
+
+Reading: on 10-bit HEVC 1080p60 every setting passes and auto never triggers. On 2160p60,
+full resolution fails and starves the UI thread (2197 audit samples instead of ~3500 in 40 s);
+auto triggers after two seconds and restores UI responsiveness (3512 samples), fixed half
+composites the most frames (2368); software decode of 2160p60 still cannot keep real time.
+Automatic quality became the default: inert when not needed, helpful under overload, logged
+when it acts, overridden by OMA_PREVIEW_SCALE=1 (full) or a fixed fraction.
