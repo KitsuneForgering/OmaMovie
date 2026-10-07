@@ -333,13 +333,22 @@ build/fuzz/fuzz_project: $(PROJECT_FUZZ_SOURCES) $(MAKEFILE_LIST)
 	$(Q)$(FUZZ_CXX) $(FUZZ_FLAGS) -Ilibs/timeline/include -Ilibs/timeline/src -Ilibs/project/include \
 		$(filter %.cpp,$^) -o $@ $$(pkg-config --libs simdjson)
 
-fuzz: build/fuzz/fuzz_cube build/fuzz/fuzz_project
+build/fuzz/fuzz_subtitles: tests/fuzz/fuzz_subtitles.cpp libs/project/src/subtitles.cpp libs/base/src/error.cpp \
+                           libs/project/include/oma/project/subtitles.hpp $(MAKEFILE_LIST)
+	$(call say,FUZZ,$@)
+	@mkdir -p $(@D)/subtitles-corpus
+	$(Q)$(FUZZ_CXX) $(FUZZ_FLAGS) -Ilibs/project/include $(filter %.cpp,$^) -o $@
+
+fuzz: build/fuzz/fuzz_cube build/fuzz/fuzz_project build/fuzz/fuzz_subtitles
 	build/fuzz/fuzz_cube -runs=$(FUZZ_RUNS) -max_len=65536 build/fuzz/cube-corpus tests/fuzz/corpus/cube
 	@# simdjson's inline padded_string pairs new(std::nothrow)[] with delete[]; under clang's
 	@# sanitizers with libstdc++ the delete reaches free(), a toolchain mismatch outside our code
 	@# (which allocates no arrays with new[]).
 	ASAN_OPTIONS=alloc_dealloc_mismatch=0 build/fuzz/fuzz_project -runs=$(FUZZ_RUNS) -max_len=65536 \
 		build/fuzz/project-corpus tests/fuzz/corpus/project
+	@# libstdc++'s stable_sort buffer meets the same new/free mismatch under clang's sanitizers.
+	ASAN_OPTIONS=alloc_dealloc_mismatch=0 build/fuzz/fuzz_subtitles -runs=$(FUZZ_RUNS) -max_len=65536 \
+		build/fuzz/subtitles-corpus tests/fuzz/corpus/subtitles
 
 # Installs every dependency declared in the PKGBUILD (runtime, build, check and dev tools).
 deps:

@@ -108,6 +108,13 @@ Document sample(const fs::path& dir) {
         b, tl::Transition{.kind = tl::TransitionKind::Wipe, .duration = f(10)}));
     (void)ed.execute(tl::edit::detach_audio(a, lane, ed.new_clip_id()));
     (void)ed.execute(tl::edit::add_marker(ed.new_marker_id(), f(12), "Intro, \"take 2\"\n"));
+    // Captions (format 5, ADR-0017): quotes, a line break and non-ASCII text survive.
+    (void)ed.execute(tl::edit::add_caption({.id = ed.new_caption_id(),
+                                            .start = f(0),
+                                            .duration = f(30),
+                                            .text = "Olá, \"mundo\"\nsegunda linha"}));
+    (void)ed.execute(tl::edit::add_caption(
+        {.id = ed.new_caption_id(), .start = f(45), .duration = f(15), .text = "→ fim"}));
     // A segmented time map (format 2, ADR-0013): ramp 1 -> 2, hold, then back to the start.
     const tl::ClipId c = ed.new_clip_id();
     source.source_in = mf(200);
@@ -380,6 +387,20 @@ void rejects_bad_effects() {
     expect(broken("\"org.example.glow\"", "\"" + std::string(100, 'x') + "\"")).toBeTruthy();
 }
 
+// Captions are bounded at the file boundary: an oversized text is refused before it is copied.
+void rejects_oversized_captions() {
+    std::string text = *oma::project::to_json(sample("/p"), "/p");
+    const std::string from = "\"text\": \"→ fim\"";
+    const auto at = text.find(from);
+    expect(at != std::string::npos).toBeTruthy();
+    if (at == std::string::npos) {
+        return;
+    }
+    text.replace(at, from.size(),
+                 "\"text\": \"" + std::string(tl::kMaxCaptionBytes + 1, 'x') + "\"");
+    expect(oma::project::from_json(text, "/p").has_value()).toBeFalsy();
+}
+
 // Relink (CLAUDE.md §14): the moved file is found under a root by name and content; a decoy
 // with the same name and size but other bytes is skipped, and nothing is found when it is gone.
 void finds_relocated_media() {
@@ -466,6 +487,7 @@ void run_document_tests() {
         it("rejects oversized titles", { rejects_oversized_titles(); });
         it("migrates format 3 filters to effects", { migrates_filters_to_effects(); });
         it("rejects malformed effects", { rejects_bad_effects(); });
+        it("rejects oversized captions", { rejects_oversized_captions(); });
         it("finds moved media by name and fingerprint", { finds_relocated_media(); });
     });
 }

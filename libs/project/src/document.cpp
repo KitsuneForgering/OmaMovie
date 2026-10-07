@@ -1016,6 +1016,17 @@ Result<std::string> to_json(const Document& doc, const std::filesystem::path& pr
             w.end_object();
         }
         w.end_array();
+        w.key("captions"); // format 5 (ADR-0017)
+        w.begin_array();
+        for (const tl::Caption& c : t.captions()) {
+            w.begin_object();
+            w.field("id", c.id.value());
+            time(w, "start", c.start);
+            time(w, "duration", c.duration);
+            w.field("text", c.text);
+            w.end_object();
+        }
+        w.end_array();
         w.end_object();
     }
     for (const auto& [k, raw] : doc.unknown) {
@@ -1068,6 +1079,7 @@ Result<Document> from_json(std::string_view json, const std::filesystem::path& p
     // `time_map` of a clip (ADR-0013), so a version 1 document already reads as version 2.
     // 2 -> 3 changes nothing either: version 3 only adds a clip's optional `title` (ADR-0015).
     // 3 -> 4 turns a clip's `filter` and `sharpness` into `effects` (ADR-0016, read_video).
+    // 4 -> 5 changes nothing: version 5 only adds the sequence's optional `captions` (ADR-0017).
 
     Document doc;
     const auto resolve = [&](std::string_view relative, std::string_view absolute) {
@@ -1189,6 +1201,23 @@ Result<Document> from_json(std::string_view json, const std::filesystem::path& p
                  .time = r(get_time(m, "time", "marker")),
                  .name = std::string(r(get_or<std::string_view>(m, "name", "", "marker")))});
         }
+        // Format 5 (ADR-0017); Timeline::restore checks timing, order and overlaps. The count and
+        // each text are bounded here, before anything is copied.
+        std::vector<tl::Caption> captions;
+        for (const Element e : r(get_array(seq, "captions", "sequence", true))) {
+            Object c;
+            std::string_view text;
+            if (e.get(c) != simdjson::SUCCESS || captions.size() >= tl::kMaxCaptions ||
+                c.at_key("text").get(text) != simdjson::SUCCESS ||
+                text.size() > tl::kMaxCaptionBytes) {
+                return std::unexpected(
+                    invalid("invalid or too many captions", "sequence.captions"));
+            }
+            captions.push_back({.id = tl::CaptionId(r(get<std::uint64_t>(c, "id", "caption"))),
+                                .start = r(get_time(c, "start", "caption")),
+                                .duration = r(get_time(c, "duration", "caption")),
+                                .text = std::string(text)});
+        }
         if (r.failed()) {
             return std::unexpected(r.error());
         }
@@ -1197,7 +1226,7 @@ Result<Document> from_json(std::string_view json, const std::filesystem::path& p
         }
         auto timeline =
             tl::Timeline::restore(*rate, timebase, std::move(tracks), std::move(markers),
-                                  std::move(media), std::move(luts));
+                                  std::move(media), std::move(luts), std::move(captions));
         if (!timeline) {
             return std::unexpected(Error(ErrorCode::InvalidData, Category::Project,
                                          timeline.error().message(), timeline.error().context()));
