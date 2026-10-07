@@ -205,7 +205,16 @@ Rectangle {
                             }
                         }
                         UiText { Layout.fillWidth: true; text: modelData.name; color: root.fg; font.pixelSize: 12; elide: Text.ElideMiddle }
-                        UiText { text: root.timecode(modelData.duration); color: root.muted; font.pixelSize: 11 }
+                        // A marked range (source viewer) is what Add/Insert/Overwrite will use: say so.
+                        UiText {
+                            objectName: "mediaRange"
+                            readonly property bool ranged: modelData.markIn >= 0 || modelData.markOut >= 0
+                            text: ranged ? "Range " + root.timecode(Math.max(0, modelData.markIn)) + " – "
+                                           + (modelData.markOut >= 0 ? root.timecode(modelData.markOut - 1 / session.frameRate) : "end")
+                                         : root.timecode(modelData.duration)
+                            color: ranged ? (colors.yellow || root.accent) : root.muted
+                            font.pixelSize: 11
+                        }
                     }
                     // Click selects, double click appends, dragging carries the item
                     // onto the timeline (ui-design §7.3).
@@ -255,6 +264,8 @@ Rectangle {
                         height: missing ? implicitHeight : 0
                         onTriggered: locateDialog.open()
                     }
+                    MenuItem { action: actions.openSource }
+                    MenuSeparator {}
                     MenuItem { action: actions.append }
                     MenuItem { action: actions.insert }
                     MenuItem { action: actions.overwrite }

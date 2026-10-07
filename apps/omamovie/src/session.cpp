@@ -176,6 +176,9 @@ void Session::newProject() {
     emit filterPreviewsChanged();
     editor_.reset();
     snapshot_.reset();
+    source_index_ = -1;
+    source_timeline_.reset();
+    emit sourceChanged();
     refreshPaths();
     luts_ = std::make_shared<const LutTables>();
     lut_paths_.clear();
@@ -733,9 +736,30 @@ std::optional<tl::edit::ClipSource> Session::sourceFor(const LibraryItem& item) 
         if (exact) ticks = item.audio_only ? *exact : *exact / ticksPerFrame() * ticksPerFrame();
     }
     if (!ticks || *ticks <= 0) return std::nullopt;
+    // The source viewer's marks, on the sequence frame grid inside what fits (stills have none).
+    std::int64_t from = 0;
+    std::int64_t to = *ticks;
+    if (!item.media.still) {
+        if (item.mark_in) from = std::min(*item.mark_in * ticksPerFrame(), to);
+        if (item.mark_out) to = std::min(*item.mark_out * ticksPerFrame(), to);
+    }
+    if (to <= from) return std::nullopt;
+    // source_in = media start + the mark, added in one timebase (CLAUDE.md §6: no implicit
+    // conversion): the sequence's when the media start is exact there, else the media's, with
+    // the mark rounded to the nearest of its ticks.
+    oma::RationalTime source_in = item.media.start;
+    if (from > 0) {
+        const auto start_here = item.media.start.rescaled(t.timebase(), oma::Rounding::Floor);
+        const auto offset = t.at(from).rescaled(item.media.start.timebase(), oma::Rounding::Nearest);
+        auto sum = start_here && *start_here == item.media.start ? start_here->plus(t.at(from))
+                   : offset ? item.media.start.plus(*offset)
+                            : oma::Result<oma::RationalTime>(std::unexpected(offset.error()));
+        if (!sum) return std::nullopt;
+        source_in = *sum;
+    }
     return tl::edit::ClipSource{.media = item.media.id,
-                                .source_in = item.media.start,
-                                .duration = t.at(*ticks),
+                                .source_in = source_in,
+                                .duration = t.at(to - from),
                                 .time_map = {},
                                 .video = {},
                                 .audio = {}};
@@ -2229,7 +2253,10 @@ QVariantList Session::media() const {
                                    {"name", i.name},
                                    {"duration", i.seconds},
                                    {"thumbnail", i.thumbnail},
-                                   {"missing", i.missing}});
+                                   {"missing", i.missing},
+                                   // The marked range Add/Insert/Overwrite will use (seconds; -1 unset).
+                                   {"markIn", i.mark_in ? static_cast<double>(*i.mark_in) / frameRate() : -1.0},
+                                   {"markOut", i.mark_out ? static_cast<double>(*i.mark_out) / frameRate() : -1.0}});
     }
     return list;
 }
@@ -2594,6 +2621,12 @@ std::int64_t Session::lastFrame() const {
 
 void Session::setFrame(std::int64_t frame) {
     if (!editor_) return;
+    if (source_index_ >= 0) { // the source viewer has its own playhead
+        source_frame_ = std::clamp<std::int64_t>(frame, 0, std::max<std::int64_t>(0, source_frames_ - 1));
+        emit sourceChanged();
+        requestFrame();
+        return;
+    }
     playhead_ = std::clamp<std::int64_t>(frame, 0, lastFrame()) * ticksPerFrame();
     emit positionChanged();
     requestFrame();
@@ -2601,6 +2634,7 @@ void Session::setFrame(std::int64_t frame) {
 
 void Session::seek(double seconds) {
     if (!editor_ || !std::isfinite(seconds)) return;
+    closeSource(); // a sequence time (the timeline, its menus) means the sequence again
     // Display seconds to the nearest frame of the sequence grid.
     setFrame(std::llround(seconds * frameRate()));
     if (playing()) startPlayback(); // restart the clock, audio and decode-ahead from here
@@ -2608,7 +2642,98 @@ void Session::seek(double seconds) {
 
 void Session::stepFrames(int frames) {
     pause();
-    setFrame(frame() + frames);
+    setFrame((source_index_ >= 0 ? source_frame_ : frame()) + frames);
+}
+
+void Session::openSource(int index) {
+    if (index < 0 || index >= static_cast<int>(library_.size())) return;
+    LibraryItem& item = library_[static_cast<std::size_t>(index)];
+    if (item.missing) {
+        setNotice(QStringLiteral("%1 is missing: locate it first").arg(item.name));
+        return;
+    }
+    if (!ensureSequence(item)) return;
+    pause();
+    // The item as a one-clip timeline at the sequence's rate, ignoring its marks: the viewer's
+    // frame builder, decoders and compositor then show it exactly as the sequence would.
+    const auto marks = std::pair(std::exchange(item.mark_in, std::nullopt), std::exchange(item.mark_out, std::nullopt));
+    const auto whole = sourceFor(item);
+    item.mark_in = marks.first;
+    item.mark_out = marks.second;
+    const tl::Timeline& seq = editor_->timeline();
+    auto created = tl::Timeline::create(seq.frame_rate(), kSequenceAudioRate);
+    if (!whole || !created) return;
+    tl::Editor ed(std::move(*created));
+    const tl::TrackId track = ed.new_track_id();
+    // Sound goes on an audio track: the viewer then shows the background while marks still work.
+    const auto kind = item.audio_only ? tl::TrackKind::Audio : tl::TrackKind::Video;
+    if (!ed.add_media(item.media) || !ed.execute(tl::edit::add_track(track, kind, "Source")) ||
+        !ed.execute(tl::edit::append(track, ed.new_clip_id(), *whole))) {
+        setNotice(QStringLiteral("Cannot show %1 in the source viewer").arg(item.name));
+        return;
+    }
+    source_timeline_ = std::make_shared<const tl::Timeline>(ed.timeline());
+    source_frames_ = source_timeline_->to_ticks(source_timeline_->duration()).value_or(0) /
+                     std::max<std::int64_t>(1, source_timeline_->to_ticks(seq.frame_rate().frame_to_time(1)).value_or(1));
+    source_index_ = index;
+    selected_media_ = index;
+    source_frame_ = item.mark_in.value_or(0);
+    emit selectionChanged();
+    emit sourceChanged();
+    requestFrame();
+}
+
+void Session::seekSource(double seconds) {
+    if (source_index_ < 0 || !std::isfinite(seconds)) return;
+    setFrame(std::llround(seconds * frameRate())); // routed to the source playhead
+}
+
+void Session::closeSource() {
+    if (source_index_ < 0) return;
+    source_index_ = -1;
+    source_timeline_.reset();
+    emit sourceChanged();
+    requestFrame();
+}
+
+void Session::markIn() {
+    if (source_index_ < 0) return;
+    LibraryItem& item = library_[static_cast<std::size_t>(source_index_)];
+    item.mark_in = source_frame_;
+    if (item.mark_out && *item.mark_out <= source_frame_) item.mark_out.reset(); // a range, never empty
+    emit libraryChanged();
+    emit sourceChanged();
+}
+
+void Session::markOut() {
+    if (source_index_ < 0) return;
+    LibraryItem& item = library_[static_cast<std::size_t>(source_index_)];
+    item.mark_out = source_frame_ + 1;
+    if (item.mark_in && *item.mark_in >= *item.mark_out) item.mark_in.reset();
+    emit libraryChanged();
+    emit sourceChanged();
+}
+
+void Session::clearMarks() {
+    if (source_index_ < 0) return;
+    LibraryItem& item = library_[static_cast<std::size_t>(source_index_)];
+    item.mark_in.reset();
+    item.mark_out.reset();
+    emit libraryChanged();
+    emit sourceChanged();
+}
+
+QVariantMap Session::source() const {
+    if (source_index_ < 0 || !editor_) return {{"open", false}};
+    const LibraryItem& item = library_[static_cast<std::size_t>(source_index_)];
+    const double fps = frameRate();
+    return {{"open", true},
+            {"index", source_index_},
+            {"name", item.name},
+            {"position", static_cast<double>(source_frame_) / fps},
+            {"duration", static_cast<double>(source_frames_) / fps},
+            {"in", item.mark_in ? static_cast<double>(*item.mark_in) / fps : -1.0},
+            {"out", item.mark_out ? static_cast<double>(*item.mark_out) / fps : -1.0}};
 }
 
 void Session::toEnd() {
@@ -2631,6 +2756,12 @@ void Session::shuttle(int direction) {
 void Session::setSpeed(int speed) {
     if (speed == 0) {
         pause();
+        return;
+    }
+    if (source_index_ >= 0) {
+        // ponytail: the source viewer steps and scrubs only; playing it needs its own clock and
+        // audio. Starting the sequence here would play something the viewer does not show.
+        setNotice(QStringLiteral("The source viewer does not play yet: step with ← → or drag its bar"));
         return;
     }
     if (!hasMedia()) return;
@@ -2820,7 +2951,7 @@ void Session::requestFrame() {
     if (playing()) return; // the scheduler feeds the viewer while playing
     if (hardwarePreview()) {
         if (!snapshot_) refreshSnapshot();
-        requestHardwareFrame(frame());
+        requestHardwareFrame(source_index_ >= 0 ? source_frame_ : frame());
         return;
     }
     wanted_ = playhead_;
@@ -2832,21 +2963,29 @@ bool Session::hardwarePreview() const {
 }
 
 void Session::requestHardwareFrame(std::int64_t frame) {
-    if (preview_ != nullptr && snapshot_) {
-        preview_->setRequest(snapshot_, paths_, luts_, canvas_width_, canvas_height_, frame,
-                             ticksPerFrame());
+    const auto& shown = source_timeline_ ? source_timeline_ : snapshot_;
+    if (preview_ != nullptr && shown) {
+        preview_->setRequest(shown, paths_, luts_, canvas_width_, canvas_height_, frame,
+                             shown->to_ticks(shown->frame_rate().frame_to_time(1)).value_or(1));
     }
 }
 
 void Session::submitFrame() {
     if (!wanted_ || !editor_) return;
-    const std::int64_t frame = *std::exchange(wanted_, std::nullopt) / ticksPerFrame();
+    std::int64_t frame = *std::exchange(wanted_, std::nullopt) / ticksPerFrame();
     if (!snapshot_) refreshSnapshot();
+    auto shown = snapshot_;
+    std::int64_t tpf = ticksPerFrame();
+    if (source_timeline_) { // the source viewer: its own timeline and playhead
+        shown = source_timeline_;
+        frame = source_frame_;
+        tpf = shown->to_ticks(shown->frame_rate().frame_to_time(1)).value_or(1);
+    }
     busy_ = true;
     const unsigned generation = generation_;
-    frame_job_ = workers_.submit("viewer-frame", [this, generation, frame, timeline = snapshot_, paths = paths_, luts = luts_,
+    frame_job_ = workers_.submit("viewer-frame", [this, generation, frame, timeline = shown, paths = paths_, luts = luts_,
                                                   width = canvas_width_, height = canvas_height_,
-                                                  tpf = ticksPerFrame()](oma::JobContext&) {
+                                                  tpf](oma::JobContext&) {
         auto view = build_viewer_frame(*timeline, *paths, *luts, width, height, frame, tpf, frames_);
         QMetaObject::invokeMethod(this, [this, generation, view = std::move(view)]() mutable {
             busy_ = false;

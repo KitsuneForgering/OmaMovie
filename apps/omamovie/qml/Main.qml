@@ -201,7 +201,7 @@ ApplicationWindow {
         }
         property OmaAction toStart: OmaAction {
             text: "Go to start"; keys: "Home"; enabled: actions.media
-            onTriggered: session.seek(0)
+            onTriggered: session.source.open ? session.seekSource(0) : session.seek(0)
         }
         property OmaAction toEnd: OmaAction {
             text: "Go to end"; keys: "End"; enabled: actions.media
@@ -305,6 +305,29 @@ ApplicationWindow {
         property OmaAction toggleLibrary: OmaAction {
             text: "Library"; keys: "Ctrl+1"; enabled: actions.editing
             onTriggered: root.compact ? root.libraryOverlay = !root.libraryOverlay : root.libraryHidden = !root.libraryHidden
+        }
+        // Source viewer (M6 pilot): mark a range of a library item before placing it.
+        property OmaAction openSource: OmaAction {
+            text: "Mark a range in the source…"; keys: "Shift+O"
+            enabled: actions.editing && session.selectedMedia >= 0 && !session.source.open
+            onTriggered: session.openSource(session.selectedMedia)
+        }
+        property OmaAction markIn: OmaAction {
+            text: "Mark in"; keys: "I"; enabled: actions.editing && !!session.source.open
+            onTriggered: session.markIn()
+        }
+        property OmaAction markOut: OmaAction {
+            text: "Mark out"; keys: "O"; enabled: actions.editing && !!session.source.open
+            onTriggered: session.markOut()
+        }
+        property OmaAction clearMarks: OmaAction {
+            text: "Clear in and out"; keys: "Alt+X"; enabled: actions.editing && !!session.source.open
+            onTriggered: session.clearMarks()
+        }
+        property OmaAction closeSource: OmaAction {
+            text: "Back to the sequence"; keys: "Escape"
+            enabled: actions.editing && !!session.source.open && root.drawer === "" && !root.viewerOnly
+            onTriggered: session.closeSource()
         }
         property OmaAction closeDrawer: OmaAction {
             text: "Done"; keys: "Escape"; enabled: actions.editing && root.drawer !== "" && !root.viewerOnly

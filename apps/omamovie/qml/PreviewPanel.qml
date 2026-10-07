@@ -252,6 +252,67 @@ Rectangle {
         color: "#8f9095"
         font.pixelSize: 12
     }
+    // Source viewer (M6 pilot): a band that names the item and carries its own playhead and
+    // in/out range, so it is never mistaken for the sequence (whose playhead does not move).
+    Rectangle {
+        objectName: "sourceBand"
+        visible: !!session.source.open
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: sourceColumn.implicitHeight + 12
+        color: Qt.rgba(0, 0, 0, 0.72)
+        ColumnLayout {
+            id: sourceColumn
+            anchors.fill: parent
+            anchors.margins: 6
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            spacing: 4
+            RowLayout {
+                UiText { text: "SOURCE"; color: colors.yellow || root.accent; font.pixelSize: 11; font.bold: true }
+                UiText { Layout.fillWidth: true; text: session.source.name || ""; color: "white"; font.pixelSize: 12; elide: Text.ElideMiddle }
+                UiText {
+                    text: session.source.in >= 0 || session.source.out >= 0
+                          ? "In " + (session.source.in >= 0 ? root.timecode(session.source.in) : "start") + " · Out " + (session.source.out >= 0 ? root.timecode(session.source.out - 1 / session.frameRate) : "end")
+                          : "I and O mark the part to use"
+                    color: "white"; font.pixelSize: 11
+                }
+                OmaButton { text: "Clear"; implicitHeight: 24; visible: session.source.in >= 0 || session.source.out >= 0; onClicked: session.clearMarks() }
+                OmaButton { objectName: "closeSource"; text: "Back to sequence"; implicitHeight: 24; onClicked: session.closeSource() }
+            }
+            // The source's own bar: the marked range, its playhead; click or drag to move it.
+            Item {
+                id: sourceBar
+                Layout.fillWidth: true
+                Layout.preferredHeight: 14
+                readonly property real total: Math.max(0.001, session.source.duration || 0)
+                Rectangle { anchors.fill: parent; radius: 3; color: Qt.rgba(1, 1, 1, 0.18) }
+                Rectangle {
+                    readonly property real from: session.source.in >= 0 ? session.source.in : 0
+                    readonly property real to: session.source.out >= 0 ? session.source.out : sourceBar.total
+                    x: from / sourceBar.total * sourceBar.width
+                    width: Math.max(2, (to - from) / sourceBar.total * sourceBar.width)
+                    height: parent.height
+                    radius: 3
+                    color: colors.yellow || root.accent
+                    opacity: session.source.in >= 0 || session.source.out >= 0 ? 0.7 : 0
+                }
+                Rectangle {
+                    x: (session.source.position || 0) / sourceBar.total * sourceBar.width - 1
+                    width: 2
+                    height: parent.height + 4
+                    y: -2
+                    color: "white"
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onPressed: (mouse) => session.seekSource(mouse.x / width * sourceBar.total)
+                    onPositionChanged: (mouse) => { if (pressed) session.seekSource(Math.max(0, mouse.x) / width * sourceBar.total) }
+                }
+            }
+        }
+    }
     // Notices (Session::notice): a short explanation after an action that did less than asked,
     // and the lasting one after the GPU device is lost.
     Rectangle {

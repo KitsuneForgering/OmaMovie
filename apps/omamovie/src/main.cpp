@@ -725,6 +725,8 @@ int main(int argc, char** argv) {
     struct Saved {
         std::uint64_t cache_before = 0;
         bool relinked = false;
+        double sequence_at = 0;
+        qsizetype clips_before_source = 0;
         double export_seconds = 0;
         bool export_started = false;
         qsizetype media = 0, clips = 0, lanes = 0;
@@ -1753,7 +1755,10 @@ int main(int argc, char** argv) {
                          !actions.remap(QStringLiteral("snapping"), QStringLiteral("Space")).isEmpty();
              // Default shortcuts: only Escape is shared, by two actions never enabled together.
              const QStringList shared = actions.conflicts();
-             r.palette = r.palette && shared == QStringList{QStringLiteral("closeDrawer leaveFullViewer")};
+             // Escape is shared by actions never enabled together (source viewer, drawer, full viewer).
+             r.palette = r.palette && shared == QStringList{QStringLiteral("closeSource closeDrawer"),
+                                                            QStringLiteral("closeSource leaveFullViewer"),
+                                                            QStringLiteral("closeDrawer leaveFullViewer")};
              if (!r.palette) std::printf("GUI smoke: palette, remap or shortcut conflicts failed (%s)\n",
                                          qPrintable(shared.join(QStringLiteral(", "))));
              saved.snapping = window->property("snapping").toBool();
@@ -1996,6 +2001,51 @@ int main(int argc, char** argv) {
                              !session.failed();
              if (!ok) std::printf("GUI smoke: relink failed (dirty %d, failed %d)\n", session.dirty(), session.failed());
              r.project = r.project && ok;
+         }},
+        // Source viewer (M6 pilot): mark a range of a library item, then add only that range.
+        {"source open", after(100), [&] {
+             saved.sequence_at = session.position();
+             saved.clips_before_source = clip_count();
+             session.selectMedia(0);
+             actions.trigger(QStringLiteral("openSource"));
+             session.seekSource(0.2); // frame 6 at 30 fps
+             actions.trigger(QStringLiteral("markIn"));
+             session.stepFrames(9);
+             actions.trigger(QStringLiteral("markOut")); // keeps frame 15: [6, 16)
+         }},
+        {"source marked", after(300), [&] {
+             screenshot(window, "OMA_GUI_SMOKE_SOURCE_SCREENSHOT");
+             const QVariantMap src = session.source();
+             const bool marked = src.value("open").toBool() && std::abs(src.value("in").toDouble() - 0.2) < 1e-9 &&
+                                 std::abs(src.value("out").toDouble() - 16.0 / 30.0) < 1e-9 &&
+                                 session.position() == saved.sequence_at; // the sequence playhead did not move
+             actions.trigger(QStringLiteral("append"));
+             const QVariantMap added = session.clips().back().toMap();
+             const bool exact = clip_count() == saved.clips_before_source + 1 &&
+                                std::abs(added.value("duration").toDouble() - 10.0 / 30.0) < 1e-9;
+             session.undo();
+             const bool undone = clip_count() == saved.clips_before_source;
+             // The library says which range it will use; a sequence seek leaves the source viewer.
+             const bool badged = std::abs(session.media().value(0).toMap().value("markIn").toDouble() - 0.2) < 1e-9;
+             session.seek(0);
+             const bool closed = badged && !session.source().value("open").toBool();
+             if (!(marked && exact && undone && closed)) {
+                 std::printf("GUI smoke: source viewer failed (marked %d, exact %d %.4f s, undone %d, closed %d)\n", marked,
+                             exact, added.value("duration").toDouble(), undone, closed);
+             }
+             r.project = r.project && marked && exact && undone && closed;
+         }},
+        {"source sound", after(100), [&] {
+             // Sound opens in the source viewer too (on an audio track; the picture stays empty).
+             session.open(QFileInfo(QStringLiteral("tests/fixtures/generated/tone_44100.wav")).absoluteFilePath());
+         }},
+        {"source sound open", [&] { return session.media().size() >= 2 || run->elapsed() > 5000; }, [&] {
+             const int last = static_cast<int>(session.media().size()) - 1;
+             session.openSource(last);
+             const bool opened = session.source().value("open").toBool() && session.source().value("duration").toDouble() > 0.5;
+             if (!opened) std::printf("GUI smoke: a sound file did not open in the source viewer (%s)\n", qPrintable(session.notice()));
+             r.project = r.project && opened;
+             session.closeSource();
          }},
         {"device lost", after(300), [&] {
              screenshot(window, "OMA_GUI_SMOKE_LIBRARY_SCREENSHOT");

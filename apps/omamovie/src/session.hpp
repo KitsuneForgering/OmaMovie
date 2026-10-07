@@ -107,6 +107,10 @@ class Session final : public QObject {
     Q_PROPERTY(QString undoText READ undoText NOTIFY sequenceChanged)
     Q_PROPERTY(QString redoText READ redoText NOTIFY sequenceChanged)
     Q_PROPERTY(double position READ position NOTIFY positionChanged)
+    // The source viewer (M6 pilot, VEGAS-style trimmer): a library item shown on its own with
+    // its own playhead and in/out marks; Add/Insert/Overwrite/Connect then use the marked range.
+    // {open, index, name, position, duration, in, out} in seconds; in/out -1 when unset.
+    Q_PROPERTY(QVariantMap source READ source NOTIFY sourceChanged)
     // The selected clip's transform at the playhead (keyframes evaluated): posX, posY, scale,
     // rotation; `keys` how many transform keys it has, `keyHere` whether one is at the playhead.
     Q_PROPERTY(QVariantMap motion READ motion NOTIFY motionChanged)
@@ -412,9 +416,19 @@ public:
     Q_INVOKABLE void shuttle(int direction);
     Q_INVOKABLE void seek(double seconds);
     Q_INVOKABLE void stepFrames(int frames);
+    Q_INVOKABLE void openSource(int index);
+    // The source viewer's playhead (seek() is the sequence's and leaves the source viewer).
+    Q_INVOKABLE void seekSource(double seconds);
+    Q_INVOKABLE void closeSource();
+    // Marks at the source playhead: in at its frame, out after it (the frame is kept).
+    Q_INVOKABLE void markIn();
+    Q_INVOKABLE void markOut();
+    Q_INVOKABLE void clearMarks();
+    [[nodiscard]] QVariantMap source() const;
     Q_INVOKABLE void toEnd();
 
 signals:
+    void sourceChanged();
     void exportChanged();
     void cacheCleared();
     void viewChanged();
@@ -448,6 +462,10 @@ private:
         QVariantMap details; // codec, resolution, frame rate for the Info drawer
         oma::project::Fingerprint fingerprint; // for relinking (ADR-0007)
         bool missing = false; // an opened project's file that was not found: Locate… relinks it
+        // Source viewer marks in sequence frames from the media's start, [in, out); session only:
+        // a project saves the range a clip was given, not the marks.
+        std::optional<std::int64_t> mark_in;
+        std::optional<std::int64_t> mark_out;
     };
 
     // `known`: a library item of an opened project, imported again under its saved ID and
@@ -604,6 +622,12 @@ private:
     // Immutable views shared with the pipelines: the timeline as of the last edit and the
     // library's files. Replaced, never mutated.
     std::shared_ptr<const oma::timeline::Timeline> snapshot_;
+    // Source viewer: the item shown, its playhead (frames) and a one-clip timeline that renders
+    // it through the viewer's own path. -1: the sequence is shown.
+    int source_index_ = -1;
+    std::int64_t source_frame_ = 0;
+    std::int64_t source_frames_ = 0;
+    std::shared_ptr<const oma::timeline::Timeline> source_timeline_;
     std::shared_ptr<const MediaPaths> paths_ = std::make_shared<const MediaPaths>();
     std::shared_ptr<const LutTables> luts_ = std::make_shared<const LutTables>(); // replaced, never mutated
 

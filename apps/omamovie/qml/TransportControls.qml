@@ -15,7 +15,9 @@ Rectangle {
         anchors.left: parent.left
         anchors.leftMargin: 12
         anchors.verticalCenter: parent.verticalCenter
-        text: root.timecode(session.position) + (root.narrow ? "" : " / " + root.timecode(session.duration))
+        // The source viewer has its own playhead: its time, not the sequence's.
+        text: session.source.open ? root.timecode(session.source.position) + (root.narrow ? "" : " / " + root.timecode(session.source.duration))
+                                  : root.timecode(session.position) + (root.narrow ? "" : " / " + root.timecode(session.duration))
         color: session.hasMedia ? root.fg : root.muted
         font.pixelSize: 12
     }
