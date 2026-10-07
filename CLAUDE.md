@@ -176,6 +176,7 @@ oma-movie/
     bench/               # Pipeline benchmarks.
   tests/
     <lib>/               # Cest tests for each lib (module.mk + main.cpp + test_*.cpp).
+    app/                 # headless Session tests (Qt offscreen, private XDG folders; debug/release).
     support/             # oma_test.hpp: the Cest entry point for tests.
     fixtures/            # Small, reproducible fixtures + generator scripts.
   third_party/           # Vendored, pinned third-party code (cest/).
