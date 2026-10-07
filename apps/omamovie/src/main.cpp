@@ -1635,6 +1635,32 @@ int main(int argc, char** argv) {
         {"empty menu ran", after(300), [&] {
              r.menu_keys = r.menu_keys && !window->findChild<QObject*>(QStringLiteral("emptyTimelineMenu"))->property("opened").toBool();
          }},
+        // Ripple scope (M6): a pending delete or trim shows who moves and who goes, simulated with
+        // the very command the edit runs; nothing changes until the edit happens.
+        {"edit scope", after(100), [&] {
+             const QVariantList clips = session.clips();
+             bool ok = clips.size() >= 2;
+             if (ok) {
+                 const QString first = clips.at(0).toMap().value("id").toString();
+                 const QString second = clips.at(1).toMap().value("id").toString();
+                 const auto undo_before = session.undoText();
+                 session.selectClip(clips.at(0).toMap().value("id").toDouble());
+                 session.previewDelete(true);
+                 QVariantMap scope = session.editScope();
+                 ok = scope.value("removed").toList().contains(clips.at(0).toMap().value("id")) &&
+                      scope.value("moved").toMap().value(second).toInt() == -1 &&
+                      !scope.value("moved").toMap().contains(first) && clip_count() == clips.size() &&
+                      session.undoText() == undo_before;
+                 screenshot(window, "OMA_GUI_SMOKE_SCOPE_SCREENSHOT");
+                 session.previewTrim(clips.at(0).toMap().value("id").toDouble(), false, -5);
+                 scope = session.editScope();
+                 ok = ok && scope.value("removed").toList().isEmpty() && scope.value("moved").toMap().value(second).toInt() == -1;
+                 session.clearEditScope();
+                 ok = ok && !session.editScope().value("active").toBool();
+             }
+             if (!ok) std::printf("GUI smoke: edit scope preview failed\n");
+             r.lanes = r.lanes && ok;
+         }},
         {"framing gesture", after(200), [&] {
              // UX-07: with Crop & framing open, dragging the box in the viewer moves the picture;
              // the gesture is one undo entry.

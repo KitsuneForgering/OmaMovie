@@ -111,6 +111,10 @@ class Session final : public QObject {
     // its own playhead and in/out marks; Add/Insert/Overwrite/Connect then use the marked range.
     // {open, index, name, position, duration, in, out} in seconds; in/out -1 when unset.
     Q_PROPERTY(QVariantMap source READ source NOTIFY sourceChanged)
+    // What an edit about to happen would do (M6, ripple scope): {active, moved: {clipId: -1|1},
+    // removed: [clipIds], markers: count moved}. Filled by the preview calls, simulated on a
+    // copy of the timeline with the very command the edit runs, so it cannot disagree with it.
+    Q_PROPERTY(QVariantMap editScope READ editScope NOTIFY editScopeChanged)
     // The selected clip's transform at the playhead (keyframes evaluated): posX, posY, scale,
     // rotation; `keys` how many transform keys it has, `keyHere` whether one is at the playhead.
     Q_PROPERTY(QVariantMap motion READ motion NOTIFY motionChanged)
@@ -416,6 +420,10 @@ public:
     Q_INVOKABLE void shuttle(int direction);
     Q_INVOKABLE void seek(double seconds);
     Q_INVOKABLE void stepFrames(int frames);
+    Q_INVOKABLE void previewDelete(bool ripple);
+    Q_INVOKABLE void previewTrim(double id, bool head, int frames);
+    Q_INVOKABLE void clearEditScope();
+    [[nodiscard]] QVariantMap editScope() const { return edit_scope_; }
     Q_INVOKABLE void openSource(int index);
     // The source viewer's playhead (seek() is the sequence's and leaves the source viewer).
     Q_INVOKABLE void seekSource(double seconds);
@@ -428,6 +436,7 @@ public:
     Q_INVOKABLE void toEnd();
 
 signals:
+    void editScopeChanged();
     void sourceChanged();
     void exportChanged();
     void cacheCleared();
@@ -625,6 +634,11 @@ private:
     // Source viewer: the item shown, its playhead (frames) and a one-clip timeline that renders
     // it through the viewer's own path. -1: the sequence is shown.
     int source_index_ = -1;
+    QVariantMap edit_scope_;
+    // The commands behind Delete/Lift and trimming, shared by the edits and their previews.
+    [[nodiscard]] std::unique_ptr<oma::timeline::Command> deleteCommand(bool ripple) const;
+    [[nodiscard]] std::unique_ptr<oma::timeline::Command> trimCommand(oma::timeline::ClipId clip, bool head, int frames) const;
+    void previewCommand(std::unique_ptr<oma::timeline::Command> command);
     std::int64_t source_frame_ = 0;
     std::int64_t source_frames_ = 0;
     std::shared_ptr<const oma::timeline::Timeline> source_timeline_;

@@ -140,6 +140,7 @@ Rectangle {
             const snapped = timelinePanel.snap(edge + dx / timelinePanel.scale, 0, clipId)
             if (head) owner.headDrag = (snapped - edge) * timelinePanel.scale
             else owner.tailDrag = (snapped - edge) * timelinePanel.scale
+            session.previewTrim(clipId, head, Math.round((snapped - edge) * session.frameRate))
         }
         onReleased: {
             const dx = head ? owner.headDrag : owner.tailDrag
@@ -148,6 +149,30 @@ Rectangle {
             timelinePanel.unsnap()
             const frames = Math.round(dx / timelinePanel.scale * session.frameRate)
             if (frames !== 0) session.trimClip(clipId, head, frames)
+            else session.clearEditScope()
+        }
+    }
+
+    // What a pending edit does to this clip (session.editScope, simulated with the real command):
+    // an arrow when it will move, a red outline when it will go. Shown before trims and deletes.
+    component ScopeMark: Rectangle {
+        required property var clip
+        readonly property int shift: session.editScope.active && session.editScope.moved[clip.id] ? session.editScope.moved[clip.id] : 0
+        readonly property bool going: !!session.editScope.active && session.editScope.removed.indexOf(clip.id) >= 0
+        objectName: "scopeMark"
+        visible: shift !== 0 || going
+        anchors.fill: parent
+        radius: 4
+        color: going ? Qt.rgba(1, 0.3, 0.3, 0.18) : Qt.rgba(1, 1, 1, 0.10)
+        border.color: going ? (colors.red || "#ff6b6b") : root.accent
+        border.width: going ? 2 : 1
+        z: 5
+        Icon {
+            visible: parent.shift !== 0
+            anchors.centerIn: parent
+            name: parent.shift > 0 ? "arrowRight" : "arrowLeft"
+            color: root.accent
+            size: 16
         }
     }
 
@@ -432,6 +457,7 @@ Rectangle {
                     color: Qt.rgba(0.55, 0.75, 1, 0.45)
                 }
                 FadeRamps { clip: modelData; visible: clipItem.detailed }
+                ScopeMark { clip: modelData }
                 TimingBadge { timing: modelData.timing; visible: timing !== "" && clipItem.detailed }
                 Rectangle { // adjusted: color, framing, effects or sound differ from the plain clip
                     visible: modelData.adjusted && clipItem.detailed
@@ -702,8 +728,8 @@ Rectangle {
             MenuItem { action: actions.detachAudio }
             ClipTimingMenu { at: storylineMenu.at }
             MenuSeparator {}
-            MenuItem { action: actions.remove }
-            MenuItem { action: actions.lift }
+            MenuItem { objectName: "menuRemove"; action: actions.remove; onHighlightedChanged: highlighted ? session.previewDelete(true) : session.clearEditScope() }
+            MenuItem { action: actions.lift; onHighlightedChanged: highlighted ? session.previewDelete(false) : session.clearEditScope() }
         }
         // Video lane clips: picture adjustments, not the sound ones.
         Menu {
@@ -720,7 +746,7 @@ Rectangle {
             ClipTimingMenu { at: overlayMenu.at }
             ConnectionItem {}
             MenuSeparator {}
-            MenuItem { text: "Delete"; onTriggered: session.deleteSelected(false) }
+            MenuItem { text: "Delete"; onTriggered: session.deleteSelected(false); onHighlightedChanged: highlighted ? session.previewDelete(false) : session.clearEditScope() }
         }
         Menu {
             id: soundMenu
@@ -732,7 +758,7 @@ Rectangle {
             MenuItem { text: "Split here"; onTriggered: { session.seek(soundMenu.at); session.splitAtPlayhead() } }
             ClipTimingMenu { at: soundMenu.at }
             ConnectionItem {}
-            MenuItem { text: "Delete"; onTriggered: session.deleteSelected(false) }
+            MenuItem { text: "Delete"; onTriggered: session.deleteSelected(false); onHighlightedChanged: highlighted ? session.previewDelete(false) : session.clearEditScope() }
         }
         // Video lanes above the storyline. A connected clip (ADR-0014) shows a stem down
         // to the storyline clip it follows.
@@ -781,6 +807,7 @@ Rectangle {
                                 else if (!hovered && timelinePanel.hoverPrimary === m.primary) timelinePanel.hoverPrimary = -1
                             }
                         }
+                        ScopeMark { clip: overlayItem.modelData }
                         Image {
                             anchors.fill: parent
                             anchors.margins: 2
@@ -916,6 +943,7 @@ Rectangle {
                             color: Qt.rgba(0.55, 0.95, 0.6, 0.55)
                         }
                         FadeRamps { clip: soundItem.modelData }
+                        ScopeMark { clip: soundItem.modelData }
                         Row {
                             anchors.left: parent.left
                             anchors.right: parent.right

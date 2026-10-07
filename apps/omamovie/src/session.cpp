@@ -954,37 +954,96 @@ void Session::splitAtPlayhead() {
     }
 }
 
-void Session::deleteSelected(bool ripple) {
-    if (!editor_) return;
+std::unique_ptr<tl::Command> Session::deleteCommand(bool ripple) const {
+    if (!editor_) return nullptr;
     tl::ClipId id = selected_clip_;
     if (!id.valid()) {
         const tl::Clip* c = editor_->timeline().clip_at(primary_, playhead_);
-        if (c == nullptr) return;
+        if (c == nullptr) return nullptr;
         id = c->id;
     }
     const tl::Track* track = editor_->timeline().track_of(id);
-    if (track == nullptr) return;
-    if (track->id == primary_) {
-        run(ripple ? tl::edit::ripple_delete(id) : tl::edit::remove_clip(id));
-        return;
-    }
+    if (track == nullptr) return nullptr;
+    if (track->id == primary_) return ripple ? tl::edit::ripple_delete(id) : tl::edit::remove_clip(id);
     // Lanes below and above the storyline are not magnetic: deleting leaves the time free.
     std::vector<std::unique_ptr<tl::Command>> steps;
     steps.push_back(tl::edit::remove_clip(id));
     if (track->clips.size() == 1) steps.push_back(tl::edit::remove_track(track->id));
-    run(tl::edit::transaction("Delete", std::move(steps)));
+    return tl::edit::transaction("Delete", std::move(steps));
 }
 
-void Session::trimClip(double id, bool head, int frames) {
-    if (!editor_ || frames == 0) return;
-    const tl::ClipId clip(static_cast<std::uint64_t>(id));
-    const tl::Clip* c = editor_->timeline().find_clip(clip);
-    if (c == nullptr) return;
+void Session::deleteSelected(bool ripple) {
+    clearEditScope();
+    if (auto command = deleteCommand(ripple)) run(std::move(command));
+}
+
+void Session::previewDelete(bool ripple) { previewCommand(deleteCommand(ripple)); }
+
+void Session::previewTrim(double id, bool head, int frames) {
+    previewCommand(frames == 0 ? nullptr : trimCommand(tl::ClipId(static_cast<std::uint64_t>(id)), head, frames));
+}
+
+void Session::clearEditScope() {
+    if (edit_scope_.isEmpty()) return;
+    edit_scope_.clear();
+    emit editScopeChanged();
+}
+
+void Session::previewCommand(std::unique_ptr<tl::Command> command) {
+    if (!editor_ || !command) {
+        clearEditScope();
+        return;
+    }
+    // ponytail: copies the timeline per preview (O(clips)); fine for a hover or a drag step at
+    // the long-form gate's 5,000 clips. Keep the copy if previews ever run every frame.
+    const tl::Timeline& before = editor_->timeline();
+    tl::Editor trial{tl::Timeline(before)};
+    if (!trial.execute(std::move(command))) {
+        clearEditScope();
+        return;
+    }
+    std::unordered_map<std::uint64_t, std::int64_t> after;
+    for (const tl::Track& track : trial.timeline().tracks()) {
+        for (const tl::Clip& c : track.clips) after.emplace(c.id.value(), c.start_ticks());
+    }
+    QVariantMap moved;
+    QVariantList removed;
+    for (const tl::Track& track : before.tracks()) {
+        for (const tl::Clip& c : track.clips) {
+            const auto it = after.find(c.id.value());
+            const QString key = QString::number(c.id.value());
+            if (it == after.end()) {
+                removed.push_back(static_cast<double>(c.id.value()));
+            } else if (it->second != c.start_ticks()) {
+                moved.insert(key, it->second < c.start_ticks() ? -1 : 1);
+            }
+        }
+    }
+    int markers = 0;
+    for (const tl::Marker& m : before.markers()) {
+        const tl::Marker* now = trial.timeline().find_marker(m.id);
+        markers += now == nullptr || now->time != m.time ? 1 : 0;
+    }
+    edit_scope_ = {{"active", true}, {"moved", moved}, {"removed", removed}, {"markers", markers}};
+    emit editScopeChanged();
+}
+
+std::unique_ptr<tl::Command> Session::trimCommand(tl::ClipId clip, bool head, int frames) const {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(clip) : nullptr;
+    if (c == nullptr) return nullptr;
     const std::int64_t delta = static_cast<std::int64_t>(frames) * ticksPerFrame();
     const tl::Timeline& t = editor_->timeline();
     const bool magnetic = t.track_of(clip) != nullptr && t.track_of(clip)->id == primary_;
-    if (run(head ? tl::edit::trim_start(clip, t.at(c->start_ticks() + delta), magnetic)
-                 : tl::edit::trim_end(clip, t.at(c->end_ticks() + delta), magnetic))) {
+    return head ? tl::edit::trim_start(clip, t.at(c->start_ticks() + delta), magnetic)
+                : tl::edit::trim_end(clip, t.at(c->end_ticks() + delta), magnetic);
+}
+
+void Session::trimClip(double id, bool head, int frames) {
+    clearEditScope();
+    if (!editor_ || frames == 0) return;
+    const tl::ClipId clip(static_cast<std::uint64_t>(id));
+    auto command = trimCommand(clip, head, frames);
+    if (command && run(std::move(command))) {
         selected_clip_ = clip;
         emit selectionChanged();
     }
