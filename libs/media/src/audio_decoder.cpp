@@ -33,6 +33,8 @@ std::span<const float> AudioBuffer::channel(int c) const noexcept {
 namespace {
 
 constexpr int kDrainMargin = 256;
+// Demuxed before every seek target and trimmed: covers codec priming and pre-roll.
+constexpr std::int64_t kSeekPrerollMs = 200;
 // Decoded before a seek target when denoising, so the noise estimate has settled at the target.
 constexpr std::int64_t kDenoisePrerollMs = 500;
 // afftdn's reduction at full amount, in dB (its range is 0.01 to 97).
@@ -524,7 +526,12 @@ Result<void> AudioDecoder::seek(const RationalTime& t) {
         d.graph.reset();
         d.deliver_from = *target;
     }
-    const RationalTime from = d.out_rate.sample_to_time(decode_from);
+    // Demux from a little earlier still: the first packet after a seek decodes short (AAC's
+    // 1024-sample priming and MDCT overlap, Opus's 80 ms pre-roll), so starting exactly at the
+    // target would hand out audio from past it while claiming the target. The extra stretch is
+    // trimmed below, so the buffer starts exactly at `t` as promised.
+    const std::int64_t preroll = kSeekPrerollMs * d.out_rate.hz() / 1000;
+    const RationalTime from = d.out_rate.sample_to_time(decode_from - preroll);
     auto ticks = ff::to_ticks(from, d.info.timebase, Rounding::Floor);
     if (!ticks) {
         return std::unexpected(ticks.error());

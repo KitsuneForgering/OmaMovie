@@ -2,10 +2,13 @@
 
 #include "media_test.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <numbers>
+#include <utility>
+#include <vector>
 
 #include "oma_test.hpp"
 
@@ -184,6 +187,63 @@ AudioDecoderOptions denoised(float amount) {
     return o;
 }
 
+// Channel 0 from the start of `file`, decoded straight through.
+std::vector<float> straight(const char* file) {
+    std::vector<float> out;
+    auto d = AudioDecoder::open(fixture(file));
+    while (d) {
+        auto b = (*d)->next();
+        if (!b || !*b)
+            break;
+        const auto ch = (*b)->channel(0);
+        out.insert(out.end(), ch.begin(), ch.end());
+    }
+    return out;
+}
+
+// Regression (2026-10-07): after a seek, a compressed stream's first packet decodes short (AAC
+// priming, Opus pre-roll), so the first buffer started up to a frame past the target while the
+// mixer took it as the target: timeline sound played ~21-23 ms early. A seek now lands exactly
+// and its samples are the ones a straight decode has there.
+void seeks_compressed_audio_exactly(const char* file, int allowed_lag) {
+    if (!have_fixture(file)) {
+        std::printf("    (skipped: fixture %s missing)\n", file);
+        return;
+    }
+    const std::vector<float> reference = straight(file);
+    auto d = AudioDecoder::open(fixture(file));
+    expect(d.has_value()).toBeTruthy();
+    if (!d)
+        return;
+    const SampleRate rate = (*d)->sample_rate();
+    for (const std::int64_t target :
+         {std::int64_t{0}, std::int64_t{rate.hz() / 2}, std::int64_t{rate.hz() / 3}}) {
+        expect((*d)->seek(rate.sample_to_time(target)).has_value()).toBeTruthy();
+        auto b = (*d)->next();
+        expect(b && *b).toBeTruthy();
+        if (!b || !*b)
+            return;
+        expect(rate.time_to_sample((*b)->pts, oma::Rounding::Nearest).value_or(-1)).toBe(target);
+        const auto ch = (*b)->channel(0);
+        // The samples there: the lag at which they match a straight decode best.
+        int best_lag = 0;
+        float best = 1e9F;
+        for (int lag = -200; lag <= 200; ++lag) {
+            float w = 0.0F;
+            for (std::size_t i = 0; i < std::min<std::size_t>(ch.size(), 256); ++i) {
+                const auto at = target + lag + static_cast<std::int64_t>(i);
+                if (at >= 0 && std::cmp_less(at, reference.size()))
+                    w = std::max(w, std::abs(ch[i] - reference[static_cast<std::size_t>(at)]));
+            }
+            if (w < best) {
+                best = w;
+                best_lag = lag;
+            }
+        }
+        expect(best < 1e-3F && std::abs(best_lag) <= allowed_lag).toBeTruthy();
+    }
+}
+
 void denoises_steady_hiss() {
     if (!have_fixture("noisy_tone.wav")) {
         return;
@@ -246,6 +306,11 @@ void run_audio_decoder_tests() {
         it("upmixes mono to both channels at full level", { upmixes_mono_at_full_level(); });
         it("decodes AAC and Opus", { decodes_aac_and_opus(); });
         it("seeks to an exact sample", { seeks_to_the_sample(); });
+        it("seeks AAC to the exact sample past its priming",
+           { seeks_compressed_audio_exactly("h264_30fps_aac.mp4", 0); });
+        // Opus in Matroska still comes back 24 samples (0.5 ms) late after a seek: known, open.
+        it("seeks Opus to within a millisecond past its pre-roll",
+           { seeks_compressed_audio_exactly("av1_opus.mkv", 48); });
         it("fails on files without audio", { rejects_video_only(); });
         it("reduces steady hiss and keeps the tone", { denoises_steady_hiss(); });
         it("lands on the exact sample after a denoised seek",
