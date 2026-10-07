@@ -219,6 +219,22 @@ $(BUILD_DIR)/omamovie: $(APP_SOURCES) $(APP_HEADERS) $(APP_MOCS) $(wildcard apps
 		$(APP_SOURCES) $(APP_MOCS) -o $@ $(LINK_project) $(LINK_playback) $(LINK_compositor) \
 		$$(pkg-config --libs Qt6Quick Qt6Test Qt6DBus) $(LDFLAGS_BASE)
 
+# Headless Session tests: the app's sources without main.cpp, Qt's offscreen platform. Run by
+# `make test` in debug and release (Qt's own allocations make sanitizer runs noise).
+APP_TEST_SOURCES := $(wildcard tests/app/*.cpp)
+APP_TESTS := $(BUILD_DIR)/tests/app_tests
+$(APP_TESTS): $(APP_TEST_SOURCES) $(APP_SOURCES) $(APP_HEADERS) $(APP_MOCS) $(LIB_project) $(LIB_playback) $(LIB_timeline) $(LIB_audio) $(LIB_compositor) $(LIB_media) $(LIB_gpu) $(LIB_base) $(MAKEFILE_LIST)
+	$(call say,LINK,$@)
+	@mkdir -p $(@D)
+	$(Q)$(CXX) $(CXXFLAGS_BASE) -fPIC $(TEST_WARNINGS) $(INC_project) $(INC_playback) $(INC_compositor) -Iapps/omamovie/src \
+		-Itests/support -Ithird_party/cest $$(pkg-config --cflags Qt6Quick Qt6Test Qt6DBus) \
+		-isystem $$(pkg-config --variable=includedir Qt6Gui)/QtGui/$$(pkg-config --modversion Qt6Gui)/QtGui \
+		$(filter-out apps/omamovie/src/main.cpp,$(APP_SOURCES)) $(APP_MOCS) $(APP_TEST_SOURCES) -o $@ \
+		$(LINK_project) $(LINK_playback) $(LINK_compositor) $$(pkg-config --libs Qt6Quick Qt6Test Qt6DBus) $(LDFLAGS_BASE)
+ifneq ($(filter debug release,$(BUILD)),)
+  ALL_APP_TESTS := $(APP_TESTS)
+endif
+
 # The installed tree (PKGBUILD package() and the release tarball share it): the executable finds
 # its QML in ../share/omamovie/qml. Build with BUILD=release first.
 PREFIX  ?= /usr/local
@@ -252,9 +268,9 @@ tests: $(ALL_TESTS)
 
 # FILTER=<pattern> runs only tests whose name contains the pattern (Cest filter).
 # JUNIT_DIR=<dir> writes one JUnit report per test binary (used by CI).
-test: $(ALL_TESTS) $(TEST_PREREQS) $(BUILD_DIR)/tools/oma-project/oma-project
+test: $(ALL_TESTS) $(ALL_APP_TESTS) $(TEST_PREREQS) $(BUILD_DIR)/tools/oma-project/oma-project
 	@failed=0; \
-	for t in $(ALL_TESTS); do \
+	for t in $(ALL_TESTS) $(ALL_APP_TESTS); do \
 	  printf '\n== %s (%s)\n' "$${t##*/}" "$(BUILD)"; \
 	  junit=""; \
 	  if [ -n "$(JUNIT_DIR)" ]; then mkdir -p "$(JUNIT_DIR)"; junit="--junit $(JUNIT_DIR)/$${t##*/}-$(BUILD).xml"; fi; \
