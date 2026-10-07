@@ -32,8 +32,11 @@ jobs:
             -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
               pacman -Syu --noconfirm >/dev/null
               scripts/deps.sh --install --noconfirm >/dev/null
+              # The app too (debug and release): CI otherwise never compiles apps/omamovie.
+              app=""
+              case "${{ matrix.build }}" in debug|release) app="build/${{ matrix.build }}/omamovie" ;; esac
               make -j"$(nproc)" BUILD=${{ matrix.build }} CXX=${{ matrix.compiler }} \
-                test JUNIT_DIR=build/junit
+                test $app JUNIT_DIR=build/junit
             '
 
       - name: JUnit reports
