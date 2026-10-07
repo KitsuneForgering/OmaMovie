@@ -40,11 +40,18 @@ public:
     [[nodiscard]] virtual std::int64_t frames_consumed() const noexcept = 0;
     // Frames taken from the ring but not yet audible (device buffering), for A/V sync.
     [[nodiscard]] virtual std::int64_t latency_frames() const noexcept = 0;
+    // Frames audible at `now_ns` (steady clock): consumed minus latency. Devices that take audio
+    // in large quanta interpolate between their callbacks with the clock, at most one quantum,
+    // so video following this position moves every frame rather than in quantum-sized steps.
+    [[nodiscard]] virtual std::int64_t frames_played(std::int64_t now_ns) const noexcept {
+        (void)now_ns;
+        return frames_consumed() - latency_frames();
+    }
     // Callbacks that found the ring short of data.
     [[nodiscard]] virtual std::int64_t underruns() const noexcept = 0;
 
-    // Drops queued frames (seek). Returns once the consumer has dropped them; the producer must
-    // not write meanwhile.
+    // Drops the frames queued so far (seek, stop) without waiting for the device: the consumer
+    // discards them at its next pull, and frames the producer writes after the call are kept.
     virtual void flush() noexcept = 0;
 
     // Silences the output without changing its timing: the device keeps consuming at its rate,

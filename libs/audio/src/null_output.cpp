@@ -53,13 +53,11 @@ public:
 
     void flush() noexcept override {
         if (!thread_.joinable()) {
-            ring_.discard_readable();
+            ring_.discard_until(ring_.written()); // no consumer running
             return;
         }
+        flush_mark_.store(ring_.written(), std::memory_order_relaxed);
         flush_requested_.store(true, std::memory_order_release);
-        while (flush_requested_.load(std::memory_order_acquire)) {
-            std::this_thread::yield();
-        }
     }
 
 private:
@@ -70,9 +68,8 @@ private:
         const auto start = std::chrono::steady_clock::now();
         std::int64_t due_total = 0;
         while (!stop.stop_requested()) {
-            if (flush_requested_.load(std::memory_order_acquire)) {
-                ring_.discard_readable();
-                flush_requested_.store(false, std::memory_order_release);
+            if (flush_requested_.exchange(false, std::memory_order_acq_rel)) {
+                ring_.discard_until(flush_mark_.load(std::memory_order_relaxed));
             }
             const auto elapsed = std::chrono::steady_clock::now() - start;
             const std::int64_t due =
@@ -98,6 +95,7 @@ private:
     std::atomic<std::int64_t> consumed_{0};
     std::atomic<std::int64_t> underruns_{0};
     std::atomic<bool> flush_requested_{false};
+    std::atomic<std::uint64_t> flush_mark_{0};
     std::jthread thread_;
 };
 

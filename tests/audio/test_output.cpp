@@ -63,6 +63,8 @@ bool null_counts_underruns_without_advancing() {
     return underran && out->frames_consumed() == 0;
 }
 
+// The flush is asynchronous: the consumer drops what was queued at its next pull and keeps
+// what is written after the call (a restart's new audio).
 bool null_flush_drops_queued_frames() {
     auto out = null_output();
     write_silence(*out, 48000); // one second, far more than the test runs
@@ -70,12 +72,14 @@ bool null_flush_drops_queued_frames() {
         return false;
     }
     out->flush();
-    const bool empty = out->ring().readable() == 0;
-    const std::int64_t after_flush = out->frames_consumed();
-    std::this_thread::sleep_for(milliseconds(20));
-    const bool stalled = out->frames_consumed() == after_flush;
+    const std::int64_t at_flush = out->frames_consumed();
+    write_silence(*out, 4800); // 100 ms written after the flush
+    std::this_thread::sleep_for(milliseconds(300));
+    const std::int64_t played = out->frames_consumed() - at_flush;
+    const bool drained = out->ring().readable() == 0;
     out->stop();
-    return empty && stalled;
+    // The new 100 ms play; of the old second at most what one pull took before the discard.
+    return drained && played >= 4800 && played < 4800 + 4800;
 }
 
 bool null_consumes_at_the_device_rate() {

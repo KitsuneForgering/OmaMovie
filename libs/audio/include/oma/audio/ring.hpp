@@ -34,6 +34,13 @@ public:
     [[nodiscard]] std::size_t readable() const noexcept;
     // Drops everything readable now (consumer side, e.g. when a flush was requested).
     void discard_readable() noexcept;
+    // Frames written so far (any side): a mark for discard_until.
+    [[nodiscard]] std::uint64_t written() const noexcept {
+        return head_.load(std::memory_order_acquire);
+    }
+    // Drops the frames written before `mark` that are still unread (consumer side): an
+    // asynchronous flush that keeps what the producer wrote after taking the mark.
+    void discard_until(std::uint64_t mark) noexcept;
 
 private:
     int channels_;

@@ -11,3 +11,8 @@ race:libswresample.so
 
 # Codec libraries FFmpeg drives with their own worker threads (dav1d decodes AV1 in software).
 race:libdav1d.so
+
+# Mesa's Intel Vulkan driver joins its shader disk-cache threads ("disk$N") with a
+# pthread_barrier; the uninstrumented driver's barrier destroy/wait pair looks like a race
+# (seen with Mesa 26.2.2 in tests/compositor/test_lifetime.cpp, both frames inside the driver).
+race:libvulkan_intel.so

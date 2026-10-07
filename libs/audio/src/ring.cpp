@@ -52,4 +52,13 @@ void SampleRing::discard_readable() noexcept {
     tail_.store(head_.load(std::memory_order_acquire), std::memory_order_release);
 }
 
+void SampleRing::discard_until(std::uint64_t mark) noexcept {
+    const std::uint64_t tail = tail_.load(std::memory_order_relaxed);
+    const std::uint64_t head = head_.load(std::memory_order_acquire);
+    const std::uint64_t to = std::min(mark, head);
+    if (to > tail) {
+        tail_.store(to, std::memory_order_release);
+    }
+}
+
 } // namespace oma::audio

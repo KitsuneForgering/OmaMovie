@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <span>
 #include <string>
@@ -76,6 +77,32 @@ public:
     [[nodiscard]] std::int64_t frames_consumed() const noexcept override {
         return consumed_.load(std::memory_order_acquire);
     }
+    [[nodiscard]] std::int64_t frames_played(std::int64_t now_ns) const noexcept override {
+        // Seqlock read of the last callback's snapshot (the writer is the RT callback, which
+        // must not block, so the reader retries instead).
+        std::int64_t played = 0;
+        std::int64_t at = 0;
+        std::int64_t chunk = 0;
+        for (;;) {
+            const std::uint32_t before = seq_.load(std::memory_order_acquire);
+            if ((before & 1U) != 0) {
+                continue;
+            }
+            // Acquire loads keep the second sequence read after the field reads.
+            played = snap_played_.load(std::memory_order_acquire);
+            at = snap_ns_.load(std::memory_order_acquire);
+            chunk = snap_chunk_.load(std::memory_order_acquire);
+            if (seq_.load(std::memory_order_acquire) == before) {
+                break;
+            }
+        }
+        if (at == 0) {
+            return played;
+        }
+        const std::int64_t since =
+            std::clamp<std::int64_t>((now_ns - at) * format_.rate.hz() / 1'000'000'000, 0, chunk);
+        return played + since;
+    }
     [[nodiscard]] std::int64_t latency_frames() const noexcept override {
         return latency_.load(std::memory_order_relaxed);
     }
@@ -96,19 +123,11 @@ public:
     }
 
     void flush() noexcept override {
-        if (!active_.load(std::memory_order_acquire)) {
-            ring_.discard_readable();
-            return;
-        }
+        // Asynchronous (a restart must not wait up to a quantum for the RT callback): the
+        // callback discards up to the mark; inactive, nothing consumes until the next start,
+        // whose first callback does it.
+        flush_mark_.store(ring_.written(), std::memory_order_relaxed);
         flush_requested_.store(true, std::memory_order_release);
-        // The real-time thread handles it within one quantum; give up after a second in case
-        // the graph stopped pulling (suspended sink).
-        for (int i = 0; i < 1000 && flush_requested_.load(std::memory_order_acquire); ++i) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-        if (flush_requested_.exchange(false, std::memory_order_acq_rel)) {
-            ring_.discard_readable();
-        }
     }
 
 private:
@@ -135,9 +154,8 @@ private:
             pw_stream_queue_buffer(stream_, b);
             return;
         }
-        if (flush_requested_.load(std::memory_order_acquire)) {
-            ring_.discard_readable();
-            flush_requested_.store(false, std::memory_order_release);
+        if (flush_requested_.exchange(false, std::memory_order_acq_rel)) {
+            ring_.discard_until(flush_mark_.load(std::memory_order_relaxed));
         }
         const auto stride = static_cast<std::uint32_t>(sizeof(float)) *
                             static_cast<std::uint32_t>(format_.channels);
@@ -166,6 +184,23 @@ private:
                            std::memory_order_relaxed);
         }
 
+        {
+            // Publish what is audible now and when, for frames_played() (seqlock writer: no
+            // blocking, no allocation).
+            // Release stores order each field after the odd sequence value (and the fields
+            // before the even one), so a reader that sees a new field also sees the change.
+            const std::uint32_t seq = seq_.load(std::memory_order_relaxed);
+            seq_.store(seq + 1, std::memory_order_release);
+            snap_played_.store(consumed_.load(std::memory_order_relaxed) -
+                                   latency_.load(std::memory_order_relaxed),
+                               std::memory_order_release);
+            snap_ns_.store(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                               std::chrono::steady_clock::now().time_since_epoch())
+                               .count(),
+                           std::memory_order_release);
+            snap_chunk_.store(static_cast<std::int64_t>(got), std::memory_order_release);
+            seq_.store(seq + 2, std::memory_order_release);
+        }
         d.chunk->offset = 0;
         d.chunk->stride = static_cast<std::int32_t>(stride);
         d.chunk->size = static_cast<std::uint32_t>(frames) * stride;
@@ -181,9 +216,14 @@ private:
     std::atomic<pw_stream_state> state_{PW_STREAM_STATE_UNCONNECTED};
     std::atomic<bool> active_{false};
     std::atomic<bool> flush_requested_{false};
+    std::atomic<std::uint64_t> flush_mark_{0};
     std::atomic<std::int64_t> consumed_{0};
     std::atomic<std::int64_t> latency_{0};
     std::atomic<std::int64_t> underruns_{0};
+    std::atomic<std::uint32_t> seq_{0};
+    std::atomic<std::int64_t> snap_played_{0};
+    std::atomic<std::int64_t> snap_ns_{0};
+    std::atomic<std::int64_t> snap_chunk_{0};
 };
 
 Result<void> PipeWireOutput::connect(std::string_view node_name) {

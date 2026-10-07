@@ -106,6 +106,20 @@ void run_ring_tests() {
             expect(ring.writable()).toBe(8U);
         });
 
+        it("discards only what was written before the mark", {
+            SampleRing ring(16, 2);
+            ring.write(ramp(12, 0.0F)); // 6 stereo frames
+            const std::uint64_t mark = ring.written();
+            ring.write(ramp(8, 100.0F)); // 4 frames written after the flush request
+            ring.discard_until(mark);
+            expect(ring.readable()).toBe(4U);
+            std::vector<float> out(8);
+            ring.read(out);
+            expect(out[0]).toBe(100.0F);
+            ring.discard_until(mark); // a late second discard drops nothing new
+            expect(ring.readable()).toBe(0U);
+        });
+
         it("keeps order between a producer and a consumer thread",
            { expect(stream_through_ring(20000)).toBe(-1LL); });
     });
