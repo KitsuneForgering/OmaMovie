@@ -23,6 +23,7 @@ one as superseded.
 | [0014](0014-connected-clips.md) | Connected clips: anchors to a primary clip's content | Accepted |
 | [0015](0015-titles.md) | Titles: generated clips rasterized by the app | Accepted |
 | [0016](0016-video-effects.md) | Video effects: an ordered stack of built-in operations | Accepted |
+| [0017](0017-captions.md) | Captions: a caption track of timed text, SRT/VTT in and out | Accepted |
 
 Template: copy the structure of an existing ADR (Context, Decision, Alternatives, Consequences).
 
