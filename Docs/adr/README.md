@@ -12,13 +12,17 @@ one as superseded.
 | [0003](0003-threading-and-job-system.md) | Threading model and job system | Accepted |
 | [0004](0004-gpu-frames-sync-decode-policy.md) | GPU frame abstraction, synchronization and decode policy | Accepted |
 | [0005](0005-qt-vulkan-interop.md) | Qt Quick ↔ Vulkan compositor integration | Accepted (S4 import diagnostic; on-screen handoff pending) |
-| 0006 | Working color space and libplacebo | Pending (M1) |
+| [0006](0006-color-space-and-libplacebo.md) | Working color space, SDR stages and libplacebo | Accepted |
 | [0007](0007-project-format.md) | Native project format: versioned JSON, simdjson | Accepted |
 | 0008 | ProjectIR and preservation of external data | Pending (M9) |
-| 0009 | Cache strategy | Pending (M7) |
+| [0009](0009-cache.md) | Cache strategy | Accepted |
 | 0010 | Canvas coordinates | Pending (M8) |
 | [0011](0011-transitions.md) | Transitions between clips | Accepted |
 | [0012](0012-color-grading.md) | Color grading: CDL, curves and 3D LUTs | Accepted |
+| [0013](0013-clip-time-maps.md) | Clip time maps: freeze, reverse and speed ramps | Accepted |
+| [0014](0014-connected-clips.md) | Connected clips: anchors to a primary clip's content | Accepted |
+| [0015](0015-titles.md) | Titles: generated clips rasterized by the app | Accepted |
+| [0016](0016-video-effects.md) | Video effects: an ordered stack of built-in operations | Accepted |
 
 Template: copy the structure of an existing ADR (Context, Decision, Alternatives, Consequences).
 

@@ -31,7 +31,8 @@ fields of compatible newer versions preserved. Project files are untrusted input
   never reuse an ID. Edits are not replayed; the history starts empty.
 - **Versions**: a newer `format_version` is refused with a message asking to update
   (`ErrorCode::Unsupported`), never read in part. Migrations `vN -> vN+1` will chain in
-  `from_json` before reading, each tested with a fixture of the old version; version 1 has none.
+  `from_json` before reading, each tested with a fixture of the old version. Version 2
+  (2026-10-05, ADR-0013) adds a clip's optional `time_map`; 1 → 2 is the identity.
 - **Unknown fields**: top-level fields this version does not know are kept as raw JSON and
   written back unchanged. Unknown fields inside known objects (a clip, a track) are not kept
   yet; a version 2 that adds some must either nest them under a new top-level field or add
@@ -78,3 +79,6 @@ fields of compatible newer versions preserved. Project files are untrusted input
   field; refusal of newer versions; preservation of unknown top-level fields; rejection of
   truncated, mistyped, overlapping and deeply nested files; a failed save (read-only folder)
   leaves the previous file intact; 5 000 000 fuzz runs without a failure.
+- Version history: 2 adds a clip's `time_map` and `anchor` (ADR-0013, ADR-0014); 3 adds a
+  clip's `title` (ADR-0015). Both migrations are identity: older files read unchanged, and
+  older OmaMovie versions refuse the newer files instead of dropping what they cannot show.
