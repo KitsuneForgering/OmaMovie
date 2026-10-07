@@ -2243,11 +2243,11 @@ void Session::requestFilterPreviews() {
     const std::string path = source->path.toStdString();
     const oma::RationalTime at = c->source_in;
     const tl::VideoProperties video = c->video;
-    const std::uint32_t width = 160;
+    constexpr std::uint32_t width = 160; // a constant: lambdas use it without capturing it
     const std::uint32_t height = std::max<std::uint32_t>(2, width * canvas_height_ / std::max<std::uint32_t>(1, canvas_width_));
     const QString dir = thumbnails_.path();
     previews_job_.cancel(); // an older request still queued would only be thrown away
-    previews_job_ = workers_.submit("filter-previews", [this, request, generation, path, at, video, width, height, dir](oma::JobContext& job) {
+    previews_job_ = workers_.submit("filter-previews", [this, request, generation, path, at, video, height, dir](oma::JobContext& job) {
         auto picture = frames_.picture_at(path, at);
         QVariantList urls;
         if (picture) {
