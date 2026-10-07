@@ -1,6 +1,12 @@
 # OmaMovie
 
+<img src="Docs/media/omamovie-logo.svg" width="360" alt="OmaMovie logo: a play button over three timeline clips">
+
 OmaMovie is a video editor under development for Omarchy. Its current editor shell lets you import local videos and pictures, arrange clips on a timeline, preview the result, and adjust clip audio. It saves and opens projects and exports the movie to MP4 (H.264 and AAC).
+
+![OmaMovie editor showing a preview, video clips, and an audio lane on the timeline](Docs/media/editor-test.webp)
+
+*The running editor with synthetic test clips. The preview and timeline are captured from the GUI smoke test.*
 
 ## Try the editor
 
