@@ -1,3 +1,4 @@
+#include "oma/gpu/commands.hpp"
 #include "oma/gpu/device.hpp"
 #include "oma/media/video_decoder.hpp"
 
@@ -119,6 +120,11 @@ public:
                                              .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
                                              .pInheritanceInfo = nullptr};
         vkBeginCommandBuffer(cmd_, &begin);
+        if (img.foreign) { // imported VA-API surfaces: take them from their driver first
+            for (uint32_t i = 0; i < img.image_count; ++i) {
+                oma::gpu::acquire_foreign(cmd_, img.images[i], d_.graphics_family());
+            }
+        }
         std::vector<VkImageMemoryBarrier2> to_src;
         for (uint32_t i = 0; i < img.image_count; ++i) {
             to_src.push_back(
@@ -151,6 +157,11 @@ public:
                                    VK_IMAGE_LAYOUT_GENERAL));
         }
         dependency(back);
+        if (img.foreign) {
+            for (uint32_t i = 0; i < img.image_count; ++i) {
+                oma::gpu::release_foreign(cmd_, img.images[i], d_.graphics_family());
+            }
+        }
         vkEndCommandBuffer(cmd_);
 
         std::vector<VkSemaphoreSubmitInfo> waits;

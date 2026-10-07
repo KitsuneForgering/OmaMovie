@@ -40,6 +40,9 @@ struct ColorInfo {
     std::uint8_t primaries = 2;
     std::uint8_t transfer = 2;
     ColorRange range = ColorRange::Unspecified;
+    // FFmpeg/H.273 chroma sample location: 0 unspecified, 1 left, 2 center,
+    // 3 top-left, 4 top, 5 bottom-left, 6 bottom. Unspecified uses center.
+    std::uint8_t chroma_location = 0;
 };
 
 struct VideoInfo {

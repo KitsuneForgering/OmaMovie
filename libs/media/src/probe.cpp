@@ -95,7 +95,8 @@ VideoInfo video_info(const AVStream& st, std::string_view demuxer) {
     v.color = {.matrix = static_cast<std::uint8_t>(par.color_space),
                .primaries = static_cast<std::uint8_t>(par.color_primaries),
                .transfer = static_cast<std::uint8_t>(par.color_trc),
-               .range = to_range(par.color_range)};
+               .range = to_range(par.color_range),
+               .chroma_location = static_cast<std::uint8_t>(par.chroma_location)};
     v.rotation = rotation_of(par);
     if (auto sar = ff::to_rational(par.sample_aspect_ratio); sar && sar->is_positive()) {
         v.sample_aspect = *sar;

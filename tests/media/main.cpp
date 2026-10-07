@@ -14,6 +14,7 @@ void run_format_tests();
 void run_video_decoder_tests();
 void run_gpu_decode_tests();
 void run_audio_decoder_tests();
+void run_video_writer_tests();
 
 namespace {
 
@@ -67,6 +68,7 @@ int main(int argc, char* argv[]) {
     run_video_decoder_tests();
     run_gpu_decode_tests();
     run_audio_decoder_tests();
+    run_video_writer_tests();
     release_media_test_device();
     return cest_result();
 }
