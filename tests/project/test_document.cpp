@@ -99,6 +99,12 @@ Document sample(const fs::path& dir) {
     source.audio.gain = 0.5F;
     source.audio.fade_in = f(5);
     source.audio.eq = {.low_db = 3, .mid_db = -1.5F, .high_db = 0};
+    // Keyed opacity and volume (format 6).
+    source.video.opacity_keys = {
+        {.at = mf(10), .value = 0.0, .interpolation = tl::Interpolation::Ease},
+        {.at = mf(20), .value = 1.0, .interpolation = tl::Interpolation::Linear}};
+    source.audio.gain_keys = {
+        {.at = mf(10), .value = 2.0, .interpolation = tl::Interpolation::Hold}};
     const tl::ClipId a = ed.new_clip_id();
     const tl::ClipId b = ed.new_clip_id();
     (void)ed.execute(tl::edit::append(video, a, source));

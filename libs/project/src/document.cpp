@@ -221,6 +221,20 @@ void triple(Writer& w, std::string_view k, const std::array<double, 3>& v) {
     w.end_array();
 }
 
+// Keyed numbers (format 6): [{at, value, interpolation}].
+void scalar_keys(Writer& w, std::string_view name, const std::vector<tl::ScalarKey>& keys) {
+    w.key(name);
+    w.begin_array();
+    for (const tl::ScalarKey& k : keys) {
+        w.begin_object();
+        time(w, "at", k.at);
+        w.field("value", k.value);
+        w.field("interpolation", name_of(kInterpolations, k.interpolation));
+        w.end_object();
+    }
+    w.end_array();
+}
+
 void video(Writer& w, const tl::VideoProperties& v) {
     w.key("video");
     w.begin_object();
@@ -246,6 +260,7 @@ void video(Writer& w, const tl::VideoProperties& v) {
     }
     w.end_array();
     w.field("opacity", v.opacity);
+    scalar_keys(w, "opacity_keys", v.opacity_keys);
     w.field("blend", name_of(kBlends, v.blend));
     w.key("color");
     w.begin_object();
@@ -289,6 +304,7 @@ void audio(Writer& w, const tl::AudioProperties& a) {
     w.key("audio");
     w.begin_object();
     w.field("gain", a.gain);
+    scalar_keys(w, "gain_keys", a.gain_keys);
     w.field("muted", a.muted);
     time(w, "fade_in", a.fade_in);
     time(w, "fade_out", a.fade_out);
@@ -607,6 +623,28 @@ Result<std::array<double, 3>> read_triple(const Object& o, std::string_view k,
     return out;
 }
 
+// Format 6; Timeline::restore checks ranges and order. The count is bounded before copying.
+Result<std::vector<tl::ScalarKey>> read_scalar_keys(const Object& o, std::string_view name,
+                                                    std::string_view at) {
+    Reader r;
+    std::vector<tl::ScalarKey> keys;
+    for (const Element e : r(get_array(o, name, at, true))) {
+        const std::string ka = where(name, at);
+        Object ko;
+        if (e.get(ko) != simdjson::SUCCESS || keys.size() >= tl::kMaxKeys) {
+            return std::unexpected(invalid("invalid or too many keys", ka));
+        }
+        keys.push_back({.at = r(get_time(ko, "at", ka)),
+                        .value = r(get<double>(ko, "value", ka)),
+                        .interpolation = r(get_enum(ko, "interpolation", kInterpolations,
+                                                    tl::Interpolation::Linear, ka))});
+    }
+    if (r.failed()) {
+        return std::unexpected(r.error());
+    }
+    return keys;
+}
+
 Result<tl::VideoProperties> read_video(const Object& clip, std::string_view context) {
     tl::VideoProperties v;
     Element e;
@@ -648,6 +686,7 @@ Result<tl::VideoProperties> read_video(const Object& clip, std::string_view cont
                  r(get_enum(ko, "interpolation", kInterpolations, tl::Interpolation::Linear, ka))});
     }
     v.opacity = r(get_float(o, "opacity", 1.0F, at));
+    v.opacity_keys = r(read_scalar_keys(o, "opacity_keys", at));
     v.blend = r(get_enum(o, "blend", kBlends, tl::BlendMode::Normal, at));
     if (Object c; o.at_key("color").get(c) == simdjson::SUCCESS) {
         const std::string ca = where("color", at);
@@ -735,6 +774,7 @@ Result<tl::AudioProperties> read_audio(const Object& clip, std::string_view cont
     }
     Reader r;
     a.gain = r(get_float(o, "gain", 1.0F, at));
+    a.gain_keys = r(read_scalar_keys(o, "gain_keys", at));
     a.muted = r(get_or<bool>(o, "muted", false, at));
     a.fade_in = r(get_time(o, "fade_in", at));
     a.fade_out = r(get_time(o, "fade_out", at));
@@ -1080,6 +1120,7 @@ Result<Document> from_json(std::string_view json, const std::filesystem::path& p
     // 2 -> 3 changes nothing either: version 3 only adds a clip's optional `title` (ADR-0015).
     // 3 -> 4 turns a clip's `filter` and `sharpness` into `effects` (ADR-0016, read_video).
     // 4 -> 5 changes nothing: version 5 only adds the sequence's optional `captions` (ADR-0017).
+    // 5 -> 6 changes nothing either: version 6 only adds optional `opacity_keys`/`gain_keys`.
 
     Document doc;
     const auto resolve = [&](std::string_view relative, std::string_view absolute) {
