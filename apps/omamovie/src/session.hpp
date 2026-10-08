@@ -118,7 +118,8 @@ class Session final : public QObject {
     // Captions (ADR-0017): {id, start, duration, text} in seconds, sorted.
     Q_PROPERTY(QVariantList captions READ captions NOTIFY sequenceChanged)
     // The selected clip's transform at the playhead (keyframes evaluated): posX, posY, scale,
-    // rotation; `keys` how many transform keys it has, `keyHere` whether one is at the playhead.
+    // rotation; `keys` how many transform keys it has, `keyHere` whether one is at the playhead;
+    // likewise opacity/opacityKeys/opacityKeyHere and gain/gainKeys/gainKeyHere (volume).
     Q_PROPERTY(QVariantMap motion READ motion NOTIFY motionChanged)
     // The selected clip's picture box at its committed transform, normalized to the canvas.
     Q_PROPERTY(QVariantMap selectedBox READ selectedBox NOTIFY motionChanged)
@@ -351,8 +352,12 @@ public:
     Q_INVOKABLE void setClipSharpness(double sharpness);
     // Crop and framing: a Fit mode and the fractions cropped from each edge.
     Q_INVOKABLE void setClipFraming(int fit, double left, double top, double right, double bottom);
-    // The selected clip's opacity in [0, 1] (composited over the layers below it).
+    // The selected clip's opacity in [0, 1] (composited over the layers below it). With opacity
+    // keys (M8) it sets the key at the playhead, as the volume of setClipAudio does with volume
+    // keys; the toggles add a key holding the value shown at the playhead, or remove the one there.
     Q_INVOKABLE void setClipOpacity(double opacity);
+    Q_INVOKABLE void toggleOpacityKey();
+    Q_INVOKABLE void toggleVolumeKey();
     // Direct manipulation in the viewer (UX-07): the selected clip's picture box for a candidate
     // position/scale, normalized to the canvas ({x, y, w, h}); a preview of a transform that only
     // the viewer shows; setClipTransform then commits the gesture as one edit.

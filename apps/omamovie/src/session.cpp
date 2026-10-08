@@ -1298,6 +1298,40 @@ void Session::detachAudio() {
     }
 }
 
+namespace {
+
+// Keyed scalars (M8): with keys, a value goes to the key at `at` (added when absent); without,
+// it is the clip's constant.
+void set_scalar(std::vector<tl::ScalarKey>& keys, float& constant, const std::optional<oma::RationalTime>& at,
+                double value) {
+    if (keys.empty()) {
+        constant = static_cast<float>(value);
+        return;
+    }
+    if (!at) return;
+    const auto it = std::ranges::lower_bound(keys, *at, std::less{}, &tl::ScalarKey::at);
+    if (it != keys.end() && it->at == *at) {
+        it->value = value;
+    } else if (keys.size() < tl::kMaxKeys) {
+        keys.insert(it, tl::ScalarKey{.at = *at, .value = value});
+    }
+}
+
+// Adds a key at `at` holding the value shown there, or removes the one there; the last one
+// removed leaves its value as the constant, so nothing jumps.
+void toggle_scalar(std::vector<tl::ScalarKey>& keys, float& constant, const oma::RationalTime& at) {
+    const double shown = keys.empty() ? constant : tl::scalar_at(keys, at);
+    const auto it = std::ranges::lower_bound(keys, at, std::less{}, &tl::ScalarKey::at);
+    if (it != keys.end() && it->at == at) {
+        if (keys.size() == 1) constant = static_cast<float>(it->value);
+        keys.erase(it);
+    } else if (keys.size() < tl::kMaxKeys) {
+        keys.insert(it, tl::ScalarKey{.at = at, .value = shown});
+    }
+}
+
+} // namespace
+
 void Session::setClipAudio(double gain, double fadeIn, double fadeOut, bool muted) {
     if (!editor_ || !selected_clip_.valid()) return;
     const tl::Clip* c = editor_->timeline().find_clip(selected_clip_);
@@ -1306,7 +1340,11 @@ void Session::setClipAudio(double gain, double fadeIn, double fadeOut, bool mute
     const std::int64_t in = std::clamp<std::int64_t>(std::llround(fadeIn * frameRate()), 0, frames);
     const std::int64_t out = std::clamp<std::int64_t>(std::llround(fadeOut * frameRate()), 0, frames - in);
     tl::AudioProperties audio = c->audio;
-    audio.gain = static_cast<float>(std::clamp(gain, 0.0, 4.0));
+    // The drawer sends the volume with every fade or mute change: an unchanged volume must not
+    // add a key at the playhead (dB round trips through the slider are not exact).
+    const auto at = keyTime(*c);
+    const double shown = audio.gain_keys.empty() || !at ? audio.gain : tl::scalar_at(audio.gain_keys, *at);
+    if (std::abs(gain - shown) > 1e-4) set_scalar(audio.gain_keys, audio.gain, at, std::clamp(gain, 0.0, 4.0));
     audio.fade_in = editor_->timeline().at(in * ticksPerFrame());
     audio.fade_out = editor_->timeline().at(out * ticksPerFrame());
     audio.muted = muted;
@@ -2039,8 +2077,27 @@ void Session::setClipOpacity(double opacity) {
     const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
     if (c == nullptr || !std::isfinite(opacity)) return;
     tl::VideoProperties video = c->video;
-    video.opacity = static_cast<float>(std::clamp(std::round(opacity * 100.0) / 100.0, 0.0, 1.0));
-    if (video.opacity != c->video.opacity) setSelectedVideo(video);
+    set_scalar(video.opacity_keys, video.opacity, keyTime(*c),
+               std::clamp(std::round(opacity * 100.0) / 100.0, 0.0, 1.0));
+    setSelectedVideo(video);
+}
+
+void Session::toggleOpacityKey() {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    const auto at = c != nullptr ? keyTime(*c) : std::nullopt;
+    if (!at) return;
+    tl::VideoProperties video = c->video;
+    toggle_scalar(video.opacity_keys, video.opacity, *at);
+    setSelectedVideo(video);
+}
+
+void Session::toggleVolumeKey() {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    const auto at = c != nullptr ? keyTime(*c) : std::nullopt;
+    if (!at) return;
+    tl::AudioProperties audio = c->audio;
+    toggle_scalar(audio.gain_keys, audio.gain, *at);
+    setSelectedAudio(audio);
 }
 
 void Session::setClipTransform(double x, double y, double scale, double rotation) {
@@ -2254,12 +2311,24 @@ QVariantMap Session::motion() const {
     const tl::Transform tr = at ? tl::transform_at(c->video, *at) : c->video.transform;
     const auto& keys = c->video.transform_keys;
     const bool here = at && std::ranges::binary_search(keys, *at, std::less{}, &tl::TransformKey::at);
+    const auto scalar = [&](const std::vector<tl::ScalarKey>& k, float constant) {
+        return k.empty() || !at ? static_cast<double>(constant) : tl::scalar_at(k, *at);
+    };
+    const auto key_here = [&](const std::vector<tl::ScalarKey>& k) {
+        return at && std::ranges::binary_search(k, *at, std::less{}, &tl::ScalarKey::at);
+    };
     return {{QStringLiteral("posX"), tr.offset_x},
             {QStringLiteral("posY"), tr.offset_y},
             {QStringLiteral("scale"), tr.scale_x},
             {QStringLiteral("rotation"), tr.rotation},
             {QStringLiteral("keys"), static_cast<int>(keys.size())},
-            {QStringLiteral("keyHere"), here}};
+            {QStringLiteral("keyHere"), here},
+            {QStringLiteral("opacity"), scalar(c->video.opacity_keys, c->video.opacity)},
+            {QStringLiteral("opacityKeys"), static_cast<int>(c->video.opacity_keys.size())},
+            {QStringLiteral("opacityKeyHere"), key_here(c->video.opacity_keys)},
+            {QStringLiteral("gain"), scalar(c->audio.gain_keys, c->audio.gain)},
+            {QStringLiteral("gainKeys"), static_cast<int>(c->audio.gain_keys.size())},
+            {QStringLiteral("gainKeyHere"), key_here(c->audio.gain_keys)}};
 }
 
 namespace {

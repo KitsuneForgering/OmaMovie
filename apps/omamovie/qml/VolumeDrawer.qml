@@ -36,6 +36,16 @@ Rectangle {
                 readout: root.decibels(root.gainOf(gainControl.slider.value))
                 onCommitted: volumeDrawer.commit()
             }
+            OmaButton {
+                objectName: "volumeKey"
+                iconName: "keyframe"
+                iconFilled: !!session.motion.gainKeyHere
+                selected: !!session.motion.gainKeyHere
+                tip: session.motion.gainKeys > 0
+                     ? session.motion.gainKeys + " volume keys: the slider sets the one at the playhead"
+                     : "Animate volume: keep this level at the playhead"
+                onClicked: session.toggleVolumeKey()
+            }
             DrawerSlider {
                 id: fadeInControl
                 label: "FADE IN"
@@ -118,7 +128,7 @@ Rectangle {
     // The sliders follow the selected clip, except while one is being dragged.
     Binding { target: gainControl.slider; property: "from"; value: root.volumeFloorDb }
     Binding { target: gainControl.slider; property: "to"; value: 12 }
-    Binding { target: gainControl.slider; property: "value"; value: root.dbOf(session.info.gain || 0); when: !gainControl.slider.pressed }
+    Binding { target: gainControl.slider; property: "value"; value: root.dbOf(session.motion.gain === undefined ? (session.info.gain || 0) : session.motion.gain); when: !gainControl.slider.pressed }
     Binding { target: fadeInControl.slider; property: "to"; value: Math.max(0.01, session.info.clipDuration || 0) }
     Binding { target: fadeInControl.slider; property: "value"; value: session.info.fadeIn || 0; when: !fadeInControl.slider.pressed }
     Binding { target: fadeOutControl.slider; property: "to"; value: Math.max(0.01, session.info.clipDuration || 0) }

@@ -66,6 +66,16 @@ Rectangle {
             DrawerSlider { id: scaleControl; label: "SCALE"; readout: Math.round(scaleControl.slider.value * 100) + "%"; onCommitted: cropDrawer.commitTransform() }
             DrawerSlider { id: rotationControl; label: "ROTATION"; readout: rotationControl.slider.value.toFixed(1) + "°"; onCommitted: cropDrawer.commitTransform() }
             DrawerSlider { id: opacityControl; objectName: "opacityControl"; label: "OPACITY"; readout: cropDrawer.percent(opacityControl.slider.value); onCommitted: session.setClipOpacity(opacityControl.slider.value) }
+            OmaButton {
+                objectName: "opacityKey"
+                iconName: "keyframe"
+                iconFilled: !!session.motion.opacityKeyHere
+                selected: !!session.motion.opacityKeyHere
+                tip: session.motion.opacityKeys > 0
+                     ? session.motion.opacityKeys + " opacity keys: the slider sets the one at the playhead"
+                     : "Animate opacity: keep this value at the playhead"
+                onClicked: session.toggleOpacityKey()
+            }
             // Keyframes (M8): with keys, the sliders above set the one at the playhead.
             OmaButton {
                 objectName: "transformKey"
@@ -110,6 +120,6 @@ Rectangle {
     Binding { target: rotationControl.slider; property: "from"; value: -180 }
     Binding { target: rotationControl.slider; property: "to"; value: 180 }
     Binding { target: rotationControl.slider; property: "value"; value: session.motion.rotation || 0; when: !rotationControl.slider.pressed }
-    Binding { target: opacityControl.slider; property: "value"; value: session.info.opacity === undefined ? 1 : session.info.opacity; when: !opacityControl.slider.pressed }
+    Binding { target: opacityControl.slider; property: "value"; value: session.motion.opacity === undefined ? 1 : session.motion.opacity; when: !opacityControl.slider.pressed }
     Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
 }

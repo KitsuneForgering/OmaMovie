@@ -183,6 +183,38 @@ bool speed_ramps() {
            s.clips().front().toMap().value("timing").toString().isEmpty();
 }
 
+// Opacity and volume keys (M8): a toggle keeps the value shown, a slider then sets the key at
+// the playhead, a fade change adds no key, and removing the last key leaves its value.
+bool scalar_keys() {
+    Session s;
+    if (!load_clip(s))
+        return false;
+    s.selectClip(s.clips().front().toMap().value("id").toDouble());
+    s.seek(0.0);
+    s.toggleOpacityKey();
+    s.toggleVolumeKey();
+    s.seek(0.5);
+    s.setClipOpacity(0.2);
+    s.setClipAudio(0.5, 0.0, 0.0, false);
+    s.setClipAudio(0.5, 0.1, 0.0, false); // only the fade
+    const QVariantMap here = s.motion();
+    const bool keyed = here.value("opacityKeys").toInt() == 2 &&
+                       here.value("gainKeys").toInt() == 2 &&
+                       here.value("opacityKeyHere").toBool() &&
+                       std::abs(here.value("gain").toDouble() - 0.5) < 1e-6;
+    s.seek(0.2);
+    const double between = s.motion().value("opacity").toDouble();
+    const bool interpolated =
+        between > 0.2 && between < 1.0 && !s.motion().value("opacityKeyHere").toBool();
+    s.seek(0.5);
+    s.toggleVolumeKey(); // removes the 0.5 s key
+    s.seek(0.0);
+    s.toggleVolumeKey(); // the last one: its 1.0 stays as the volume
+    const QVariantMap after = s.motion();
+    return keyed && interpolated && after.value("gainKeys").toInt() == 0 &&
+           std::abs(after.value("gain").toDouble() - 1.0) < 1e-6;
+}
+
 } // namespace
 
 void run_session_tests() {
@@ -200,5 +232,6 @@ void run_session_tests() {
            { expect(canvas_aspect_changes()).toBeTruthy(); });
         it("adds, imports and exports captions on the frame grid",
            { expect(captions_round_trip()).toBeTruthy(); });
+        it("keys opacity and volume at the playhead", { expect(scalar_keys()).toBeTruthy(); });
     });
 }
