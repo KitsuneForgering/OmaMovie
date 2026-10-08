@@ -3,6 +3,7 @@
 > Reviewed on 2026-10-03 with skeptical-research. This is non-normative research.
 > Source metadata and access limits: [source register](sources.md). Decisions and open
 > validation gates: [audit](skeptical-review.md). Product descriptions are not user studies.
+> VEGAS Pro 23 was added in a separate documentary review on 2026-10-07.
 
 The architecture remains a defensible direction, subject to driver, synchronization,
 color and workload checks. The product positioning and UX proposals remain hypotheses.
@@ -27,6 +28,7 @@ claims; it does not certify the implementation or complete the pending spikes.
 | [Omarchy integration](omarchy-integration.md) | Installed-file observations and version-sensitive adapters |
 | [Premiere](premiere-pro.md) | Editing, color and importer hypotheses |
 | [Final Cut Pro](final-cut-pro.md) | Anchored editing, precise placement, recovery, proxies and bounded FCPXML |
+| [VEGAS Pro 23](vegas-pro.md) | Source trimming, ripple scope, sync links, takes and adjustment events; bounded OmaMovie pilots |
 | [iMovie](imovie.md) | Contextual controls and transferable UX proposals |
 | [Movie Maker / Clipchamp](movie-maker.md) | Historical limits and current documented interactions |
 | [Resolve](davinci-resolve.md) | Versioned codec evidence and limits of competitive inference |

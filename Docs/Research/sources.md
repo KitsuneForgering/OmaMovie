@@ -6,6 +6,11 @@ Unknown publication dates and unpinned live revisions remain **unknown**. `lates
 and `master` are moving references, not version locks. Vendor product/help pages support
 feature descriptions, not independent performance or user preference evidence.
 
+The VEGAS Pro 23 entries below were accessed separately on **2026-10-07**. The
+browser exposed the cited sections as HTML. “Last modified” was 2025-12-08
+where noted; otherwise the page date is unknown. These are all one VEGAS
+vendor-help lineage, not independent observations.
+
 | ID | Author / institution; direct source | Date / version actually exposed | Passage inspected; role and limits |
 |---|---|---|---|
 | F1 | FFmpeg developers, [release news](https://ffmpeg.org/index.html) | 7.1: 2024-09-30; 8.0: 2025-08-22; 8.1: 2026-03-16 | Release highlights for Vulkan/compute codecs; accessed page did not establish a 9.0 release |
@@ -37,6 +42,14 @@ feature descriptions, not independent performance or user preference evidence.
 | E1 | Farid Abdelnour / Kdenlive, [State of Kdenlive](https://kdenlive.org/news/2026/state-2026/) | 2026-04-18 | Stability and planned MLT features; dated developer roadmap, not October availability audit |
 | E2 | Shotcut project, [FAQ](https://www.shotcut.org/FAQ/) | live FAQ, version/update unknown | GPU processing modes, decode limitations and transfer costs; implementation description, not cross-editor benchmark |
 | E3 | Descript, [video editing](https://www.descript.com/video-editing) | live product page, date/version unknown | Advertised text-based editing; no adoption/learnability measurement |
+| V1 | VEGAS Creative Software, [Trimmer](https://help.magix-hub.com/video/vegas/23/en/content/topics/2-window/window_trimmer.htm) | VEGAS Pro 23; update unknown | “Selecting data”, “Adding media to the timeline”, “Three-point editing” and “Creating a subclip”; source-range workflow, not tested usability |
+| V2 | VEGAS Creative Software, [Post-edit ripple](https://help.magix-hub.com/video/vegas/23/en/content/topics/7-edit/post_edit_ripple.htm) | VEGAS Pro 23; modified 2025-12-08 | “Ripple types” table, manual/automatic sections; documented scope and indicators, not correctness evidence for OmaMovie |
+| V3 | VEGAS Creative Software, [Sync links](https://help.magix-hub.com/video/vegas/23/en/content/topics/7-edit/using_sync_links.htm) | VEGAS Pro 23; modified 2025-12-08 | Opening and create/unlink sections; visible one-way behavior, no internal data model |
+| V4 | VEGAS Creative Software, [Takes](https://help.magix-hub.com/video/vegas/23/en/content/topics/7-edit/take.htm) | VEGAS Pro 23; modified 2025-12-08 | Creating, choosing and switching active take; no cross-source alignment guarantee |
+| V5 | VEGAS Creative Software, [Automatic crossfades](https://help.magix-hub.com/video/vegas/23/en/content/topics/7-edit/autocrossfades.htm) | VEGAS Pro 23; modified 2025-12-08 | Creating and changing fade type; feature conditional on enabled option |
+| V6 | VEGAS Creative Software, [Adjustment events](https://help.magix-hub.com/video/vegas/23/en/content/topics/7-edit/adjustmentevents.htm) | VEGAS Pro 23; modified 2025-12-08 | Opening and limiting to tracks; example workflow, no proof it fits OmaMovie's render graph |
+| V7 | VEGAS Creative Software, [Video proxies](https://help.magix-hub.com/video/vegas/23/en/content/topics/5-preview/creating_intermediate_files.htm) | VEGAS Pro 23; modified 2025-12-08 | Note that proxy is excluded from render and preview-quality routing; no measured benefit |
+| V8 | VEGAS Creative Software, [Multicamera editing](https://help.magix-hub.com/video/vegas/23/en/content/topics/7-edit/editing_multicamera_video.htm) | VEGAS Pro 23; update unknown | Initial editing/preview sections; documented frame-rate limit on many takes, no local benchmark |
 | R1 | PipeWire project, [Streams](https://docs.pipewire.org/page_streams.html) | generated 1.16.1; update unknown | Streaming, RT process flag and timing; RT safety contract, not local A/V validation |
 | S1 | Linux man-pages project, [fsync(2)](https://man7.org/linux/man-pages/man2/fsync.2.html) | man-pages 6.19, 2026-02-08 | Description: file vs directory durability; local-filesystem design input |
 | S2 | SQLite project, [atomic commit](https://www.sqlite.org/atomiccommit.html) | live page, update unknown | Transaction/durability discussion; counterexample to blanket database unreliability |

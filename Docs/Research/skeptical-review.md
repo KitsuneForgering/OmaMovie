@@ -1,5 +1,13 @@
 # Skeptical review of OmaMovie documentation
 
+> VEGAS Pro 23 addendum (2026-10-07): [dedicated review](vegas-pro.md) and
+> [source entries V1–V8](sources.md) add official-help evidence for source-range
+> selection, ripple scope, sync links, takes and adjustment events. This is a
+> documentary comparison, not a local VEGAS test or user result. M6 now has
+> proposed source-selection and ripple-visibility pilots; M8 has conditional
+> takes and adjustment-event pilots. Existing anchor, transition and proxy
+> decisions stay subject to their own task/workload gates.
+
 **Conclusion (2026-10-03):** retain the modular GPU-first direction and bounded Intel work.
 Qt queue integration, color/display correctness and multi-vendor validation remain gates.
 Product fit and the UI proposals need task evidence. The earlier research did not justify
