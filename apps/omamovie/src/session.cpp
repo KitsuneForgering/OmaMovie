@@ -12,6 +12,7 @@
 #include "oma/compositor/geometry.hpp"
 #include "oma/compositor/grade.hpp"
 #include "oma/compositor/render_graph.hpp"
+#include "oma/project/subtitles.hpp"
 #include "oma/timeline/edit.hpp"
 #include "oma/timeline/effects.hpp"
 #include "oma/timeline/evaluate.hpp"
@@ -22,6 +23,7 @@
 #include <QDateTime>
 #include <QLocale>
 #include <QFile>
+#include <QSaveFile>
 #include <QStringList>
 #include <QFileInfo>
 #include <QMetaObject>
@@ -1699,6 +1701,11 @@ void Session::exportMovie(const QUrl& url) {
                 setNotice(QStringLiteral("Cannot export %1: %2").arg(QFileInfo(path).fileName(), why));
             } else {
                 exported_file_ = path;
+                // Captions travel beside the movie as SubRip (ADR-0017).
+                if (editor_ && !editor_->timeline().captions().empty()) {
+                    exportCaptions(QUrl::fromLocalFile(QFileInfo(path).path() + QLatin1Char('/') +
+                                                       QFileInfo(path).completeBaseName() + QStringLiteral(".srt")));
+                }
                 setNotice(QStringLiteral("Exported %1 · %2").arg(QFileInfo(path).fileName(), QString::fromStdString(stats.encoder)));
                 // The user may have gone elsewhere during a long export (M7: notification).
                 if (QGuiApplication::applicationState() != Qt::ApplicationActive && notifications_) {
@@ -2704,6 +2711,143 @@ void Session::seek(double seconds) {
 void Session::stepFrames(int frames) {
     pause();
     setFrame((source_index_ >= 0 ? source_frame_ : frame()) + frames);
+}
+
+// ------------------------------------------------------------------- captions
+
+QVariantList Session::captions() const {
+    QVariantList out;
+    if (!editor_) return out;
+    for (const tl::Caption& c : editor_->timeline().captions()) {
+        out.push_back(QVariantMap{{"id", static_cast<double>(c.id.value())},
+                                  {"start", c.start.seconds_approx()},
+                                  {"duration", c.duration.seconds_approx()},
+                                  {"text", QString::fromStdString(c.text)}});
+    }
+    return out;
+}
+
+namespace {
+
+// The caption covering sequence tick `at` (captions are sorted and never overlap): O(log n).
+const tl::Caption* caption_covering(const tl::Timeline& t, std::int64_t at) {
+    const auto list = t.captions();
+    auto it = std::ranges::upper_bound(list, at, {}, [](const tl::Caption& c) { return c.start.value(); });
+    if (it == list.begin()) return nullptr;
+    --it;
+    return at < it->start.value() + it->duration.value() ? &*it : nullptr;
+}
+
+} // namespace
+
+QString Session::captionAt(double seconds) const {
+    if (!editor_ || !std::isfinite(seconds)) return {};
+    const tl::Caption* c = caption_covering(editor_->timeline(), ticksAt(seconds));
+    return c != nullptr ? QString::fromStdString(c->text) : QString();
+}
+
+double Session::captionIdAt(double seconds) const {
+    if (!editor_ || !std::isfinite(seconds)) return 0;
+    const tl::Caption* c = caption_covering(editor_->timeline(), ticksAt(seconds));
+    return c != nullptr ? static_cast<double>(c->id.value()) : 0;
+}
+
+double Session::addCaption() {
+    if (!editor_) return 0;
+    const tl::Timeline& t = editor_->timeline();
+    if (caption_covering(t, playhead_) != nullptr) {
+        setNotice(QStringLiteral("A caption is already here: double-click it to edit"));
+        return 0;
+    }
+    // Three seconds, or up to the next caption.
+    std::int64_t end = playhead_ + (3 * static_cast<std::int64_t>(std::llround(frameRate())) * ticksPerFrame());
+    const auto list = t.captions();
+    const auto next = std::ranges::upper_bound(list, playhead_, {}, [](const tl::Caption& c) { return c.start.value(); });
+    if (next != list.end()) end = std::min(end, next->start.value());
+    if (end <= playhead_) return 0;
+    const tl::CaptionId id = editor_->new_caption_id();
+    if (!run(tl::edit::add_caption({.id = id, .start = t.at(playhead_), .duration = t.at(end - playhead_), .text = "Caption"}))) {
+        return 0;
+    }
+    return static_cast<double>(id.value());
+}
+
+void Session::setCaptionText(double id, const QString& text) {
+    if (!editor_) return;
+    const auto list = editor_->timeline().captions();
+    const auto it = std::ranges::find(list, tl::CaptionId(static_cast<std::uint64_t>(id)), &tl::Caption::id);
+    const std::string utf8 = text.toStdString();
+    if (it == list.end() || it->text == utf8) return;
+    if (utf8.size() > tl::kMaxCaptionBytes) {
+        setNotice(QStringLiteral("A caption holds at most %1 bytes of text").arg(tl::kMaxCaptionBytes));
+        return;
+    }
+    tl::Caption changed = *it;
+    changed.text = utf8;
+    run(tl::edit::set_caption(std::move(changed)));
+}
+
+void Session::removeCaption(double id) {
+    if (editor_) run(tl::edit::remove_caption(tl::CaptionId(static_cast<std::uint64_t>(id))));
+}
+
+void Session::importCaptions(const QUrl& url) {
+    if (!editor_) return;
+    QFile file(url.toLocalFile());
+    if (file.size() > static_cast<qint64>(oma::project::kMaxSubtitleBytes) || !file.open(QIODevice::ReadOnly)) {
+        setNotice(QStringLiteral("Cannot read %1").arg(QFileInfo(file.fileName()).fileName()));
+        return;
+    }
+    const QByteArray bytes = file.readAll();
+    auto cues = oma::project::parse_subtitles(std::string_view(bytes.constData(), static_cast<std::size_t>(bytes.size())));
+    if (!cues) {
+        setNotice(QStringLiteral("%1: %2 (%3)").arg(QFileInfo(file.fileName()).fileName(),
+                                                   QString::fromStdString(cues.error().message()),
+                                                   QString::fromStdString(cues.error().context())));
+        return;
+    }
+    // Onto the frame grid: starts round down, ends up, then each end stops at the next start.
+    const tl::Timeline& t = editor_->timeline();
+    const std::int64_t tpf = ticksPerFrame();
+    std::vector<tl::Caption> captions;
+    for (const oma::project::Cue& cue : *cues) {
+        const auto from = oma::rescale(cue.start_ms, oma::Rational::literal(1, 1000), t.timebase(), oma::Rounding::Floor);
+        const auto to = oma::rescale(cue.end_ms, oma::Rational::literal(1, 1000), t.timebase(), oma::Rounding::Ceil);
+        if (!from || !to) continue;
+        const std::int64_t start = *from / tpf * tpf;
+        const std::int64_t end = (*to + tpf - 1) / tpf * tpf;
+        if (!captions.empty()) {
+            tl::Caption& last = captions.back();
+            const std::int64_t last_end = std::min(last.start.value() + last.duration.value(), start);
+            last.duration = t.at(last_end - last.start.value());
+        }
+        captions.push_back({.id = editor_->new_caption_id(), .start = t.at(start), .duration = t.at(end - start), .text = cue.text});
+    }
+    std::erase_if(captions, [](const tl::Caption& c) { return c.duration.value() <= 0; });
+    if (run(tl::edit::replace_captions(std::move(captions)))) {
+        setNotice(QStringLiteral("%1 captions imported").arg(editor_->timeline().captions().size()));
+    }
+}
+
+void Session::exportCaptions(const QUrl& url) {
+    if (!editor_) return;
+    const QString path = url.toLocalFile();
+    std::vector<oma::project::Cue> cues;
+    for (const tl::Caption& c : editor_->timeline().captions()) {
+        const auto ms = [](const oma::RationalTime& time) {
+            return oma::rescale(time.value(), time.timebase(), oma::Rational::literal(1, 1000), oma::Rounding::Nearest).value_or(0);
+        };
+        cues.push_back({.start_ms = ms(c.start), .end_ms = ms(c.start) + std::max<std::int64_t>(1, ms(c.duration)), .text = c.text});
+    }
+    const std::string text = path.endsWith(QStringLiteral(".vtt"), Qt::CaseInsensitive) ? oma::project::write_vtt(cues)
+                                                                                         : oma::project::write_srt(cues);
+    QSaveFile out(path);
+    if (!out.open(QIODevice::WriteOnly) || out.write(text.data(), static_cast<qint64>(text.size())) != static_cast<qint64>(text.size()) ||
+        !out.commit()) {
+        setNotice(QStringLiteral("Cannot write %1").arg(QFileInfo(path).fileName()));
+        return;
+    }
+    setNotice(QStringLiteral("%1 captions saved to %2").arg(cues.size()).arg(QFileInfo(path).fileName()));
 }
 
 void Session::openSource(int index) {

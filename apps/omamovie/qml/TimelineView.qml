@@ -72,8 +72,9 @@ Rectangle {
     readonly property int lanes: session.audioTracks.length
     readonly property int videoLanes: session.videoTracks.length
     readonly property real storylineY: 4 + videoLanes * (laneHeight + laneGap) + (videoLanes > 0 ? 4 : 0)
+    readonly property int captionRows: session.captions.length > 0 ? 1 : 0 // below the audio lanes
     readonly property real storylineHeight:
-        Math.min(86, Math.max(44, timelineScroll.height - 12 - (lanes + videoLanes) * (laneHeight + laneGap)))
+        Math.min(86, Math.max(44, timelineScroll.height - 12 - (lanes + videoLanes + captionRows) * (laneHeight + laneGap)))
     function laneY(index) { return storylineY + storylineHeight + 8 + index * (laneHeight + laneGap) }
     // Delegates exist only for clips near the view (M6 long-form audit: recreating one
     // per clip after every edit cost 330-660 ms at 500 clips). The range moves in
@@ -367,6 +368,8 @@ Rectangle {
             property real at: 0
             MenuItem { text: "Move the playhead here"; onTriggered: session.seek(emptyMenu.at) }
             MenuItem { action: actions.importMedia }
+            MenuItem { action: actions.addCaption }
+            MenuItem { action: actions.importCaptions }
             MenuSeparator {}
             MenuItem { action: actions.zoomFit }
             MenuItem { action: actions.snapping }
@@ -406,6 +409,38 @@ Rectangle {
                 color: "transparent"
                 border.color: root.accent
                 border.width: 2
+            }
+        }
+        // Captions (ADR-0017): one row under the audio lanes, in sequence time.
+        Repeater {
+            model: timelinePanel.near(session.captions)
+            delegate: Rectangle {
+                id: captionItem
+                required property var modelData
+                objectName: "captionItem"
+                x: timelinePanel.origin + modelData.start * timelinePanel.scale
+                y: timelinePanel.laneY(timelinePanel.lanes)
+                width: Math.max(4, modelData.duration * timelinePanel.scale - 2)
+                height: timelinePanel.laneHeight - 8
+                radius: 4
+                color: Qt.tint(colors.lighter_background, Qt.rgba(1, 0.85, 0.3, 0.22))
+                border.width: 1
+                border.color: Qt.rgba(1, 0.85, 0.3, 0.6)
+                clip: true
+                UiText {
+                    anchors.fill: parent
+                    anchors.leftMargin: 6
+                    verticalAlignment: Text.AlignVCenter
+                    text: captionItem.modelData.text.replace(/\n/g, " · ")
+                    color: root.fg
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: session.seek(captionItem.modelData.start)
+                    onDoubleClicked: root.editCaption(captionItem.modelData.id)
+                }
             }
         }
         Repeater {

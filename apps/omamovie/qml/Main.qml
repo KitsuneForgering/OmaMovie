@@ -307,6 +307,24 @@ ApplicationWindow {
             onTriggered: root.compact ? root.libraryOverlay = !root.libraryOverlay : root.libraryHidden = !root.libraryHidden
         }
         // Source viewer (M6 pilot): mark a range of a library item before placing it.
+        // Captions (ADR-0017).
+        property OmaAction addCaption: OmaAction {
+            text: "Add caption"; keys: "Ctrl+Alt+C"; enabled: actions.editing && session.clips.length > 0
+            onTriggered: { const id = session.addCaption(); if (id > 0) root.editCaption(id) }
+        }
+        property OmaAction editCaption: OmaAction {
+            text: "Edit the caption at the playhead"; keys: "Ctrl+Alt+E"
+            enabled: actions.editing && session.captionIdAt(session.position) > 0
+            onTriggered: root.editCaption(session.captionIdAt(session.position))
+        }
+        property OmaAction importCaptions: OmaAction {
+            text: "Import captions…"; enabled: actions.editing && session.clips.length > 0
+            onTriggered: captionsOpenDialog.open()
+        }
+        property OmaAction exportCaptions: OmaAction {
+            text: "Export captions…"; enabled: actions.editing && session.captions.length > 0
+            onTriggered: captionsSaveDialog.open()
+        }
         property OmaAction openSource: OmaAction {
             text: "Mark a range in the source…"; keys: "Shift+O"
             enabled: actions.editing && session.selectedMedia >= 0 && !session.source.open
@@ -402,6 +420,53 @@ ApplicationWindow {
         }
     }
 
+    FileDialog {
+        id: captionsOpenDialog
+        title: "Import captions"
+        nameFilters: ["Captions (*.srt *.vtt)"]
+        onAccepted: session.importCaptions(selectedFile)
+    }
+    FileDialog {
+        id: captionsSaveDialog
+        title: "Export captions"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "srt"
+        nameFilters: ["SubRip (*.srt)", "WebVTT (*.vtt)"]
+        onAccepted: session.exportCaptions(selectedFile)
+    }
+    // The caption editor: its text (line breaks allowed), Save or Delete. One edit each.
+    function editCaption(id) {
+        const c = session.captions.find(x => x.id === id)
+        if (!c) return
+        captionEditor.captionId = id
+        captionText.text = c.text
+        captionEditor.open()
+        captionText.forceActiveFocus()
+        captionText.selectAll()
+    }
+    Dialog {
+        id: captionEditor
+        objectName: "captionEditor"
+        property double captionId: 0
+        anchors.centerIn: parent
+        width: Math.min(460, root.width - 48)
+        modal: true
+        title: "Caption"
+        TextArea {
+            id: captionText
+            objectName: "captionText"
+            width: parent.width
+            wrapMode: TextEdit.Wrap
+            placeholderText: "What is said"
+        }
+        footer: DialogButtonBox {
+            Button { text: "Save"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
+            Button { text: "Delete"; DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole }
+            Button { text: "Cancel"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        }
+        onAccepted: session.setCaptionText(captionId, captionText.text)
+        onDiscarded: { session.removeCaption(captionId); close() }
+    }
     FileDialog {
         id: exportDialog
         title: "Export movie"

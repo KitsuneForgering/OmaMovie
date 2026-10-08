@@ -730,6 +730,7 @@ int main(int argc, char** argv) {
         double export_seconds = 0;
         bool export_started = false;
         bool saved_while_exporting = false;
+        bool caption_added = false;
         qsizetype media = 0, clips = 0, lanes = 0;
         double duration = 0;
         QVariantMap first;
@@ -1974,6 +1975,9 @@ int main(int argc, char** argv) {
              // An unsaved change, then export and save at once: the save must not wait for the export.
              session.selectClip(session.clips().front().toMap().value("id").toDouble());
              session.setClipOpacity(0.9);
+             session.seek(0.1); // a caption, so the export writes movie.srt beside the movie (ADR-0017)
+             saved.caption_added = session.addCaption() > 0;
+             screenshot(window, "OMA_GUI_SMOKE_CAPTION_SCREENSHOT");
              session.exportMovie(QUrl::fromLocalFile(project_dir.filePath(QStringLiteral("movie.mp4"))));
              saved.export_started = session.exportProgress() >= 0;
              session.saveProject(QUrl());
@@ -1988,11 +1992,14 @@ int main(int argc, char** argv) {
              const QString file = project_dir.filePath(QStringLiteral("movie.mp4"));
              const auto info = oma::media::FfmpegFormatBackend{}.inspect_input(file.toStdString());
              const double seconds = info && info->duration ? info->duration->seconds_approx() : 0.0;
-             const bool ok = saved.export_started && session.exportedFile() == file && info && info->best_video &&
+             bool ok = saved.export_started && session.exportedFile() == file && info && info->best_video &&
                              info->best_audio && std::abs(seconds - saved.export_seconds) < 0.1 &&
                              !QDir(project_dir.path()).entryList({QStringLiteral("movie.mp4.tmp*")}).size();
              if (!ok) std::printf("GUI smoke: export failed (%s; %.3f s for a %.3f s sequence)\n", qPrintable(session.notice()),
                                   seconds, saved.export_seconds);
+             const bool sidecar = saved.caption_added && QFile::exists(project_dir.filePath(QStringLiteral("movie.srt")));
+             if (!sidecar) std::printf("GUI smoke: no movie.srt beside the export\n");
+             ok = ok && sidecar;
              // The notice names the encoder used (Settings: automatic here).
              const bool named = session.notice().contains(QStringLiteral("VA-API")) || session.notice().contains(QStringLiteral("libx264"));
              if (!named) std::printf("GUI smoke: export notice does not name the encoder (%s)\n", qPrintable(session.notice()));

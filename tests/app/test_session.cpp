@@ -2,7 +2,10 @@
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
+#include <QTemporaryDir>
+#include <QUrl>
 
 #include <cmath>
 #include <functional>
@@ -112,6 +115,42 @@ bool ripple_preview_names_clips() {
     return named && untouched && lift && !s.editScope().value("active").toBool();
 }
 
+// Captions (ADR-0017): added at the playhead up to the next one, never over another; imported
+// from SRT onto the frame grid; exported again as SRT that reads the same.
+bool captions_round_trip() {
+    Session s;
+    if (!load_clip(s))
+        return false;
+    QTemporaryDir dir;
+    QFile srt(dir.filePath("in.srt"));
+    if (!srt.open(QIODevice::WriteOnly))
+        return false;
+    srt.write(
+        "1\n00:00:00,100 --> 00:00:00,450\nHello\n\n2\n00:00:00,500 --> 00:00:00,900\nWorld\n");
+    srt.close();
+    s.importCaptions(QUrl::fromLocalFile(srt.fileName()));
+    const QVariantList c = s.captions();
+    // 0.1 s → frame 3 (floor); 0.45 s → frame 14 (ceil), cut at the next start (frame 15).
+    const bool imported =
+        c.size() == 2 && std::abs(c[0].toMap().value("start").toDouble() - 0.1) < 1e-9 &&
+        std::abs(c[0].toMap().value("duration").toDouble() - 11.0 / 30.0) < 1e-9 &&
+        s.captionAt(0.2) == QStringLiteral("Hello") && s.captionAt(0.95).isEmpty();
+    s.seek(0.2);
+    const bool refused = s.addCaption() == 0; // a caption is already there
+    s.seek(0.0);
+    const double id = s.addCaption(); // [0, 0.1): up to the next caption
+    const bool added =
+        id > 0 && std::abs(s.captions().front().toMap().value("duration").toDouble() - 0.1) < 1e-9;
+    s.setCaptionText(id, QStringLiteral("Olá"));
+    s.exportCaptions(QUrl::fromLocalFile(dir.filePath("out.srt")));
+    QFile out(dir.filePath("out.srt"));
+    const bool written = out.open(QIODevice::ReadOnly) &&
+                         out.readAll().startsWith("1\n00:00:00,000 --> 00:00:00,100\nOlá");
+    s.undo(); // the text edit
+    return imported && refused && added && written &&
+           s.captionAt(0.05) == QStringLiteral("Caption");
+}
+
 } // namespace
 
 void run_session_tests() {
@@ -124,5 +163,7 @@ void run_session_tests() {
            { expect(playheads_stay_apart()).toBeTruthy(); });
         it("previews a delete with the delete command itself",
            { expect(ripple_preview_names_clips()).toBeTruthy(); });
+        it("adds, imports and exports captions on the frame grid",
+           { expect(captions_round_trip()).toBeTruthy(); });
     });
 }

@@ -313,6 +313,30 @@ Rectangle {
             }
         }
     }
+    // The caption at the playhead (ADR-0017): drawn over the viewer, not into the picture.
+    Rectangle {
+        objectName: "captionOverlay"
+        // Depends on the captions too, so an edited caption shows without moving the playhead.
+        readonly property string text: session.captions.length >= 0 ? session.captionAt(session.position) : ""
+        visible: text !== "" && !session.source.open
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 56
+        width: Math.min(parent.width - 48, captionLabel.implicitWidth + 24)
+        height: captionLabel.implicitHeight + 12
+        radius: 4
+        color: Qt.rgba(0, 0, 0, 0.7)
+        UiText {
+            id: captionLabel
+            anchors.centerIn: parent
+            width: Math.min(implicitWidth, parent.parent.width - 72)
+            text: parent.text
+            color: "white"
+            font.pixelSize: 16
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+        }
+    }
     // Notices (Session::notice): a short explanation after an action that did less than asked,
     // and the lasting one after the GPU device is lost.
     Rectangle {

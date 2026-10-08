@@ -115,6 +115,8 @@ class Session final : public QObject {
     // removed: [clipIds], markers: count moved}. Filled by the preview calls, simulated on a
     // copy of the timeline with the very command the edit runs, so it cannot disagree with it.
     Q_PROPERTY(QVariantMap editScope READ editScope NOTIFY editScopeChanged)
+    // Captions (ADR-0017): {id, start, duration, text} in seconds, sorted.
+    Q_PROPERTY(QVariantList captions READ captions NOTIFY sequenceChanged)
     // The selected clip's transform at the playhead (keyframes evaluated): posX, posY, scale,
     // rotation; `keys` how many transform keys it has, `keyHere` whether one is at the playhead.
     Q_PROPERTY(QVariantMap motion READ motion NOTIFY motionChanged)
@@ -424,6 +426,19 @@ public:
     Q_INVOKABLE void previewTrim(double id, bool head, int frames);
     Q_INVOKABLE void clearEditScope();
     [[nodiscard]] QVariantMap editScope() const { return edit_scope_; }
+    [[nodiscard]] QVariantList captions() const;
+    // The caption text under `seconds` (the viewer's overlay), empty when none.
+    Q_INVOKABLE QString captionAt(double seconds) const;
+    // The caption under the playhead's id, or 0.
+    Q_INVOKABLE double captionIdAt(double seconds) const;
+    // Adds a caption at the playhead, three seconds or up to the next one; returns its id or 0.
+    Q_INVOKABLE double addCaption();
+    Q_INVOKABLE void setCaptionText(double id, const QString& text);
+    Q_INVOKABLE void removeCaption(double id);
+    // SRT or VTT (by content); replaces the captions as one undoable edit.
+    Q_INVOKABLE void importCaptions(const QUrl& url);
+    // .vtt by extension, else SRT.
+    Q_INVOKABLE void exportCaptions(const QUrl& url);
     Q_INVOKABLE void openSource(int index);
     // The source viewer's playhead (seek() is the sequence's and leaves the source viewer).
     Q_INVOKABLE void seekSource(double seconds);
