@@ -369,6 +369,13 @@ Rectangle {
             MenuItem { text: "Move the playhead here"; onTriggered: session.seek(emptyMenu.at) }
             MenuItem { action: actions.importMedia }
             MenuItem { action: actions.addCaption }
+            Menu {
+                title: "Canvas (" + session.canvasWidth + " × " + session.canvasHeight + ")"
+                MenuItem { action: actions.canvasWide }
+                MenuItem { action: actions.canvasVertical }
+                MenuItem { action: actions.canvasSquare }
+                MenuItem { action: actions.canvasPortrait }
+            }
             MenuItem { action: actions.importCaptions }
             MenuSeparator {}
             MenuItem { action: actions.zoomFit }

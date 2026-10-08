@@ -151,6 +151,20 @@ bool captions_round_trip() {
            s.captionAt(0.05) == QStringLiteral("Caption");
 }
 
+// Canvas proportion (ADR-0010): 9:16 keeps the short side, follows undo, and survives a save.
+bool canvas_aspect_changes() {
+    Session s;
+    if (!load_clip(s))
+        return false; // 320x180 fixture
+    const bool start = s.canvasWidth() == 320 && s.canvasHeight() == 180;
+    s.setCanvasAspect(9, 16);
+    const bool vertical = s.canvasWidth() == 180 && s.canvasHeight() == 320;
+    s.undo();
+    const bool back = s.canvasWidth() == 320 && s.canvasHeight() == 180;
+    s.redo();
+    return start && vertical && back && s.canvasWidth() == 180;
+}
+
 } // namespace
 
 void run_session_tests() {
@@ -163,6 +177,8 @@ void run_session_tests() {
            { expect(playheads_stay_apart()).toBeTruthy(); });
         it("previews a delete with the delete command itself",
            { expect(ripple_preview_names_clips()).toBeTruthy(); });
+        it("changes the canvas proportion with undo",
+           { expect(canvas_aspect_changes()).toBeTruthy(); });
         it("adds, imports and exports captions on the frame grid",
            { expect(captions_round_trip()).toBeTruthy(); });
     });

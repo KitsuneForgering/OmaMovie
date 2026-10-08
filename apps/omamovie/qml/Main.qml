@@ -307,6 +307,23 @@ ApplicationWindow {
             onTriggered: root.compact ? root.libraryOverlay = !root.libraryOverlay : root.libraryHidden = !root.libraryHidden
         }
         // Source viewer (M6 pilot): mark a range of a library item before placing it.
+        // Canvas proportion (ADR-0010): keeps the short side; positions follow.
+        property OmaAction canvasWide: OmaAction {
+            text: "Canvas 16:9 (landscape)"; enabled: actions.editing && session.clips.length > 0
+            onTriggered: session.setCanvasAspect(16, 9)
+        }
+        property OmaAction canvasVertical: OmaAction {
+            text: "Canvas 9:16 (vertical)"; enabled: actions.editing && session.clips.length > 0
+            onTriggered: session.setCanvasAspect(9, 16)
+        }
+        property OmaAction canvasSquare: OmaAction {
+            text: "Canvas 1:1 (square)"; enabled: actions.editing && session.clips.length > 0
+            onTriggered: session.setCanvasAspect(1, 1)
+        }
+        property OmaAction canvasPortrait: OmaAction {
+            text: "Canvas 4:5 (portrait)"; enabled: actions.editing && session.clips.length > 0
+            onTriggered: session.setCanvasAspect(4, 5)
+        }
         // Captions (ADR-0017).
         property OmaAction addCaption: OmaAction {
             text: "Add caption"; keys: "Ctrl+Alt+C"; enabled: actions.editing && session.clips.length > 0

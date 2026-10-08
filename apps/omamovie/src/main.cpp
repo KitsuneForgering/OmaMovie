@@ -731,6 +731,7 @@ int main(int argc, char** argv) {
         bool export_started = false;
         bool saved_while_exporting = false;
         bool caption_added = false;
+        int canvas_before = 0;
         qsizetype media = 0, clips = 0, lanes = 0;
         double duration = 0;
         QVariantMap first;
@@ -1662,6 +1663,19 @@ int main(int argc, char** argv) {
              }
              if (!ok) std::printf("GUI smoke: edit scope preview failed\n");
              r.lanes = r.lanes && ok;
+         }},
+        // Canvas proportion (ADR-0010): a vertical canvas shows in the viewer, and undo restores it.
+        {"vertical canvas", after(100), [&] {
+             saved.canvas_before = session.canvasWidth();
+             session.setCanvasAspect(9, 16);
+         }},
+        {"vertical shown", after(500), [&] {
+             screenshot(window, "OMA_GUI_SMOKE_CANVAS_SCREENSHOT");
+             const bool vertical = session.canvasHeight() > session.canvasWidth();
+             session.undo();
+             const bool restored = session.canvasWidth() == saved.canvas_before;
+             if (!(vertical && restored)) std::printf("GUI smoke: canvas proportion failed\n");
+             r.lanes = r.lanes && vertical && restored;
          }},
         {"framing gesture", after(200), [&] {
              // UX-07: with Crop & framing open, dragging the box in the viewer moves the picture;

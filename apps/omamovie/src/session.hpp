@@ -439,6 +439,9 @@ public:
     Q_INVOKABLE void importCaptions(const QUrl& url);
     // .vtt by extension, else SRT.
     Q_INVOKABLE void exportCaptions(const QUrl& url);
+    // The canvas proportion (ADR-0010), keeping its short side: 16:9, 9:16, 1:1, 4:5…; one undo
+    // entry that also rescales every layer's position so it keeps its place in the frame.
+    Q_INVOKABLE void setCanvasAspect(int w, int h);
     Q_INVOKABLE void openSource(int index);
     // The source viewer's playhead (seek() is the sequence's and leaves the source viewer).
     Q_INVOKABLE void seekSource(double seconds);

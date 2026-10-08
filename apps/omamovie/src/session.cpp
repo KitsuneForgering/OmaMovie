@@ -709,6 +709,9 @@ bool Session::ensureSequence(const LibraryItem& first) {
         canvas_width_ = (first.width + 1) & ~1U;
         canvas_height_ = (first.height + 1) & ~1U;
     }
+    // The timeline owns the canvas (ADR-0010) so that changing it is one undo entry with the
+    // offsets it rescales; this first setting is part of the new project (history cleared below).
+    (void)editor_->execute(tl::edit::set_canvas(canvas_width_, canvas_height_));
     for (const LibraryItem& i : library_) {
         if (auto r = editor_->add_media(i.media); !r) {
             fail(message(r.error()));
@@ -825,6 +828,11 @@ bool Session::run(std::unique_ptr<tl::Command> command) {
 }
 
 void Session::afterEdit() {
+    // Undo/redo of a canvas change (ADR-0010) brings the size with it.
+    if (editor_->timeline().canvas_width() != 0) {
+        canvas_width_ = editor_->timeline().canvas_width();
+        canvas_height_ = editor_->timeline().canvas_height();
+    }
     refreshSnapshot();
     if (selected_clip_.valid() && editor_->timeline().find_clip(selected_clip_) == nullptr) {
         selected_clip_ = {};
@@ -1766,6 +1774,9 @@ void Session::applyProject(oma::project::Document doc, const QString& path) {
     if (doc.timeline) {
         editor_.emplace(std::move(*doc.timeline));
         primary_ = doc.storyline;
+        // The saved canvas, as state of the timeline (ADR-0010), not an edit to undo.
+        (void)editor_->execute(tl::edit::set_canvas(canvas_width_, canvas_height_));
+        editor_->clear_history();
     }
     for (oma::project::MediaRef& m : doc.media) {
         next_media_ = std::max(next_media_, m.info.id.value() + 1);
@@ -2848,6 +2859,19 @@ void Session::exportCaptions(const QUrl& url) {
         return;
     }
     setNotice(QStringLiteral("%1 captions saved to %2").arg(cues.size()).arg(QFileInfo(path).fileName()));
+}
+
+void Session::setCanvasAspect(int w, int h) {
+    if (!editor_ || w <= 0 || h <= 0) return;
+    // Same short side, new proportion, even sizes: 1920x1080 becomes 1080x1920 at 9:16.
+    const std::uint32_t short_side = std::min(canvas_width_, canvas_height_);
+    const auto even = [](double v) { return static_cast<std::uint32_t>(std::lround(v / 2.0)) * 2U; };
+    const std::uint32_t width = w >= h ? even(static_cast<double>(short_side) * w / h) : short_side;
+    const std::uint32_t height = w >= h ? short_side : even(static_cast<double>(short_side) * h / w);
+    if (width == canvas_width_ && height == canvas_height_) return;
+    if (run(tl::edit::set_canvas(width, height))) {
+        setNotice(QStringLiteral("Canvas %1 × %2").arg(width).arg(height));
+    }
 }
 
 void Session::openSource(int index) {
