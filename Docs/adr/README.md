@@ -16,7 +16,7 @@ one as superseded.
 | [0007](0007-project-format.md) | Native project format: versioned JSON, simdjson | Accepted |
 | 0008 | ProjectIR and preservation of external data | Pending (M9) |
 | [0009](0009-cache.md) | Cache strategy | Accepted |
-| 0010 | Canvas coordinates | Pending (M8) |
+| [0010](0010-canvas-coordinates.md) | Canvas coordinates: pixels, rescaled when the canvas changes | Accepted |
 | [0011](0011-transitions.md) | Transitions between clips | Accepted |
 | [0012](0012-color-grading.md) | Color grading: CDL, curves and 3D LUTs | Accepted |
 | [0013](0013-clip-time-maps.md) | Clip time maps: freeze, reverse and speed ramps | Accepted |
