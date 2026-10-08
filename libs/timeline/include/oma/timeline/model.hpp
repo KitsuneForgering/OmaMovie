@@ -427,6 +427,10 @@ public:
     [[nodiscard]] std::span<const Track> tracks() const noexcept { return tracks_; }
     [[nodiscard]] std::span<const Marker> markers() const noexcept { return markers_; }
     [[nodiscard]] std::span<const Caption> captions() const noexcept { return captions_; }
+    // The canvas the sequence renders to (ADR-0010), in pixels; 0 until the first picture or a
+    // project sets it. Transform offsets are pixels of this canvas.
+    [[nodiscard]] std::uint32_t canvas_width() const noexcept { return canvas_width_; }
+    [[nodiscard]] std::uint32_t canvas_height() const noexcept { return canvas_height_; }
     [[nodiscard]] std::span<const MediaInfo> media() const noexcept { return media_; }
     [[nodiscard]] std::span<const LutInfo> luts() const noexcept { return luts_; }
 
@@ -462,6 +466,8 @@ private:
     std::vector<Track> tracks_; // video tracks bottom first, then any order for audio
     std::vector<Marker> markers_;
     std::vector<Caption> captions_; // sorted by start, not overlapping (ADR-0017)
+    std::uint32_t canvas_width_ = 0;
+    std::uint32_t canvas_height_ = 0;
     std::vector<MediaInfo> media_;
     std::vector<LutInfo> luts_;
     // IDs only grow, even across undo, so an ID is never reused for another object.

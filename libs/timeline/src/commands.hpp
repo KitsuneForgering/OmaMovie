@@ -37,5 +37,7 @@ using Planner = std::function<Result<Steps>(Timeline&)>;
 [[nodiscard]] std::unique_ptr<Command> erase_marker(MarkerId id);
 // Swaps the timeline's captions for `captions`; revert restores the previous list.
 [[nodiscard]] std::unique_ptr<Command> replace_captions(std::vector<Caption> captions);
+// Sets the canvas size; revert restores the previous one.
+[[nodiscard]] std::unique_ptr<Command> set_canvas(std::uint32_t width, std::uint32_t height);
 
 } // namespace oma::timeline::detail

@@ -501,4 +501,34 @@ std::unique_ptr<Command> replace_captions(std::vector<Caption> captions) {
     return std::make_unique<ReplaceCaptions>(std::move(captions));
 }
 
+namespace {
+
+class SetCanvas final : public Command {
+public:
+    SetCanvas(std::uint32_t width, std::uint32_t height) : width_(width), height_(height) {}
+
+    [[nodiscard]] std::string_view name() const noexcept override { return "Canvas"; }
+
+    [[nodiscard]] Result<void> apply(Timeline& timeline) override {
+        previous_ = {timeline.canvas_width(), timeline.canvas_height()};
+        Mutation(timeline).set_canvas(width_, height_);
+        return {};
+    }
+
+    void revert(Timeline& timeline) noexcept override {
+        Mutation(timeline).set_canvas(previous_.first, previous_.second);
+    }
+
+private:
+    std::uint32_t width_;
+    std::uint32_t height_;
+    std::pair<std::uint32_t, std::uint32_t> previous_{};
+};
+
+} // namespace
+
+std::unique_ptr<Command> set_canvas(std::uint32_t width, std::uint32_t height) {
+    return std::make_unique<SetCanvas>(width, height);
+}
+
 } // namespace oma::timeline::detail

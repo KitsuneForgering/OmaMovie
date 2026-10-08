@@ -10,6 +10,7 @@ void run_anchor_tests();
 void run_title_tests();
 void run_effect_tests();
 void run_caption_tests();
+void run_canvas_tests();
 
 int main(int argc, char* argv[]) {
     cest_init(argc, argv);
@@ -23,5 +24,6 @@ int main(int argc, char* argv[]) {
     run_title_tests();
     run_effect_tests();
     run_caption_tests();
+    run_canvas_tests();
     return cest_result();
 }

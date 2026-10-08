@@ -944,6 +944,41 @@ std::unique_ptr<Command> remove_caption(CaptionId id) {
         });
 }
 
+std::unique_ptr<Command> set_canvas(std::uint32_t width, std::uint32_t height) {
+    return detail::make_planned("Canvas", [width, height](Timeline& tl) -> Result<Steps> {
+        if (width < 16 || height < 16 || width > 16384 || height > 16384 || (width & 1U) != 0 ||
+            (height & 1U) != 0) {
+            return error(ErrorCode::InvalidArgument,
+                         "the canvas must be even and 16 to 16384 pixels each way");
+        }
+        Steps steps;
+        if (tl.canvas_width() != 0 && tl.canvas_height() != 0) {
+            const double sx = static_cast<double>(width) / tl.canvas_width();
+            const double sy = static_cast<double>(height) / tl.canvas_height();
+            const auto scaled = [&](Transform t) {
+                t.offset_x *= sx;
+                t.offset_y *= sy;
+                return t;
+            };
+            for (const Track& track : tl.tracks()) {
+                for (const Clip& c : track.clips) {
+                    if (c.video.transform.offset_x == 0.0 && c.video.transform.offset_y == 0.0 &&
+                        c.video.transform_keys.empty()) {
+                        continue; // nothing in pixels to move
+                    }
+                    Clip changed = c;
+                    changed.video.transform = scaled(changed.video.transform);
+                    for (TransformKey& k : changed.video.transform_keys)
+                        k.value = scaled(k.value);
+                    steps.push_back(detail::replace_clip(std::move(changed)));
+                }
+            }
+        }
+        steps.push_back(detail::set_canvas(width, height));
+        return steps;
+    });
+}
+
 std::unique_ptr<Command> replace_captions(std::vector<Caption> captions) {
     return caption_edit("Import Captions",
                         [captions = std::move(captions)](

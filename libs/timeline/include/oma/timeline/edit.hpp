@@ -120,6 +120,10 @@ struct ClipSource {
 [[nodiscard]] std::unique_ptr<Command> add_caption(Caption caption);
 [[nodiscard]] std::unique_ptr<Command> set_caption(Caption caption); // the caption with its ID
 [[nodiscard]] std::unique_ptr<Command> remove_caption(CaptionId id);
+// The canvas size (ADR-0010): even, 16 to 16384 pixels each way. Transform offsets (and their
+// keys) are pixels of the canvas, so they scale by the same ratio on each axis and every layer
+// keeps its place relative to the frame. From an unset canvas (0) nothing is rescaled.
+[[nodiscard]] std::unique_ptr<Command> set_canvas(std::uint32_t width, std::uint32_t height);
 // The whole list at once (an import), one undo entry.
 [[nodiscard]] std::unique_ptr<Command> replace_captions(std::vector<Caption> captions);
 
