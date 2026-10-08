@@ -1,5 +1,8 @@
 #include "oma/audio/mix.hpp"
 
+#include <array>
+#include <cmath>
+
 #include <cmath>
 
 #include <vector>
@@ -39,8 +42,32 @@ ClipGain crossfaded() {
 
 } // namespace
 
+namespace {
+
+// Keyed volume (M8): linear between points, held, eased; before the first and after the last
+// the nearest point's gain; fades still multiply on top.
+bool automates_gain() {
+    using oma::audio::ClipGain;
+    using oma::audio::GainPoint;
+    const std::array<GainPoint, 3> points{
+        GainPoint{.sample = 0, .gain = 1.0F, .interpolation = 1},
+        GainPoint{.sample = 100, .gain = 0.0F, .interpolation = 0},
+        GainPoint{.sample = 200, .gain = 1.0F, .interpolation = 2}};
+    ClipGain g;
+    g.length = 400;
+    g.automation = points;
+    const bool linear = std::abs(g.at(50) - 0.5F) < 1e-6F;
+    const bool held = g.at(150) == 0.0F;
+    const bool after = g.at(300) == 1.0F;
+    g.fade_out = 100; // last 100 samples fade on top of the automation
+    return linear && held && after && g.at(399) == 0.0F && std::abs(g.at(350) - 0.49F) < 0.02F;
+}
+
+} // namespace
+
 void run_mix_tests() {
     describe("ClipGain", {
+        it("follows keyed volume under its fades", { expect(automates_gain()).toBeTruthy(); });
         it("is constant between the fades", {
             expect(faded().at(50)).toBe(0.5F);
             expect(faded().at(10)).toBe(0.5F);

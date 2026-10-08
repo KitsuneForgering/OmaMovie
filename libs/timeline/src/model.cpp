@@ -471,6 +471,20 @@ bool transform_ok(const Transform& tr) {
            tr.scale_y != 0.0;
 }
 
+bool scalar_keys_ok(const std::vector<ScalarKey>& keys, double max) {
+    if (keys.size() > kMaxKeys) {
+        return false;
+    }
+    for (std::size_t i = 0; i < keys.size(); ++i) {
+        if (!std::isfinite(keys[i].value) || keys[i].value < 0.0 || keys[i].value > max ||
+            keys[i].interpolation > Interpolation::Ease ||
+            (i > 0 && !(keys[i - 1].at < keys[i].at))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool keys_ok(const std::vector<TransformKey>& keys) {
     if (keys.size() > kMaxKeys) {
         return false;
@@ -490,7 +504,8 @@ Result<void> validate_properties(const Clip& c) {
                          in_unit(v.crop.bottom) && v.crop.left + v.crop.right < 1.0 &&
                          v.crop.top + v.crop.bottom < 1.0;
     const bool motion_ok = transform_ok(v.transform) && keys_ok(v.transform_keys);
-    const bool opacity_ok = std::isfinite(v.opacity) && v.opacity >= 0.0F && v.opacity <= 1.0F;
+    const bool opacity_ok = std::isfinite(v.opacity) && v.opacity >= 0.0F && v.opacity <= 1.0F &&
+                            scalar_keys_ok(v.opacity_keys, 1.0);
     const auto within = [](double x, double limit) {
         return std::isfinite(x) && std::abs(x) <= limit;
     };
@@ -504,7 +519,7 @@ Result<void> validate_properties(const Clip& c) {
         return error(ErrorCode::InvalidData, r.error().message(), detail::clip_context(c.id));
     }
     const AudioProperties& a = c.audio;
-    if (!std::isfinite(a.gain) || a.gain < 0.0F) {
+    if (!std::isfinite(a.gain) || a.gain < 0.0F || !scalar_keys_ok(a.gain_keys, 16.0)) {
         return error(ErrorCode::InvalidData, "invalid audio gain", detail::clip_context(c.id));
     }
     const auto band_ok = [](float db) {

@@ -44,13 +44,19 @@ Result<RationalTime> media_time(const Timeline& tl, const Clip& c, const MediaIn
 // The clip's properties at `ticks`, keyframes evaluated (VideoLayer::video).
 Result<VideoProperties> video_at(const Timeline& tl, const Clip& c, std::int64_t ticks) {
     VideoProperties v = c.video;
-    if (!v.transform_keys.empty()) {
+    if (!v.transform_keys.empty() || !v.opacity_keys.empty()) {
         auto source = source_time(tl, c, ticks);
         if (!source) {
             return std::unexpected(source.error());
         }
-        v.transform = transform_at(c.video, *source);
-        v.transform_keys.clear();
+        if (!v.transform_keys.empty()) {
+            v.transform = transform_at(c.video, *source);
+            v.transform_keys.clear();
+        }
+        if (!v.opacity_keys.empty()) {
+            v.opacity = static_cast<float>(scalar_at(v.opacity_keys, *source));
+            v.opacity_keys.clear();
+        }
     }
     return v;
 }
@@ -201,6 +207,28 @@ Transform transform_at(const VideoProperties& video, const RationalTime& source)
             .scale_x = scale(x.scale_x, y.scale_x),
             .scale_y = scale(x.scale_y, y.scale_y),
             .rotation = lerp(x.rotation, y.rotation)};
+}
+
+double scalar_at(std::span<const ScalarKey> keys, const RationalTime& source) {
+    const auto next = std::ranges::upper_bound(keys, source, std::less{}, &ScalarKey::at);
+    if (next == keys.begin()) {
+        return keys.front().value;
+    }
+    if (next == keys.end()) {
+        return keys.back().value;
+    }
+    const ScalarKey& a = *std::prev(next);
+    const ScalarKey& b = *next;
+    if (a.interpolation == Interpolation::Hold) {
+        return a.value;
+    }
+    // A display-derived fraction; the key times themselves stay exact.
+    const double span = b.at.seconds_approx() - a.at.seconds_approx();
+    double t = std::clamp((source.seconds_approx() - a.at.seconds_approx()) / span, 0.0, 1.0);
+    if (a.interpolation == Interpolation::Ease) {
+        t = t * t * (3.0 - (2.0 * t));
+    }
+    return a.value + ((b.value - a.value) * t);
 }
 
 Result<Composition> evaluate(const Timeline& timeline, const RationalTime& at) {

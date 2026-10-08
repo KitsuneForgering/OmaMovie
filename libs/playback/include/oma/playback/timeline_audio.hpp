@@ -1,6 +1,7 @@
 #pragma once
 
 #include "oma/audio/effect.hpp"
+#include "oma/audio/mix.hpp"
 #include "oma/base/error.hpp"
 #include "oma/base/time.hpp"
 #include "oma/media/audio_decoder.hpp"
@@ -45,6 +46,8 @@ public:
     [[nodiscard]] std::size_t open_streams() const noexcept { return streams_.size(); }
 
 private:
+    std::vector<oma::audio::GainPoint> gain_points_; // the clip being mixed, reused per clip
+
     struct Stream {
         std::uint64_t media = 0;             // media ID
         oma::timeline::NoiseReduction noise; // what the decoder was opened with

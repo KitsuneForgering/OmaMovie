@@ -212,13 +212,28 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, const Span& span
         s.next_sample = media_sample;
         s.effects.reset();
     }
+    // Keyed volume in clip samples: a key's source time minus the clip's source start (sound
+    // plays only at 1×, so source and clip time advance together). Reused buffer: no allocation
+    // once it has grown.
+    gain_points_.clear();
+    if (!clip.audio.gain_keys.empty()) {
+        const std::int64_t base =
+            rate_.time_to_sample(clip.source_in, oma::Rounding::Nearest).value_or(0);
+        for (const oma::timeline::ScalarKey& k : clip.audio.gain_keys) {
+            gain_points_.push_back(
+                {.sample = rate_.time_to_sample(k.at, oma::Rounding::Nearest).value_or(0) - base,
+                 .gain = static_cast<float>(k.value),
+                 .interpolation = static_cast<std::uint8_t>(k.interpolation)});
+        }
+    }
     const oma::audio::ClipGain gain{
         .gain = clip.audio.gain,
         .length = b - a,
         .fade_in = rate_.time_to_sample(clip.audio.fade_in, oma::Rounding::Floor).value_or(0),
         .fade_out = rate_.time_to_sample(clip.audio.fade_out, oma::Rounding::Floor).value_or(0),
         .lead = span.lead,
-        .tail = span.tail};
+        .tail = span.tail,
+        .automation = gain_points_};
     std::int64_t pos = from;
     while (pos < to) {
         if (!s.buffer || s.offset >= s.buffer->frames) {

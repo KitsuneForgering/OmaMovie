@@ -257,6 +257,16 @@ struct TransformKey {
     friend bool operator==(const TransformKey&, const TransformKey&) noexcept = default;
 };
 
+// A keyed number (opacity, volume): the same source-time rule and interpolations as transform
+// keys. At most kMaxKeys per property, strictly increasing `at`.
+struct ScalarKey {
+    RationalTime at;
+    double value = 0.0;
+    Interpolation interpolation = Interpolation::Linear; // toward the next key
+
+    friend bool operator==(const ScalarKey&, const ScalarKey&) noexcept = default;
+};
+
 // A title clip's text (ADR-0015): drawn by the app over a transparent background at the canvas
 // size, then composited like any picture.
 enum class TitlePlacement : std::uint8_t { LowerThird, Center, Top };
@@ -279,7 +289,8 @@ struct VideoProperties {
     Transform transform; // used when transform_keys is empty
     // At most kMaxKeys, strictly increasing `at`; timeline::transform_at evaluates them.
     std::vector<TransformKey> transform_keys;
-    float opacity = 1.0F;
+    float opacity = 1.0F;                // used when opacity_keys is empty
+    std::vector<ScalarKey> opacity_keys; // values in [0, 1]
     BlendMode blend = BlendMode::Normal;
     ColorAdjust color;
     // At most kMaxEffects, each definition at most once; rendered by stage, in this order
@@ -308,7 +319,8 @@ struct NoiseReduction {
 };
 
 struct AudioProperties {
-    float gain = 1.0F; // linear
+    float gain = 1.0F;                // linear; used when gain_keys is empty
+    std::vector<ScalarKey> gain_keys; // linear gains in [0, 16], interpolated linearly in gain
     bool muted = false;
     // Fade lengths in timeline time; together they fit in the clip.
     RationalTime fade_in;

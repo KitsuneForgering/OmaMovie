@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
 
 // What the timeline shows and plays at one instant (CLAUDE.md §9.1): plain data, testable
@@ -79,6 +80,9 @@ transition_window(const Timeline& timeline, const Track& track, std::size_t inde
 // or last key's value outside them, else the interpolation from the key before. Scale moves
 // geometrically (a steady zoom) when both keys have the same sign, linearly otherwise.
 [[nodiscard]] Transform transform_at(const VideoProperties& video, const RationalTime& source);
+// A keyed number at exact source time `source` (`keys` not empty): before the first key its
+// value, after the last its value, else the interpolation of the key before it.
+[[nodiscard]] double scalar_at(std::span<const ScalarKey> keys, const RationalTime& source);
 
 // Hidden video tracks contribute no layers, muted tracks and clips no audio. Inside a
 // transition a video track contributes both clips, outgoing first, with their transition

@@ -37,6 +37,16 @@ tl::AudioProperties muted() {
     return a;
 }
 
+// Volume keys in source time (M8): full until source sample 36,000, then a quarter. The clip
+// starts at source 12,000, so the step lands 24,000 samples into the output.
+tl::AudioProperties keyed_volume() {
+    tl::AudioProperties a;
+    a.gain_keys = {
+        tl::ScalarKey{.at = s(12000), .value = 1.0, .interpolation = tl::Interpolation::Hold},
+        tl::ScalarKey{.at = s(36000), .value = 0.25, .interpolation = tl::Interpolation::Hold}};
+    return a;
+}
+
 } // namespace
 
 void run_timeline_audio_tests() {
@@ -92,6 +102,17 @@ void run_timeline_audio_tests() {
             const auto out = render(seq.editor.timeline(), 0, 48000);
             expect(near_tone(peak(out, 0, 24000), 0.5F)).toBeTruthy();
             expect(peak(out, 24000, 48000)).toEqual(0.0F);
+        });
+
+        it("follows volume keys in source time", {
+            if (!have_fixture("tone_44100.wav")) {
+                return;
+            }
+            Sequence seq = make_sequence();
+            expect(place(seq, 0, 12000, 48000, keyed_volume()).valid()).toBeTruthy();
+            const auto out = render(seq.editor.timeline(), 0, 48000);
+            expect(near_tone(peak(out, 0, 23000), 1.0F)).toBeTruthy();
+            expect(near_tone(peak(out, 25000, 48000), 0.25F)).toBeTruthy();
         });
 
         it("plays a split clip exactly like the unsplit clip", {

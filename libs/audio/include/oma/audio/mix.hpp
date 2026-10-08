@@ -10,8 +10,16 @@ namespace oma::audio {
 
 // A clip's gain over its length: a constant gain with linear fades at both ends, and
 // crossfades with its neighbours when transitions join them.
-struct ClipGain {
+// Volume automation: a gain at a sample of the clip (0 = its first), held, linear or eased
+// toward the next point. Sorted by sample.
+struct GainPoint {
+    std::int64_t sample = 0;
     float gain = 1.0F;
+    std::uint8_t interpolation = 1; // 0 hold, 1 linear, 2 ease (as timeline::Interpolation)
+};
+
+struct ClipGain {
+    float gain = 1.0F;         // when `automation` is empty
     std::int64_t length = 0;   // clip length in samples
     std::int64_t fade_in = 0;  // samples
     std::int64_t fade_out = 0; // samples
@@ -19,6 +27,9 @@ struct ClipGain {
     // last, under equal-power ramps over [-lead, lead) and [length - tail, length + tail).
     std::int64_t lead = 0;
     std::int64_t tail = 0;
+
+    // Keyed volume (M8): replaces `gain` when not empty; borrowed, outlives the mix call.
+    std::span<const GainPoint> automation{};
 
     // The gain at `sample` (0 = the clip's first sample). Zero outside [-lead, length + tail).
     [[nodiscard]] float at(std::int64_t sample) const noexcept;

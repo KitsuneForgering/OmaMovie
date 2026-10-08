@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <iterator>
 #include <numbers>
 #include <utility>
 
@@ -13,6 +14,22 @@ float ClipGain::at(std::int64_t sample) const noexcept {
         return 0.0F;
     }
     float g = gain;
+    if (!automation.empty()) {
+        // O(log k) per sample: k is at most a few hundred keys.
+        const auto next = std::ranges::upper_bound(automation, sample, {}, &GainPoint::sample);
+        if (next == automation.begin()) {
+            g = automation.front().gain;
+        } else if (next == automation.end()) {
+            g = automation.back().gain;
+        } else {
+            const GainPoint& a = *std::prev(next);
+            float t =
+                static_cast<float>(sample - a.sample) / static_cast<float>(next->sample - a.sample);
+            if (a.interpolation == 2)
+                t = t * t * (3.0F - (2.0F * t));
+            g = a.interpolation == 0 ? a.gain : a.gain + ((next->gain - a.gain) * t);
+        }
+    }
     if (fade_in > 0 && sample < fade_in) {
         g *= static_cast<float>(std::max<std::int64_t>(sample, 0)) / static_cast<float>(fade_in);
     }
