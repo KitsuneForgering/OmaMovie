@@ -75,16 +75,18 @@ QString timingLabel(const tl::TimeMap& map) {
         bool reverse = false;
         bool freeze = false;
         bool other = false;
+        bool ramp = false;
         for (const tl::TimeSegment& seg : map.segments()) {
+            ramp = ramp || seg.kind == tl::TimeSegment::Kind::Ramp;
             reverse = reverse || seg.from.num() < 0 || seg.to.num() < 0;
             freeze = freeze || seg.kind == tl::TimeSegment::Kind::Freeze;
-            other = other || seg.kind == tl::TimeSegment::Kind::Ramp ||
-                    (seg.kind == tl::TimeSegment::Kind::Linear && seg.from != oma::Rational::literal(1, 1) &&
+            other = other || (seg.kind == tl::TimeSegment::Kind::Linear && seg.from != oma::Rational::literal(1, 1) &&
                      seg.from != oma::Rational::literal(-1, 1));
         }
         QStringList parts;
         if (reverse) parts << QStringLiteral("Reverse");
         if (freeze) parts << QStringLiteral("Freeze");
+        if (ramp) parts << QStringLiteral("Ramp");
         if (other) parts << QStringLiteral("Retimed");
         return parts.join(QStringLiteral(" · "));
     }
@@ -1217,6 +1219,38 @@ void Session::freezeFrame(double seconds) {
     if (run(tl::edit::freeze_frame(id, t.at(playhead_), t.at(ticksAt(seconds)), ripple))) {
         selected_clip_ = id;
         emit selectionChanged();
+    }
+}
+
+void Session::setSpeedRamp(int preset) {
+    const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
+    if (c == nullptr || preset < 0 || preset > 2) {
+        setNotice(QStringLiteral("Select a clip to ramp its speed"));
+        return;
+    }
+    using Kind = tl::TimeSegment::Kind;
+    const auto q = [](std::int64_t n, std::int64_t d) { return oma::Rational::make(n, d).value(); };
+    const std::int64_t tpf = ticksPerFrame();
+    const std::int64_t frames = (c->end_ticks() - c->start_ticks()) / tpf;
+    std::vector<tl::TimeSegment> segments;
+    if (preset < 2) {
+        // Average speed 1×: the same media over the same duration.
+        if (frames < 2) return;
+        const auto slow = q(1, 2);
+        const auto fast = q(3, 2);
+        segments.push_back({.kind = Kind::Ramp, .length = frames * tpf, .from = preset == 0 ? slow : fast,
+                            .to = preset == 0 ? fast : slow});
+    } else {
+        // Up and down at an average of 1½×: two thirds of the frames cover the same media.
+        const std::int64_t half = std::max<std::int64_t>(1, (frames * 2 / 3) / 2);
+        segments.push_back({.kind = Kind::Ramp, .length = half * tpf, .from = q(1, 1), .to = q(2, 1)});
+        segments.push_back({.kind = Kind::Ramp, .length = half * tpf, .from = q(2, 1), .to = q(1, 1)});
+    }
+    auto map = tl::TimeMap::segmented(std::move(segments));
+    if (!map) return;
+    const bool ripple = editor_->timeline().track_of(c->id)->id == primary_;
+    if (run(tl::edit::set_time_map(c->id, std::move(*map), ripple))) {
+        setNotice(QStringLiteral("Speed ramps play without sound"));
     }
 }
 

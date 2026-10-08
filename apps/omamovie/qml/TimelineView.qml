@@ -201,6 +201,10 @@ Rectangle {
         MenuItem { text: "Fast (2×)"; onTriggered: session.setClipSpeed(2, 1) }
         MenuItem { text: "Faster (4×)"; onTriggered: session.setClipSpeed(4, 1) }
         MenuSeparator {}
+        MenuItem { objectName: "menuRampUp"; text: "Accelerate (½× → 1½×)"; onTriggered: session.setSpeedRamp(0) }
+        MenuItem { text: "Decelerate (1½× → ½×)"; onTriggered: session.setSpeedRamp(1) }
+        MenuItem { text: "Burst (1× → 2× → 1×)"; onTriggered: session.setSpeedRamp(2) }
+        MenuSeparator {}
         MenuItem { objectName: "menuFreezeFrame"; text: "Freeze frame here"; onTriggered: { session.seek(at); session.freezeFrame(2) } }
         MenuItem { objectName: "menuReverse"; text: "Reverse"; onTriggered: session.reverseClip() }
     }

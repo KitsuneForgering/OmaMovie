@@ -165,6 +165,24 @@ bool canvas_aspect_changes() {
     return start && vertical && back && s.canvasWidth() == 180;
 }
 
+// Named speed ramps (M8): accelerate keeps the duration, burst takes two thirds; undo restores.
+bool speed_ramps() {
+    Session s;
+    if (!load_clip(s))
+        return false; // 30 frames
+    s.selectClip(s.clips().front().toMap().value("id").toDouble());
+    s.setSpeedRamp(0);
+    const QVariantMap up = s.clips().front().toMap();
+    const bool same = std::abs(up.value("duration").toDouble() - 1.0) < 1e-9 &&
+                      up.value("timing").toString() == "Ramp";
+    s.undo();
+    s.setSpeedRamp(2);
+    const bool burst = std::abs(clip_seconds(s, 0) - 20.0 / 30.0) < 1e-9;
+    s.undo();
+    return same && burst && std::abs(clip_seconds(s, 0) - 1.0) < 1e-9 &&
+           s.clips().front().toMap().value("timing").toString().isEmpty();
+}
+
 } // namespace
 
 void run_session_tests() {
@@ -177,6 +195,7 @@ void run_session_tests() {
            { expect(playheads_stay_apart()).toBeTruthy(); });
         it("previews a delete with the delete command itself",
            { expect(ripple_preview_names_clips()).toBeTruthy(); });
+        it("applies named speed ramps with undo", { expect(speed_ramps()).toBeTruthy(); });
         it("changes the canvas proportion with undo",
            { expect(canvas_aspect_changes()).toBeTruthy(); });
         it("adds, imports and exports captions on the frame grid",

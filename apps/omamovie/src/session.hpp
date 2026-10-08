@@ -442,6 +442,10 @@ public:
     // The canvas proportion (ADR-0010), keeping its short side: 16:9, 9:16, 1:1, 4:5…; one undo
     // entry that also rescales every layer's position so it keeps its place in the frame.
     Q_INVOKABLE void setCanvasAspect(int w, int h);
+    // Named speed ramps (M8, ADR-0013 segments) on the selected clip, using the same stretch of
+    // media it shows now: 0 accelerate (½× to 1½×), 1 decelerate (1½× to ½×), 2 burst
+    // (1× up to 2× and back, two thirds as long). One undoable edit; sound stays silent.
+    Q_INVOKABLE void setSpeedRamp(int preset);
     Q_INVOKABLE void openSource(int index);
     // The source viewer's playhead (seek() is the sequence's and leaves the source viewer).
     Q_INVOKABLE void seekSource(double seconds);
