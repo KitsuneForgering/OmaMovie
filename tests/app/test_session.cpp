@@ -202,6 +202,9 @@ bool scalar_keys() {
                        here.value("gainKeys").toInt() == 2 &&
                        here.value("opacityKeyHere").toBool() &&
                        std::abs(here.value("gain").toDouble() - 0.5) < 1e-6;
+    // The timeline marks each key where it falls in the clip.
+    const QVariantList marks = s.clips().front().toMap().value("keys").toList();
+    const bool marked = marks.size() == 4 && std::abs(marks.back().toDouble() - 0.5) < 1e-9;
     s.seek(0.2);
     const double between = s.motion().value("opacity").toDouble();
     const bool interpolated =
@@ -211,7 +214,7 @@ bool scalar_keys() {
     s.seek(0.0);
     s.toggleVolumeKey(); // the last one: its 1.0 stays as the volume
     const QVariantMap after = s.motion();
-    return keyed && interpolated && after.value("gainKeys").toInt() == 0 &&
+    return keyed && marked && interpolated && after.value("gainKeys").toInt() == 0 &&
            std::abs(after.value("gain").toDouble() - 1.0) < 1e-6;
 }
 

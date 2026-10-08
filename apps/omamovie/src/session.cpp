@@ -2443,6 +2443,29 @@ QVariantList Session::media() const {
     return list;
 }
 
+namespace {
+
+// Where the clip's keys (transform, opacity, volume) fall, as fractions of its length, for
+// display. Keys are in source time.
+// ponytail: constant speed only; a ramped or reversed clip shows none until TimeMap has an
+// inverse (source -> local ticks).
+QVariantList key_fractions(const tl::Clip& c) {
+    QVariantList out;
+    if (!c.time_map.is_constant() || c.duration.value() <= 0) return out;
+    const double length = c.duration.seconds_approx();
+    const double speed = c.time_map.speed().to_double_approx();
+    const auto add = [&](const oma::RationalTime& at) {
+        const double f = (at.seconds_approx() - c.source_in.seconds_approx()) / speed / length;
+        if (f >= 0.0 && f <= 1.0) out.push_back(f);
+    };
+    for (const auto& k : c.video.transform_keys) add(k.at);
+    for (const auto& k : c.video.opacity_keys) add(k.at);
+    for (const auto& k : c.audio.gain_keys) add(k.at);
+    return out;
+}
+
+} // namespace
+
 QVariantMap Session::clipMap(const tl::Clip& c, const tl::Track& track, std::size_t index) const {
     const LibraryItem* source = item(c.media);
     // The transition into this clip as it plays: its kind (-1 none, or not playable here) and
@@ -2473,6 +2496,7 @@ QVariantMap Session::clipMap(const tl::Clip& c, const tl::Track& track, std::siz
                                           : QString()},
                        {"isTitle", c.title.has_value()},
                        {"thumbnail", source != nullptr ? source->thumbnail : QString()},
+                       {"keys", key_fractions(c)},
                        {"fadeIn", c.audio.fade_in.seconds_approx()},
                        {"fadeOut", c.audio.fade_out.seconds_approx()},
                        {"audioAdjusted", c.audio.muted || c.audio.gain != 1.0F || c.audio.fade_in.value() != 0 ||

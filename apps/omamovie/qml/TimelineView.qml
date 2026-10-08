@@ -177,6 +177,24 @@ Rectangle {
         }
     }
 
+    // Keyframes (M8): a small diamond where each key falls in the clip (fractions of its length).
+    component KeyMarks: Repeater {
+        required property var clip
+        model: clip.keys || []
+        delegate: Rectangle {
+            required property real modelData
+            objectName: "keyMark"
+            x: modelData * parent.width - 3
+            y: parent.height - 24
+            width: 6; height: 6
+            rotation: 45
+            color: root.fg
+            border.color: colors.dark_background
+            border.width: 1
+            z: 4
+        }
+    }
+
     // The sound of a clip: the media range it shows, scaled by its volume.
     component ClipWaveform: WaveformItem {
         required property var clip
@@ -504,6 +522,7 @@ Rectangle {
                 }
                 FadeRamps { clip: modelData; visible: clipItem.detailed }
                 ScopeMark { clip: modelData }
+                KeyMarks { clip: modelData; visible: clipItem.detailed }
                 TimingBadge { timing: modelData.timing; visible: timing !== "" && clipItem.detailed }
                 Rectangle { // adjusted: color, framing, effects or sound differ from the plain clip
                     visible: modelData.adjusted && clipItem.detailed
@@ -854,6 +873,7 @@ Rectangle {
                             }
                         }
                         ScopeMark { clip: overlayItem.modelData }
+                        KeyMarks { clip: overlayItem.modelData }
                         Image {
                             anchors.fill: parent
                             anchors.margins: 2
@@ -990,6 +1010,7 @@ Rectangle {
                         }
                         FadeRamps { clip: soundItem.modelData }
                         ScopeMark { clip: soundItem.modelData }
+                        KeyMarks { clip: soundItem.modelData }
                         Row {
                             anchors.left: parent.left
                             anchors.right: parent.right
