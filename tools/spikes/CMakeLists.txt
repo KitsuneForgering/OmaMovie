@@ -22,9 +22,9 @@ target_include_directories(s6_libplacebo SYSTEM PRIVATE ${LIBPLACEBO_INCLUDE_DIR
 target_link_libraries(s6_libplacebo PRIVATE
     oma_compositor oma_media oma_gpu oma_base ${LIBPLACEBO_LIBRARIES})
 
-# s4: reuses the real compositor and Qt's RHI (find_package gives the versioned headers).
-find_package(Qt6 REQUIRED COMPONENTS Quick)
+# s4: reuses the real compositor and Qt's RHI. GuiPrivate carries the versioned headers (rhi/qrhi.h).
+find_package(Qt6 REQUIRED COMPONENTS Quick GuiPrivate)
 add_executable(s4_qt_shared_device s4_qt_shared_device.cpp)
 target_compile_options(s4_qt_shared_device PRIVATE ${OMA_TEST_WARNINGS})
 target_link_libraries(s4_qt_shared_device PRIVATE
-    oma_compositor oma_media oma_gpu oma_base Qt6::Quick)
+    oma_compositor oma_media oma_gpu oma_base Qt6::Quick Qt6::GuiPrivate)

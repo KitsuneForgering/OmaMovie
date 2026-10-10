@@ -39,8 +39,8 @@ target_compile_options(fuzz_subtitles PRIVATE ${FUZZ_FLAGS})
 target_link_options(fuzz_subtitles PRIVATE ${FUZZ_LINK})
 
 set_target_properties(fuzz_cube fuzz_project fuzz_subtitles PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/fuzz)
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 file(MAKE_DIRECTORY
-    ${CMAKE_BINARY_DIR}/fuzz/cube-corpus
-    ${CMAKE_BINARY_DIR}/fuzz/project-corpus
-    ${CMAKE_BINARY_DIR}/fuzz/subtitles-corpus)
+    ${CMAKE_BINARY_DIR}/cube-corpus
+    ${CMAKE_BINARY_DIR}/project-corpus
+    ${CMAKE_BINARY_DIR}/subtitles-corpus)
