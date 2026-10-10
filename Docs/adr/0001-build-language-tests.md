@@ -1,6 +1,8 @@
 # ADR-0001 — GNU Make build, C++23, tests with Cest, code conventions
 
-- **Status:** Accepted (2026-10-02)
+- **Status:** Accepted (2026-10-02) — **build portion superseded by [ADR-0018](0018-cmake-build.md)
+  (2026-10-10).** The GNU Make decision below is historical; the language, Cest, conventions and
+  license decisions remain in force.
 - **Milestone:** M0
 
 ## Evidence review (2026-10-03)

@@ -75,6 +75,9 @@ Legend: **Deliverables** = what exists at the end. **Done when** = a verifiable 
 **Deliverables**
 - [x] Build/development dependencies declared by the PKGBUILD; `make deps` reads it.
 - [x] Non-recursive `Makefile` (GNU Make, ADR-0001): `BUILD=debug|release|asan|tsan`, one `module.mk` per lib and per test suite.
+      **Superseded (2026-10-10):** the build is now CMake with GNU Make as a thin front-end
+      (ADR-0018). The `BUILD=` names and the documented `make` commands are unchanged. This
+      historical record of the M0 build keeps its original wording.
 - [x] Full warning set with `-Werror` on the libs; `.clang-format`, `.clang-tidy` (warnings are errors), `.editorconfig`, `.gitignore`.
 - [x] **Dependency graph from §5.2 enforced by Make**: a forbidden dependency or an unregistered lib fails before compiling. The graph now includes `base`, `gpu`, `media`, `compositor`, `audio` and `timeline`.
 - [x] `libs/base`:
@@ -392,6 +395,8 @@ clean Omarchy machine.
 - [ ] Background render filling the cache where real time is not possible. Evaluate it separately from source proxies on the same effects-heavy scene: a proxy reduces source decode work, while a preview render can reuse already composited/effected regions. Bound disk use and invalidate only affected ranges; a deleted cache must not change project or export content.
 - [ ] Pilot a time-bounded adjustment event only if a task needs the same correction across several clips. First compare copying an existing effect/preset. Declare which tracks are affected and composition order, then check undo, save/reopen, preview and decoded export, including an excluded overlay. Do not make overlapping events create transitions implicitly without a separate gesture comparison against ADR-0011 ([VEGAS research](Research/vegas-pro.md)).
 - [ ] Evaluate semantic storyboard ↔ timeline zoom against ordinary zoom/minimap, including linked tracks and unequal durations; no historical behavior claim is assumed.
+- [ ] Pilot full-mix loudness analysis and, only if a delivery task needs it, two-pass export normalization. Peak-normalizing individual clips (the current control) cannot establish the integrated loudness or true peak of the mixed, encoded program. First expose measured integrated LUFS and true peak for the exact export snapshot; compare manual gain against a chosen target/ceiling for a named destination, without inventing a universal preset. If normalization helps, keep the gain/limiting decision reproducible and verify the independently decoded AAC output with a separate BS.1770 meter, including narration over music, silence, and a true-peak stress signal. Record analysis time, extra disk/CPU cost, and the result when the requested loudness and peak ceiling cannot both be met. This extends the audio gap above, not the existing clip peak-normalize action ([ITU-R BS.1770-5](https://www.itu.int/rec/R-REC-BS.1770-5-202311-I/en), [FFmpeg loudnorm](https://ffmpeg.org/ffmpeg-filters.html#loudnorm), [Kdenlive two-pass normalize](https://docs.kdenlive.org/en/effects_and_filters/audio_effects/volume_and_dynamics/normalize_2pass.html)).
+- [ ] Conditional local speech-to-text pilot for caption creation after manual caption timing, ripple behavior and export are correct. Compare corrected caption minutes and final error rate with typing/importing SRT on representative Portuguese and English Omarchy recordings, including quiet speech, names and overlapping voices. Keep generated cues editable and reviewable; do not silently replace manual cues. Measure model download/storage, CPU time and memory on the Intel target before selecting an engine or dependency; define an explicit no-network path. Stop if correction time or resource cost erases the task benefit. Text-based timeline editing is a separate hypothesis and is not implied by caption transcription. This is a proposed AI use case requiring the explicit scope/dependency decision in `CLAUDE.md` §2/§4 ([Kdenlive speech-to-text](https://docs.kdenlive.org/en/effects_and_filters/speech_to_text.html)).
 
 **Research**: [capcut](Research/capcut.md), [imovie](Research/imovie.md), [final-cut-pro](Research/final-cut-pro.md), [VEGAS Pro](Research/vegas-pro.md), [movie-maker](Research/movie-maker.md), [other-editors](Research/other-editors.md).
 
@@ -401,8 +406,18 @@ clean Omarchy machine.
 - [ ] OTIO pilot first using a pinned library/schema and actual versioned exports; evaluate FCPXML, EDL and Kdenlive subsets with fixtures. For FCPXML, pin an exported version, cover both `.fcpxml` and applicable `.fcpxmld` bundles, and check rational timing, connected clips, gaps, media references and unsupported objects before claiming any support level. Report floating-to-rational conversion loss and unsupported effects.
 - [ ] `oma-project diff | convert`.
 - [ ] Color management presets, `.cube` LUTs, scopes; HDR gated by independent vectors and an actual display/preview/export contract.
+- [ ] Conditional nested-sequence pilot only if a repeated-intro, chapter or multi-output task shows a material advantage over copying editable clips or exporting/reimporting a segment. Begin with two named sequences and one reference, not unrestricted nesting. Define source-time mapping, audio/caption and effect ordering, edit propagation, cycle rejection, undo, cache invalidation and missing-media behavior before changing the native DTO or ProjectIR. Compare edit time and output fidelity with the simpler alternatives; independently decode exports before claiming reusable sequence support. Kdenlive documents live references and multiple sequences, but that establishes availability, not demand in OmaMovie ([Kdenlive sequences](https://docs.kdenlive.org/en/cutting_and_assembling/sequence.html)).
+- [ ] Conditional export queue and multi-output pilot after one-export snapshot correctness and long-export recovery pass M7/M10. Test a real task that needs two aspect ratios or separate chapter outputs against exporting each version manually. Every queued job must pin its own project snapshot, media/effect dependencies, caption snapshot, destination and settings; edits or project switches must not change it. Bound concurrent decode/encode, RAM and disk on the Intel target; verify each decoded output and sidecar independently, including cancellation, duplicate destinations and a failed job that does not corrupt the next one. Do not infer a speedup from queueing: it may only save operator time ([Kdenlive rendering and job queue](https://docs.kdenlive.org/en/exporting/render.html)).
 
 **Research**: [davinci-resolve](Research/davinci-resolve.md), [premiere-pro](Research/premiere-pro.md), [final-cut-pro](Research/final-cut-pro.md), `CLAUDE.md` §16.
+
+The four advanced candidates above are documentary hypotheses, not v0.1 release gates or
+measured user demand. Source review: official ITU-R, FFmpeg and Kdenlive pages accessed
+2026-10-08; the Kdenlive manual identifies itself as 26.08. The documents describe
+mechanisms and available controls, not OmaMovie performance or comparative task results.
+The decisive missing evidence is same-machine task comparison plus independently checked
+exports. Existing M6/M7 correctness and M8 mask/caption work take precedence. No
+competitor workflow, model inference or new-feature benchmark was executed for this addition.
 
 ---
 
@@ -584,7 +599,7 @@ contributors with that hardware), v0.1 can only declare Intel as validated.
 | CUDA handle-specific synchronization | Future | Pin API/handle semantics and test scheduler liveness |
 | Slow Vulkan-Hpp compilation | M2 | Confined include + PCH |
 | Scope growth across milestones | All | Keep each milestone's acceptance criteria explicit; record scope changes before implementing them |
-| Qt 6 without CMake (moc, rcc, QML type registration) | M4–M6 | Make rules with `pkg-config Qt6*`; validate with a minimal window in M4 before the UI (ADR-0001) |
+| Qt 6 build (moc, QML registration) | M4–M6 | `find_package(Qt6)` + `AUTOMOC`, QML kept as files; validated with the M4 window (ADR-0018) |
 
 ---
 

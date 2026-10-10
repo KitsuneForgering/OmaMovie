@@ -65,7 +65,8 @@ If a task pushes toward a non-goal, stop and ask.
 
 ## 3. Commands
 
-GNU Make build (ADR-0001). `make help` lists everything.
+CMake build (ADR-0018) with GNU Make as a thin front-end. `make help` lists everything; the
+underlying `cmake --preset <debug|release|asan|tsan>` / `ctest` commands are hidden behind it.
 
 ```sh
 make deps                      # install every dependency declared in the PKGBUILD (sudo pacman)
@@ -127,7 +128,7 @@ changes also pass with `BUILD=tsan`. If you did not run the tests, say so.
 | Layer | Technology | Notes |
 |---|---|---|
 | Core | C++23 | `std::expected`, `std::span`, concepts. Arch compilers support it. |
-| Build | Non-recursive GNU Make (`Makefile` + one `module.mk` per lib) | ADR-0001. **Do not use CMake.** |
+| Build | CMake (+ Ninja) driven by a thin GNU Make front-end (`Makefile` + one `CMakeLists.txt` per lib) | ADR-0018. Presets `debug release asan tsan`. |
 | Tests | Cest (`third_party/cest`, header-only) | ADR-0001; rules in §25. |
 | UI | Qt 6 Quick / QML | Presentation and interaction only. |
 | Media | FFmpeg (libavformat/codec/util/filter/swresample) | Wrapped by `oma-media`. |
@@ -175,13 +176,13 @@ oma-movie/
     oma-project/         # CLI: inspect, dump, diff, validate, convert.
     bench/               # Pipeline benchmarks.
   tests/
-    <lib>/               # Cest tests for each lib (module.mk + main.cpp + test_*.cpp).
+    <lib>/               # Cest tests for each lib (CMakeLists.txt + main.cpp + test_*.cpp).
     app/                 # headless Session tests (Qt offscreen, private XDG folders; debug/release).
     support/             # oma_test.hpp: the Cest entry point for tests.
     fixtures/            # Small, reproducible fixtures + generator scripts.
   third_party/           # Vendored, pinned third-party code (cest/).
   scripts/               # Repository scripts (commit check, changelog).
-  Makefile               # Build; each lib has libs/<lib>/module.mk.
+  Makefile               # Thin front-end over CMake; each lib has libs/<lib>/CMakeLists.txt.
   PKGBUILD               # Arch package and the single source of truth for dependencies.
   Docs/
     adr/                 # Architecture Decision Records.
@@ -206,7 +207,8 @@ timeline, media, audio <- playback (no Qt: the app drives it)
 everything  <-  apps/omamovie, tools/*
 ```
 
-- The Makefile enforces this graph (`ALLOWED_DEPS_<lib>`): a forbidden dependency fails the build.
+- CMake enforces this graph (`ALLOWED_DEPS_<lib>` in `cmake/OmaDependencyGraph.cmake`): a
+  forbidden or unregistered dependency fails configuration before anything compiles.
 - **Qt only in `apps/` and in explicitly marked bridge code.** The libs (`base`, `gpu`,
   `media`, `timeline`, `project-ir`, `project`, `importers`) do not include Qt headers. This
   keeps `oma-media` separable and testable without a UI. Possible exception: the Qt RHI ↔
@@ -797,8 +799,8 @@ parser robustness.
 
 ### Writing tests with Cest
 - One suite per file `tests/<lib>/test_<topic>.cpp`, exposed as `void run_<topic>_tests()`
-  and called from the lib's `main.cpp`. A new lib suite: `tests/<lib>/module.mk` with
-  `oma_test` and an `include` in the `Makefile`.
+  and called from the lib's `main.cpp`. A new lib suite: `tests/<lib>/CMakeLists.txt` with
+  `oma_test` and `add_subdirectory` from the root.
 - Include `oma_test.hpp` **last** (after project and standard headers).
 - **No top-level commas** inside `describe`/`it`: the preprocessor splits macro arguments.
   Avoid `std::pair<A, B>`, `[&a, &b]` captures and `{1, 2}` directly in the block; use

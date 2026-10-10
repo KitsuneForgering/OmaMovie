@@ -7,7 +7,7 @@ one as superseded.
 
 | ADR | Title | Status |
 |---|---|---|
-| [0001](0001-build-language-tests.md) | Build (GNU Make), C++23, tests with Cest, conventions | Accepted |
+| [0001](0001-build-language-tests.md) | Build (GNU Make), C++23, tests with Cest, conventions | Accepted; build portion superseded by ADR-0018 |
 | [0002](0002-time-representation.md) | Time representation | Accepted |
 | [0003](0003-threading-and-job-system.md) | Threading model and job system | Accepted |
 | [0004](0004-gpu-frames-sync-decode-policy.md) | GPU frame abstraction, synchronization and decode policy | Accepted |
@@ -24,6 +24,7 @@ one as superseded.
 | [0015](0015-titles.md) | Titles: generated clips rasterized by the app | Accepted |
 | [0016](0016-video-effects.md) | Video effects: an ordered stack of built-in operations | Accepted |
 | [0017](0017-captions.md) | Captions: a caption track of timed text, SRT/VTT in and out | Accepted |
+| [0018](0018-cmake-build.md) | CMake as the build system, GNU Make as a thin front-end | Accepted |
 
 Template: copy the structure of an existing ADR (Context, Decision, Alternatives, Consequences).
 
