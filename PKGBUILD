@@ -37,6 +37,8 @@ optdepends=(
     'intel-media-driver: GPU video decoding and export encoding (VA-API) on Intel'
 )
 makedepends=(
+    'cmake'                     # the build (ADR-0018)
+    'ninja'                     # the generator the presets use
     'git'
     'vulkan-headers'            # vulkan.hpp / vulkan_raii.hpp (libs/gpu)
     'shaderc'                   # glslc: GLSL compute shaders to SPIR-V (libs/compositor)
@@ -69,8 +71,8 @@ pkgver() {
 
 build() {
     cd "${pkgname}"
-    # The Makefile appends makepkg's CXXFLAGS/LDFLAGS. Warnings from distribution flags must not
-    # fail a user's build, so -Werror stays a developer/CI setting.
+    # The Makefile forwards makepkg's CXXFLAGS/CPPFLAGS/LDFLAGS into the CMake cache. Warnings from
+    # distribution flags must not fail a user's build, so -Werror stays a developer/CI setting.
     make BUILD=release WERROR=0 libs tests build/release/omamovie
 }
 
