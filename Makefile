@@ -69,6 +69,7 @@ configure:
 
 all: configure
 	$(Q)$(CMAKE_BUILD)
+	$(Q)$(CMAKE_BUILD) --target compdb
 
 libs: configure
 	$(Q)$(CMAKE_BUILD) --target $(LIB_TARGETS)
@@ -145,7 +146,7 @@ deps:
 
 help:
 	@echo 'Targets:'
-	@echo '  all           libs + tools + app + tests (default)'
+	@echo '  all           libs + tools + app + tests + compile_commands.json (default)'
 	@echo '  test          build and run the tests  [FILTER=pattern] [JUNIT_DIR=dir]'
 	@echo '  libs | tests  build only the libraries / the test binaries'
 	@echo '  oma-project   build the native project inspect/validate/dump CLI'
