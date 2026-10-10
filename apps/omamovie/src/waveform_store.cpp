@@ -7,6 +7,8 @@
 #include <filesystem>
 #include <utility>
 
+WaveformStore::WaveformStore(QObject* parent) : QObject(parent) {}
+
 WaveformStore::~WaveformStore() {
     pool_.shutdown();
 }
@@ -63,3 +65,5 @@ std::shared_ptr<const oma::playback::Waveform> WaveformStore::get(std::uint64_t 
     const auto it = waveforms_.find(media);
     return it == waveforms_.end() ? nullptr : it->second;
 }
+
+void WaveformStore::set_cache(const oma::DiskCache* cache) { cache_ = cache; }

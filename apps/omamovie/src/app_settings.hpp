@@ -28,13 +28,13 @@ class AppSettings : public QObject {
 public:
     explicit AppSettings(QString settings_file, QObject* parent = nullptr);
 
-    [[nodiscard]] QString previewQuality() const { return preview_quality_; }
-    [[nodiscard]] QString decodePath() const { return decode_path_; }
-    [[nodiscard]] QString recordingsFolder() const { return recordings_folder_; }
-    [[nodiscard]] QString startupDecodePath() const { return startup_decode_path_; }
-    [[nodiscard]] QString cacheLimit() const { return cache_limit_; }
-    [[nodiscard]] QString exportEncoder() const { return export_encoder_; }
-    [[nodiscard]] QVariantMap system() const { return system_; }
+    [[nodiscard]] QString previewQuality() const;
+    [[nodiscard]] QString decodePath() const;
+    [[nodiscard]] QString recordingsFolder() const;
+    [[nodiscard]] QString startupDecodePath() const;
+    [[nodiscard]] QString cacheLimit() const;
+    [[nodiscard]] QString exportEncoder() const;
+    [[nodiscard]] QVariantMap system() const;
 
     void setPreviewQuality(const QString& value);
     void setDecodePath(const QString& value);
@@ -44,7 +44,7 @@ public:
     void setSystem(QVariantMap system);
     Q_INVOKABLE void resetAll();
     // The screen asks for fresh system facts when it opens (the audio device may have changed).
-    Q_INVOKABLE void refreshSystem() { emit systemRequested(); }
+    Q_INVOKABLE void refreshSystem();
 
 signals:
     void changed();

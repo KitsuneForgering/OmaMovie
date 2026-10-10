@@ -31,10 +31,10 @@ public:
     Buffer& operator=(const Buffer&) = delete;
     ~Buffer();
 
-    [[nodiscard]] VkBuffer handle() const noexcept { return buffer_; }
-    [[nodiscard]] VkDeviceSize size() const noexcept { return size_; }
+    [[nodiscard]] VkBuffer handle() const noexcept;
+    [[nodiscard]] VkDeviceSize size() const noexcept;
     // Persistently mapped pointer for Upload and Readback buffers, nullptr otherwise.
-    [[nodiscard]] void* mapped() const noexcept { return mapped_; }
+    [[nodiscard]] void* mapped() const noexcept;
     // Makes CPU writes visible to the GPU / GPU writes visible to the CPU on non-coherent memory.
     void flush() const noexcept;
     void invalidate() const noexcept;
@@ -70,9 +70,9 @@ public:
     Image& operator=(const Image&) = delete;
     ~Image();
 
-    [[nodiscard]] VkImage handle() const noexcept { return image_; }
-    [[nodiscard]] VkImageView view() const noexcept { return view_; }
-    [[nodiscard]] const ImageDesc& desc() const noexcept { return desc_; }
+    [[nodiscard]] VkImage handle() const noexcept;
+    [[nodiscard]] VkImageView view() const noexcept;
+    [[nodiscard]] const ImageDesc& desc() const noexcept;
 
 private:
     void reset() noexcept;
@@ -110,8 +110,8 @@ public:
     DmaBufImage& operator=(const DmaBufImage&) = delete;
     ~DmaBufImage();
 
-    [[nodiscard]] VkImage handle() const noexcept { return image_; }
-    [[nodiscard]] VkFormat format() const noexcept { return format_; }
+    [[nodiscard]] VkImage handle() const noexcept;
+    [[nodiscard]] VkFormat format() const noexcept;
 
 private:
     void reset() noexcept;

@@ -37,8 +37,8 @@ public:
     // in normal runs; the smoke run passes its own.
     Theme(QString state_dir, QString fontconfig_dir, QObject* parent = nullptr);
 
-    [[nodiscard]] const QVariantMap& palette() const { return palette_; }
-    [[nodiscard]] const QFont& font() const { return font_; }
+    [[nodiscard]] const QVariantMap& palette() const;
+    [[nodiscard]] const QFont& font() const;
 
     // Reads both now (asynchronously); also what a watched change triggers after the debounce.
     void refresh();

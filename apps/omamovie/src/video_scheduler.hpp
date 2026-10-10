@@ -57,14 +57,12 @@ public:
     [[nodiscard]] std::optional<Frame> take(std::int64_t target);
 
     // Prepared frames never shown because a newer one was due.
-    [[nodiscard]] std::int64_t dropped() const noexcept { return dropped_.load(std::memory_order_relaxed); }
+    [[nodiscard]] std::int64_t dropped() const noexcept;
     // A failure in the producer (undecodable media), reported once.
     [[nodiscard]] std::optional<std::string> take_error();
 
 private:
-    [[nodiscard]] bool not_after(std::int64_t frame, std::int64_t target) const noexcept {
-        return step_ > 0 ? frame <= target : frame >= target;
-    }
+    [[nodiscard]] bool not_after(std::int64_t frame, std::int64_t target) const noexcept;
 
     int step_ = 1;
     std::shared_ptr<oma::BoundedQueue<Frame>> queue_;

@@ -30,15 +30,15 @@ public:
 
     [[nodiscard]] QObject* store() const;
     void setStore(QObject* store);
-    [[nodiscard]] double media() const { return media_; }
+    [[nodiscard]] double media() const;
     void setMedia(double media);
-    [[nodiscard]] double from() const { return from_; }
+    [[nodiscard]] double from() const;
     void setFrom(double from);
-    [[nodiscard]] double length() const { return length_; }
+    [[nodiscard]] double length() const;
     void setLength(double length);
-    [[nodiscard]] double gain() const { return gain_; }
+    [[nodiscard]] double gain() const;
     void setGain(double gain);
-    [[nodiscard]] QColor color() const { return color_; }
+    [[nodiscard]] QColor color() const;
     void setColor(const QColor& color);
 
 signals:

@@ -246,3 +246,18 @@ QSGNode* PreviewItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData* /*data*
     node->setRect((width() - fit.width()) / 2, (height() - fit.height()) / 2, fit.width(), fit.height());
     return node;
 }
+
+void PreviewItem::setDevice(const oma::gpu::Device* device) { device_ = device; }
+const oma::gpu::Device* PreviewItem::device() const { return device_; }
+void PreviewItem::setDecodePreference(DecodePreference preference) { decode_preference_ = preference; }
+unsigned PreviewItem::presentedFrames() const { return presented_; }
+double PreviewItem::scale() const { return scale_.load(std::memory_order_relaxed); }
+
+std::int64_t PreviewItem::lastCompositedFrame() const {
+    return last_composited_frame_.load(std::memory_order_acquire);
+}
+
+void PreviewItem::setScale(double scale) {
+    scale_.store(scale > 0.0 && scale < 1.0 ? scale : 1.0, std::memory_order_relaxed);
+    update();
+}

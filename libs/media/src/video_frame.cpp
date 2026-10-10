@@ -39,6 +39,14 @@ std::string_view to_string(DecodePath path) noexcept {
     return "unknown";
 }
 
+bool compositable(const SampleLayout& layout) noexcept {
+    if (layout.container_bits != 8 && layout.container_bits != 16)
+        return false;
+    if (layout.yuv)
+        return !layout.alpha && (layout.planes == 2 || layout.planes == 3);
+    return layout.planes == (layout.alpha ? 4 : 3);
+}
+
 // ------------------------------------------------------------------------------- GpuAccess
 
 GpuAccess::GpuAccess(void* frame, const GpuImages& images) noexcept
@@ -58,6 +66,10 @@ GpuAccess& GpuAccess::operator=(GpuAccess&& other) noexcept {
 
 GpuAccess::~GpuAccess() {
     release();
+}
+
+const GpuImages& GpuAccess::images() const noexcept {
+    return images_;
 }
 
 void GpuAccess::commit(VkImageLayout layout, VkAccessFlags2 access) noexcept {

@@ -1,11 +1,60 @@
 #include "oma/media/format.hpp"
 
 #include "ffmpeg.hpp"
+#include "oma/media/audio_decoder.hpp"
+#include "oma/media/video_decoder.hpp"
 
 namespace oma::media {
 
+ExportFormat export_format(OutputProfile profile) {
+    switch (profile) {
+    case OutputProfile::Mp4H264Aac:
+        return {"mp4", "libx264", "aac"};
+    case OutputProfile::MatroskaH264Aac:
+        return {"matroska", "libx264", "aac"};
+    case OutputProfile::MatroskaHevcAac:
+        return {"matroska", "libx265", "aac"};
+    case OutputProfile::WebmVp9Vorbis:
+        return {"webm", "libvpx-vp9", "libvorbis"};
+    }
+    return {};
+}
+
 Result<MediaInfo> FfmpegFormatBackend::inspect_input(const std::filesystem::path& path) const {
-    return probe(path);
+    auto info = probe(path);
+    if (!info)
+        return info;
+    if (info->best_video) {
+        VideoDecoderOptions options;
+        options.paths = {DecodePath::Software};
+        options.stream = *info->best_video;
+        auto decoder = VideoDecoder::open(path, options);
+        if (!decoder)
+            return std::unexpected(decoder.error());
+        auto first = (*decoder)->next();
+        if (!first)
+            return std::unexpected(first.error());
+        if (!*first)
+            return make_error(ErrorCode::InvalidData, Category::Decode,
+                              "video has no decodable frame", path.string());
+        if (!compositable((*first)->layout()))
+            return make_error(ErrorCode::Unsupported, Category::Decode,
+                              "video sample layout cannot be composited", path.string());
+    }
+    if (info->best_audio) {
+        AudioDecoderOptions options;
+        options.stream = *info->best_audio;
+        auto decoder = AudioDecoder::open(path, options);
+        if (!decoder)
+            return std::unexpected(decoder.error());
+        auto first = (*decoder)->next();
+        if (!first)
+            return std::unexpected(first.error());
+        if (!*first)
+            return make_error(ErrorCode::InvalidData, Category::Audio,
+                              "audio has no decodable samples", path.string());
+    }
+    return info;
 }
 
 Result<void> FfmpegFormatBackend::check_output(const ExportFormat& format) const {

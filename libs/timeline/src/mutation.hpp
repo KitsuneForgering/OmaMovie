@@ -16,18 +16,15 @@ namespace oma::timeline::detail {
 
 class Mutation {
 public:
-    explicit Mutation(Timeline& timeline) noexcept : t_(timeline) {}
+    explicit Mutation(Timeline& timeline) noexcept;
 
-    [[nodiscard]] std::vector<Track>& tracks() noexcept { return t_.tracks_; }
-    [[nodiscard]] std::vector<Marker>& markers() noexcept { return t_.markers_; }
-    [[nodiscard]] std::vector<Caption>& captions() noexcept { return t_.captions_; }
-    void set_canvas(std::uint32_t width, std::uint32_t height) noexcept {
-        t_.canvas_width_ = width;
-        t_.canvas_height_ = height;
-    }
-    [[nodiscard]] std::vector<MediaInfo>& media() noexcept { return t_.media_; }
-    [[nodiscard]] std::vector<LutInfo>& luts() noexcept { return t_.luts_; }
-    [[nodiscard]] std::uint64_t allocate_id() noexcept { return t_.next_id_++; }
+    [[nodiscard]] std::vector<Track>& tracks() noexcept;
+    [[nodiscard]] std::vector<Marker>& markers() noexcept;
+    [[nodiscard]] std::vector<Caption>& captions() noexcept;
+    void set_canvas(std::uint32_t width, std::uint32_t height) noexcept;
+    [[nodiscard]] std::vector<MediaInfo>& media() noexcept;
+    [[nodiscard]] std::vector<LutInfo>& luts() noexcept;
+    [[nodiscard]] std::uint64_t allocate_id() noexcept;
 
     [[nodiscard]] Track* track(TrackId id) noexcept;
 

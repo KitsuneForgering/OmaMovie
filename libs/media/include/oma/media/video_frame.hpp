@@ -41,6 +41,9 @@ struct SampleLayout {
     friend bool operator==(const SampleLayout&, const SampleLayout&) = default;
 };
 
+// Both compositors read planar YUV or GBR(A), with one byte or two bytes per sample.
+[[nodiscard]] bool compositable(const SampleLayout& layout) noexcept;
+
 // The Vulkan images of a GPU frame while it is acquired (VideoFrame::acquire_gpu).
 //
 // Synchronization contract (FFmpeg's AVVkFrame): before touching image i, a submission waits on
@@ -72,7 +75,7 @@ public:
     GpuAccess& operator=(const GpuAccess&) = delete;
     ~GpuAccess();
 
-    [[nodiscard]] const GpuImages& images() const noexcept { return images_; }
+    [[nodiscard]] const GpuImages& images() const noexcept;
 
     // Records that a submission waiting on wait_values and signaling signal_values was made, and
     // the state it left the images in. Without a commit the frame's state is left untouched.

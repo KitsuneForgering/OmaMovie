@@ -61,6 +61,7 @@ class Session final : public QObject {
     // Export (M7): progress in [0, 1] while an export runs, -1 otherwise; the last finished file.
     Q_PROPERTY(double exportProgress READ exportProgress NOTIFY exportChanged)
     Q_PROPERTY(QString exportedFile READ exportedFile NOTIFY exportChanged)
+    Q_PROPERTY(QVariantList exportProfiles READ exportProfiles CONSTANT)
     Q_PROPERTY(QVariantList media READ media NOTIFY libraryChanged)
     // Omarchy screen recordings, newest first (UX-09): path, name, when, growing.
     Q_PROPERTY(QVariantList recordings READ recordings NOTIFY recordingsChanged)
@@ -143,45 +144,43 @@ public:
     // Settings: a recordings folder instead of Omarchy's ("" restores it).
     void setRecordingsFolderOverride(const QString& folder);
     // Automated runs: never play through the speakers.
-    void setSilent(bool silent) { audio_.set_silent(silent); }
+    void setSilent(bool silent);
     // Desktop notifications (export finished); the smoke and audits turn them off.
-    void setNotifications(bool on) { notifications_ = on; }
+    void setNotifications(bool on);
     // From Settings: "auto", "hardware" or "software" for the next exports.
-    void setExportEncoder(const QString& choice) { export_encoder_ = choice; }
-    void setOutputMuted(bool muted) { audio_.set_muted(muted); }
-    [[nodiscard]] float takeAudioPeak() { return audio_.take_peak(); }
-    [[nodiscard]] bool audioRunning() const { return audio_.running(); }
-    [[nodiscard]] bool audioOnDevice() const { return audio_.on_device(); }
+    void setExportEncoder(const QString& choice);
+    void setOutputMuted(bool muted);
+    [[nodiscard]] float takeAudioPeak();
+    [[nodiscard]] bool audioRunning() const;
+    [[nodiscard]] bool audioOnDevice() const;
     // What the disk caches hold now, for Settings (bytes; directory scans, call off hot paths).
-    [[nodiscard]] std::uint64_t cacheBytes() const { return thumbnail_cache_.size() + waveform_cache_.size(); }
+    [[nodiscard]] std::uint64_t cacheBytes() const;
     [[nodiscard]] QString cacheFolder() const;
     // ADR-0009 budgets: each store's limit, applied by an eviction pass on the job workers.
     void setCacheBudget(std::uint64_t bytes_per_store);
     // Empties both stores on the job workers, then emits cacheCleared.
     Q_INVOKABLE void clearCache();
-    [[nodiscard]] std::int64_t audibleSample() const { return audio_.audible_sample(); }
-    [[nodiscard]] std::int64_t audioUnderruns() const { return audio_.underruns(); }
-    [[nodiscard]] std::int64_t droppedVideoFrames() const { return scheduler_.dropped(); }
+    [[nodiscard]] std::int64_t audibleSample() const;
+    [[nodiscard]] std::int64_t audioUnderruns() const;
+    [[nodiscard]] std::int64_t droppedVideoFrames() const;
     // How long the last playback (re)start held the UI thread, in milliseconds (M4 audit).
-    [[nodiscard]] double lastRestartMs() const { return last_restart_ms_; }
+    [[nodiscard]] double lastRestartMs() const;
     // M4 audit: how long each playback tick held the UI thread, and the time between ticks (ms).
-    [[nodiscard]] std::pair<std::vector<double>, std::vector<double>> takeTickTimings() {
-        return {std::exchange(tick_ms_, {}), std::exchange(tick_gap_ms_, {})};
-    }
+    [[nodiscard]] std::pair<std::vector<double>, std::vector<double>> takeTickTimings();
 
-    [[nodiscard]] bool editing() const { return editing_; }
-    [[nodiscard]] QString status() const { return status_; }
-    [[nodiscard]] bool failed() const { return failed_; }
+    [[nodiscard]] bool editing() const;
+    [[nodiscard]] QString status() const;
+    [[nodiscard]] bool failed() const;
     // The latest notice; once the GPU device is lost, its explanation stays when nothing newer shows.
     [[nodiscard]] QString notice() const;
     [[nodiscard]] QVariantList media() const;
-    [[nodiscard]] int selectedMedia() const { return selected_media_; }
+    [[nodiscard]] int selectedMedia() const;
     [[nodiscard]] QVariantList clips() const;
     [[nodiscard]] QVariantList audioTracks() const;
     [[nodiscard]] QVariantList videoTracks() const;
-    [[nodiscard]] QObject* storylineClips() { return &storyline_model_; }
+    [[nodiscard]] QObject* storylineClips();
     [[nodiscard]] QList<double> clipSpans() const;
-    [[nodiscard]] bool storylineCompact() const { return storyline_compact_; }
+    [[nodiscard]] bool storylineCompact() const;
     // The seconds the timeline view covers (with its margin): storylineClips holds only the
     // clips there, so an edit far from the view updates no delegate.
     Q_INVOKABLE void setStorylineView(double from, double to);
@@ -203,37 +202,37 @@ public:
     // (ADR-0014).
     Q_INVOKABLE void connectSelectedClip();
     Q_INVOKABLE void disconnectSelectedClip();
-    [[nodiscard]] QObject* waveforms() { return &waveforms_; }
-    [[nodiscard]] QVariantList filterPreviews() const { return filter_previews_; }
+    [[nodiscard]] QObject* waveforms();
+    [[nodiscard]] QVariantList filterPreviews() const;
     [[nodiscard]] static QVariantList lookEffects();
     [[nodiscard]] QVariantList luts() const;
-    [[nodiscard]] double selectedClip() const { return static_cast<double>(selected_clip_.value()); }
+    [[nodiscard]] double selectedClip() const;
     [[nodiscard]] QVariantMap info() const;
     [[nodiscard]] bool hasMedia() const;
     [[nodiscard]] double duration() const;
     [[nodiscard]] double frameRate() const;
-    [[nodiscard]] int canvasWidth() const { return static_cast<int>(canvas_width_); }
-    [[nodiscard]] int canvasHeight() const { return static_cast<int>(canvas_height_); }
-    [[nodiscard]] bool canUndo() const { return editor_ && editor_->can_undo(); }
-    [[nodiscard]] bool canRedo() const { return editor_ && editor_->can_redo(); }
+    [[nodiscard]] int canvasWidth() const;
+    [[nodiscard]] int canvasHeight() const;
+    [[nodiscard]] bool canUndo() const;
+    [[nodiscard]] bool canRedo() const;
     [[nodiscard]] QString undoText() const;
     [[nodiscard]] QString redoText() const;
     [[nodiscard]] double position() const;
     [[nodiscard]] QVariantMap motion() const;
     [[nodiscard]] QString projectName() const;
-    [[nodiscard]] QString projectPath() const { return project_path_; }
-    [[nodiscard]] bool dirty() const { return savedMarker() != saved_; }
-    [[nodiscard]] bool playing() const { return speed_ != 0; }
+    [[nodiscard]] QString projectPath() const;
+    [[nodiscard]] bool dirty() const;
+    [[nodiscard]] bool playing() const;
     // Playback speed: 0 paused, 1 normal, 2 and 4 faster, negative in reverse (J/K/L).
-    [[nodiscard]] int speed() const { return speed_; }
+    [[nodiscard]] int speed() const;
     [[nodiscard]] std::int64_t frame() const;
 
     // Screens (ui-design §3).
     Q_INVOKABLE void newProject();
     Q_INVOKABLE void showProjects();
     Q_INVOKABLE void continueProject();
-    [[nodiscard]] QVariantList recordings() const { return recordings_; }
-    [[nodiscard]] QString recordingsFolder() const { return recordings_folder_; }
+    [[nodiscard]] QVariantList recordings() const;
+    [[nodiscard]] QString recordingsFolder() const;
     // Re-reads the recordings folder (also done when it changes on disk).
     Q_INVOKABLE void refreshRecordings();
     // Recent project files, kept in `settings_file` (the smoke run passes its own).
@@ -257,7 +256,7 @@ public:
     // Writes the autosave now if it is due (also what the timer calls).
     Q_INVOKABLE void autosave();
     // An import (or an opened project's re-import) is still running; saving waits for it.
-    [[nodiscard]] bool importsPending() const { return importing(); }
+    [[nodiscard]] bool importsPending() const;
 
     // Import. A file opened with the app goes straight to the end of the storyline (§3.1); one
     // imported from the dialog goes to the library, and to the storyline only when it is empty.
@@ -269,16 +268,14 @@ public:
     Q_INVOKABLE void openFiles(const QStringList& paths);
     // Saves in the background (atomic replacement); an empty url saves to the current file.
     Q_INVOKABLE void saveProject(const QUrl& url);
-    // Renders the sequence to an MP4 file (H.264 + AAC) on the job workers; cancellable.
-    Q_INVOKABLE void exportMovie(const QUrl& url);
+    // Renders the sequence with the selected container and codecs on the job workers; cancellable.
+    Q_INVOKABLE void exportMovie(const QUrl& url, const QString& profile = QStringLiteral("mp4-h264"));
     Q_INVOKABLE void cancelExport();
-    Q_INVOKABLE void clearExported() {
-        exported_file_.clear();
-        emit exportChanged();
-    }
-    [[nodiscard]] double exportProgress() const { return export_progress_; }
-    [[nodiscard]] QString exportedFile() const { return exported_file_; }
-    [[nodiscard]] const ExportStats& lastExportStats() const { return export_stats_; }
+    Q_INVOKABLE void clearExported();
+    [[nodiscard]] double exportProgress() const;
+    [[nodiscard]] QString exportedFile() const;
+    [[nodiscard]] QVariantList exportProfiles() const;
+    [[nodiscard]] const ExportStats& lastExportStats() const;
     // Points a missing library item (an opened project's moved file) at `url`, which must hold
     // the same kind of media at least as long as the clips use; then looks for the project's
     // other missing files in that folder.
@@ -362,11 +359,7 @@ public:
     // position/scale, normalized to the canvas ({x, y, w, h}); a preview of a transform that only
     // the viewer shows; setClipTransform then commits the gesture as one edit.
     Q_INVOKABLE QVariantMap layerBox(double x, double y, double scale) const;
-    [[nodiscard]] QVariantMap selectedBox() const {
-        const QVariantMap m = motion();
-        return m.isEmpty() ? QVariantMap{}
-                           : layerBox(m.value("posX").toDouble(), m.value("posY").toDouble(), m.value("scale").toDouble());
-    }
+    [[nodiscard]] QVariantMap selectedBox() const;
     Q_INVOKABLE void previewClipTransform(double x, double y, double scale, double rotation);
     // Crop handles in the viewer: the picture box and the canvas point of each edge's middle
     // ({x, y, w, h, left, top, right, bottom}, normalized) for a candidate crop; the crop
@@ -430,7 +423,7 @@ public:
     Q_INVOKABLE void previewDelete(bool ripple);
     Q_INVOKABLE void previewTrim(double id, bool head, int frames);
     Q_INVOKABLE void clearEditScope();
-    [[nodiscard]] QVariantMap editScope() const { return edit_scope_; }
+    [[nodiscard]] QVariantMap editScope() const;
     [[nodiscard]] QVariantList captions() const;
     // The caption text under `seconds` (the viewer's overlay), empty when none.
     Q_INVOKABLE QString captionAt(double seconds) const;

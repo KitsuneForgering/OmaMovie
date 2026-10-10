@@ -29,13 +29,10 @@ public:
     [[nodiscard]] double seconds_approx() const noexcept;
 
     friend std::strong_ordering operator<=>(const RationalTime& a, const RationalTime& b) noexcept;
-    friend bool operator==(const RationalTime& a, const RationalTime& b) noexcept {
-        return (a <=> b) == 0;
-    }
+    friend bool operator==(const RationalTime& a, const RationalTime& b) noexcept;
 
 private:
-    constexpr RationalTime(std::int64_t value, Rational timebase) noexcept
-        : value_(value), timebase_(timebase) {}
+    RationalTime(std::int64_t value, Rational timebase) noexcept;
 
     std::int64_t value_ = 0;
     Rational timebase_ = Rational::literal(1, 1);
@@ -47,17 +44,16 @@ class TimeRange {
 public:
     [[nodiscard]] static Result<TimeRange> make(RationalTime start, RationalTime duration);
 
-    [[nodiscard]] const RationalTime& start() const noexcept { return start_; }
-    [[nodiscard]] const RationalTime& duration() const noexcept { return duration_; }
-    [[nodiscard]] const RationalTime& end() const noexcept { return end_; }
-    [[nodiscard]] bool empty() const noexcept { return duration_.value() == 0; }
+    [[nodiscard]] const RationalTime& start() const noexcept;
+    [[nodiscard]] const RationalTime& duration() const noexcept;
+    [[nodiscard]] const RationalTime& end() const noexcept;
+    [[nodiscard]] bool empty() const noexcept;
 
     [[nodiscard]] bool contains(const RationalTime& t) const noexcept;
     [[nodiscard]] bool overlaps(const TimeRange& other) const noexcept;
 
 private:
-    TimeRange(RationalTime start, RationalTime duration, RationalTime end) noexcept
-        : start_(start), duration_(duration), end_(end) {}
+    TimeRange(RationalTime start, RationalTime duration, RationalTime end) noexcept;
 
     RationalTime start_;
     RationalTime duration_;
@@ -120,7 +116,7 @@ public:
     friend constexpr bool operator==(SampleRate, SampleRate) noexcept = default;
 
 private:
-    explicit constexpr SampleRate(std::int32_t hz) noexcept : hz_(hz) {}
+    explicit SampleRate(std::int32_t hz) noexcept;
 
     std::int32_t hz_;
 };

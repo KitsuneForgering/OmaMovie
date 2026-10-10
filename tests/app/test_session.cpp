@@ -1,5 +1,7 @@
 #include "session.hpp"
 
+#include "oma/media/probe.hpp"
+
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QFile>
@@ -218,6 +220,28 @@ bool scalar_keys() {
            std::abs(after.value("gain").toDouble() - 1.0) < 1e-6;
 }
 
+bool exports_other_formats() {
+    Session s;
+    if (!load_clip(s))
+        return false;
+    s.setExportEncoder(QStringLiteral("software"));
+    QTemporaryDir dir;
+    for (const auto& [id, extension, video, audio] :
+         {std::tuple{"mkv-hevc", ".mkv", "hevc", "aac"},
+          std::tuple{"webm-vp9", ".webm", "vp9", "vorbis"}}) {
+        const QString file = dir.filePath(QString::fromLatin1(id) + QString::fromLatin1(extension));
+        s.exportMovie(QUrl::fromLocalFile(file), QString::fromLatin1(id));
+        if (!wait_until([&] { return s.exportProgress() < 0; }, 60000) || s.exportedFile() != file)
+            return false;
+        const auto info = oma::media::probe(file.toStdString());
+        if (!info || !info->best_video || !info->best_audio ||
+            info->streams[static_cast<std::size_t>(*info->best_video)].codec != video ||
+            info->streams[static_cast<std::size_t>(*info->best_audio)].codec != audio)
+            return false;
+    }
+    return true;
+}
+
 } // namespace
 
 void run_session_tests() {
@@ -233,6 +257,8 @@ void run_session_tests() {
         it("applies named speed ramps with undo", { expect(speed_ramps()).toBeTruthy(); });
         it("changes the canvas proportion with undo",
            { expect(canvas_aspect_changes()).toBeTruthy(); });
+        it("exports other selected container and codec profiles",
+           { expect(exports_other_formats()).toBeTruthy(); });
         it("adds, imports and exports captions on the frame grid",
            { expect(captions_round_trip()).toBeTruthy(); });
         it("keys opacity and volume at the playhead", { expect(scalar_keys()).toBeTruthy(); });

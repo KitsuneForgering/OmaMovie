@@ -22,7 +22,7 @@
 class WaveformStore final : public QObject {
     Q_OBJECT
 public:
-    explicit WaveformStore(QObject* parent = nullptr) : QObject(parent) {}
+    explicit WaveformStore(QObject* parent = nullptr);
     ~WaveformStore() override;
     WaveformStore(const WaveformStore&) = delete;
     WaveformStore& operator=(const WaveformStore&) = delete;
@@ -30,7 +30,7 @@ public:
     WaveformStore& operator=(WaveformStore&&) = delete;
 
     // The disk cache to read first and fill (may be null; must outlive the store's jobs).
-    void set_cache(const oma::DiskCache* cache) { cache_ = cache; }
+    void set_cache(const oma::DiskCache* cache);
     // Starts computing the waveform of `media` unless it exists or is being computed.
     // `identity` names the file's content (path, size, time, fingerprint) for the disk cache.
     void request(std::uint64_t media, const std::string& path, const std::string& identity);

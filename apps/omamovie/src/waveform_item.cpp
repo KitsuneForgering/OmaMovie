@@ -136,3 +136,9 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData* /*data
     node->markDirty(QSGNode::DirtyGeometry);
     return node;
 }
+
+double WaveformItem::media() const { return media_; }
+double WaveformItem::from() const { return from_; }
+double WaveformItem::length() const { return length_; }
+double WaveformItem::gain() const { return gain_; }
+QColor WaveformItem::color() const { return color_; }

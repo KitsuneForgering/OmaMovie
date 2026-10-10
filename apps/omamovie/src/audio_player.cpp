@@ -176,3 +176,9 @@ std::optional<std::string> AudioPlayer::take_error() {
     }
     return render_error_;
 }
+
+bool AudioPlayer::running() const noexcept { return running_; }
+void AudioPlayer::set_silent(bool silent) noexcept { silent_ = silent; }
+float AudioPlayer::take_peak() noexcept { return peak_.exchange(0.0F, std::memory_order_relaxed); }
+void AudioPlayer::inject_stall(int ms) noexcept { stall_ms_.store(ms, std::memory_order_relaxed); }
+bool AudioPlayer::on_device() const noexcept { return on_device_; }

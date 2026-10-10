@@ -17,9 +17,9 @@ namespace oma::audio {
 
 class PlaybackClock {
 public:
-    explicit PlaybackClock(SampleRate rate) noexcept : rate_(rate) {}
+    explicit PlaybackClock(SampleRate rate) noexcept;
 
-    [[nodiscard]] SampleRate rate() const noexcept { return rate_; }
+    [[nodiscard]] SampleRate rate() const noexcept;
 
     // Ties a media position to the device's consumed count, after a seek (output flushed) or
     // before the first write. The position is rounded to the nearest sample.
@@ -32,7 +32,7 @@ public:
                                         std::int64_t latency_frames) const noexcept;
 
     // The anchor in samples (the first sample written after it).
-    [[nodiscard]] std::int64_t anchor_sample() const noexcept { return anchor_sample_; }
+    [[nodiscard]] std::int64_t anchor_sample() const noexcept;
 
 private:
     SampleRate rate_;

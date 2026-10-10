@@ -57,12 +57,8 @@ public:
         return ref;
     }
     // Drops the effects in slots `count` and beyond.
-    void resize(std::size_t count) {
-        if (count < effects_.size()) {
-            effects_.resize(count);
-        }
-    }
-    [[nodiscard]] std::size_t size() const noexcept { return effects_.size(); }
+    void resize(std::size_t count);
+    [[nodiscard]] std::size_t size() const noexcept;
 
     [[nodiscard]] bool active() const noexcept;
     void reset() noexcept;

@@ -281,4 +281,7 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, const Span& span
     return {};
 }
 
+int TimelineAudio::channels() const noexcept { return channels_; }
+std::size_t TimelineAudio::open_streams() const noexcept { return streams_.size(); }
+
 } // namespace oma::playback

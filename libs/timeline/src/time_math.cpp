@@ -6,6 +6,13 @@
 
 namespace oma::timeline::detail {
 
+Mutation::Mutation(Timeline& timeline) noexcept : t_(timeline) {}
+
+void Mutation::set_canvas(std::uint32_t width, std::uint32_t height) noexcept {
+    t_.canvas_width_ = width;
+    t_.canvas_height_ = height;
+}
+
 namespace {
 
 __extension__ using Int128 = __int128;
@@ -216,5 +223,12 @@ std::string clip_context(ClipId id) {
 std::string track_context(TrackId id) {
     return std::format("track {}", id.value());
 }
+
+std::vector<Track>& Mutation::tracks() noexcept { return t_.tracks_; }
+std::vector<Marker>& Mutation::markers() noexcept { return t_.markers_; }
+std::vector<Caption>& Mutation::captions() noexcept { return t_.captions_; }
+std::vector<MediaInfo>& Mutation::media() noexcept { return t_.media_; }
+std::vector<LutInfo>& Mutation::luts() noexcept { return t_.luts_; }
+std::uint64_t Mutation::allocate_id() noexcept { return t_.next_id_++; }
 
 } // namespace oma::timeline::detail

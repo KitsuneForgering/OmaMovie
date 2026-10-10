@@ -94,3 +94,12 @@ void AppSettings::resetAll() {
     setCacheLimit(kCacheLimits.front());
     setExportEncoder(kExportEncoders.front());
 }
+
+QString AppSettings::previewQuality() const { return preview_quality_; }
+QString AppSettings::decodePath() const { return decode_path_; }
+QString AppSettings::recordingsFolder() const { return recordings_folder_; }
+QString AppSettings::startupDecodePath() const { return startup_decode_path_; }
+QString AppSettings::cacheLimit() const { return cache_limit_; }
+QString AppSettings::exportEncoder() const { return export_encoder_; }
+QVariantMap AppSettings::system() const { return system_; }
+void AppSettings::refreshSystem() { emit systemRequested(); }

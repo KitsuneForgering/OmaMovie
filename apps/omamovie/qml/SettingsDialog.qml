@@ -150,12 +150,12 @@ Popup {
                 OmaButton { objectName: "clearCache"; text: "Clear cache"; onClicked: session.clearCache() }
 
                 Heading { text: "EXPORT" }
-                Note { text: "MP4: H.264 video at the project's size and frame rate, BT.709 colour, AAC stereo sound at 48 kHz. The encoder changes speed and file size, never these." }
+                Note { text: "Choose the container and codecs in Export. Output keeps the project's size and frame rate, BT.709 colour and stereo sound at 48 kHz." }
                 ColumnLayout {
                     spacing: 0
-                    Choice { text: "Automatic: the GPU's encoder where OmaMovie has validated it (Intel), else software"; value: "auto"; current: appSettings.exportEncoder; onChosen: v => appSettings.exportEncoder = v }
-                    Choice { text: "GPU (VA-API): faster, larger files; falls back to software if it cannot start"; value: "hardware"; current: appSettings.exportEncoder; onChosen: v => appSettings.exportEncoder = v }
-                    Choice { objectName: "exportSoftware"; text: "Software (x264): slower, smaller files"; value: "software"; current: appSettings.exportEncoder; onChosen: v => appSettings.exportEncoder = v }
+                    Choice { text: "Automatic: GPU for H.264 where validated, else software"; value: "auto"; current: appSettings.exportEncoder; onChosen: v => appSettings.exportEncoder = v }
+                    Choice { text: "GPU for H.264 (VA-API); falls back to software if unavailable"; value: "hardware"; current: appSettings.exportEncoder; onChosen: v => appSettings.exportEncoder = v }
+                    Choice { objectName: "exportSoftware"; text: "Software encoder for the chosen format"; value: "software"; current: appSettings.exportEncoder; onChosen: v => appSettings.exportEncoder = v }
                 }
 
                 Heading { text: "THIS COMPUTER" }

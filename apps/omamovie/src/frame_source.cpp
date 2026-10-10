@@ -30,6 +30,8 @@ std::size_t bytes_of(const oma::media::VideoFrame& f) {
 
 } // namespace
 
+FrameSource::FrameSource(const oma::gpu::Device* device) : device_(device) {}
+
 std::size_t FrameSource::history_budget() {
     static const std::size_t budget = [] {
         constexpr std::size_t kMax = std::size_t{384} << 20;

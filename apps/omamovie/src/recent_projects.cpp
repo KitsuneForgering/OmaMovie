@@ -6,9 +6,13 @@
 #include <QSettings>
 #include <QVariantMap>
 
+#include <utility>
+
 namespace {
 constexpr auto kKey = "projects/recent";
 } // namespace
+
+RecentProjects::RecentProjects(QString settings_file) : settings_file_(std::move(settings_file)) {}
 
 QStringList RecentProjects::read() const {
     return QSettings(settings_file_, QSettings::IniFormat).value(QLatin1String(kKey)).toStringList();

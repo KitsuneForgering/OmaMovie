@@ -7,6 +7,8 @@
 
 namespace oma::timeline {
 
+Editor::Editor(Timeline timeline) noexcept : timeline_(std::move(timeline)) {}
+
 Result<void> Editor::execute(std::unique_ptr<Command> command) {
     if (!command) {
         return detail::error(ErrorCode::InvalidArgument, "no command");
@@ -129,5 +131,10 @@ MarkerId Editor::new_marker_id() noexcept {
 CaptionId Editor::new_caption_id() noexcept {
     return CaptionId(detail::Mutation(timeline_).allocate_id());
 }
+
+const Timeline& Editor::timeline() const noexcept { return timeline_; }
+bool Editor::can_undo() const noexcept { return !undo_.empty(); }
+bool Editor::can_redo() const noexcept { return !redo_.empty(); }
+std::uint64_t Editor::revision() const noexcept { return revision_; }
 
 } // namespace oma::timeline

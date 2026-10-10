@@ -1,6 +1,7 @@
 #include "oma/media/video_writer.hpp"
 
 #include "ffmpeg.hpp"
+#include "oma/media/format.hpp"
 
 extern "C" {
 #include <libavutil/audio_fifo.h>
@@ -75,6 +76,8 @@ struct VideoWriter::Impl {
     std::unique_ptr<AVAudioFifo, FifoCloser> fifo;
     AVStream* audio_stream = nullptr;
     std::int64_t audio_pts = 0;
+    int audio_frame_size = 0;
+    bool variable_audio_frames = false;
     std::vector<float> planar; // reused deinterleave buffer
 
     ~Impl() {
@@ -113,7 +116,7 @@ Result<void> VideoWriter::Impl::drain(AVCodecContext* from, AVStream* to) const 
 }
 
 Result<void> VideoWriter::Impl::encode_audio(bool flush) {
-    const int size = audio->frame_size;
+    const int size = audio_frame_size;
     while (av_audio_fifo_size(fifo.get()) >= size ||
            (flush && av_audio_fifo_size(fifo.get()) > 0)) {
         if (const int err = av_frame_make_writable(audio_frame.get()); err < 0)
@@ -122,12 +125,15 @@ Result<void> VideoWriter::Impl::encode_audio(bool flush) {
             av_audio_fifo_read(fifo.get(), reinterpret_cast<void**>(audio_frame->data), size);
         if (got < 0)
             return std::unexpected(ff::av_error(got, Category::Encode, "cannot read audio FIFO"));
-        for (int ch = 0; ch < audio->ch_layout.nb_channels; ++ch) { // pad the last frame
-            auto* plane = reinterpret_cast<float*>(audio_frame->data[ch]);
-            std::fill(plane + got, plane + size, 0.0F);
+        if (!variable_audio_frames) {
+            for (int ch = 0; ch < audio->ch_layout.nb_channels; ++ch) {
+                auto* plane = reinterpret_cast<float*>(audio_frame->data[ch]);
+                std::fill(plane + got, plane + size, 0.0F);
+            }
         }
+        audio_frame->nb_samples = variable_audio_frames ? got : size;
         audio_frame->pts = audio_pts;
-        audio_pts += size;
+        audio_pts += audio_frame->nb_samples;
         if (const int err = avcodec_send_frame(audio.get(), audio_frame.get()); err < 0)
             return std::unexpected(ff::av_error(err, Category::Encode, "cannot submit audio"));
         if (auto drained = drain(audio.get(), audio_stream); !drained)
@@ -144,6 +150,11 @@ Result<std::unique_ptr<VideoWriter>> VideoWriter::create(const std::filesystem::
                                                          const VideoWriterOptions& options) {
     const std::optional<AudioTrack>& audio = options.audio;
     const bool vaapi = options.encoder == VideoEncoder::VaApi;
+    const ExportFormat format = export_format(options.profile);
+    if (format.container.empty() || (vaapi && format.video_encoder != "libx264")) {
+        return make_error(ErrorCode::Unsupported, Category::Encode,
+                          "unsupported output profile or hardware encoder");
+    }
     if (file.empty() || width < 16 || height < 16 || width > 16384 || height > 16384 ||
         (width & 1) != 0 || (height & 1) != 0 || rate.fps().num() > INT_MAX ||
         rate.fps().den() > INT_MAX ||
@@ -153,12 +164,18 @@ Result<std::unique_ptr<VideoWriter>> VideoWriter::create(const std::filesystem::
                           "invalid video output settings");
     }
     ff::ensure_initialized();
-    const AVCodec* encoder = avcodec_find_encoder_by_name(vaapi ? "h264_vaapi" : "libx264");
+    const AVCodec* encoder =
+        avcodec_find_encoder_by_name(vaapi ? "h264_vaapi" : format.video_encoder.c_str());
     if (encoder == nullptr) {
         return make_error(ErrorCode::Unsupported, Category::Encode,
                           vaapi ? "the VA-API H.264 encoder is unavailable"
-                                : "H.264 software encoder is unavailable");
+                                : "video encoder is unavailable");
     }
+    if (auto checked = FfmpegFormatBackend{}.check_output(
+            {format.container, vaapi ? "h264_vaapi" : format.video_encoder,
+             audio ? format.audio_encoder : std::nullopt});
+        !checked)
+        return std::unexpected(checked.error());
     auto impl = std::make_unique<Impl>();
     impl->file = file;
     impl->temporary = file.string() + ".tmp.XXXXXX";
@@ -175,11 +192,12 @@ Result<std::unique_ptr<VideoWriter>> VideoWriter::create(const std::filesystem::
         return std::unexpected(io_error("cannot close temporary output", file, errno));
 
     AVFormatContext* raw = nullptr;
-    int err = avformat_alloc_output_context2(&raw, nullptr, "mp4", impl->temporary.c_str());
+    int err = avformat_alloc_output_context2(&raw, nullptr, format.container.c_str(),
+                                             impl->temporary.c_str());
     impl->format.reset(raw);
     if (err < 0 || raw == nullptr) {
         return std::unexpected(
-            ff::av_error(err, Category::Encode, "cannot create MP4 output", file.string()));
+            ff::av_error(err, Category::Encode, "cannot create output container", file.string()));
     }
     impl->stream = avformat_new_stream(raw, nullptr);
     impl->codec.reset(avcodec_alloc_context3(encoder));
@@ -234,7 +252,7 @@ Result<std::unique_ptr<VideoWriter>> VideoWriter::create(const std::filesystem::
         c.flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
     err = avcodec_open2(&c, encoder, nullptr);
     if (err < 0) {
-        return std::unexpected(ff::av_error(err, Category::Encode, "cannot open H.264 encoder"));
+        return std::unexpected(ff::av_error(err, Category::Encode, "cannot open video encoder"));
     }
     err = avcodec_parameters_from_context(impl->stream->codecpar, &c);
     if (err < 0) {
@@ -258,13 +276,15 @@ Result<std::unique_ptr<VideoWriter>> VideoWriter::create(const std::filesystem::
         return make_error(ErrorCode::Internal, Category::Encode, "cannot set BT.709 conversion");
     }
     if (audio) {
-        const AVCodec* aac = avcodec_find_encoder(AV_CODEC_ID_AAC);
+        const AVCodec* audio_encoder = avcodec_find_encoder_by_name(format.audio_encoder->c_str());
         impl->audio_stream = avformat_new_stream(raw, nullptr);
-        impl->audio.reset(aac != nullptr ? avcodec_alloc_context3(aac) : nullptr);
+        impl->audio.reset(audio_encoder != nullptr ? avcodec_alloc_context3(audio_encoder)
+                                                   : nullptr);
         impl->audio_frame.reset(av_frame_alloc());
-        if (aac == nullptr || impl->audio_stream == nullptr || !impl->audio || !impl->audio_frame) {
+        if (audio_encoder == nullptr || impl->audio_stream == nullptr || !impl->audio ||
+            !impl->audio_frame) {
             return make_error(ErrorCode::Unsupported, Category::Encode,
-                              "AAC encoder is unavailable");
+                              "audio encoder is unavailable", *format.audio_encoder);
         }
         auto& a = *impl->audio;
         a.sample_fmt = AV_SAMPLE_FMT_FLTP;
@@ -274,14 +294,18 @@ Result<std::unique_ptr<VideoWriter>> VideoWriter::create(const std::filesystem::
         a.time_base = {.num = 1, .den = a.sample_rate};
         if ((raw->oformat->flags & AVFMT_GLOBALHEADER) != 0)
             a.flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-        if (err = avcodec_open2(&a, aac, nullptr); err < 0)
-            return std::unexpected(ff::av_error(err, Category::Encode, "cannot open AAC encoder"));
+        if (err = avcodec_open2(&a, audio_encoder, nullptr); err < 0)
+            return std::unexpected(
+                ff::av_error(err, Category::Encode, "cannot open audio encoder"));
         if (err = avcodec_parameters_from_context(impl->audio_stream->codecpar, &a); err < 0)
             return std::unexpected(ff::av_error(err, Category::Encode, "cannot set audio stream"));
         impl->audio_stream->time_base = a.time_base;
         auto& f = *impl->audio_frame;
         f.format = a.sample_fmt;
-        f.nb_samples = a.frame_size;
+        impl->variable_audio_frames =
+            (audio_encoder->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE) != 0;
+        impl->audio_frame_size = a.frame_size > 0 ? a.frame_size : 1024;
+        f.nb_samples = impl->audio_frame_size;
         f.sample_rate = a.sample_rate;
         err = av_channel_layout_copy(&f.ch_layout, &a.ch_layout);
         if (err >= 0)
@@ -290,7 +314,8 @@ Result<std::unique_ptr<VideoWriter>> VideoWriter::create(const std::filesystem::
             return std::unexpected(
                 ff::av_error(err, Category::Encode, "cannot allocate audio frame"));
         }
-        impl->fifo.reset(av_audio_fifo_alloc(a.sample_fmt, audio->channels, a.frame_size * 4));
+        impl->fifo.reset(
+            av_audio_fifo_alloc(a.sample_fmt, audio->channels, impl->audio_frame_size * 4));
         if (!impl->fifo)
             return make_error(ErrorCode::Internal, Category::Encode, "cannot allocate audio FIFO");
     }
@@ -302,7 +327,7 @@ Result<std::unique_ptr<VideoWriter>> VideoWriter::create(const std::filesystem::
     err = avformat_write_header(raw, nullptr);
     if (err < 0) {
         return std::unexpected(
-            ff::av_error(err, Category::Encode, "cannot write MP4 header", file.string()));
+            ff::av_error(err, Category::Encode, "cannot write output header", file.string()));
     }
     return std::unique_ptr<VideoWriter>(new VideoWriter(std::move(impl)));
 }
@@ -409,12 +434,12 @@ Result<void> VideoWriter::finish() {
     err = av_write_trailer(s.format.get());
     if (err < 0) {
         return std::unexpected(
-            ff::av_error(err, Category::Encode, "cannot finish MP4", s.file.string()));
+            ff::av_error(err, Category::Encode, "cannot finish output", s.file.string()));
     }
     err = avio_closep(&s.format->pb);
     if (err < 0) {
         return std::unexpected(
-            ff::av_error(err, Category::Encode, "cannot close MP4", s.file.string()));
+            ff::av_error(err, Category::Encode, "cannot close output", s.file.string()));
     }
     if (::rename(s.temporary.c_str(), s.file.c_str()) != 0) {
         return std::unexpected(io_error("cannot replace output", s.file, errno));

@@ -125,4 +125,7 @@ void Theme::read_font() {
     font_process_.start(QStringLiteral("omarchy-font-current"), {});
 }
 
+const QVariantMap& Theme::palette() const { return palette_; }
+const QFont& Theme::font() const { return font_; }
+
 } // namespace omarchy

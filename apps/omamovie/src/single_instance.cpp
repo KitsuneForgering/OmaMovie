@@ -6,11 +6,15 @@
 #include <QStandardPaths>
 
 #include <memory>
+#include <utility>
 
 namespace {
 constexpr int kConnectMs = 300;
 constexpr int kWriteMs = 1000;
 } // namespace
+
+SingleInstance::SingleInstance(QString socket_path, QObject* parent)
+    : QObject(parent), socket_path_(std::move(socket_path)) {}
 
 QString SingleInstance::default_socket() {
     QString dir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);

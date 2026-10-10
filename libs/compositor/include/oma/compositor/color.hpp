@@ -14,7 +14,7 @@ namespace oma::compositor {
 struct Mat3 {
     std::array<double, 9> m{1, 0, 0, 0, 1, 0, 0, 0, 1}; // row-major
 
-    [[nodiscard]] static Mat3 identity() noexcept { return {}; }
+    [[nodiscard]] static Mat3 identity() noexcept;
     [[nodiscard]] double at(int row, int col) const noexcept;
     [[nodiscard]] Mat3 operator*(const Mat3& o) const noexcept;
     [[nodiscard]] std::array<double, 3> apply(const std::array<double, 3>& v) const noexcept;

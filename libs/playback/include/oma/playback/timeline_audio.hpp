@@ -41,9 +41,9 @@ public:
     void set_timeline(oma::timeline::Timeline timeline,
                       std::unordered_map<std::uint64_t, std::string> paths);
 
-    [[nodiscard]] int channels() const noexcept { return channels_; }
+    [[nodiscard]] int channels() const noexcept;
     // Clips with an open decoder (tests see reuse through it).
-    [[nodiscard]] std::size_t open_streams() const noexcept { return streams_.size(); }
+    [[nodiscard]] std::size_t open_streams() const noexcept;
 
 private:
     std::vector<oma::audio::GainPoint> gain_points_; // the clip being mixed, reused per clip

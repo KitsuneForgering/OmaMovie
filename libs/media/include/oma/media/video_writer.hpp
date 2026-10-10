@@ -12,22 +12,32 @@
 namespace oma::media {
 
 // Sequential SDR video output. Input is packed RGB24 with BT.709 primaries and transfer;
-// the writer converts it to limited-range 4:2:0 for H.264 in MP4. With `audio`, an AAC track
-// takes interleaved float samples at that rate. The output is replaced only after finish()
-// succeeds. A discarded writer removes its temporary file.
+// the writer converts it to limited-range 4:2:0 for the selected video codec. With `audio`,
+// the selected audio codec takes interleaved float samples at that rate. The output is replaced
+// only after finish() succeeds. A discarded writer removes its temporary file.
 struct AudioTrack {
     SampleRate rate;
     int channels = 2; // 1 or 2
 };
 
-// Software is libx264 (CPU). VaApi is the GPU's fixed-function H.264 encoder through VA-API:
-// the same resolution, rate, colour tags and container, at a quality of its own.
+// VaApi is the GPU's fixed-function H.264 encoder through VA-API. Other profiles use their
+// software encoder; the same resolution, rate and colour tags are kept.
 enum class VideoEncoder : std::uint8_t { Software, VaApi };
+
+// Output combinations implemented by the writer. A format check alone does not make an
+// arbitrary encoder usable: sample layout, pixel format and timestamp rules also matter.
+enum class OutputProfile : std::uint8_t {
+    Mp4H264Aac,
+    MatroskaH264Aac,
+    MatroskaHevcAac,
+    WebmVp9Vorbis,
+};
 
 struct VideoWriterOptions {
     std::optional<AudioTrack> audio;
     VideoEncoder encoder = VideoEncoder::Software;
     std::filesystem::path render_node; // VA-API device; empty: libva's default
+    OutputProfile profile = OutputProfile::Mp4H264Aac;
 };
 
 class VideoWriter {

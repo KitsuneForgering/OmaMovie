@@ -100,6 +100,20 @@ constexpr int kNoticeMs = 3500;
 constexpr std::int64_t kStillSeconds = 4; // default length of a picture on the storyline
 const auto kSequenceAudioRate = oma::SampleRate::make(48000).value();
 
+struct ExportChoice {
+    const char* id;
+    const char* filter;
+    const char* extension;
+    oma::media::OutputProfile profile;
+};
+
+constexpr std::array kExportChoices{
+    ExportChoice{"mp4-h264", "MP4 · H.264 + AAC (*.mp4)", ".mp4", oma::media::OutputProfile::Mp4H264Aac},
+    ExportChoice{"mkv-h264", "Matroska · H.264 + AAC (*.mkv)", ".mkv", oma::media::OutputProfile::MatroskaH264Aac},
+    ExportChoice{"mkv-hevc", "Matroska · HEVC + AAC (*.mkv)", ".mkv", oma::media::OutputProfile::MatroskaHevcAac},
+    ExportChoice{"webm-vp9", "WebM · VP9 + Vorbis (*.webm)", ".webm", oma::media::OutputProfile::WebmVp9Vorbis},
+};
+
 QString message(const oma::Error& error) {
     return QString::fromStdString(error.message());
 }
@@ -165,6 +179,59 @@ Session::~Session() {
     export_job_.cancel(); // stops at the next frame; the temporary output is removed
     export_pool_.shutdown();
     workers_.shutdown();
+}
+
+void Session::setSilent(bool silent) { audio_.set_silent(silent); }
+void Session::setNotifications(bool on) { notifications_ = on; }
+void Session::setExportEncoder(const QString& choice) { export_encoder_ = choice; }
+void Session::setOutputMuted(bool muted) { audio_.set_muted(muted); }
+float Session::takeAudioPeak() { return audio_.take_peak(); }
+bool Session::audioRunning() const { return audio_.running(); }
+bool Session::audioOnDevice() const { return audio_.on_device(); }
+std::uint64_t Session::cacheBytes() const { return thumbnail_cache_.size() + waveform_cache_.size(); }
+std::int64_t Session::audibleSample() const { return audio_.audible_sample(); }
+std::int64_t Session::audioUnderruns() const { return audio_.underruns(); }
+std::int64_t Session::droppedVideoFrames() const { return scheduler_.dropped(); }
+double Session::lastRestartMs() const { return last_restart_ms_; }
+
+std::pair<std::vector<double>, std::vector<double>> Session::takeTickTimings() {
+    return {std::exchange(tick_ms_, {}), std::exchange(tick_gap_ms_, {})};
+}
+
+bool Session::editing() const { return editing_; }
+QString Session::status() const { return status_; }
+bool Session::failed() const { return failed_; }
+int Session::selectedMedia() const { return selected_media_; }
+QObject* Session::storylineClips() { return &storyline_model_; }
+bool Session::storylineCompact() const { return storyline_compact_; }
+QObject* Session::waveforms() { return &waveforms_; }
+QVariantList Session::filterPreviews() const { return filter_previews_; }
+double Session::selectedClip() const { return static_cast<double>(selected_clip_.value()); }
+int Session::canvasWidth() const { return static_cast<int>(canvas_width_); }
+int Session::canvasHeight() const { return static_cast<int>(canvas_height_); }
+bool Session::canUndo() const { return editor_ && editor_->can_undo(); }
+bool Session::canRedo() const { return editor_ && editor_->can_redo(); }
+QString Session::projectPath() const { return project_path_; }
+bool Session::dirty() const { return savedMarker() != saved_; }
+bool Session::playing() const { return speed_ != 0; }
+int Session::speed() const { return speed_; }
+QVariantList Session::recordings() const { return recordings_; }
+QString Session::recordingsFolder() const { return recordings_folder_; }
+bool Session::importsPending() const { return importing(); }
+double Session::exportProgress() const { return export_progress_; }
+QString Session::exportedFile() const { return exported_file_; }
+const ExportStats& Session::lastExportStats() const { return export_stats_; }
+QVariantMap Session::editScope() const { return edit_scope_; }
+
+void Session::clearExported() {
+    exported_file_.clear();
+    emit exportChanged();
+}
+
+QVariantMap Session::selectedBox() const {
+    const QVariantMap m = motion();
+    return m.isEmpty() ? QVariantMap{}
+                       : layerBox(m.value("posX").toDouble(), m.value("posY").toDouble(), m.value("scale").toDouble());
 }
 
 // ------------------------------------------------------------------- screens
@@ -1725,10 +1792,40 @@ void Session::saveProject(const QUrl& url) {
     });
 }
 
-void Session::exportMovie(const QUrl& url) {
+QVariantList Session::exportProfiles() const {
+    QVariantList available;
+    const oma::media::FfmpegFormatBackend checker;
+    for (const ExportChoice& choice : kExportChoices) {
+        if (checker.check_output(oma::media::export_format(choice.profile))) {
+            available.push_back(QVariantMap{{"id", QString::fromLatin1(choice.id)},
+                                            {"filter", QString::fromLatin1(choice.filter)}});
+        }
+    }
+    return available;
+}
+
+void Session::exportMovie(const QUrl& url, const QString& profile) {
     QString path = url.isLocalFile() ? url.toLocalFile() : url.toString();
     if (path.isEmpty() || !editor_ || export_progress_ >= 0) return;
-    if (!path.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive)) path += QStringLiteral(".mp4");
+    const auto choice = std::ranges::find_if(kExportChoices, [&](const ExportChoice& item) {
+        return profile == QLatin1String(item.id);
+    });
+    if (choice == kExportChoices.end()) {
+        setNotice(QStringLiteral("Unknown export format"));
+        return;
+    }
+    if (auto checked = oma::media::FfmpegFormatBackend{}.check_output(
+            oma::media::export_format(choice->profile)); !checked) {
+        setNotice(message(checked.error()));
+        return;
+    }
+    const QString extension = QString::fromLatin1(choice->extension);
+    if (!path.endsWith(extension, Qt::CaseInsensitive)) {
+        const QString suffix = QFileInfo(path).suffix().toLower();
+        if (suffix == QLatin1String("mp4") || suffix == QLatin1String("mkv") ||
+            suffix == QLatin1String("webm")) path.chop(suffix.size() + 1);
+        path += extension;
+    }
     if (std::ranges::any_of(library_, &LibraryItem::missing)) {
         setNotice(QStringLiteral("Locate the missing files first: export would leave gaps where they play"));
         return;
@@ -1754,7 +1851,8 @@ void Session::exportMovie(const QUrl& url) {
                           .audio_rate = kSequenceAudioRate,
                           .encoder = export_encoder_ == QLatin1String("hardware")   ? ExportRequest::Encoder::Hardware
                                      : export_encoder_ == QLatin1String("software") ? ExportRequest::Encoder::Software
-                                                                                    : ExportRequest::Encoder::Auto};
+                                                                                    : ExportRequest::Encoder::Auto,
+                          .profile = choice->profile};
     export_total_ = request.frames;
     export_done_.store(0);
     export_progress_ = 0;

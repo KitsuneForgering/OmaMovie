@@ -20,6 +20,13 @@ void run_format_tests() {
                 expect(result->best_audio.has_value()).toBeTruthy();
             }
         });
+        it("accepts decoded video, still pictures, and audio across containers", {
+            for (const char* name :
+                 {"h264_vfr.mkv", "hevc_10bit.mp4", "still.png", "tone_44100.wav"}) {
+                const auto result = importer.inspect_input(fixture(name));
+                expect(result.has_value()).toBeTruthy();
+            }
+        });
 
         it("accepts a muxer and installed video encoder that fit together", {
             oma::media::ExportFormat format;

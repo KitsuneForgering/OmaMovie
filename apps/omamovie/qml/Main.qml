@@ -488,9 +488,11 @@ ApplicationWindow {
         id: exportDialog
         title: "Export movie"
         fileMode: FileDialog.SaveFile
-        defaultSuffix: "mp4"
-        nameFilters: ["MP4 video (*.mp4)"]
-        onAccepted: session.exportMovie(selectedFile)
+        nameFilters: session.exportProfiles.map(profile => profile.filter)
+        onAccepted: {
+            const choice = session.exportProfiles[selectedNameFilter.index]
+            if (choice) session.exportMovie(selectedFile, choice.id)
+        }
     }
     // Export progress (M7): the editor stays usable; the export renders the project as it was
     // when it started.

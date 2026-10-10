@@ -16,6 +16,13 @@ std::string format_time(const RationalTime& t) {
 
 // ---------------------------------------------------------------- RationalTime
 
+RationalTime::RationalTime(std::int64_t value, Rational timebase) noexcept
+    : value_(value), timebase_(timebase) {}
+
+bool operator==(const RationalTime& a, const RationalTime& b) noexcept {
+    return (a <=> b) == 0;
+}
+
 Result<RationalTime> RationalTime::make(std::int64_t value, Rational timebase) {
     if (!timebase.is_positive()) {
         return make_error(ErrorCode::InvalidArgument, Category::Base, "timebase must be positive",
@@ -76,6 +83,9 @@ std::strong_ordering operator<=>(const RationalTime& a, const RationalTime& b) n
 
 // ---------------------------------------------------------------- TimeRange
 
+TimeRange::TimeRange(RationalTime start, RationalTime duration, RationalTime end) noexcept
+    : start_(start), duration_(duration), end_(end) {}
+
 Result<TimeRange> TimeRange::make(RationalTime start, RationalTime duration) {
     if (start.timebase() != duration.timebase()) {
         return make_error(ErrorCode::InvalidArgument, Category::Base,
@@ -126,6 +136,8 @@ Result<std::int64_t> FrameRate::time_to_frame(const RationalTime& t, Rounding ro
 
 // ---------------------------------------------------------------- SampleRate
 
+SampleRate::SampleRate(std::int32_t hz) noexcept : hz_(hz) {}
+
 Result<SampleRate> SampleRate::make(std::int32_t hz) {
     if (hz <= 0) {
         return make_error(ErrorCode::InvalidArgument, Category::Base,
@@ -145,5 +157,10 @@ RationalTime SampleRate::sample_to_time(std::int64_t sample) const {
 Result<std::int64_t> SampleRate::time_to_sample(const RationalTime& t, Rounding rounding) const {
     return rescale(t.value(), t.timebase(), timebase(), rounding);
 }
+
+const RationalTime& TimeRange::start() const noexcept { return start_; }
+const RationalTime& TimeRange::duration() const noexcept { return duration_; }
+const RationalTime& TimeRange::end() const noexcept { return end_; }
+bool TimeRange::empty() const noexcept { return duration_.value() == 0; }
 
 } // namespace oma

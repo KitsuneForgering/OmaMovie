@@ -1,6 +1,7 @@
 #pragma once
 
 #include "oma/media/probe.hpp"
+#include "oma/media/video_writer.hpp"
 
 #include <filesystem>
 #include <optional>
@@ -15,6 +16,8 @@ struct ExportFormat {
     std::string video_encoder;
     std::optional<std::string> audio_encoder;
 };
+
+[[nodiscard]] ExportFormat export_format(OutputProfile profile);
 
 // Input formats and output capability checks vary independently. Neither interface exposes
 // FFmpeg types to the editor; both are internal, in-process extension points.

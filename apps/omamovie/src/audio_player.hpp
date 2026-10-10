@@ -43,12 +43,12 @@ public:
                                           std::unordered_map<std::uint64_t, std::string> paths,
                                           std::int64_t from);
     void stop() noexcept;
-    [[nodiscard]] bool running() const noexcept { return running_; }
+    [[nodiscard]] bool running() const noexcept;
     // Plays into the silent null output even when a device exists (automated runs).
-    void set_silent(bool silent) noexcept { silent_ = silent; }
+    void set_silent(bool silent) noexcept;
     // Highest absolute sample rendered since the last call (a level meter; also how tests see
     // that clip audio is actually mixed).
-    [[nodiscard]] float take_peak() noexcept { return peak_.exchange(0.0F, std::memory_order_relaxed); }
+    [[nodiscard]] float take_peak() noexcept;
 
     // The sequence sample audible now. It holds still until the device plays real samples.
     // Safe from any thread (the viewer's presentation measurement reads it on the render
@@ -60,9 +60,9 @@ public:
     // Device-level mute for measurements: the device clock keeps running.
     void set_muted(bool muted) noexcept;
     // Diagnostics: the pipeline stops producing for `ms`, forcing underruns.
-    void inject_stall(int ms) noexcept { stall_ms_.store(ms, std::memory_order_relaxed); }
+    void inject_stall(int ms) noexcept;
     // Whether sound reaches a device (PipeWire) rather than the silent null output.
-    [[nodiscard]] bool on_device() const noexcept { return on_device_; }
+    [[nodiscard]] bool on_device() const noexcept;
     [[nodiscard]] std::int64_t underruns() const noexcept;
     // Rendering failures (undecodable media) since start, reported once per start.
     [[nodiscard]] std::optional<std::string> take_error();

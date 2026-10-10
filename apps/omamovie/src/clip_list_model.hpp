@@ -14,12 +14,10 @@ class ClipListModel : public QAbstractListModel {
 public:
     using QAbstractListModel::QAbstractListModel;
 
-    [[nodiscard]] int rowCount(const QModelIndex& parent = {}) const override {
-        return parent.isValid() ? 0 : static_cast<int>(rows_.size());
-    }
+    [[nodiscard]] int rowCount(const QModelIndex& parent = {}) const override;
     [[nodiscard]] QVariant data(const QModelIndex& index, int role) const override;
     [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
-    [[nodiscard]] int count() const { return static_cast<int>(rows_.size()); }
+    [[nodiscard]] int count() const;
 
     // O(rows) comparisons; delegates are created only for inserted rows.
     void sync(const QVariantList& rows);

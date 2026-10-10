@@ -712,6 +712,9 @@ Conventions (ADR-0001; `.clang-format` and `.clang-tidy` at the root are the ref
 - Do not use `describe`, `test`, `it`, `expect`, `bench`, `beforeEach`, `afterEach`,
   `beforeAll`, `afterAll` as API names: they are Cest macros in tests.
 - Headers with `#pragma once`.
+- Declare ordinary class and struct methods in headers and define them in their module's `.cpp`.
+  Keep templates, compile-time `constexpr`/`consteval` operations and compiler-generated members
+  in headers when their definitions must remain visible to callers.
 - Identifiers, code comments, log messages and all docs in English.
 - Comments explain **why** (invariants, synchronization, the reason for a copy), not the obvious.
 - Warnings are errors (`WERROR=1` by default; full set in ADR-0001).

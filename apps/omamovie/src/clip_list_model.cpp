@@ -12,6 +12,10 @@ QVariant id_of(const QVariant& row) {
 
 } // namespace
 
+int ClipListModel::rowCount(const QModelIndex& parent) const {
+    return parent.isValid() ? 0 : static_cast<int>(rows_.size());
+}
+
 QVariant ClipListModel::data(const QModelIndex& index, int role) const {
     if (role != kRow || !index.isValid() || index.row() >= rows_.size()) return {};
     return rows_[index.row()];
@@ -61,3 +65,5 @@ void ClipListModel::sync(const QVariantList& rows) {
     flush(new_n);
     if (old_n != new_n) emit countChanged();
 }
+
+int ClipListModel::count() const { return static_cast<int>(rows_.size()); }

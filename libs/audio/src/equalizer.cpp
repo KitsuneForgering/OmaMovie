@@ -7,6 +7,8 @@
 
 namespace oma::audio {
 
+bool Equalizer::active() const noexcept { return active_; }
+
 namespace {
 
 enum class Shape : std::uint8_t {

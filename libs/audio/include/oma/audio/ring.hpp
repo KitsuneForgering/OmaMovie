@@ -22,8 +22,8 @@ public:
     SampleRing& operator=(SampleRing&&) = delete;
     ~SampleRing() = default;
 
-    [[nodiscard]] int channels() const noexcept { return channels_; }
-    [[nodiscard]] std::size_t capacity() const noexcept { return mask_ + 1; }
+    [[nodiscard]] int channels() const noexcept;
+    [[nodiscard]] std::size_t capacity() const noexcept;
 
     // Producer side. Writes whole frames; returns how many fit.
     std::size_t write(std::span<const float> interleaved) noexcept;
@@ -35,9 +35,7 @@ public:
     // Drops everything readable now (consumer side, e.g. when a flush was requested).
     void discard_readable() noexcept;
     // Frames written so far (any side): a mark for discard_until.
-    [[nodiscard]] std::uint64_t written() const noexcept {
-        return head_.load(std::memory_order_acquire);
-    }
+    [[nodiscard]] std::uint64_t written() const noexcept;
     // Drops the frames written before `mark` that are still unread (consumer side): an
     // asynchronous flush that keeps what the producer wrote after taking the mark.
     void discard_until(std::uint64_t mark) noexcept;

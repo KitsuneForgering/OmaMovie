@@ -32,7 +32,7 @@ public:
     void configure(std::int32_t sample_rate, const EqBands& bands) noexcept;
     void reset() noexcept override;
     // Whether any band changes the sound; a flat equalizer passes samples through untouched.
-    [[nodiscard]] bool active() const noexcept override { return active_; }
+    [[nodiscard]] bool active() const noexcept override;
     void process(std::span<float> samples, int channels, std::int64_t stride,
                  std::int64_t frames) noexcept override;
 

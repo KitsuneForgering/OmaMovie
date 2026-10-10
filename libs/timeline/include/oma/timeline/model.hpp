@@ -74,10 +74,10 @@ public:
     // Segments in order; each one starts where the previous one left the media.
     [[nodiscard]] static Result<TimeMap> segmented(std::vector<TimeSegment> segments);
 
-    [[nodiscard]] bool is_constant() const noexcept { return segments_.empty(); }
+    [[nodiscard]] bool is_constant() const noexcept;
     // The constant speed; meaningful only when is_constant().
-    [[nodiscard]] Rational speed() const noexcept { return speed_; }
-    [[nodiscard]] std::span<const TimeSegment> segments() const noexcept { return segments_; }
+    [[nodiscard]] Rational speed() const noexcept;
+    [[nodiscard]] std::span<const TimeSegment> segments() const noexcept;
     // Ticks the segments cover (0 for a constant map, which fits any duration).
     [[nodiscard]] std::int64_t length() const noexcept;
     // Whether the media position decreases at local tick `t` (a reverse segment).
@@ -104,7 +104,7 @@ public:
     friend bool operator==(const TimeMap&, const TimeMap&) noexcept = default;
 
 private:
-    explicit TimeMap(Rational speed) noexcept : speed_(speed) {}
+    explicit TimeMap(Rational speed) noexcept;
 
     Rational speed_ = Rational::literal(1, 1);
     std::vector<TimeSegment> segments_;
@@ -378,10 +378,8 @@ struct Clip {
     std::optional<Title> title;
 
     // Exact end: start + duration.
-    [[nodiscard]] std::int64_t start_ticks() const noexcept { return start.value(); }
-    [[nodiscard]] std::int64_t end_ticks() const noexcept {
-        return start.value() + duration.value();
-    }
+    [[nodiscard]] std::int64_t start_ticks() const noexcept;
+    [[nodiscard]] std::int64_t end_ticks() const noexcept;
 };
 
 struct Track {
@@ -433,18 +431,18 @@ public:
             std::vector<Marker> markers, std::vector<MediaInfo> media, std::vector<LutInfo> luts,
             std::vector<Caption> captions = {});
 
-    [[nodiscard]] FrameRate frame_rate() const noexcept { return rate_; }
-    [[nodiscard]] Rational timebase() const noexcept { return timebase_; }
+    [[nodiscard]] FrameRate frame_rate() const noexcept;
+    [[nodiscard]] Rational timebase() const noexcept;
 
-    [[nodiscard]] std::span<const Track> tracks() const noexcept { return tracks_; }
-    [[nodiscard]] std::span<const Marker> markers() const noexcept { return markers_; }
-    [[nodiscard]] std::span<const Caption> captions() const noexcept { return captions_; }
+    [[nodiscard]] std::span<const Track> tracks() const noexcept;
+    [[nodiscard]] std::span<const Marker> markers() const noexcept;
+    [[nodiscard]] std::span<const Caption> captions() const noexcept;
     // The canvas the sequence renders to (ADR-0010), in pixels; 0 until the first picture or a
     // project sets it. Transform offsets are pixels of this canvas.
-    [[nodiscard]] std::uint32_t canvas_width() const noexcept { return canvas_width_; }
-    [[nodiscard]] std::uint32_t canvas_height() const noexcept { return canvas_height_; }
-    [[nodiscard]] std::span<const MediaInfo> media() const noexcept { return media_; }
-    [[nodiscard]] std::span<const LutInfo> luts() const noexcept { return luts_; }
+    [[nodiscard]] std::uint32_t canvas_width() const noexcept;
+    [[nodiscard]] std::uint32_t canvas_height() const noexcept;
+    [[nodiscard]] std::span<const MediaInfo> media() const noexcept;
+    [[nodiscard]] std::span<const LutInfo> luts() const noexcept;
 
     [[nodiscard]] const Track* find_track(TrackId id) const noexcept;
     [[nodiscard]] const Clip* find_clip(ClipId id) const noexcept;
@@ -469,7 +467,7 @@ public:
     [[nodiscard]] Result<void> validate() const;
 
 private:
-    Timeline(FrameRate rate, Rational timebase) noexcept : rate_(rate), timebase_(timebase) {}
+    Timeline(FrameRate rate, Rational timebase) noexcept;
 
     friend class detail::Mutation;
 

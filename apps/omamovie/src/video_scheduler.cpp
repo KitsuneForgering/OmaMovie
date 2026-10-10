@@ -91,3 +91,9 @@ std::optional<std::string> VideoScheduler::take_error() {
     const std::scoped_lock lock(error_mutex_);
     return std::exchange(error_, std::nullopt);
 }
+
+std::int64_t VideoScheduler::dropped() const noexcept { return dropped_.load(std::memory_order_relaxed); }
+
+bool VideoScheduler::not_after(std::int64_t frame, std::int64_t target) const noexcept {
+    return step_ > 0 ? frame <= target : frame >= target;
+}

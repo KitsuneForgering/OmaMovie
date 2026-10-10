@@ -28,13 +28,7 @@ __extension__ using i128 = __int128;
     return a;
 }
 
-[[nodiscard]] inline std::optional<i128> mul_checked(i128 a, i128 b) noexcept {
-    i128 r = 0;
-    if (__builtin_mul_overflow(a, b, &r)) {
-        return std::nullopt;
-    }
-    return r;
-}
+[[nodiscard]] std::optional<i128> mul_checked(i128 a, i128 b) noexcept;
 
 // Floor division for a divisor d > 0.
 [[nodiscard]] constexpr i128 floor_div(i128 n, i128 d) noexcept {

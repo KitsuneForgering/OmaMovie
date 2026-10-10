@@ -37,7 +37,7 @@ struct Picture {
 // handed out are only read elsewhere.
 class FrameSource {
 public:
-    explicit FrameSource(const oma::gpu::Device* device = nullptr) : device_(device) {}
+    explicit FrameSource(const oma::gpu::Device* device = nullptr);
     // The frame whose PTS is the last one <= `t` (the first frame when `t` precedes it).
     // Moving forward a little reuses the open decoder without seeking, so playback decodes
     // each frame once. Moving back a little reads the frames decoded last; past them, the

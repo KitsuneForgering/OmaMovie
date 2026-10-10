@@ -2,7 +2,7 @@
 
 <img src="Docs/media/omamovie-logo.svg" width="360" alt="OmaMovie logo: a play button over three timeline clips">
 
-OmaMovie is a video editor under development for Omarchy. Its current editor shell lets you import local videos and pictures, arrange clips on a timeline, preview the result, and adjust clip audio. It saves and opens projects and exports the movie to MP4 (H.264 and AAC).
+OmaMovie is a video editor under development for Omarchy. Its current editor shell lets you import local videos and pictures, arrange clips on a timeline, preview the result, and adjust clip audio. It saves and opens projects and exports MP4, Matroska, or WebM movies.
 
 ![OmaMovie editor showing a preview, video clips, and an audio lane on the timeline](Docs/media/editor-test.webp)
 
@@ -25,11 +25,11 @@ You can also open a file directly:
 make run-gui GUI_FILE=/path/to/video.mp4
 ```
 
-The imported media stays on disk and is never modified. Save with `Ctrl+S` (an `.omamovie` file) and reopen it later with `Ctrl+O`. `Ctrl+K` opens the command palette, which lists every action and lets you change its shortcut. `Ctrl+E` exports the movie as MP4: H.264 at the project's size and frame rate with AAC sound, using the GPU's encoder on Intel (VA-API) and x264 elsewhere (Settings can choose).
+The imported media stays on disk and is never modified. Save with `Ctrl+S` (an `.omamovie` file) and reopen it later with `Ctrl+O`. `Ctrl+K` opens the command palette, which lists every action and lets you change its shortcut. `Ctrl+E` offers the output formats supported by the installed FFmpeg build: MP4 (H.264/AAC), Matroska (H.264/AAC or HEVC/AAC), and WebM (VP9/Vorbis). H.264 can use the GPU encoder on validated Intel hardware (VA-API), with a software fallback. Other profiles use software encoders. All outputs use the project's size and frame rate.
 
 ## What works today
 
-- Import and inspect local video and still image files through FFmpeg. Actual codec support depends on the installed FFmpeg build and the file.
+- Import and inspect local video, audio and still image files through FFmpeg. Import checks that the chosen video and audio streams can produce an initial frame or samples; later damage in a file may still cause a decode error.
 - Append, insert, overwrite, split, trim, delete, and ripple edit clips with undo and redo.
 - Preview the timeline with Vulkan compositing and audio clock playback; adjust clip gain, fades, and mute.
 - Use visible transport and edit controls, or their keyboard shortcuts, in the editor shell.

@@ -16,8 +16,7 @@ public:
     static constexpr qint64 kMaxMessageBytes = 64 * 1024;
     static constexpr qsizetype kMaxPaths = 256;
 
-    explicit SingleInstance(QString socket_path, QObject* parent = nullptr)
-        : QObject(parent), socket_path_(std::move(socket_path)) {}
+    explicit SingleInstance(QString socket_path, QObject* parent = nullptr);
 
     // $XDG_RUNTIME_DIR/omamovie.sock (or the temp directory without one).
     [[nodiscard]] static QString default_socket();

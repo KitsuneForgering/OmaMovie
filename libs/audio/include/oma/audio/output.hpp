@@ -43,10 +43,7 @@ public:
     // Frames audible at `now_ns` (steady clock): consumed minus latency. Devices that take audio
     // in large quanta interpolate between their callbacks with the clock, at most one quantum,
     // so video following this position moves every frame rather than in quantum-sized steps.
-    [[nodiscard]] virtual std::int64_t frames_played(std::int64_t now_ns) const noexcept {
-        (void)now_ns;
-        return frames_consumed() - latency_frames();
-    }
+    [[nodiscard]] virtual std::int64_t frames_played(std::int64_t now_ns) const noexcept;
     // Callbacks that found the ring short of data.
     [[nodiscard]] virtual std::int64_t underruns() const noexcept = 0;
 

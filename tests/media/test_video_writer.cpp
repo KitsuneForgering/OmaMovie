@@ -161,6 +161,75 @@ void writes_audio_with_video() {
     fs::remove(file);
 }
 
+void writes_other_profiles() {
+    using namespace oma::media;
+    namespace fs = std::filesystem;
+    struct Case {
+        OutputProfile profile;
+        const char* extension;
+        const char* video;
+        const char* audio;
+    };
+    for (const Case& c : {Case{OutputProfile::MatroskaH264Aac, ".mkv", "h264", "aac"},
+                          Case{OutputProfile::MatroskaHevcAac, ".mkv", "hevc", "aac"},
+                          Case{OutputProfile::WebmVp9Vorbis, ".webm", "vp9", "vorbis"}}) {
+        if (!FfmpegFormatBackend{}.check_output(export_format(c.profile))) {
+            std::printf("    (skipping %s output: encoder unavailable)\n", c.extension);
+            continue;
+        }
+        const fs::path file =
+            fs::temp_directory_path() /
+            ("oma-output-profile-" + std::to_string(::getpid()) + "-" + c.video + c.extension);
+        auto writer = VideoWriter::create(
+            file, 32, 32, oma::frame_rates::k30,
+            {.audio = AudioTrack{.rate = oma::SampleRate::make(48000).value(), .channels = 2},
+             .encoder = VideoEncoder::Software,
+             .render_node = {},
+             .profile = c.profile});
+        expect(writer.has_value()).toBeTruthy();
+        if (!writer)
+            continue;
+        std::vector<std::uint8_t> rgba(32U * 32U * 4U, 128);
+        std::vector<float> sound(1600U * 2U, 0.1F);
+        for (int i = 0; i < 3; ++i) {
+            expect((*writer)->write_rgba(rgba, 32 * 4).has_value()).toBeTruthy();
+            expect((*writer)->write_audio(sound).has_value()).toBeTruthy();
+        }
+        expect((*writer)->finish().has_value()).toBeTruthy();
+        const auto inspected = probe(file);
+        expect(inspected.has_value()).toBeTruthy();
+        if (inspected && inspected->best_video && inspected->best_audio) {
+            expect(inspected->streams[static_cast<std::size_t>(*inspected->best_video)].codec)
+                .toEqual(c.video);
+            expect(inspected->streams[static_cast<std::size_t>(*inspected->best_audio)].codec)
+                .toEqual(c.audio);
+        } else {
+            expect(false).toBeTruthy();
+        }
+        VideoDecoderOptions decode_options;
+        decode_options.paths = {DecodePath::Software};
+        auto video_decoder = VideoDecoder::open(file, decode_options);
+        int video_frames = 0;
+        while (video_decoder) {
+            auto frame = (*video_decoder)->next();
+            if (!frame || !*frame)
+                break;
+            ++video_frames;
+        }
+        expect(video_frames).toBe(3);
+        auto audio_decoder = AudioDecoder::open(file);
+        std::int64_t audio_frames = 0;
+        while (audio_decoder) {
+            auto block = (*audio_decoder)->next();
+            if (!block || !*block)
+                break;
+            audio_frames += (*block)->frames;
+        }
+        expect(audio_frames >= 4800 && audio_frames < 6000).toBeTruthy();
+        fs::remove(file);
+    }
+}
+
 // The GPU's H.264 encoder through VA-API (skipped where the machine has none): same frames,
 // rate and colour tags as the software path, a picture close to what was written.
 void writes_with_vaapi() {
@@ -260,6 +329,7 @@ void run_video_writer_tests() {
         it("video writer replaces output after writing rational-rate frames",
            { writes_and_reopens_video(); });
         it("adds an AAC track from interleaved float samples", { writes_audio_with_video(); });
+        it("writes and reopens Matroska and WebM output profiles", { writes_other_profiles(); });
         it("encodes H.264 on the GPU through VA-API", { writes_with_vaapi(); });
         it("fails cleanly when the disk fills, keeping the old file", { survives_a_full_disk(); });
     });

@@ -3,6 +3,7 @@
 #include "oma/base/log.hpp"
 #include "oma/compositor/compositor.hpp"
 #include "oma/gpu/device.hpp"
+#include "oma/media/format.hpp"
 #include "oma/media/video_writer.hpp"
 #include "oma/playback/timeline_audio.hpp"
 
@@ -78,36 +79,40 @@ oma::Result<void> export_timeline(const ExportRequest& request,
     using Encoder = ExportRequest::Encoder;
     constexpr std::uint32_t kIntel = 0x8086;
     const bool validated = device && device->info().vendor_id == kIntel;
-    const bool try_hardware =
-        request.encoder == Encoder::Hardware || (request.encoder == Encoder::Auto && validated);
+    const bool h264 = request.profile == oma::media::OutputProfile::Mp4H264Aac ||
+                      request.profile == oma::media::OutputProfile::MatroskaH264Aac;
+    const bool try_hardware = h264 && (request.encoder == Encoder::Hardware ||
+                                       (request.encoder == Encoder::Auto && validated));
     const oma::media::VideoWriterOptions base{
         .audio = oma::media::AudioTrack{.rate = request.audio_rate, .channels = 2},
         .encoder = oma::media::VideoEncoder::Software,
-        .render_node = {}};
-    oma::Result<std::unique_ptr<oma::media::VideoWriter>> writer =
-        std::unexpected(oma::Error(oma::ErrorCode::Unsupported, oma::Category::Encode, "not tried"));
+        .render_node = {},
+        .profile = request.profile};
+    oma::Result<std::unique_ptr<oma::media::VideoWriter>> writer = std::unexpected(
+        oma::Error(oma::ErrorCode::Unsupported, oma::Category::Encode, "not tried"));
     if (try_hardware) {
         auto hw = base;
         hw.encoder = oma::media::VideoEncoder::VaApi;
-        if (device) hw.render_node = device->info().render_node;
+        if (device)
+            hw.render_node = device->info().render_node;
         writer = oma::media::VideoWriter::create(request.file, static_cast<int>(request.width),
                                                  static_cast<int>(request.height), rate, hw);
-        st.encoder = writer ? "VA-API H.264 (GPU)"
-                            : "libx264 (software): the GPU encoder failed: " + writer.error().summary();
+        st.encoder =
+            writer ? "VA-API H.264 (GPU)"
+                   : "libx264 (software): the GPU encoder failed: " + writer.error().summary();
     }
     if (!writer) {
         writer = oma::media::VideoWriter::create(request.file, static_cast<int>(request.width),
                                                  static_cast<int>(request.height), rate, base);
-        if (!writer) return std::unexpected(writer.error());
-        if (st.encoder.empty()) {
-            st.encoder = request.encoder == Encoder::Software ? "libx264 (software, chosen)"
-                                                              : "libx264 (software): no validated GPU encoder here";
-        }
+        if (!writer)
+            return std::unexpected(writer.error());
+        if (st.encoder.empty())
+            st.encoder = oma::media::export_format(request.profile).video_encoder;
     }
     oma::log_info(oma::Category::Encode, "export encoder: {}", st.encoder);
-    oma::log_info(oma::Category::Encode,
-                  "export {}x{} {} frames to {}: {} compositor", request.width,
-                  request.height, request.frames, request.file.string(), gpu ? "Vulkan" : "CPU");
+    oma::log_info(oma::Category::Encode, "export {}x{} {} frames to {}: {} compositor",
+                  request.width, request.height, request.frames, request.file.string(),
+                  gpu ? "Vulkan" : "CPU");
     oma::playback::TimelineAudio audio(request.timeline, request.paths, request.audio_rate, 2);
     const auto sample_tb = oma::Rational::make(1, request.audio_rate.hz()).value();
     std::vector<std::uint8_t> rgb(static_cast<std::size_t>(request.width) * request.height * 3);

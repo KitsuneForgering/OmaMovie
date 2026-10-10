@@ -392,4 +392,15 @@ void DmaBufImage::reset() noexcept {
     memory_ = VK_NULL_HANDLE;
 }
 
+VkBuffer Buffer::handle() const noexcept { return buffer_; }
+VkDeviceSize Buffer::size() const noexcept { return size_; }
+void* Buffer::mapped() const noexcept { return mapped_; }
+
+VkImage Image::handle() const noexcept { return image_; }
+VkImageView Image::view() const noexcept { return view_; }
+const ImageDesc& Image::desc() const noexcept { return desc_; }
+
+VkImage DmaBufImage::handle() const noexcept { return image_; }
+VkFormat DmaBufImage::format() const noexcept { return format_; }
+
 } // namespace oma::gpu

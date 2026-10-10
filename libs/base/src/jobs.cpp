@@ -45,6 +45,24 @@ struct JobShared {
 
 } // namespace detail
 
+CancellationToken::CancellationToken(std::shared_ptr<const std::atomic<bool>> flag)
+    : flag_(std::move(flag)) {}
+
+bool CancellationToken::is_cancelled() const noexcept {
+    return flag_ && flag_->load(std::memory_order_acquire);
+}
+
+CancellationSource::CancellationSource() : flag_(std::make_shared<std::atomic<bool>>(false)) {}
+
+bool CancellationSource::is_cancelled() const noexcept {
+    return flag_->load(std::memory_order_acquire);
+}
+
+JobContext::JobContext(CancellationToken token, std::atomic<double>& progress) noexcept
+    : token_(std::move(token)), progress_(progress) {}
+
+JobHandle::JobHandle(std::shared_ptr<detail::JobShared> shared) : shared_(std::move(shared)) {}
+
 namespace {
 bool is_terminal(JobState s) {
     return s == JobState::Succeeded || s == JobState::Failed || s == JobState::Cancelled;
@@ -195,5 +213,15 @@ void JobPool::worker_loop(const std::stop_token& stop) {
         }
     }
 }
+
+CancellationToken CancellationSource::token() const { return CancellationToken(flag_); }
+void CancellationSource::cancel() noexcept { flag_->store(true, std::memory_order_release); }
+
+const CancellationToken& JobContext::token() const noexcept { return token_; }
+bool JobContext::is_cancelled() const noexcept { return token_.is_cancelled(); }
+
+bool JobHandle::valid() const noexcept { return shared_ != nullptr; }
+
+std::size_t JobPool::worker_count() const noexcept { return worker_count_; }
 
 } // namespace oma

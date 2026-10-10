@@ -67,15 +67,7 @@ Result<PreparedLayer> prepare_layer(const Layer& layer, const LayerInput& input,
                                     const media::SampleLayout& layout, std::uint32_t source_width,
                                     std::uint32_t source_height, std::uint32_t out_width,
                                     std::uint32_t out_height) {
-    // Planar GBR, or GBRA with a straight-alpha fourth plane (ADR-0015).
-    if (!layout.yuv && layout.planes != (layout.alpha ? 4 : 3)) {
-        return std::unexpected(unsupported("only planar GBR(A) sources are supported for RGB"));
-    }
-    if (layout.yuv && layout.alpha) {
-        return std::unexpected(unsupported("YUV with alpha is not supported"));
-    }
-    if (layout.planes < 2 || layout.planes > (layout.alpha ? 4 : 3) ||
-        (layout.container_bits != 8 && layout.container_bits != 16)) {
+    if (!media::compositable(layout)) {
         return std::unexpected(unsupported("unsupported sample layout"));
     }
 

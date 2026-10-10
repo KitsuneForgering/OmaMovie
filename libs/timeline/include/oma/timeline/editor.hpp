@@ -39,9 +39,9 @@ public:
 
 class Editor {
 public:
-    explicit Editor(Timeline timeline) noexcept : timeline_(std::move(timeline)) {}
+    explicit Editor(Timeline timeline) noexcept;
 
-    [[nodiscard]] const Timeline& timeline() const noexcept { return timeline_; }
+    [[nodiscard]] const Timeline& timeline() const noexcept;
 
     // Registers media for clips to reference. Importing is not a timeline edit: it stays out
     // of the history (undoing an edit never unregisters media a library still shows), and
@@ -54,8 +54,8 @@ public:
     // redo stack. A failing command or a broken invariant leaves the timeline unchanged.
     [[nodiscard]] Result<void> execute(std::unique_ptr<Command> command);
 
-    [[nodiscard]] bool can_undo() const noexcept { return !undo_.empty(); }
-    [[nodiscard]] bool can_redo() const noexcept { return !redo_.empty(); }
+    [[nodiscard]] bool can_undo() const noexcept;
+    [[nodiscard]] bool can_redo() const noexcept;
     [[nodiscard]] std::string_view undo_name() const noexcept;
     [[nodiscard]] std::string_view redo_name() const noexcept;
     [[nodiscard]] Result<void> undo();
@@ -72,7 +72,7 @@ public:
     [[nodiscard]] CaptionId new_caption_id() noexcept;
 
     // Increases on every change (execute, undo, redo), so views know when to refresh.
-    [[nodiscard]] std::uint64_t revision() const noexcept { return revision_; }
+    [[nodiscard]] std::uint64_t revision() const noexcept;
 
 private:
     Timeline timeline_;

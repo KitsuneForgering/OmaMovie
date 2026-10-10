@@ -29,10 +29,10 @@ class Error {
 public:
     Error(ErrorCode code, Category category, std::string message, std::string context = {});
 
-    [[nodiscard]] ErrorCode code() const noexcept { return code_; }
-    [[nodiscard]] Category category() const noexcept { return category_; }
-    [[nodiscard]] const std::string& message() const noexcept { return message_; }
-    [[nodiscard]] const std::string& context() const noexcept { return context_; }
+    [[nodiscard]] ErrorCode code() const noexcept;
+    [[nodiscard]] Category category() const noexcept;
+    [[nodiscard]] const std::string& message() const noexcept;
+    [[nodiscard]] const std::string& context() const noexcept;
 
     // Human-readable form: "[category] code: message (context)".
     // (Not named describe(): that name is a Cest macro in test files.)
@@ -48,10 +48,7 @@ private:
 template <typename T>
 using Result = std::expected<T, Error>;
 
-[[nodiscard]] inline std::unexpected<Error>
-make_error(ErrorCode code, Category category, std::string message, std::string context = {}) {
-    return std::unexpected<Error>(std::in_place, code, category, std::move(message),
-                                  std::move(context));
-}
+[[nodiscard]] std::unexpected<Error>
+make_error(ErrorCode code, Category category, std::string message, std::string context = {});
 
 } // namespace oma

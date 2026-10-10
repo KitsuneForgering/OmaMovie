@@ -30,13 +30,9 @@ public:
     // $XDG_CACHE_HOME/omamovie, else ~/.cache/omamovie; empty without an absolute either.
     [[nodiscard]] static std::filesystem::path default_root();
 
-    [[nodiscard]] const std::filesystem::path& dir() const noexcept { return dir_; }
-    [[nodiscard]] std::uint64_t budget() const noexcept {
-        return budget_.load(std::memory_order_relaxed);
-    }
-    void set_budget(std::uint64_t bytes) noexcept {
-        budget_.store(bytes, std::memory_order_relaxed);
-    }
+    [[nodiscard]] const std::filesystem::path& dir() const noexcept;
+    [[nodiscard]] std::uint64_t budget() const noexcept;
+    void set_budget(std::uint64_t bytes) noexcept;
 
     // The payload stored under `key`, or nothing. A hit refreshes the entry's age for eviction.
     [[nodiscard]] std::optional<std::vector<std::uint8_t>> get(std::string_view key) const;
