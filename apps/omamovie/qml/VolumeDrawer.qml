@@ -20,6 +20,12 @@ Rectangle {
     function commitEq() {
         session.setClipEq(lowControl.slider.value, midControl.slider.value, highControl.slider.value)
     }
+    function focusAdvanced(target) {
+        Qt.callLater(() => {
+            if (target === "noise") noiseControl.slider.forceActiveFocus(Qt.TabFocusReason)
+            else eqPreset.forceActiveFocus(Qt.TabFocusReason)
+        })
+    }
     ColumnLayout {
         anchors.fill: parent
         anchors.leftMargin: 12
@@ -80,6 +86,7 @@ Rectangle {
                 UiText { text: "EQUALIZER"; color: root.muted; font.pixelSize: 10; font.bold: true }
                 ComboBox {
                     id: eqPreset
+                    objectName: "audioEqPreset"
                     Layout.preferredWidth: 140
                     font.pixelSize: 11
                     focusPolicy: Qt.TabFocus
@@ -119,9 +126,8 @@ Rectangle {
                 onCommitted: session.setClipNoise(noiseControl.slider.value)
             }
             OmaButton {
-                text: "Normalize"
+                action: actions.normalizeAudio
                 tip: "Raise or lower the volume so the loudest peak reaches −1 dB"
-                onClicked: session.normalizeClip()
             }
         }
     }

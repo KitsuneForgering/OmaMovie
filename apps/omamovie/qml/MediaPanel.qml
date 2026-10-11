@@ -10,7 +10,7 @@ Rectangle {
     objectName: "librarySidebar"
     z: 3
     visible: !root.viewerOnly && (root.compact ? root.libraryOverlay : !root.libraryHidden)
-    width: root.compact ? Math.min(380, upper.width * 0.8) : upper.width * 0.30
+    width: root.compact ? Math.min(380, upper.width * 0.8) : upper.width * root.libraryRatio
     // As an overlay it stops above the transport so the timecode stays visible.
     height: root.compact ? upper.height - transport.height : upper.height
     color: colors.dark_background
@@ -270,8 +270,6 @@ Rectangle {
                     MenuItem { action: actions.insert }
                     MenuItem { action: actions.overwrite }
                     MenuItem { action: actions.connect }
-                    MenuSeparator {}
-                    MenuItem { action: actions.addTitle }
                 }
                 UiText {
                     anchors.centerIn: parent

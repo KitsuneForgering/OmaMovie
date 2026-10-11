@@ -25,7 +25,10 @@ ApplicationWindow {
     property color line: colors.lighter_background
     readonly property color viewerBackground: "#1b1b1d" // never themed (ui-design §5)
     // Layout breakpoints (ui-design §2): wide ≥ 1500, half width 900–1500, narrow below.
-    property bool compact: width < 1500
+    // Keep the current layout while a tiling resize jitters near the breakpoint.
+    property bool compact: true
+    onWidthChanged: compact = compact ? width < 1550 : width <= 1450
+    Component.onCompleted: compact = width < 1500
     property bool narrow: width < 900
     property bool libraryOverlay: false
     property bool libraryHidden: false // wide windows: the library sidebar folded away, the viewer centered
@@ -33,6 +36,7 @@ ApplicationWindow {
     property bool viewerOnly: false
     property string drawer: "" // the open adjustment, "" when the drawer is closed
     property real upperRatio: 0.55
+    property real libraryRatio: 0.30
     property real pixelsPerSecond: 60
     property bool fitTimeline: true
     property bool snapping: true // ui-design §7.2: on by default, N toggles
@@ -229,6 +233,14 @@ ApplicationWindow {
             text: "Split at the playhead"; keys: "Ctrl+B"; enabled: actions.media
             onTriggered: session.splitAtPlayhead()
         }
+        property OmaAction speedDouble: OmaAction {
+            text: "Set video speed to 2x"; enabled: actions.videoClip
+            onTriggered: session.setClipSpeed(2, 1)
+        }
+        property OmaAction normalizeAudio: OmaAction {
+            text: "Normalize audio"; enabled: actions.editing && !!session.info.clip && !!session.info.hasAudio
+            onTriggered: session.normalizeClip()
+        }
         property OmaAction remove: OmaAction {
             text: "Delete and close the gap"; keys: "Delete"; enabled: actions.media
             onTriggered: session.deleteSelected(true)
@@ -397,10 +409,49 @@ ApplicationWindow {
             enabled: actions.editing && !!session.info.clip && !!session.info.hasAudio
             onTriggered: root.drawer = root.drawer === "volume" ? "" : "volume"
         }
-        readonly property bool videoClip: actions.editing && !!session.info.clip && !!session.info.hasVideo
+        property OmaAction toggleMute: OmaAction {
+            text: session.info.muted ? "Unmute clip" : "Mute clip"
+            enabled: actions.volume.enabled
+            onTriggered: session.setClipAudio(session.info.gain, session.info.fadeIn || 0,
+                                              session.info.fadeOut || 0, !session.info.muted)
+        }
+        property OmaAction equalizer: OmaAction {
+            text: "Equalizer"; enabled: actions.volume.enabled
+            onTriggered: {
+                root.volumeMore = true
+                root.openDrawer("volume")
+                volumeDrawer.focusAdvanced("equalizer")
+            }
+        }
+        property OmaAction noiseReduction: OmaAction {
+            text: "Noise reduction"; enabled: actions.volume.enabled
+            onTriggered: {
+                root.volumeMore = true
+                root.openDrawer("volume")
+                volumeDrawer.focusAdvanced("noise")
+            }
+        }
+        readonly property bool videoClip: actions.editing && !!session.info.clip &&
+                                          !!session.info.hasVideo && !session.info.isTitle
+        property OmaAction transformControls: OmaAction {
+            text: "Transform and opacity"; enabled: actions.videoClip
+            onTriggered: {
+                root.cropMore = true
+                root.openDrawer("crop")
+                cropDrawer.focusAdvanced()
+            }
+        }
         property OmaAction color: OmaAction {
             text: "Color"; enabled: actions.videoClip
             onTriggered: root.drawer = root.drawer === "color" ? "" : "color"
+        }
+        property OmaAction colorGrade: OmaAction {
+            text: "Color grading"; enabled: actions.videoClip
+            onTriggered: {
+                root.colorMore = true
+                root.openDrawer("color")
+                colorDrawer.focusAdvanced()
+            }
         }
         property OmaAction crop: OmaAction {
             text: "Crop"; enabled: actions.videoClip
@@ -419,7 +470,7 @@ ApplicationWindow {
             onTriggered: { session.addTitle(); root.openDrawer("title") }
         }
         property OmaAction title: OmaAction {
-            text: "Title"; enabled: actions.editing && !!session.info.isTitle
+            text: "Edit text"; enabled: actions.editing && !!session.info.isTitle
             onTriggered: root.drawer = root.drawer === "title" ? "" : "title"
         }
         property OmaAction settings: OmaAction {
@@ -635,6 +686,7 @@ ApplicationWindow {
 
             Item {
                 id: upper
+                objectName: "upperWorkspace"
                 width: parent.width
                 height: root.viewerOnly ? parent.height : parent.height * root.upperRatio
 
@@ -702,6 +754,39 @@ ApplicationWindow {
 
                     // Transport (§5): the same actions serve buttons and keyboard shortcuts.
                     TransportControls { id: transport }
+                }
+
+                Rectangle {
+                    id: libraryDivider
+                    objectName: "libraryDivider"
+                    visible: !root.compact && !root.viewerOnly && !root.libraryHidden
+                    z: 4
+                    x: library.width - width / 2
+                    width: 6
+                    height: upper.height
+                    color: "transparent"
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 1
+                        height: parent.height
+                        color: libraryResize.activeFocus ? root.accent : root.line
+                    }
+                    MouseArea {
+                        id: libraryResize
+                        anchors.fill: parent
+                        anchors.margins: -4
+                        activeFocusOnTab: true
+                        Accessible.name: "Resize media library"
+                        cursorShape: Qt.SplitHCursor
+                        onPressed: forceActiveFocus()
+                        onPositionChanged: (mouse) => {
+                            if (pressed) root.libraryRatio = Math.max(0.20, Math.min(0.50,
+                                mapToItem(upper, mouse.x, mouse.y).x / upper.width))
+                        }
+                        onDoubleClicked: root.libraryRatio = 0.30
+                        Keys.onLeftPressed: root.libraryRatio = Math.max(0.20, root.libraryRatio - 0.02)
+                        Keys.onRightPressed: root.libraryRatio = Math.min(0.50, root.libraryRatio + 0.02)
+                    }
                 }
             }
 

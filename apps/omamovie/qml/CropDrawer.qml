@@ -21,6 +21,7 @@ Rectangle {
         session.setClipTransform(posX.slider.value, posY.slider.value, scaleControl.slider.value,
                                  rotationControl.slider.value)
     }
+    function focusAdvanced() { Qt.callLater(() => posX.slider.forceActiveFocus(Qt.TabFocusReason)) }
     function percent(v) { return Math.round(v * 100) + "%" }
     ColumnLayout {
         anchors.fill: parent

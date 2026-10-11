@@ -74,7 +74,7 @@ Popup {
             id: query
             objectName: "paletteQuery"
             Layout.fillWidth: true
-            placeholderText: "Search actions"
+            placeholderText: "Search actions or type :split"
             color: colors.foreground
             onTextChanged: palette.refresh()
             // Navigation keys belong to the list, not to the editor's shortcuts.
@@ -114,6 +114,7 @@ Popup {
                 width: ListView.view.width
                 height: 32
                 highlighted: ListView.isCurrentItem
+                Accessible.name: modelData.text + (modelData.keys !== "" ? ", " + modelData.keys : "")
                 onClicked: palette.run(index)
                 contentItem: RowLayout {
                     spacing: 8

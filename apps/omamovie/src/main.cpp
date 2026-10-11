@@ -714,7 +714,7 @@ int main(int argc, char** argv) {
         bool controls = false, lanes = false, looks = false, transitions = false, dragdrop = false;
         bool tab = false, guard = false, grading = false, project = false, recordings = false, connected = false, timing = false;
         bool palette = false, palette_keys = false, theme = false, launch = false, settings = false, menu_keys = false, titles = false, autosave = false;
-        bool device_lost = false;
+        bool device_lost = false, layout = true;
         double after_steps = 0;
     } r;
     const auto clip_count = [&] { return session.clips().size(); };
@@ -739,6 +739,7 @@ int main(int argc, char** argv) {
         QString font, next_font;
         QStringList launched, forwarded;
         double menu_clip = 0;
+        bool menu_audio_muted = false;
         QString undo_before_title;
         int title_pixels = 0;
         qsizetype clips_after_edit = 0;
@@ -1031,6 +1032,9 @@ int main(int argc, char** argv) {
          }},
         {"effects drawer", after(400), [&] {
              screenshot(window, "OMA_GUI_SMOKE_EFFECTS_SCREENSHOT");
+             auto* narrow_timeline = window->findChild<QQuickItem*>(QStringLiteral("timelinePanel"));
+             r.layout = r.layout && narrow_timeline && narrow_timeline->height() >= 120;
+             if (!r.layout) std::printf("GUI smoke: timeline too small at 640 px\n");
              // At 640 px two whole look tiles stay visible beside the stack and the slider.
              const auto narrow_tiles = items_named("lookTiles");
              const auto sharpen = items_named("sharpnessControl");
@@ -1281,7 +1285,50 @@ int main(int argc, char** argv) {
              r.stepped = std::abs(r.after_steps - 3.0 / session.frameRate()) < 1e-9;
              window->resize(820, 620);
          }},
+        {"layout stress", after(100), [&] {
+             // Repeated tiling-size changes and screen/popup switches must leave the editor
+             // visible and its single GPU viewer attached to the same window.
+             for (int i = 0; i < 24; ++i) {
+                 window->resize(i % 2 == 0 ? 640 : 1600, i % 3 == 0 ? 520 : 900);
+                 session.showProjects();
+                 QTest::qWait(5);
+                 session.continueProject();
+                 actions.trigger(QStringLiteral("settings"));
+                 QTest::qWait(5);
+                 actions.trigger(QStringLiteral("settings"));
+             }
+             window->resize(1440, 900);
+             QTest::qWait(20);
+             bool stable = window->property("compact").toBool();
+             for (int i = 0; i < 12; ++i) {
+                 window->resize(i % 2 == 0 ? 1490 : 1510, 900);
+                 QTest::qWait(5);
+                 stable = stable && window->property("compact").toBool();
+             }
+             window->resize(1560, 900);
+             QTest::qWait(20);
+             stable = stable && !window->property("compact").toBool();
+             for (int i = 0; i < 12; ++i) {
+                 window->resize(i % 2 == 0 ? 1490 : 1510, 900);
+                 QTest::qWait(5);
+                 stable = stable && !window->property("compact").toBool();
+             }
+             window->resize(820, 620);
+             QTest::qWait(100);
+             auto* timeline = window->findChild<QQuickItem*>(QStringLiteral("timelinePanel"));
+             auto* viewer = window->findChild<QQuickItem*>(QStringLiteral("preview"));
+             const bool ok = stable && session.editing() && timeline && timeline->isVisible() &&
+                             timeline->height() >= 120 && viewer && viewer->isVisible() &&
+                             viewer->width() > 0 && viewer->height() > 0 &&
+                             !window->grabWindow().isNull();
+             r.layout = r.layout && ok;
+             if (!ok) std::printf("GUI smoke: layout did not recover after repeated resize and screen switches\n");
+         }},
         {"context menu", after(400), [&] {
+             auto* timeline = window->findChild<QQuickItem*>(QStringLiteral("timelinePanel"));
+             auto* upper = window->findChild<QQuickItem*>(QStringLiteral("upperWorkspace"));
+             r.layout = r.layout && timeline && upper && upper->height() >= 200 && timeline->height() >= 120;
+             if (!r.layout) std::printf("GUI smoke: library/viewer/timeline layout too small at half width\n");
              // Right click inside the first storyline clip; the next step picks "Split here".
              const auto clips = items_named("storylineClip");
              if (!clips.empty()) QTest::mouseClick(window, Qt::RightButton, Qt::NoModifier, center_of(clips.front()).toPoint());
@@ -1293,6 +1340,21 @@ int main(int argc, char** argv) {
              const bool split = clip_count() == before + 1;
              if (!split) std::printf("GUI smoke: Split here from the context menu failed\n");
              if (split) session.undo();
+             actions.trigger(QStringLiteral("clipMenu"));
+             // Pointer access follows the same one-level branch as the keyboard check.
+             QQuickItem* picture_item = nullptr;
+             auto* storyline_menu = window->findChild<QObject*>(QStringLiteral("storylineMenu"));
+             if (storyline_menu) {
+                 QMetaObject::invokeMethod(storyline_menu, "itemAt", Q_RETURN_ARG(QQuickItem*, picture_item), Q_ARG(int, 0));
+             }
+             if (picture_item) QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, center_of(picture_item).toPoint());
+             const auto color_items = items_named("pictureColorItem");
+             if (!color_items.empty()) QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                                                       center_of(color_items.front()).toPoint());
+             const bool color_from_menu = window->property("drawer").toString() == QStringLiteral("color");
+             if (!color_from_menu) std::printf("GUI smoke: Picture > Color by pointer failed (branch %d, item %lld)\n",
+                                               picture_item != nullptr, static_cast<long long>(color_items.size()));
+             window->setProperty("drawer", QString());
              session.seek(0.5);
              session.togglePlay();
              const bool stop_clicked = click_button("transportStop");
@@ -1300,7 +1362,7 @@ int main(int argc, char** argv) {
              const bool end_clicked = click_button("transportEnd");
              const bool at_end = end_clicked && session.position() > 0.0;
              const bool start_clicked = click_button("transportStart");
-             r.controls = split && stopped && at_end && start_clicked && session.position() == 0.0;
+             r.controls = split && color_from_menu && stopped && at_end && start_clicked && session.position() == 0.0;
          }},
         {"discard guard", after(300), [&] {
              // With media in the session, New project asks before discarding anything.
@@ -1370,9 +1432,14 @@ int main(int argc, char** argv) {
              const bool asked = click_button("newProject");
              const bool saved_first = asked && click_button("saveFirst");
              r.guard = r.guard && session.dirty() && saved_first;
+             if (!r.guard) std::printf("GUI smoke: Save from guard failed (asked %d, clicked %d, dirty %d, importing %d, status '%s')\n",
+                                       asked, saved_first, session.dirty(), session.importsPending(), qPrintable(session.status()));
          }},
         {"saved then new", [&] { return session.media().isEmpty() || run->elapsed() > 5000; }, [&] {
              r.guard = r.guard && session.media().isEmpty() && session.projectPath().isEmpty();
+             if (!r.guard) std::printf("GUI smoke: Save from guard did not make a new project (media %lld, path '%s', dirty %d, status '%s')\n",
+                                       static_cast<long long>(session.media().size()), qPrintable(session.projectPath()),
+                                       session.dirty(), qPrintable(session.status()));
              session.openProject(QUrl::fromLocalFile(project_file));
          }},
         {"guard save kept", [&] { return session.media().size() == saved.media || session.failed(); }, [&] {
@@ -1427,14 +1494,24 @@ int main(int argc, char** argv) {
              // Wide windows fold the library sidebar away and give the viewer the whole width.
              auto* sidebar = window->findChild<QQuickItem*>(QStringLiteral("librarySidebar"));
              auto* viewer = window->findChild<QQuickItem*>(QStringLiteral("viewerColumn"));
+             auto* divider = window->findChild<QQuickItem*>(QStringLiteral("libraryDivider"));
              const bool shown = sidebar != nullptr && sidebar->isVisible() && viewer != nullptr && viewer->x() > 0;
+             const double before = sidebar ? sidebar->width() : 0;
+             if (divider && divider->isVisible()) {
+                 const QPointF from = center_of(divider);
+                 const QPointF to = from + QPointF(100, 0);
+                 QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, from.toPoint());
+                 for (int i = 1; i <= 8; ++i) QTest::mouseMove(window, (from + (to - from) * i / 8.0).toPoint(), 10);
+                 QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, to.toPoint(), 10);
+             }
+             const bool resized = sidebar && sidebar->width() > before + 50 && viewer->x() == sidebar->width();
              const bool clicked = click_button("toggleLibrary");
              const bool hidden = clicked && !sidebar->isVisible() && viewer->x() == 0.0 &&
                                  viewer->width() == window->contentItem()->width();
              screenshot(window, "OMA_GUI_SMOKE_WIDE_SCREENSHOT");
              window->setProperty("libraryHidden", false);
-             r.project = r.project && shown && hidden;
-             if (!(shown && hidden)) std::printf("GUI smoke: hiding the library failed\n");
+             r.project = r.project && shown && resized && hidden;
+             if (!(shown && resized && hidden)) std::printf("GUI smoke: resizing or hiding the library failed\n");
              window->resize(820, 620); // back to the size of the steps before
          }},
         {"library", after(500), [&] {
@@ -1536,6 +1613,15 @@ int main(int argc, char** argv) {
          }},
         {"title drawer", after(300), [&] {
              r.titles = r.titles && items_named("titleDrawer").size() == 1;
+             actions.trigger(QStringLiteral("clipMenu"));
+             auto* menu = window->findChild<QObject*>(QStringLiteral("titleMenu"));
+             auto* title_item = window->findChild<QObject*>(QStringLiteral("overlayTitleItem"));
+             const bool title_menu = menu && menu->property("opened").toBool() && title_item &&
+                                     title_item->property("visible").toBool() && menu->property("count").toInt() == 6;
+             r.titles = r.titles && title_menu;
+             if (!title_menu) std::printf("GUI smoke: title menu has wrong entries (%d)\n",
+                                          menu ? menu->property("count").toInt() : -1);
+             if (menu) QMetaObject::invokeMethod(menu, "close");
              window->setProperty("drawer", QString()); // the same viewer size for both measurements
          }},
         {"title drawn", after(600), [&] {
@@ -1554,7 +1640,7 @@ int main(int argc, char** argv) {
                                         saved.title_pixels, without);
          }},
         // Menus by keyboard (ui-design §7.3): Shift+F10 opens the selected clip's menu with the
-        // focus in it, Down/Enter run the first item on that clip, Escape closes only the menu.
+        // focus in it; Down/Right/Down/Enter traverse the picture branch, Escape closes it.
         {"menu keys", after(100), [&] {
              saved.menu_clip = session.clips().front().toMap().value("id").toDouble();
              session.selectClip(saved.menu_clip);
@@ -1568,8 +1654,18 @@ int main(int argc, char** argv) {
              bool inside = false;
              for (const QQuickItem* i = focus; i != nullptr && content != nullptr; i = i->parentItem()) inside = inside || i == content;
              r.menu_keys = menu && menu->property("opened").toBool() && inside;
+             auto* picture = window->findChild<QObject*>(QStringLiteral("storylinePictureMenu"));
+             auto* sound = window->findChild<QObject*>(QStringLiteral("storylineSoundMenu"));
+             r.menu_keys = r.menu_keys && picture && picture->property("count").toInt() == 3 &&
+                           (sound != nullptr) == session.info().value("hasAudio").toBool() &&
+                           !window->findChild<QObject*>(QStringLiteral("pictureTransformItem")) &&
+                           !window->findChild<QObject*>(QStringLiteral("pictureGradeItem")) &&
+                           window->findChild<QObject*>(QStringLiteral("soundEqItem")) &&
+                           window->findChild<QObject*>(QStringLiteral("soundNoiseItem"));
              if (!r.menu_keys) std::printf("GUI smoke: clip menu %s, focus %s\n", menu && menu->property("opened").toBool() ? "open" : "closed",
                                            focus ? focus->metaObject()->className() : "none");
+             press(Qt::Key_Down);
+             press(Qt::Key_Right);
              press(Qt::Key_Down);
              press(Qt::Key_Return);
          }},
@@ -1592,6 +1688,25 @@ int main(int argc, char** argv) {
              if (!r.menu_keys) std::printf("GUI smoke: menu keyboard check failed (drawer '%s')\n",
                                            qPrintable(window->property("drawer").toString()));
              window->setProperty("drawer", QString());
+             actions.trigger(QStringLiteral("transformControls"));
+         }},
+        {"precise picture", after(150), [&] {
+             const QQuickItem* focus = window->activeFocusItem();
+             const bool ok = window->property("drawer").toString() == QStringLiteral("crop") &&
+                             window->property("cropMore").toBool() && focus &&
+                             focus->objectName() == QStringLiteral("drawerSlider:POSITION X") &&
+                             session.selectedClip() == saved.menu_clip;
+             if (!ok) std::printf("GUI smoke: transform controls did not open with focus\n");
+             r.menu_keys = r.menu_keys && ok;
+             actions.trigger(QStringLiteral("colorGrade"));
+         }},
+        {"precise color", after(150), [&] {
+             const QQuickItem* focus = window->activeFocusItem();
+             const bool ok = window->property("drawer").toString() == QStringLiteral("color") &&
+                             window->property("colorMore").toBool() && focus &&
+                             focus->objectName().startsWith(QStringLiteral("gradeTab:"));
+             if (!ok) std::printf("GUI smoke: color grading did not open with focus\n");
+             r.menu_keys = r.menu_keys && ok;
              // The same walk on an audio lane clip's menu.
              const QVariantList lanes = session.audioTracks();
              const QVariantList sounds = lanes.isEmpty() ? QVariantList{} : lanes.front().toMap().value("clips").toList();
@@ -1601,11 +1716,58 @@ int main(int argc, char** argv) {
                  return;
              }
              session.selectClip(sounds.front().toMap().value("id").toDouble());
+             actions.trigger(QStringLiteral("equalizer"));
+         }},
+        {"precise sound", after(150), [&] {
+             const QQuickItem* focus = window->activeFocusItem();
+             const bool eq = window->property("drawer").toString() == QStringLiteral("volume") &&
+                             window->property("volumeMore").toBool() && focus &&
+                             focus->objectName() == QStringLiteral("audioEqPreset");
+             actions.trigger(QStringLiteral("noiseReduction"));
+             r.menu_keys = r.menu_keys && eq;
+             if (!eq) std::printf("GUI smoke: equalizer did not open with focus\n");
+         }},
+        {"precise noise", after(150), [&] {
+             const QQuickItem* focus = window->activeFocusItem();
+             const bool ok = focus && focus->objectName() == QStringLiteral("drawerSlider:NOISE REDUCTION") &&
+                             session.info().value("hasAudio").toBool();
+             if (!ok) std::printf("GUI smoke: noise reduction did not open with focus\n");
+             r.menu_keys = r.menu_keys && ok;
+             saved.menu_audio_muted = session.info().value("muted").toBool();
+             actions.trigger(QStringLiteral("toggleMute"));
+         }},
+        {"sound mute", after(150), [&] {
+             const bool muted = session.info().value("muted").toBool() != saved.menu_audio_muted;
+             const bool label = window->findChild<QObject*>(QStringLiteral("soundMuteItem")) != nullptr;
+             if (!muted || !label) std::printf("GUI smoke: sound mute action did not update\n");
+             r.menu_keys = r.menu_keys && muted && label;
+             actions.trigger(QStringLiteral("toggleMute"));
+             window->setProperty("drawer", QString());
              actions.trigger(QStringLiteral("clipMenu"));
          }},
         {"lane menu", after(300), [&] {
-             const bool ok = menu_has_focus(QStringLiteral("soundMenu"));
+             auto* menu = window->findChild<QObject*>(QStringLiteral("soundMenu"));
+             const bool ok = menu_has_focus(QStringLiteral("soundMenu")) &&
+                             menu && menu->property("count").toInt() == 6 &&
+                             window->findChild<QObject*>(QStringLiteral("laneSoundMenu")) &&
+                             !window->findChild<QObject*>(QStringLiteral("lanePictureMenu"));
              if (!ok) std::printf("GUI smoke: audio lane menu not open with focus\n");
+             r.menu_keys = r.menu_keys && ok;
+             press(Qt::Key_Escape);
+         }},
+        {"overlay menu", after(250), [&] {
+             const QVariantList tracks = session.videoTracks();
+             const QVariantList clips = tracks.isEmpty() ? QVariantList{} : tracks.front().toMap().value("clips").toList();
+             if (clips.isEmpty()) { r.menu_keys = false; return; }
+             session.selectClip(clips.front().toMap().value("id").toDouble());
+             actions.trigger(QStringLiteral("clipMenu"));
+         }},
+        {"overlay tree", after(300), [&] {
+             const bool ok = menu_has_focus(QStringLiteral("overlayMenu")) &&
+                             window->findChild<QObject*>(QStringLiteral("overlayPictureMenu")) &&
+                             (window->findChild<QObject*>(QStringLiteral("overlaySoundMenu")) != nullptr) ==
+                                 session.info().value("hasAudio").toBool();
+             if (!ok) std::printf("GUI smoke: overlay menu has wrong branches\n");
              r.menu_keys = r.menu_keys && ok;
              press(Qt::Key_Escape);
          }},
@@ -1791,6 +1953,9 @@ int main(int argc, char** argv) {
         {"palette", after(200), [&] {
              const QVariantList hits = actions.search(QStringLiteral("snap"));
              r.palette = !hits.isEmpty() && hits.front().toMap().value("id") == QStringLiteral("snapping") &&
+                         actions.search(QStringLiteral(":split")).value(0).toMap().value("id") == QStringLiteral("split") &&
+                         actions.search(QStringLiteral(":speed 2x")).value(0).toMap().value("id") == QStringLiteral("speedDouble") &&
+                         actions.search(QStringLiteral(":normalize-audio")).value(0).toMap().value("id") == QStringLiteral("normalizeAudio") &&
                          actions.search(QString()).size() == actions.actions().size() &&
                          actions.remap(QStringLiteral("snapping"), QStringLiteral("m")).isEmpty() &&
                          !actions.remap(QStringLiteral("zoomFit"), QStringLiteral("M")).isEmpty() &&
@@ -1803,6 +1968,9 @@ int main(int argc, char** argv) {
                                                             QStringLiteral("closeDrawer leaveFullViewer")};
              if (!r.palette) std::printf("GUI smoke: palette, remap or shortcut conflicts failed (%s)\n",
                                          qPrintable(shared.join(QStringLiteral(", "))));
+             actions.trigger(QStringLiteral("snapping"));
+             r.palette = r.palette && actions.search(QString()).value(0).toMap().value("id") == QStringLiteral("snapping");
+             actions.trigger(QStringLiteral("snapping"));
              saved.snapping = window->property("snapping").toBool();
              actions.trigger(QStringLiteral("commandPalette"));
          }},
@@ -1975,7 +2143,11 @@ int main(int argc, char** argv) {
              session.autosave(); // the restored work keeps autosaving into the recovered file
              session.saveProject(QUrl());
          }},
-        {"saved over autosave", [&] { return !session.dirty() || run->elapsed() > 4000; }, [&] {
+        {"saved over autosave", [&] {
+             const QDir dir(smoke_recordings.filePath(QStringLiteral("state-home/omamovie/autosave")));
+             return (!session.dirty() && dir.entryList({QStringLiteral("*.omamovie*")}, QDir::Files).isEmpty()) ||
+                    run->elapsed() > 4000;
+         }, [&] {
              // Saving the project removes its autosave: nothing is left to recover.
              const QDir dir(smoke_recordings.filePath(QStringLiteral("state-home/omamovie/autosave")));
              r.autosave = r.autosave && !session.dirty() && dir.entryList({QStringLiteral("*.omamovie*")}, QDir::Files).isEmpty();
@@ -2132,7 +2304,7 @@ int main(int argc, char** argv) {
              const bool edits = r.imported && r.split && r.undone && r.redone && r.rippled && r.inserted &&
                                 r.overwritten && r.trimmed && r.played && r.audio && r.volume && r.muted &&
                                 r.gpu_viewer && r.shuttle && r.lanes && r.looks && r.transitions && r.dragdrop && r.guard &&
-                                r.grading && r.project && r.recordings && r.connected && r.timing && r.palette && r.theme && r.launch && r.settings && r.titles && r.autosave && r.device_lost;
+                                r.grading && r.project && r.recordings && r.connected && r.timing && r.palette && r.theme && r.launch && r.settings && r.titles && r.autosave && r.device_lost && r.layout;
              const bool keys = r.space && r.escape && r.stepped && r.tab && r.palette_keys && r.menu_keys;
              std::printf("GUI smoke: edits %s (import %d, split %d, undo %d, redo %d, ripple delete %d, "
                          "insert %d, overwrite %d, trim %d, play %d, audio %d, volume %d, mute %d, "

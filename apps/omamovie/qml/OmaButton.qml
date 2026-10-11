@@ -11,6 +11,7 @@ AbstractButton {
     property bool selected: false
     property bool activeDot: false
     property string tip: action ? action.text : text
+    Accessible.name: text !== "" ? text : tip
     // Tab reaches every button; Enter activates the focused one. Space and letters stay with the
     // editor's actions: window shortcuts fire before the focused item sees the key.
     focusPolicy: Qt.TabFocus

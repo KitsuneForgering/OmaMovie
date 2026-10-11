@@ -46,6 +46,7 @@ ActionRegistry::ActionRegistry(QString settings_file, QObject* parent)
 
 void ActionRegistry::attach(QObject* registry) {
     entries_.clear();
+    recent_.clear();
     if (registry == nullptr) return;
     const QSettings settings(settings_file_, QSettings::IniFormat);
     const QMetaObject* meta = registry->metaObject();
@@ -59,6 +60,8 @@ void ActionRegistry::attach(QObject* registry) {
                     .defaults = action->property("keys").toString()};
         const QString key = QStringLiteral("%1/%2").arg(QLatin1String(kGroup), entry.id);
         if (settings.contains(key)) apply(entry, settings.value(key).toString());
+        action->setProperty("omaActionId", entry.id);
+        QObject::connect(action, SIGNAL(triggered(QObject*)), this, SLOT(recordTriggered()));
         entries_.push_back(std::move(entry));
     }
     emit attached();
@@ -125,7 +128,10 @@ void ActionRegistry::resetAll() {
 }
 
 QVariantList ActionRegistry::search(const QString& query) const {
-    const QStringList words = query.toLower().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    // A leading colon is the palette's command notation, not part of an action name.
+    const QString command = query.trimmed().startsWith(QLatin1Char(':')) ? query.trimmed().mid(1) : query;
+    const QStringList words = command.toLower().replace(QLatin1Char('-'), QLatin1Char(' '))
+                                  .split(QLatin1Char(' '), Qt::SkipEmptyParts);
     struct Hit {
         int score;
         const Entry* entry;
@@ -151,8 +157,18 @@ QVariantList ActionRegistry::search(const QString& query) const {
         }
         if (score != std::numeric_limits<int>::max()) hits.push_back({score, &entry, std::move(text)});
     }
-    std::ranges::stable_sort(hits, [](const Hit& a, const Hit& b) {
-        return a.score != b.score ? a.score < b.score : a.text.localeAwareCompare(b.text) < 0;
+    std::ranges::stable_sort(hits, [this, &words](const Hit& a, const Hit& b) {
+        if (a.score != b.score) return a.score < b.score;
+        if (words.isEmpty()) {
+            const int a_recent = recent_.indexOf(a.entry->id);
+            const int b_recent = recent_.indexOf(b.entry->id);
+            if (a_recent != b_recent) {
+                if (a_recent < 0) return false;
+                if (b_recent < 0) return true;
+                return a_recent < b_recent;
+            }
+        }
+        return a.text.localeAwareCompare(b.text) < 0;
     });
     QVariantList rows;
     rows.reserve(static_cast<qsizetype>(hits.size()));
@@ -164,6 +180,16 @@ QVariantList ActionRegistry::search(const QString& query) const {
                                 {QStringLiteral("enabled"), hit.entry->action->property("enabled")}});
     }
     return rows;
+}
+
+void ActionRegistry::recordTriggered() {
+    const QObject* action = sender();
+    if (action == nullptr) return;
+    const QString id = action->property("omaActionId").toString();
+    if (id.isEmpty()) return;
+    recent_.removeAll(id);
+    recent_.prepend(id);
+    while (recent_.size() > 8) recent_.removeLast();
 }
 
 QString ActionRegistry::sequenceOf(int key, int modifiers) const {

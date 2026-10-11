@@ -18,6 +18,13 @@ Rectangle {
                              saturationControl.slider.value, temperatureControl.slider.value)
     }
     function signed(v) { return (v > 0 ? "+" : "") + Math.round(v * 100) }
+    function focusAdvanced() {
+        Qt.callLater(() => {
+            const index = root.gradeTab === "curves" ? 1 : root.gradeTab === "lut" ? 2 : 0
+            const tab = gradeTabs.itemAt(index)
+            if (tab) tab.forceActiveFocus(Qt.TabFocusReason)
+        })
+    }
     // The three wheels as the session wants them, with one changed.
     function commitWheel(name, x, y, level) {
         const w = session.info.wheels || {}
@@ -89,9 +96,11 @@ Rectangle {
             Layout.fillWidth: false
             spacing: 2
             Repeater {
+                id: gradeTabs
                 model: [{ name: "Wheels", tab: "wheels" }, { name: "Curves", tab: "curves" }, { name: "LUT", tab: "lut" }]
                 delegate: OmaButton {
                     Layout.fillWidth: true
+                    objectName: "gradeTab:" + modelData.tab
                     text: modelData.name
                     selected: root.gradeTab === modelData.tab
                     onClicked: root.gradeTab = modelData.tab

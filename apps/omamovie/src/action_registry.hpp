@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 
 #include <vector>
@@ -47,6 +48,9 @@ signals:
     void attached();
     void changed();
 
+private slots:
+    void recordTriggered();
+
 private:
     struct Entry {
         QString id;
@@ -58,4 +62,5 @@ private:
 
     QString settings_file_;
     std::vector<Entry> entries_;
+    QStringList recent_;
 };

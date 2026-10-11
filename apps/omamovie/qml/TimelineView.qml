@@ -8,6 +8,7 @@ import OmaMovie
 // context menus. Reads the window's ids (root, actions, session) from the document that places it.
 Rectangle {
     id: timelinePanel
+    objectName: "timelinePanel"
     visible: !root.viewerOnly
     // Shift+F10 or the Menu key: the selected clip's menu at the clip; with nothing selected,
     // the cut's or the timeline's at the playhead.
@@ -30,9 +31,10 @@ Rectangle {
         for (let lane = 0; lane < session.videoTracks.length; ++lane) {
             for (const c of session.videoTracks[lane].clips) {
                 if (c.id !== session.selectedClip) continue
-                overlayMenu.at = session.position
-                overlayMenu.popup(timelineScroll.contentItem, timelinePanel.origin + c.start * timelinePanel.scale,
-                                  timelinePanel.videoLaneY(lane) + timelinePanel.laneHeight)
+                const menu = session.info.isTitle ? titleMenu : overlayMenu
+                menu.at = session.position
+                menu.popup(timelineScroll.contentItem, timelinePanel.origin + c.start * timelinePanel.scale,
+                           timelinePanel.videoLaneY(lane) + timelinePanel.laneHeight)
                 return
             }
         }
@@ -83,9 +85,10 @@ Rectangle {
     readonly property real viewFrom: Math.max(0, ((page - 1) * timelineScroll.width - origin) / scale)
     readonly property real viewTo: ((page + 3) * timelineScroll.width - origin) / scale
     // The storyline model follows the view range (Session::setStorylineView).
-    onViewFromChanged: session.setStorylineView(viewFrom, viewTo)
-    onViewToChanged: session.setStorylineView(viewFrom, viewTo)
-    Component.onCompleted: session.setStorylineView(viewFrom, viewTo)
+    function syncStorylineView() { session.setStorylineView(viewFrom, viewTo) }
+    onViewFromChanged: Qt.callLater(syncStorylineView)
+    onViewToChanged: Qt.callLater(syncStorylineView)
+    Component.onCompleted: syncStorylineView()
     function near(list) {
         const from = viewFrom
         const to = viewTo
@@ -214,9 +217,10 @@ Rectangle {
     component ClipTimingMenu: Menu {
         property real at: 0
         title: "Speed"
+        width: Math.min(320, root.width - 24)
         MenuItem { text: "Normal"; onTriggered: session.setClipSpeed(1, 1) }
         MenuItem { text: "Slow (½×)"; onTriggered: session.setClipSpeed(1, 2) }
-        MenuItem { text: "Fast (2×)"; onTriggered: session.setClipSpeed(2, 1) }
+        MenuItem { action: actions.speedDouble }
         MenuItem { text: "Faster (4×)"; onTriggered: session.setClipSpeed(4, 1) }
         MenuSeparator {}
         MenuItem { objectName: "menuRampUp"; text: "Accelerate (½× → 1½×)"; onTriggered: session.setSpeedRamp(0) }
@@ -297,7 +301,8 @@ Rectangle {
                 if (followed.length === 2) {
                     ctx.strokeStyle = root.fg
                     ctx.lineWidth = 2
-                    ctx.strokeRect(followed[0] * s - left + 1, 1, Math.max(2, followed[1] * s - 2), height - 2)
+                    ctx.strokeRect(width * followed[0] / total + 1, 1,
+                                   Math.max(2, width * followed[1] / total - 2), height - 2)
                 }
                 const sel = session.selectedSpan
                 if (sel.length === 2) {
@@ -309,6 +314,10 @@ Rectangle {
                 target: session
                 function onSequenceChanged() { minimapClips.requestPaint() }
                 function onSelectionChanged() { minimapClips.requestPaint() }
+            }
+            Connections {
+                target: timelinePanel
+                function onFollowedChanged() { minimapClips.requestPaint() }
             }
             onWidthChanged: requestPaint()
         }
@@ -391,6 +400,7 @@ Rectangle {
             MenuItem { text: "Move the playhead here"; onTriggered: session.seek(emptyMenu.at) }
             MenuItem { action: actions.importMedia }
             MenuItem { action: actions.addCaption }
+            MenuItem { action: actions.addTitle }
             Menu {
                 title: "Canvas (" + session.canvasWidth + " × " + session.canvasHeight + ")"
                 MenuItem { action: actions.canvasWide }
@@ -770,58 +780,100 @@ Rectangle {
         component AdjustItem: MenuItem {
             property OmaAction adjustment
             property string drawerName
+            property bool applicable: adjustment.enabled
             // The adjusted mark the bar used to show, next to the adjustment's name.
             readonly property bool adjusted: drawerName === "color" ? !!session.info.colorAdjusted
                 : drawerName === "crop" ? !!session.info.framingAdjusted
                 : drawerName === "volume" ? root.audioAdjusted
                 : drawerName === "effects" ? !!session.info.filtered : false
             text: adjustment.text + "…" + (adjusted ? "  ●" : "")
-            enabled: adjustment.enabled
-            onTriggered: root.openDrawer(drawerName)
+            visible: applicable
+            height: visible ? implicitHeight : 0
+            enabled: applicable
+            onTriggered: adjustment.trigger()
+        }
+        // A shallow context tree: adjustment families have one level, while editing commands
+        // stay in the root. Both keyboard and pointer paths invoke the registered actions.
+        component PictureMenu: Menu {
+            title: "Picture"
+            width: Math.min(280, root.width - 24)
+            AdjustItem { objectName: "pictureCropItem"; adjustment: actions.crop; drawerName: "crop"; text: "Framing and transform…" + (adjusted ? "  ●" : "") }
+            AdjustItem { objectName: "pictureColorItem"; adjustment: actions.color; drawerName: "color"; text: "Color and grading…" + (adjusted ? "  ●" : "") }
+            AdjustItem { objectName: "pictureEffectsItem"; adjustment: actions.effects; drawerName: "effects"; text: "Stylize and effects…" + (adjusted ? "  ●" : "") }
+        }
+        component SoundMenu: Menu {
+            title: "Sound"
+            width: Math.min(320, root.width - 24)
+            AdjustItem { objectName: "soundLevelsItem"; adjustment: actions.volume; drawerName: "volume"; text: "Levels and fades…" + (adjusted ? "  ●" : "") }
+            MenuItem { objectName: "soundMuteItem"; action: actions.toggleMute }
+            MenuSeparator {}
+            MenuItem { objectName: "soundEqItem"; action: actions.equalizer; text: actions.equalizer.text + "…" }
+            MenuItem { objectName: "soundNoiseItem"; action: actions.noiseReduction; text: actions.noiseReduction.text + "…" }
+            MenuItem { action: actions.normalizeAudio }
         }
         Menu {
             id: storylineMenu
             objectName: "storylineMenu"
+            width: Math.min(280, root.width - 24)
             property real at: 0
-            AdjustItem { adjustment: actions.color; drawerName: "color" }
-            AdjustItem { adjustment: actions.crop; drawerName: "crop" }
-            AdjustItem { adjustment: actions.volume; drawerName: "volume" }
-            AdjustItem { adjustment: actions.effects; drawerName: "effects" }
+            PictureMenu { objectName: "storylinePictureMenu" }
+            Instantiator {
+                model: session.info.hasAudio ? 1 : 0
+                delegate: SoundMenu { objectName: "storylineSoundMenu" }
+                onObjectAdded: (index, object) => storylineMenu.insertMenu(1, object)
+                onObjectRemoved: (index, object) => storylineMenu.removeMenu(object)
+            }
             AdjustItem { adjustment: actions.info; drawerName: "info" }
             MenuSeparator {}
-            MenuItem { objectName: "menuSplitHere"; text: "Split here"; onTriggered: { session.seek(storylineMenu.at); session.splitAtPlayhead() } }
-            MenuItem { action: actions.detachAudio }
+            MenuItem { objectName: "menuSplitHere"; text: "Split here"; onTriggered: { session.seek(storylineMenu.at); actions.split.trigger() } }
+            MenuItem { action: actions.detachAudio; visible: enabled; height: visible ? implicitHeight : 0 }
             ClipTimingMenu { at: storylineMenu.at }
             MenuSeparator {}
             MenuItem { objectName: "menuRemove"; action: actions.remove; onHighlightedChanged: highlighted ? session.previewDelete(true) : session.clearEditScope() }
             MenuItem { action: actions.lift; onHighlightedChanged: highlighted ? session.previewDelete(false) : session.clearEditScope() }
         }
-        // Video lane clips: picture adjustments, not the sound ones.
+        // Video lane clips expose sound only when their media actually has audio.
         Menu {
             id: overlayMenu
             objectName: "overlayMenu"
+            width: Math.min(280, root.width - 24)
             property real at: 0
-            AdjustItem { adjustment: actions.title; drawerName: "title"; visible: !!session.info.isTitle; height: visible ? implicitHeight : 0 }
-            AdjustItem { adjustment: actions.color; drawerName: "color" }
-            AdjustItem { adjustment: actions.crop; drawerName: "crop" }
-            AdjustItem { adjustment: actions.effects; drawerName: "effects" }
+            PictureMenu { objectName: "overlayPictureMenu" }
+            Instantiator {
+                model: session.info.hasAudio ? 1 : 0
+                delegate: SoundMenu { objectName: "overlaySoundMenu" }
+                onObjectAdded: (index, object) => overlayMenu.insertMenu(1, object)
+                onObjectRemoved: (index, object) => overlayMenu.removeMenu(object)
+            }
             AdjustItem { adjustment: actions.info; drawerName: "info" }
             MenuSeparator {}
-            MenuItem { text: "Split here"; onTriggered: { session.seek(overlayMenu.at); session.splitAtPlayhead() } }
+            MenuItem { text: "Split here"; onTriggered: { session.seek(overlayMenu.at); actions.split.trigger() } }
             ClipTimingMenu { at: overlayMenu.at }
             ConnectionItem {}
             MenuSeparator {}
             MenuItem { text: "Delete"; onTriggered: session.deleteSelected(false); onHighlightedChanged: highlighted ? session.previewDelete(false) : session.clearEditScope() }
         }
         Menu {
-            id: soundMenu
-            objectName: "soundMenu"
+            id: titleMenu
+            objectName: "titleMenu"
+            width: Math.min(280, root.width - 24)
             property real at: 0
-            AdjustItem { adjustment: actions.volume; drawerName: "volume" }
+            AdjustItem { objectName: "overlayTitleItem"; adjustment: actions.title; drawerName: "title" }
             AdjustItem { adjustment: actions.info; drawerName: "info" }
             MenuSeparator {}
-            MenuItem { text: "Split here"; onTriggered: { session.seek(soundMenu.at); session.splitAtPlayhead() } }
-            ClipTimingMenu { at: soundMenu.at }
+            MenuItem { text: "Split here"; onTriggered: { session.seek(titleMenu.at); actions.split.trigger() } }
+            ConnectionItem {}
+            MenuItem { text: "Delete"; onTriggered: session.deleteSelected(false); onHighlightedChanged: highlighted ? session.previewDelete(false) : session.clearEditScope() }
+        }
+        Menu {
+            id: soundMenu
+            objectName: "soundMenu"
+            width: Math.min(280, root.width - 24)
+            property real at: 0
+            SoundMenu { objectName: "laneSoundMenu" }
+            AdjustItem { adjustment: actions.info; drawerName: "info" }
+            MenuSeparator {}
+            MenuItem { text: "Split here"; onTriggered: { session.seek(soundMenu.at); actions.split.trigger() } }
             ConnectionItem {}
             MenuItem { text: "Delete"; onTriggered: session.deleteSelected(false); onHighlightedChanged: highlighted ? session.previewDelete(false) : session.clearEditScope() }
         }
@@ -905,8 +957,9 @@ Rectangle {
                                 session.selectClip(overlayItem.modelData.id)
                                 const at = overlayItem.modelData.start + mouse.x / timelinePanel.scale
                                 if (mouse.button === Qt.RightButton) {
-                                    overlayMenu.at = at
-                                    overlayMenu.popup()
+                                    const menu = session.info.isTitle ? titleMenu : overlayMenu
+                                    menu.at = at
+                                    menu.popup()
                                     return
                                 }
                                 pressAt = mapToItem(timelineScroll.contentItem, mouse.x, mouse.y)

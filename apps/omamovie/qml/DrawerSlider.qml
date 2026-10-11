@@ -18,6 +18,9 @@ ColumnLayout {
     }
     Slider {
         id: control
+        objectName: "drawerSlider:" + drawerSlider.label
+        Accessible.name: drawerSlider.label
+        Accessible.description: drawerSlider.readout
         Layout.fillWidth: true
         // Tab reaches it; while focused, the arrows and Home/End move it
         // instead of the playhead, and each key step is one command.
