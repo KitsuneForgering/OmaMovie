@@ -1,5 +1,8 @@
 # UI design — OmaMovie
 
+The [2026-10-10 UI/UX evaluation](ui-ux-evaluation-2026-10-10.md) records the current
+implementation, interaction checks and remaining gates against the product direction.
+
 > Product choices from 2026-10-02; evidence reviewed on 2026-10-03, with the decisions in §12. Based on `Docs/Research/imovie.md`
 > (principles), `movie-maker.md`, `capcut.md`, `davinci-resolve.md` and
 > `omarchy-integration.md`. Implementation rules remain in `CLAUDE.md` §11.
@@ -168,6 +171,9 @@ Shell state (2026-10-03), aligned with this document:
 ```
 
 - The library becomes a **sliding panel** over the viewer (shortcut `Ctrl+1`), closing once a clip is added.
+- The 1500 px docked/overlay breakpoint has a 100 px hysteresis band during window resizing:
+  enter the docked layout above 1550 px, return to the overlay layout below 1450 px.
+  This avoids repeated full-layout switches when a tiled window jitters near the breakpoint.
 - Adjustments bar labels become icons only (with a tooltip and shortcut).
 
 ### 2.3 Narrow window (< ~900 px)
@@ -292,7 +298,7 @@ from Final Cut, **tools** exist and are switched by key (§8.1).
 | Drag a clip edge | Ripple trim (magnetic) |
 | Drag a storyline clip | Moves it to the nearest cut; its gap closes and the neighbors make room (magnetic) |
 | Drag from the library | Pictures insert at the nearest storyline cut; sound lands on the lane under the pointer |
-| Right click a clip or ⋈ | Context menu with what applies to that item: its adjustments (open the drawer), split here, detach audio, delete; transition type and duration |
+| Right click a clip or ⋈ | One-level context tree: Picture has one entry per drawer (Framing and transform, Color and grading, Effects) for video; Sound offers levels/fades, mute, EQ, noise reduction, and clip peak normalization only when audio exists. Speed is offered on video clips, where retiming affects the picture; audio-only clips and titles have no Speed branch because their sound/time behavior is not implemented. Split, detach, connection and delete remain at the root. Titles have Edit text; cuts show only transition type and duration. Precise transform, grading, EQ and noise controls remain in the drawers and command palette. Add title belongs to the empty timeline menu, not a library item's menu. |
 | Double click a junction | **Cut editor**: both sides with the unused material dimmed; adjusts the cut and the audio split (J/L-cut) |
 | Drag an edge with the Trim tool (`T`) | Roll between neighbors |
 | Drag the middle with the Trim tool | Slip (changes the content, keeps position and duration) |
