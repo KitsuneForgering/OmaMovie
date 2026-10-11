@@ -243,6 +243,7 @@ void Session::newProject() {
     pause();
     for (oma::JobHandle& h : imports_) h.cancel();
     imports_.clear();
+    pending_import_callbacks_ = 0;
     library_.clear();
     waveforms_.clear();
     filter_previews_.clear();
@@ -382,7 +383,11 @@ void Session::autosave() {
         }
         const QString why = saved ? QString() : message(saved.error());
         QMetaObject::invokeMethod(this, [this, generation, marker, file, why] {
-            if (generation != generation_ || file != autosave_file_) return; // discarded meanwhile
+            if (generation != generation_ || file != autosave_file_) {
+                // Save or discard may have removed it while this worker was still writing.
+                autosave::remove(file.toStdString());
+                return;
+            }
             if (!why.isEmpty()) {
                 oma::log_warn(oma::Category::Project, "autosave failed: {}", why.toStdString());
                 return;
@@ -527,6 +532,7 @@ void Session::open(const QString& path) {
 
 void Session::importFile(const QString& path, bool append, std::optional<oma::project::MediaRef> known) {
     if (path.isEmpty()) return;
+    ++pending_import_callbacks_;
     if (!editing_) {
         editing_ = true;
         emit viewChanged();
@@ -575,6 +581,7 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
             }
             QMetaObject::invokeMethod(this, [this, generation, source, why, missing = std::move(missing)]() mutable {
                 if (generation != generation_) return;
+                --pending_import_callbacks_;
                 if (missing) {
                     addToLibrary(std::move(*missing), false);
                     fail(QStringLiteral("%1 is missing: find it with Locate… in the library").arg(QFileInfo(source).fileName()));
@@ -643,6 +650,7 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
                                         : QStringLiteral("it is shorter than the part the project uses");
                 QMetaObject::invokeMethod(this, [this, generation, source, why] {
                     if (generation != generation_) return;
+                    --pending_import_callbacks_;
                     setNotice(QStringLiteral("%1 cannot stand in for the missing file: %2").arg(QFileInfo(source).fileName(), why));
                 }, Qt::QueuedConnection);
                 return oma::Result<void>{};
@@ -678,6 +686,7 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
         }
         QMetaObject::invokeMethod(this, [this, generation, item = std::move(item), append, relinked]() mutable {
             if (generation != generation_) return;
+            --pending_import_callbacks_;
             if (relinked) {
                 oma::log_info(oma::Category::Project, "relinked {} to {}", item.name.toStdString(), item.path.toStdString());
                 setNotice(QStringLiteral("Found %1 in its new place").arg(item.name));
@@ -1746,6 +1755,7 @@ oma::project::Document Session::document() const {
 }
 
 bool Session::importing() const {
+    if (pending_import_callbacks_ > 0) return true;
     return std::ranges::any_of(imports_, [](const oma::JobHandle& h) {
         const auto st = h.state();
         return st == oma::JobState::Pending || st == oma::JobState::Running;
@@ -1757,10 +1767,7 @@ void Session::saveProject(const QUrl& url) {
     if (path.isEmpty()) return;
     if (!path.endsWith(QStringLiteral(".omamovie"))) path += QStringLiteral(".omamovie");
     // The library is complete only once its imports land (an opened project re-imports all).
-    if (std::ranges::any_of(imports_, [](const oma::JobHandle& h) {
-            const auto st = h.state();
-            return st == oma::JobState::Pending || st == oma::JobState::Running;
-        })) {
+    if (importing()) {
         setNotice(QStringLiteral("Wait for the import to finish, then save"));
         return;
     }

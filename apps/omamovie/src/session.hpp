@@ -672,6 +672,7 @@ private:
 
     // Imports in flight (cancelled by New project) and the viewer frame being decoded.
     std::vector<oma::JobHandle> imports_;
+    std::size_t pending_import_callbacks_ = 0; // worker completion precedes its queued UI update
     oma::JobHandle frame_job_;
     oma::JobHandle save_job_; // never cancelled: a save the user asked for completes
     oma::JobHandle export_job_;
