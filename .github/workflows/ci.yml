@@ -27,17 +27,7 @@ jobs:
         run: sudo sysctl -w vm.mmap_rnd_bits=28
 
       - name: Build and test
-        run: |
-          docker run --rm --cap-add SYS_PTRACE \
-            -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
-              pacman -Syu --noconfirm >/dev/null
-              scripts/deps.sh --install --noconfirm >/dev/null
-              # The app too (debug and release): CI otherwise never compiles apps/omamovie.
-              app=""
-              case "${{ matrix.build }}" in debug|release) app="build/${{ matrix.build }}/omamovie" ;; esac
-              make -j"$(nproc)" BUILD=${{ matrix.build }} CXX=${{ matrix.compiler }} \
-                test $app JUNIT_DIR=build/junit
-            '
+        run: bash scripts/ci-run.sh test '${{ matrix.compiler }}' '${{ matrix.build }}'
 
       - name: JUnit reports
         if: always()
@@ -53,14 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: clang-format and clang-tidy
-        run: |
-          docker run --rm -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
-            pacman -Syu --noconfirm >/dev/null
-            scripts/deps.sh --install --noconfirm >/dev/null
-            make format-check
-            make compdb
-            make tidy
-          '
+        run: bash scripts/ci-run.sh lint
 
   fuzz:
     name: parser fuzzing (libFuzzer, ASan/UBSan)
@@ -68,9 +51,4 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Fuzz the parsers of untrusted files
-        run: |
-          docker run --rm -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
-            pacman -Syu --noconfirm >/dev/null
-            scripts/deps.sh --install --noconfirm >/dev/null
-            make fuzz FUZZ_RUNS=500000
-          '
+        run: bash scripts/ci-run.sh fuzz

@@ -299,6 +299,10 @@ public:
     Q_INVOKABLE void deleteSelected(bool ripple);
     // Drags an edge by whole frames; the storyline stays magnetic (ripple, ui-design §7.3).
     Q_INVOKABLE void trimClip(double id, bool head, int frames);
+    // Precise one-frame edits reuse the timeline commands (one history entry per invocation).
+    Q_INVOKABLE void nudgeRoll(int frames);
+    Q_INVOKABLE void nudgeSlip(int frames);
+    Q_INVOKABLE void nudgeSlide(int frames);
     // Moves a clip on the lanes below the storyline by whole lanes (a new lane past the last)
     // and frames; the storyline reorders by editing instead.
     Q_INVOKABLE void moveClip(double id, int lanes, int frames);
@@ -589,6 +593,8 @@ private:
     std::uint64_t next_lut_ = 1;
     std::unordered_map<std::uint64_t, QString> lut_paths_; // LUT ID -> its .cube file
     QString project_path_;
+    // Preserve compatible fields this version cannot interpret across app saves and autosaves.
+    std::vector<std::pair<std::string, std::string>> project_unknown_;
     Marker saved_{false, 0, 0, 0, 0};
     void setSelectedCurve(int channel, std::vector<oma::timeline::CurvePoint> points);
     // The lift/gamma/gain wheels a CDL corresponds to (the inverse of setClipWheels).

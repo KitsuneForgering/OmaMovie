@@ -8,6 +8,9 @@
 #include "oma_test.hpp"
 
 void run_session_tests();
+void run_project_unknown_tests();
+void run_missing_lut_tests();
+void run_export_bundle_tests();
 
 int main(int argc, char* argv[]) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
@@ -21,5 +24,8 @@ int main(int argc, char* argv[]) {
     QGuiApplication app(qt_argc, argv);
     cest_init(argc, argv);
     run_session_tests();
+    run_project_unknown_tests();
+    run_missing_lut_tests();
+    run_export_bundle_tests();
     return cest_result();
 }

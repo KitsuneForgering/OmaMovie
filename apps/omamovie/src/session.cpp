@@ -1,6 +1,9 @@
 #include "session.hpp"
 
 #include "autosave.hpp"
+#include "caption_io.hpp"
+#include "export_requirements.hpp"
+#include "export_bundle.hpp"
 #include "exporter.hpp"
 #include "desktop_notify.hpp"
 
@@ -23,7 +26,6 @@
 #include <QDateTime>
 #include <QLocale>
 #include <QFile>
-#include <QSaveFile>
 #include <QStringList>
 #include <QFileInfo>
 #include <QMetaObject>
@@ -257,6 +259,7 @@ void Session::newProject() {
     luts_ = std::make_shared<const LutTables>();
     lut_paths_.clear();
     project_path_.clear();
+    project_unknown_.clear();
     saved_ = {false, 0, 0, 0, library_revision_};
     emit lutsChanged();
     primary_ = {};
@@ -1139,6 +1142,27 @@ void Session::trimClip(double id, bool head, int frames) {
     }
 }
 
+void Session::nudgeRoll(int frames) {
+    if (!editor_ || !selected_clip_.valid() || frames == 0) return;
+    const tl::Clip* clip = editor_->timeline().find_clip(selected_clip_);
+    if (clip == nullptr) return;
+    const tl::Timeline& t = editor_->timeline();
+    run(tl::edit::roll(selected_clip_, t.at(clip->end_ticks() +
+                                         static_cast<std::int64_t>(frames) * ticksPerFrame())));
+}
+
+void Session::nudgeSlip(int frames) {
+    if (!editor_ || !selected_clip_.valid() || frames == 0) return;
+    const tl::Timeline& t = editor_->timeline();
+    run(tl::edit::slip(selected_clip_, t.at(static_cast<std::int64_t>(frames) * ticksPerFrame())));
+}
+
+void Session::nudgeSlide(int frames) {
+    if (!editor_ || !selected_clip_.valid() || frames == 0) return;
+    const tl::Timeline& t = editor_->timeline();
+    run(tl::edit::slide(selected_clip_, t.at(static_cast<std::int64_t>(frames) * ticksPerFrame())));
+}
+
 void Session::moveClip(double id, int lanes, int frames) {
     if (!editor_ || (lanes == 0 && frames == 0)) return;
     const tl::ClipId clip(static_cast<std::uint64_t>(id));
@@ -1751,6 +1775,7 @@ oma::project::Document Session::document() const {
     }
     doc.canvas_width = canvas_width_;
     doc.canvas_height = canvas_height_;
+    doc.unknown = project_unknown_;
     return doc;
 }
 
@@ -1852,6 +1877,27 @@ void Session::exportMovie(const QUrl& url, const QString& profile) {
         setNotice(QStringLiteral("Some effects come from a newer OmaMovie: remove or disable them before exporting"));
         return;
     }
+    if (const auto missing = missing_export_lut(editor_->timeline(), *luts_)) {
+        const auto lut_path = lut_paths_.find(missing->value());
+        const QString name = lut_path == lut_paths_.end() ? QString::number(missing->value())
+                                                          : QFileInfo(lut_path->second).fileName();
+        setNotice(QStringLiteral("Cannot export: load the missing LUT %1 first").arg(name));
+        return;
+    }
+    // Replacing only the movie would leave an older .srt looking like its captions. We do not
+    // own an arbitrary sidecar already on disk, so ask the user to move it first.
+    const QString sidecar = QFileInfo(path).path() + QLatin1Char('/') +
+                            QFileInfo(path).completeBaseName() + QStringLiteral(".srt");
+    if ((QFileInfo::exists(path) && !QFileInfo(path).isFile()) ||
+        (QFileInfo::exists(sidecar) && !QFileInfo(sidecar).isFile())) {
+        setNotice(QStringLiteral("Export destination or caption path is not a regular file"));
+        return;
+    }
+    if (editor_->timeline().captions().empty() && QFileInfo::exists(sidecar)) {
+        setNotice(QStringLiteral("Move or remove %1 before exporting without captions")
+                      .arg(QFileInfo(sidecar).fileName()));
+        return;
+    }
     ExportRequest request{.timeline = editor_->timeline(), .paths = *paths_, .luts = *luts_,
                           .file = std::filesystem::path(path.toStdString()), .width = canvas_width_ & ~1U,
                           .height = canvas_height_ & ~1U, .frames = lastFrame() + 1, .ticks_per_frame = ticksPerFrame(),
@@ -1860,6 +1906,9 @@ void Session::exportMovie(const QUrl& url, const QString& profile) {
                                      : export_encoder_ == QLatin1String("software") ? ExportRequest::Encoder::Software
                                                                                     : ExportRequest::Encoder::Auto,
                           .profile = choice->profile};
+    const auto cues = caption_io::cues(request.timeline);
+    const std::optional<std::string> captions = cues.empty() ? std::nullopt
+                                                              : std::optional(oma::project::write_srt(cues));
     export_total_ = request.frames;
     export_done_.store(0);
     export_progress_ = 0;
@@ -1868,9 +1917,10 @@ void Session::exportMovie(const QUrl& url, const QString& profile) {
     // Progress crosses threads through one atomic; the UI polls it, so the job never waits on
     // the UI thread (CLAUDE.md §13).
     export_timer_.start(); // connected in the constructor
-    export_job_ = export_pool_.submit("export", [this, request = std::move(request), path](oma::JobContext& job) {
+    export_job_ = export_pool_.submit("export", [this, request = std::move(request), path,
+                                                 captions](oma::JobContext& job) mutable {
         ExportStats stats;
-        auto done = export_timeline(request, [this, &job](std::int64_t k, std::int64_t) {
+        auto done = export_movie_bundle(std::move(request), std::move(captions), [this, &job](std::int64_t k, std::int64_t) {
             export_done_.store(k);
             return !job.is_cancelled();
         }, &stats);
@@ -1886,12 +1936,8 @@ void Session::exportMovie(const QUrl& url, const QString& profile) {
                 setNotice(QStringLiteral("Cannot export %1: %2").arg(QFileInfo(path).fileName(), why));
             } else {
                 exported_file_ = path;
-                // Captions travel beside the movie as SubRip (ADR-0017).
-                if (editor_ && !editor_->timeline().captions().empty()) {
-                    exportCaptions(QUrl::fromLocalFile(QFileInfo(path).path() + QLatin1Char('/') +
-                                                       QFileInfo(path).completeBaseName() + QStringLiteral(".srt")));
-                }
-                setNotice(QStringLiteral("Exported %1 · %2").arg(QFileInfo(path).fileName(), QString::fromStdString(stats.encoder)));
+                setNotice(QStringLiteral("Exported %1 · %2").arg(QFileInfo(path).fileName(),
+                                                                  QString::fromStdString(stats.encoder)));
                 // The user may have gone elsewhere during a long export (M7: notification).
                 if (QGuiApplication::applicationState() != Qt::ApplicationActive && notifications_) {
                     notify_desktop(QStringLiteral("Export finished"), QFileInfo(path).fileName());
@@ -1935,6 +1981,7 @@ void Session::openProject(const QUrl& url) {
 
 void Session::applyProject(oma::project::Document doc, const QString& path) {
     newProject();
+    project_unknown_ = std::move(doc.unknown);
     const bool restoring = !restoring_.isEmpty() && path == restoring_;
     if (restoring) {
         // A recovered autosave: the project it belonged to, with everything unsaved.
@@ -3075,18 +3122,8 @@ void Session::importCaptions(const QUrl& url) {
 void Session::exportCaptions(const QUrl& url) {
     if (!editor_) return;
     const QString path = url.toLocalFile();
-    std::vector<oma::project::Cue> cues;
-    for (const tl::Caption& c : editor_->timeline().captions()) {
-        const auto ms = [](const oma::RationalTime& time) {
-            return oma::rescale(time.value(), time.timebase(), oma::Rational::literal(1, 1000), oma::Rounding::Nearest).value_or(0);
-        };
-        cues.push_back({.start_ms = ms(c.start), .end_ms = ms(c.start) + std::max<std::int64_t>(1, ms(c.duration)), .text = c.text});
-    }
-    const std::string text = path.endsWith(QStringLiteral(".vtt"), Qt::CaseInsensitive) ? oma::project::write_vtt(cues)
-                                                                                         : oma::project::write_srt(cues);
-    QSaveFile out(path);
-    if (!out.open(QIODevice::WriteOnly) || out.write(text.data(), static_cast<qint64>(text.size())) != static_cast<qint64>(text.size()) ||
-        !out.commit()) {
+    const auto cues = caption_io::cues(editor_->timeline());
+    if (!caption_io::write(path, cues)) {
         setNotice(QStringLiteral("Cannot write %1").arg(QFileInfo(path).fileName()));
         return;
     }

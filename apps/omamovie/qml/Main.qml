@@ -233,6 +233,36 @@ ApplicationWindow {
             text: "Split at the playhead"; keys: "Ctrl+B"; enabled: actions.media
             onTriggered: session.splitAtPlayhead()
         }
+        property OmaAction rollEarlier: OmaAction {
+            text: "Roll selected cut one frame earlier"; keys: "Alt+Shift+Left"
+            enabled: actions.editing && session.selectedClip > 0
+            onTriggered: session.nudgeRoll(-1)
+        }
+        property OmaAction rollLater: OmaAction {
+            text: "Roll selected cut one frame later"; keys: "Alt+Shift+Right"
+            enabled: actions.rollEarlier.enabled
+            onTriggered: session.nudgeRoll(1)
+        }
+        property OmaAction slipEarlier: OmaAction {
+            text: "Slip selected clip one source frame earlier"; keys: "Ctrl+Alt+Left"
+            enabled: actions.editing && session.selectedClip > 0
+            onTriggered: session.nudgeSlip(-1)
+        }
+        property OmaAction slipLater: OmaAction {
+            text: "Slip selected clip one source frame later"; keys: "Ctrl+Alt+Right"
+            enabled: actions.slipEarlier.enabled
+            onTriggered: session.nudgeSlip(1)
+        }
+        property OmaAction slideEarlier: OmaAction {
+            text: "Slide selected clip one frame earlier"; keys: "Ctrl+Alt+Shift+Left"
+            enabled: actions.editing && session.selectedClip > 0
+            onTriggered: session.nudgeSlide(-1)
+        }
+        property OmaAction slideLater: OmaAction {
+            text: "Slide selected clip one frame later"; keys: "Ctrl+Alt+Shift+Right"
+            enabled: actions.slideEarlier.enabled
+            onTriggered: session.nudgeSlide(1)
+        }
         property OmaAction speedDouble: OmaAction {
             text: "Set video speed to 2x"; enabled: actions.videoClip
             onTriggered: session.setClipSpeed(2, 1)

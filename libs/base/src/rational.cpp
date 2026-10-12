@@ -46,34 +46,5 @@ std::strong_ordering operator<=>(Rational a, Rational b) noexcept {
                  : (c > 0 ? std::strong_ordering::greater : std::strong_ordering::equal);
 }
 
-Result<std::int64_t> rescale(std::int64_t value, Rational from, Rational to, Rounding rounding) {
-    using detail::i128;
-    if (!from.is_positive() || !to.is_positive()) {
-        return make_error(
-            ErrorCode::InvalidArgument, Category::Base, "rescale units must be positive",
-            std::format("{}/{} -> {}/{}", from.num(), from.den(), to.num(), to.den()));
-    }
-
-    // value * (from.num * to.den) / (from.den * to.num); each factor fits in 126 bits.
-    i128 num = static_cast<i128>(from.num()) * to.den();
-    i128 den = static_cast<i128>(from.den()) * to.num();
-    const i128 g = detail::gcd128(num, den);
-    num /= g;
-    den /= g;
-
-    const auto scaled = detail::mul_checked(value, num);
-    if (!scaled) {
-        return make_error(
-            ErrorCode::Overflow, Category::Base, "rescale overflowed 128 bits",
-            std::format("{} * {}/{} -> {}/{}", value, from.num(), from.den(), to.num(), to.den()));
-    }
-    const i128 result = detail::div_round(*scaled, den, rounding);
-    if (!detail::fits_int64(result)) {
-        return make_error(
-            ErrorCode::Overflow, Category::Base, "rescaled value does not fit in int64",
-            std::format("{} * {}/{} -> {}/{}", value, from.num(), from.den(), to.num(), to.den()));
-    }
-    return static_cast<std::int64_t>(result);
-}
 
 } // namespace oma

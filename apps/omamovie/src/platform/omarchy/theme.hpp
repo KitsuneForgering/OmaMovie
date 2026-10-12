@@ -2,18 +2,16 @@
 
 // QObject/QString first: GCC 16 rejects QChar's definition after QByteArray's headers probed it
 // as incomplete (-Wsfinae-incomplete).
-#include <QObject>
-#include <QString>
-#include <QByteArray>
+#include "palette.hpp"
 #include <QFileSystemWatcher>
 #include <QFont>
+#include <QObject>
 #include <QProcess>
+#include <QString>
 #include <QTimer>
 #include <QVariantMap>
 
-// The active Omarchy palette and font (Docs/Research/omarchy-integration.md §3), the one place
-// the app reads them. Both come from the installed scripts (`omarchy-theme-color --all`,
-// `omarchy-font-current`), run asynchronously so the UI thread never waits on them, and are
+// The active Omarchy palette and font come from the installed scripts asynchronously, and are
 // re-read when the theme state or fontconfig changes.
 //
 // `omarchy-theme-set` deletes the current theme directory before moving the next one in, so
@@ -21,14 +19,6 @@
 // Outside Omarchy (no scripts, no state directory) the built-in palette and the system's
 // monospace font stay.
 namespace omarchy {
-
-// The palette keys the UI uses, each with its fallback value (a dark neutral palette).
-[[nodiscard]] QVariantMap fallback_palette();
-
-// `omarchy-theme-color --all` output (key<TAB>value lines) applied over `base`: only known keys
-// with a #rgb/#rrggbb value (or `mode`), so a partial or malformed palette changes nothing
-// else. `accepted` reports whether any value was accepted.
-[[nodiscard]] QVariantMap merge_palette(const QVariantMap& base, const QByteArray& output, bool* accepted);
 
 class Theme : public QObject {
     Q_OBJECT

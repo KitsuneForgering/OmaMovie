@@ -173,10 +173,8 @@ oma::Result<void> export_timeline(const ExportRequest& request,
             return std::unexpected(next.error());
         const std::int64_t count = next->value() - sample;
         sound.assign(static_cast<std::size_t>(count) * 2, 0.0F);
-        if (auto r = audio.render(sound, sample); !r) {
-            oma::log_warn(oma::Category::Encode, "export audio: {}",
-                          r.error().summary()); // silent there
-        }
+        if (auto r = audio.render(sound, sample); !r)
+            return std::unexpected(r.error());
         if (auto w = (*writer)->write_audio(sound); !w)
             return w;
         lap(st.audio);

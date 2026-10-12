@@ -811,6 +811,18 @@ Rectangle {
             MenuItem { objectName: "soundNoiseItem"; action: actions.noiseReduction; text: actions.noiseReduction.text + "…" }
             MenuItem { action: actions.normalizeAudio }
         }
+        component PreciseEditMenu: Menu {
+            title: "Precise edit"
+            width: Math.min(330, root.width - 24)
+            MenuItem { action: actions.rollEarlier }
+            MenuItem { action: actions.rollLater }
+            MenuSeparator {}
+            MenuItem { action: actions.slipEarlier }
+            MenuItem { action: actions.slipLater }
+            MenuSeparator {}
+            MenuItem { action: actions.slideEarlier }
+            MenuItem { action: actions.slideLater }
+        }
         Menu {
             id: storylineMenu
             objectName: "storylineMenu"
@@ -826,6 +838,7 @@ Rectangle {
             AdjustItem { adjustment: actions.info; drawerName: "info" }
             MenuSeparator {}
             MenuItem { objectName: "menuSplitHere"; text: "Split here"; onTriggered: { session.seek(storylineMenu.at); actions.split.trigger() } }
+            PreciseEditMenu {}
             MenuItem { action: actions.detachAudio; visible: enabled; height: visible ? implicitHeight : 0 }
             ClipTimingMenu { at: storylineMenu.at }
             MenuSeparator {}

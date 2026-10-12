@@ -3,6 +3,7 @@
 #include "oma/base/error.hpp"
 #include "oma/base/time.hpp"
 #include "oma/media/probe.hpp"
+#include "oma/media/video_decoder_options.hpp"
 #include "oma/media/video_frame.hpp"
 
 #include <filesystem>
@@ -10,22 +11,7 @@
 #include <optional>
 #include <vector>
 
-namespace oma::gpu {
-class Device;
-}
-
 namespace oma::media {
-
-struct VideoDecoderOptions {
-    // OmaMovie's device; it must outlive the decoder. Without it only software decode is possible.
-    const gpu::Device* device = nullptr;
-    // Paths to try, in order. The default is the policy measured in S1/S2: VA-API imported into
-    // Vulkan, then Vulkan Video, then software. Leave Software out to forbid the fallback.
-    std::vector<DecodePath> paths = {DecodePath::VaapiToVulkan, DecodePath::VulkanVideo,
-                                     DecodePath::Software};
-    std::optional<int> stream; // stream index; default: the best video stream
-    int threads = 0;           // software decode threads, 0 = automatic
-};
 
 // Decodes one video stream of a file in presentation order. Not thread-safe: one thread drives a
 // decoder (the playback scheduler owns one per clip).

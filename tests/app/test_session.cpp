@@ -1,8 +1,10 @@
 #include "session.hpp"
+#include "../playback/playback_test.hpp"
 
 #include "oma/media/probe.hpp"
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
@@ -15,6 +17,8 @@
 #include "oma_test.hpp"
 
 namespace {
+
+namespace tl = oma::timeline;
 
 // Runs the event loop until `done` holds or `ms` pass (imports finish on job workers and
 // report back through queued calls).
@@ -61,6 +65,100 @@ bool source_range_adds_exactly() {
     const bool undone = s.clips().size() == 1;
     const bool shown = std::abs(s.media().value(0).toMap().value("markIn").toDouble() - 0.2) < 1e-9;
     return exact && undone && shown;
+}
+
+bool precise_nudges_keep_one_edit_per_step() {
+    Session s;
+    if (!load_clip(s))
+        return false;
+    const double first = s.clips().front().toMap().value("id").toDouble();
+    s.trimClip(first, false, -5); // leave five source frames as the left clip's handle
+    s.openSource(0);
+    s.seekSource(5.0 / 30.0);
+    s.markIn();
+    s.seekSource(24.0 / 30.0);
+    s.markOut();
+    s.appendSelected();
+    if (s.clips().size() != 2)
+        return false;
+    const double second = s.clips().at(1).toMap().value("id").toDouble();
+    const double cut = s.clips().at(1).toMap().value("start").toDouble();
+    s.selectClip(first);
+    s.nudgeRoll(-1);
+    const bool rolled = std::abs(s.clips().at(1).toMap().value("start").toDouble() -
+                                 (cut - 1.0 / 30.0)) < 1e-9;
+    s.undo();
+    const bool roll_undo = std::abs(s.clips().at(1).toMap().value("start").toDouble() - cut) < 1e-9;
+    s.selectClip(second);
+    const double source = s.clips().at(1).toMap().value("sourceIn").toDouble();
+    s.nudgeSlip(1);
+    const bool slipped = std::abs(s.clips().at(1).toMap().value("sourceIn").toDouble() -
+                                  (source + 1.0 / 30.0)) < 1e-9 &&
+                         std::abs(s.clips().at(1).toMap().value("start").toDouble() - cut) < 1e-9;
+    s.undo();
+    const bool slip_undo = std::abs(s.clips().at(1).toMap().value("sourceIn").toDouble() - source) < 1e-9;
+    s.nudgeSlide(1);
+    const bool slid = std::abs(s.clips().at(1).toMap().value("start").toDouble() -
+                               (cut + 1.0 / 30.0)) < 1e-9;
+    s.undo();
+    return rolled && roll_undo && slipped && slip_undo && slid &&
+           std::abs(s.clips().at(1).toMap().value("start").toDouble() - cut) < 1e-9;
+}
+
+bool source_range_works_for_overwrite_and_connect() {
+    Session s;
+    if (!load_clip(s))
+        return false;
+    s.openSource(0);
+    s.seekSource(0.2);
+    s.markIn();
+    s.seekSource(0.5);
+    s.markOut(); // [6, 16): ten source frames
+    s.seek(0);  // sequence playhead; source marks remain on the library item
+    s.overwriteSelected();
+    const QVariantList overwritten = s.clips();
+    if (overwritten.isEmpty() ||
+        std::abs(overwritten.front().toMap().value("duration").toDouble() - 10.0 / 30.0) > 1e-9 ||
+        std::abs(overwritten.front().toMap().value("sourceIn").toDouble() - 0.2) > 1e-9)
+        return false;
+    s.seek(0.5);
+    s.connectSelected();
+    const QVariantList tracks = s.videoTracks();
+    if (tracks.isEmpty())
+        return false;
+    const QVariantList connected = tracks.front().toMap().value("clips").toList();
+    return connected.size() == 1 &&
+           std::abs(connected.front().toMap().value("duration").toDouble() - 10.0 / 30.0) < 1e-9 &&
+           std::abs(connected.front().toMap().value("sourceIn").toDouble() - 0.2) < 1e-9;
+}
+
+bool marked_source_range_survives_project_reopen() {
+    QTemporaryDir dir;
+    if (!dir.isValid())
+        return false;
+    const QString path = dir.filePath(QStringLiteral("marked.omamovie"));
+    Session original;
+    if (!load_clip(original))
+        return false;
+    original.openSource(0);
+    original.seekSource(0.2);
+    original.markIn();
+    original.seekSource(0.5);
+    original.markOut();
+    original.appendSelected();
+    original.saveProject(QUrl::fromLocalFile(path));
+    if (!wait_until([&] { return original.projectPath() == path && !original.dirty(); }))
+        return false;
+
+    Session reopened;
+    reopened.setSilent(true);
+    reopened.openProject(QUrl::fromLocalFile(path));
+    if (!wait_until([&] { return reopened.projectPath() == path &&
+                                  reopened.clips().size() == 2 && !reopened.importsPending(); }))
+        return false;
+    const QVariantMap clip = reopened.clips().at(1).toMap();
+    return std::abs(clip.value("sourceIn").toDouble() - 0.2) < 1e-9 &&
+           std::abs(clip.value("duration").toDouble() - 10.0 / 30.0) < 1e-9;
 }
 
 // Marks that leave nothing (out at or before in) never produce an empty clip.
@@ -242,12 +340,160 @@ bool exports_other_formats() {
     return true;
 }
 
+bool export_refuses_broken_audio() {
+    namespace pt = playback_test;
+    pt::Sequence seq = pt::make_sequence();
+    if (!pt::place(seq, 0, 0, 1600).valid())
+        return false;
+    QTemporaryDir dir;
+    const QString file = dir.filePath(QStringLiteral("existing.mp4"));
+    QFile previous(file);
+    if (!previous.open(QIODevice::WriteOnly) || previous.write("previous") != 8)
+        return false;
+    previous.close();
+    ExportRequest request{.timeline = seq.editor.timeline(),
+                          .paths = {{pt::kTone.value(), dir.filePath(QStringLiteral("missing.wav")).toStdString()}},
+                          .luts = {},
+                          .file = file.toStdString(),
+                          .width = 32,
+                          .height = 32,
+                          .frames = 1,
+                          .ticks_per_frame = 1600,
+                          .audio_rate = pt::rate(),
+                          .encoder = ExportRequest::Encoder::Software};
+    const auto result = export_timeline(request, [](std::int64_t, std::int64_t) { return true; });
+    if (result || !previous.open(QIODevice::ReadOnly))
+        return false;
+    return previous.readAll() == "previous" &&
+           QDir(dir.path()).entryList(QDir::Files).size() == 1;
+}
+
+bool export_refuses_audio_failure_after_good_block() {
+    namespace pt = playback_test;
+    pt::Sequence seq = pt::make_sequence();
+    if (!pt::place(seq, 0, 0, 1600).valid())
+        return false;
+    const auto second = seq.editor.new_clip_id();
+    const tl::edit::ClipSource source{.media = pt::kNoisy,
+                                      .source_in = pt::s(0),
+                                      .duration = pt::s(1600),
+                                      .time_map = {},
+                                      .video = {},
+                                      .audio = {}};
+    if (!seq.editor.execute(tl::edit::overwrite(seq.audio, second, pt::s(1600), source)))
+        return false;
+    QTemporaryDir dir;
+    const QString file = dir.filePath(QStringLiteral("existing.mp4"));
+    QFile previous(file);
+    if (!previous.open(QIODevice::WriteOnly) || previous.write("previous") != 8)
+        return false;
+    previous.close();
+    ExportRequest request{.timeline = seq.editor.timeline(),
+                          .paths = {{pt::kTone.value(), pt::fixture("tone_44100.wav").string()},
+                                    {pt::kNoisy.value(), dir.filePath(QStringLiteral("missing.wav")).toStdString()}},
+                          .luts = {},
+                          .file = file.toStdString(),
+                          .width = 32,
+                          .height = 32,
+                          .frames = 2,
+                          .ticks_per_frame = 1600,
+                          .audio_rate = pt::rate(),
+                          .encoder = ExportRequest::Encoder::Software};
+    ExportStats stats;
+    const auto result = export_timeline(request, [](std::int64_t, std::int64_t) { return true; }, &stats);
+    if (result || !previous.open(QIODevice::ReadOnly))
+        return false;
+    return stats.frames == 1 && previous.readAll() == "previous" &&
+           QDir(dir.path()).entryList(QDir::Files).size() == 1;
+}
+
+bool export_allows_intentional_silence() {
+    namespace pt = playback_test;
+    QTemporaryDir dir;
+    const auto render = [&](pt::Sequence& seq, const QString& name) {
+        ExportRequest request{.timeline = seq.editor.timeline(),
+                              .paths = {},
+                              .luts = {},
+                              .file = dir.filePath(name).toStdString(),
+                              .width = 32,
+                              .height = 32,
+                              .frames = 1,
+                              .ticks_per_frame = 1600,
+                              .audio_rate = pt::rate(),
+                              .encoder = ExportRequest::Encoder::Software};
+        const auto result = export_timeline(request, [](std::int64_t, std::int64_t) { return true; });
+        return result.has_value() && QFileInfo::exists(dir.filePath(name));
+    };
+    pt::Sequence empty = pt::make_sequence();
+    if (!render(empty, QStringLiteral("empty.mp4")))
+        return false;
+    pt::Sequence muted = pt::make_sequence();
+    tl::AudioProperties properties;
+    properties.muted = true;
+    if (!pt::place(muted, 0, 0, 1600, properties).valid() ||
+        !render(muted, QStringLiteral("muted.mp4")))
+        return false;
+    pt::Sequence retimed = pt::make_sequence();
+    const auto clip = pt::place(retimed, 0, 0, 3200);
+    return clip.valid() &&
+           retimed.editor.execute(tl::edit::set_speed(clip, pt::q(2, 1), false)).has_value() &&
+           render(retimed, QStringLiteral("retimed.mp4"));
+}
+
+bool export_captions_use_start_snapshot() {
+    Session s;
+    if (!load_clip(s))
+        return false;
+    s.seek(0);
+    const double caption = s.addCaption();
+    if (caption <= 0)
+        return false;
+    s.setCaptionText(caption, QStringLiteral("Before export"));
+    QTemporaryDir dir;
+    const QString file = dir.filePath(QStringLiteral("movie.mp4"));
+    s.setExportEncoder(QStringLiteral("software"));
+    s.exportMovie(QUrl::fromLocalFile(file), QStringLiteral("mp4-h264"));
+    s.setCaptionText(caption, QStringLiteral("After export started"));
+    if (!wait_until([&] { return s.exportProgress() < 0; }, 60000) || s.exportedFile() != file)
+        return false;
+    QFile sidecar(dir.filePath(QStringLiteral("movie.srt")));
+    return sidecar.open(QIODevice::ReadOnly) &&
+           sidecar.readAll().contains("Before export") &&
+           s.captionAt(0).contains(QStringLiteral("After export started"));
+}
+
+bool export_without_captions_refuses_stale_sidecar() {
+    Session s;
+    if (!load_clip(s))
+        return false;
+    QTemporaryDir dir;
+    const QString movie = dir.filePath(QStringLiteral("movie.mp4"));
+    QFile existing(movie);
+    QFile sidecar(dir.filePath(QStringLiteral("movie.srt")));
+    if (!existing.open(QIODevice::WriteOnly) || existing.write("old movie") != 9 ||
+        !sidecar.open(QIODevice::WriteOnly) || sidecar.write("old captions") != 12)
+        return false;
+    existing.close();
+    sidecar.close();
+    s.exportMovie(QUrl::fromLocalFile(movie), QStringLiteral("mp4-h264"));
+    if (!existing.open(QIODevice::ReadOnly) || !sidecar.open(QIODevice::ReadOnly))
+        return false;
+    return s.exportProgress() < 0 && s.notice().contains(QStringLiteral("movie.srt")) &&
+           existing.readAll() == "old movie" && sidecar.readAll() == "old captions";
+}
+
 } // namespace
 
 void run_session_tests() {
     describe("Session (headless)", {
         it("adds exactly the marked source range",
            { expect(source_range_adds_exactly()).toBeTruthy(); });
+        it("nudges roll, slip and slide with one undo step each",
+           { expect(precise_nudges_keep_one_edit_per_step()).toBeTruthy(); });
+        it("uses a marked source range for overwrite and connect",
+           { expect(source_range_works_for_overwrite_and_connect()).toBeTruthy(); });
+        it("preserves the placed source range after saving and reopening",
+           { expect(marked_source_range_survives_project_reopen()).toBeTruthy(); });
         it("drops an out mark that an in mark passes",
            { expect(reversed_marks_reset()).toBeTruthy(); });
         it("keeps the source and sequence playheads apart",
@@ -259,6 +505,16 @@ void run_session_tests() {
            { expect(canvas_aspect_changes()).toBeTruthy(); });
         it("exports other selected container and codec profiles",
            { expect(exports_other_formats()).toBeTruthy(); });
+        it("leaves an existing movie untouched when audio decode fails",
+           { expect(export_refuses_broken_audio()).toBeTruthy(); });
+        it("discards a partial export after a later audio source fails",
+           { expect(export_refuses_audio_failure_after_good_block()).toBeTruthy(); });
+        it("exports an audio-free, muted or explicitly silent retimed timeline",
+           { expect(export_allows_intentional_silence()).toBeTruthy(); });
+        it("exports captions from the movie's start snapshot",
+           { expect(export_captions_use_start_snapshot()).toBeTruthy(); });
+        it("protects an existing sidecar when the new movie has no captions",
+           { expect(export_without_captions_refuses_stale_sidecar()).toBeTruthy(); });
         it("adds, imports and exports captions on the frame grid",
            { expect(captions_round_trip()).toBeTruthy(); });
         it("keys opacity and volume at the playhead", { expect(scalar_keys()).toBeTruthy(); });

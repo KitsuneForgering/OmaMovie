@@ -258,6 +258,36 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "OmaMovie QML did not create the preview window\n");
         return 1;
     }
+    // Opt-in presentation trace for correlating a compositor recording with Wayland resizes.
+    // Do not call grabWindow() here: it adds a readback and has disturbed Vulkan validation.
+    if (qEnvironmentVariableIsSet("OMA_PRESENT_TRACE")) {
+        const auto start = std::chrono::steady_clock::now();
+        auto trace_lock = std::make_shared<std::mutex>();
+        const auto trace = [start, trace_lock](const char* event, int value = -1) {
+            const auto us = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - start).count();
+            const std::scoped_lock lock(*trace_lock);
+            std::fprintf(stderr, "present-trace us=%lld event=%s value=%d\n",
+                         static_cast<long long>(us), event, value);
+        };
+        QObject::connect(window, &QWindow::widthChanged, window,
+                         [trace](int width) { trace("width", width); });
+        QObject::connect(window, &QWindow::heightChanged, window,
+                         [trace](int height) { trace("height", height); });
+        QObject::connect(window, &QWindow::visibilityChanged, window,
+                         [trace](QWindow::Visibility state) { trace("visibility", static_cast<int>(state)); });
+        QObject::connect(window, &QQuickWindow::frameSwapped, window,
+                         [trace] { trace("frame-swapped"); }, Qt::DirectConnection);
+        QObject::connect(window, &QQuickWindow::sceneGraphInitialized, window,
+                         [trace] { trace("scene-graph-initialized"); }, Qt::DirectConnection);
+        QObject::connect(window, &QQuickWindow::sceneGraphInvalidated, window,
+                         [trace] { trace("scene-graph-invalidated"); }, Qt::DirectConnection);
+        QObject::connect(window, &QQuickWindow::sceneGraphError, window,
+                         [trace](QQuickWindow::SceneGraphError error, const QString& message) {
+                             trace("scene-graph-error", static_cast<int>(error));
+                             std::fprintf(stderr, "present-trace detail=%s\n", message.toUtf8().constData());
+                         });
+    }
     preview->setDevice(device.get());
     // Settings (M6): the decode path is fixed for the run; quality and recordings apply live.
     const QString decode = app_settings.startupDecodePath();
