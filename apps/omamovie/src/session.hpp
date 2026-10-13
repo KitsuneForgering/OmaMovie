@@ -665,6 +665,15 @@ private:
     // it through the viewer's own path. -1: the sequence is shown.
     int source_index_ = -1;
     QVariantMap edit_scope_;
+    // The trim whose consequences edit_scope_ shows, to skip identical drag steps.
+    struct TrimPreview {
+        double clip;
+        bool head;
+        int frames;
+        std::uint64_t revision;
+        bool operator==(const TrimPreview&) const = default;
+    };
+    std::optional<TrimPreview> trim_preview_;
     // The commands behind Delete/Lift and trimming, shared by the edits and their previews.
     [[nodiscard]] std::unique_ptr<oma::timeline::Command> deleteCommand(bool ripple) const;
     [[nodiscard]] std::unique_ptr<oma::timeline::Command> trimCommand(oma::timeline::ClipId clip, bool head, int frames) const;

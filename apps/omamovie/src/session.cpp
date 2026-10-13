@@ -825,6 +825,7 @@ bool Session::ensureSequence(const LibraryItem& first) {
         return false;
     }
     editor_.emplace(std::move(*timeline));
+    trim_preview_.reset(); // a new editor restarts its revision count
     if (first.width > 0 && first.height > 0) {
         // Even sizes keep 4:2:0 exports possible later.
         canvas_width_ = (first.width + 1) & ~1U;
@@ -1113,10 +1114,17 @@ void Session::deleteSelected(bool ripple) {
 void Session::previewDelete(bool ripple) { previewCommand(deleteCommand(ripple)); }
 
 void Session::previewTrim(double id, bool head, int frames) {
+    // A drag sends several pointer events per snapped frame; each preview simulates the edit on
+    // a copy of the timeline, so repeat it only when the result can differ.
+    const TrimPreview key{.clip = id, .head = head, .frames = frames,
+                          .revision = editor_ ? editor_->revision() : 0};
+    if (trim_preview_ == key) return;
     previewCommand(frames == 0 ? nullptr : trimCommand(tl::ClipId(static_cast<std::uint64_t>(id)), head, frames));
+    trim_preview_ = key;
 }
 
 void Session::clearEditScope() {
+    trim_preview_.reset();
     if (edit_scope_.isEmpty()) return;
     edit_scope_.clear();
     emit editScopeChanged();
@@ -2038,6 +2046,7 @@ void Session::applyProject(oma::project::Document doc, const QString& path) {
     canvas_height_ = doc.canvas_height;
     if (doc.timeline) {
         editor_.emplace(std::move(*doc.timeline));
+        trim_preview_.reset(); // a new editor restarts its revision count
         primary_ = doc.storyline;
         // The saved canvas, as state of the timeline (ADR-0010), not an edit to undo.
         (void)editor_->execute(tl::edit::set_canvas(canvas_width_, canvas_height_));
