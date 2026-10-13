@@ -398,6 +398,10 @@ public:
     Q_INVOKABLE void resetClipFraming();
     // Lays out the selected clip above the storyline: 0 picture-in-picture, 1 split screen.
     Q_INVOKABLE void applyLayout(int preset);
+    // Built-in effect presets [{id, name}] and applying one to the selected clip (one edit).
+    Q_PROPERTY(QVariantList effectPresets READ effectPresets CONSTANT)
+    [[nodiscard]] QVariantList effectPresets() const;
+    Q_INVOKABLE void applyEffectPreset(const QString& id);
     // The transition into a storyline clip from the clip before it: a TransitionKind, or -1 to
     // remove it, lasting `seconds` (snapped to whole frames).
     Q_INVOKABLE void setTransition(double clip, int kind, double seconds);

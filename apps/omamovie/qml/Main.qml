@@ -776,6 +776,7 @@ ApplicationWindow {
                                 font.bold: true
                                 elide: Text.ElideRight
                             }
+                            EffectPresets { visible: root.drawer === "effects" }
                             OmaButton { objectName: "closeDrawer"; action: actions.closeDrawer; text: "Done" }
                         }
                         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
