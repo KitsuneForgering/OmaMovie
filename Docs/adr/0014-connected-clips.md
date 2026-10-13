@@ -55,3 +55,5 @@ first instant is attached to the instant where the primary shows that source pos
   surprise; the M6 comparison against manual grouping decides whether anchors stay.
 - There are no locked tracks yet; when they exist, an edit that would move a dependent on a
   locked track fails like an overlap.
+- Detached sound (2026-10-12) is connected to its picture at the same source frame, so a slide
+  or ripple keeps it in sync; before, it stayed put and an exported slide was 2 frames late.
