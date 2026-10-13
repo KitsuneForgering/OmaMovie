@@ -26,6 +26,8 @@ Rectangle {
         Field { label: "DURATION"; value: root.timecode(session.info.duration || 0) }
         Field { label: "FORMAT"; value: (session.info.codec || "") + "  " + (session.info.resolution || "") + "  " + (session.info.frameRate || "") }
         Field { label: "DECODE PATH"; value: session.info.decodePath || "" }
+        MediaColorChoice { range: false }
+        MediaColorChoice { range: true }
     }
     DopeSheet {
         id: dopeSheet

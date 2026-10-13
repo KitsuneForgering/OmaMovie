@@ -2818,6 +2818,10 @@ QVariantMap Session::info() const {
             out.insert("noise", static_cast<double>(c->audio.noise.amount));
             const tl::Track* track = editor_->timeline().track_of(c->id);
             out.insert("hasVideo", track != nullptr && track->kind == tl::TrackKind::Video);
+            if (const tl::MediaInfo* m = editor_->timeline().find_media(c->media); m != nullptr) {
+                out.insert("colorMatrix", static_cast<int>(m->color_matrix)); // ADR-0019
+                out.insert("colorRange", static_cast<int>(m->color_range));
+            }
             const tl::VideoProperties& v = c->video;
             out.insert("exposure", v.color.exposure);
             out.insert("contrast", v.color.contrast);
