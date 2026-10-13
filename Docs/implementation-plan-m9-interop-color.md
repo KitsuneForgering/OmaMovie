@@ -1,6 +1,6 @@
 ### M9 — Interop and color
 
-- [ ] `libs/project-ir` + importer framework + import report + `Docs/interop.md` with levels per format.
+- [ ] `libs/project-ir` + importer framework + import report + `Docs/interop.md` with levels per format. *Started (2026-10-13)*: ADR-0008 accepted (IR shape; OTIO read by an own reader on simdjson, no new dependency). `libs/project-ir` holds the IR (tracks of clips, gaps and transitions in source time, opaque objects for anything unrepresented), `ir::validate` (unique media ids, known media, clips inside their media compared exactly across timebases, no negative durations; `tests/project-ir`) and the import report with §16.5 levels; `Docs/interop.md` lists every format at no proven level. Open: `libs/importers` with the OTIO reader, a fuzz target, the converter to timeline commands, and the report in the UI and `oma-project`.
 - [ ] OTIO pilot first using a pinned library/schema and actual versioned exports; evaluate FCPXML, EDL and Kdenlive subsets with fixtures. For FCPXML, pin an exported version, cover both `.fcpxml` and applicable `.fcpxmld` bundles, and check rational timing, connected clips, gaps, media references and unsupported objects before claiming any support level. Report floating-to-rational conversion loss and unsupported effects.
 - [ ] `oma-project diff | convert`.
 - [ ] Color management presets, `.cube` LUTs, scopes; HDR gated by independent vectors and an actual display/preview/export contract.
