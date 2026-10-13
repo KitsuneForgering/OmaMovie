@@ -15,7 +15,7 @@ external project → importer → ProjectIR (ADR-0008) → converter → OmaMovi
 
 | Format | Versions | Level | Evidence |
 |---|---|---|---|
-| OpenTimelineIO JSON (`.otio`) | Timeline.1, Stack.1, Track.1, Clip.1/2, Gap.1, Transition.1, ExternalReference.1, MissingReference.1, RationalTime.1, TimeRange.1 | 2 in ProjectIR only; none in a project | `tests/importers` (hand-written file per the OTIO specification), `fuzz_otio`; no converter yet, and no application's actual export checked |
+| OpenTimelineIO JSON (`.otio`) | Timeline.1, Stack.1, Track.1, Clip.1/2, Gap.1, Transition.1, ExternalReference.1, MissingReference.1, RationalTime.1, TimeRange.1 | 2 in the libraries (reader + converter); not yet reachable from the app | `tests/importers` (hand-written file per the OTIO specification), `fuzz_otio`, `tests/project` (`from_ir`); no application's actual export checked |
 | FCPXML / `.fcpxmld` | — | none | Not started |
 | CMX 3600 EDL | — | none | Not started |
 | Kdenlive (MLT XML) | — | none | Not started |
@@ -24,3 +24,9 @@ external project → importer → ProjectIR (ADR-0008) → converter → OmaMovi
 report every importer fills. `libs/importers` reads OTIO into it: NTSC rates become exact
 fractions, other float rates and sub-thousandth frame times are rounded and reported, effects,
 markers, generators and nested stacks are kept as opaque objects and reported.
+
+`project::from_ir` (2026-10-13) turns ProjectIR into a native project: the first video track
+becomes the storyline, gaps stay as space, SMPTE dissolves become the next clip's transition
+(other transitions become reported hard cuts), media the app cannot resolve leaves reported
+gaps, and a timecode start is reported (sequences start at zero). Opaque objects are not saved
+in the native project yet; that loss belongs in the report once the app shows it.
