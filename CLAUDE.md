@@ -91,6 +91,7 @@ build/release/omamovie --m4-audit FILE SECONDS    # A/V sync, per-stage timing (
 build/release/omamovie --m4-seek-audit FILE SEEKS # seek UI blocking and first-frame latency
 build/release/omamovie --export-audit FILE OUT.mp4 # export one file, per-phase timing (opens a window)
 make oma-project               # build the native project inspect/validate/dump CLI
+build/debug/tools/oma-project/oma-project import FILE.otio  # OTIO import report (media not probed)
 make BUILD=release DESTDIR=dir PREFIX=/usr install  # the installed tree (PKGBUILD, release tarball)
 makepkg -si                    # build and install the Arch package from the PKGBUILD
 scripts/package-check.sh       # PKGBUILD build/check/install + GUI smoke in clean containers (podman)
