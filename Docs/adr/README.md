@@ -14,7 +14,7 @@ one as superseded.
 | [0005](0005-qt-vulkan-interop.md) | Qt Quick ↔ Vulkan compositor integration | Accepted (S4 import diagnostic; on-screen handoff pending) |
 | [0006](0006-color-space-and-libplacebo.md) | Working color space, SDR stages and libplacebo | Accepted |
 | [0007](0007-project-format.md) | Native project format: versioned JSON, simdjson | Accepted |
-| 0008 | ProjectIR and preservation of external data | Pending (M9) |
+| [0008](0008-project-ir.md) | ProjectIR and preservation of external data | Proposed (OTIO reader choice open) |
 | [0009](0009-cache.md) | Cache strategy | Accepted |
 | [0010](0010-canvas-coordinates.md) | Canvas coordinates: pixels, rescaled when the canvas changes | Accepted |
 | [0011](0011-transitions.md) | Transitions between clips | Accepted |
