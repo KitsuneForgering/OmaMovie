@@ -16,6 +16,7 @@
 #include "oma/compositor/geometry.hpp"
 #include "oma/compositor/grade.hpp"
 #include "oma/compositor/render_graph.hpp"
+#include "oma/playback/timeline_audio.hpp"
 #include "oma/project/subtitles.hpp"
 #include "oma/timeline/edit.hpp"
 #include "oma/timeline/effects.hpp"
@@ -1266,7 +1267,11 @@ void Session::setClipSpeed(int num, int den) {
     auto speed = oma::Rational::make(num, den);
     if (track == nullptr || !speed) return;
     if (run(tl::edit::set_speed(selected_clip_, *speed, track->id == primary_)) && num != den) {
-        setNotice(QStringLiteral("Sound plays only at normal speed"));
+        // The mixer's own rule (playback::retimed_rate), so the notice cannot disagree with it.
+        const tl::Clip* c = editor_->timeline().find_clip(selected_clip_);
+        const bool audible = c != nullptr && oma::playback::retimed_rate(*c, kSequenceAudioRate);
+        setNotice(audible ? QStringLiteral("Sound follows the speed, its pitch changing with it")
+                          : QStringLiteral("At this speed the clip plays without sound"));
     }
 }
 
@@ -1285,6 +1290,7 @@ void Session::freezeFrame(double seconds) {
     if (run(tl::edit::freeze_frame(id, t.at(playhead_), t.at(ticksAt(seconds)), ripple))) {
         selected_clip_ = id;
         emit selectionChanged();
+        setNotice(QStringLiteral("A clip with a freeze frame plays without sound"));
     }
 }
 
