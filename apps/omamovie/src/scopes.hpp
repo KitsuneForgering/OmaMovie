@@ -7,6 +7,13 @@
 
 #include <QImage>
 
+#include <functional>
+
+// A waveform of any per-pixel level in [0, 255]: one column per picture column, level 0 at the
+// bottom, brighter where more pixels share a level. `picture.width()` × 256 grayscale.
+[[nodiscard]] QImage level_waveform(const QImage& picture,
+                                    const std::function<int(QRgb)>& level_of);
+
 // A luma waveform: one column per picture column, Y' (BT.709 weights on the display-encoded
 // values) from 0 at the bottom to 255 at the top, brighter where more pixels share a level.
 // `picture` is any 8-bit RGB(A) image; the result is `picture.width()` × 256 grayscale.
