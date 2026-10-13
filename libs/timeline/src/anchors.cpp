@@ -11,15 +11,39 @@ namespace oma::timeline::detail {
 
 namespace {
 
+// Where each clip is after the edit, built once per reattach: looking clips up by scanning every
+// track for each connected clip cost O(connected × clips) per edit.
+struct Located {
+    const Clip* clip;
+    const Track* track;
+};
+using Index = std::unordered_map<ClipId, Located>;
+
+Index index_of(const Timeline& tl) {
+    Index out;
+    for (const Track& t : tl.tracks()) {
+        for (const Clip& c : t.clips) {
+            out.emplace(c.id, Located{.clip = &c, .track = &t});
+        }
+    }
+    return out;
+}
+
+const Located* locate(const Index& index, ClipId id) {
+    const auto it = index.find(id);
+    return it == index.end() ? nullptr : &it->second;
+}
+
 bool hosts(const Timeline& tl, const Clip& p, const RationalTime& source) {
     return p.time_map.is_constant() && !p.anchor && holds(p, source, tl.timebase());
 }
 
 // The clip that now shows the anchor's source: the primary itself, or a clip the edit created
 // from it (the tail of a split: new ID, same track and media).
-const Clip* host_of(const Timeline& tl, const Anchor& a, const Places& before) {
-    if (const Clip* p = tl.find_clip(a.primary); p != nullptr && hosts(tl, *p, a.source)) {
-        return p;
+const Clip* host_of(const Timeline& tl, const Index& index, const Anchor& a, const Places& before) {
+    if (const Located* p = locate(index, a.primary);
+        p != nullptr && hosts(tl, *p->clip, a.source)) {
+        return p->clip;
     }
     const auto was = before.find(a.primary);
     if (was == before.end()) {
@@ -70,6 +94,7 @@ Result<Steps> reattach(const Timeline& tl, const Places& before) {
     Steps erase;
     Steps insert;
     Steps update;
+    const Index index = index_of(tl);
     for (const Track& t : tl.tracks()) {
         for (const Clip& d : t.clips) {
             if (!d.anchor) {
@@ -77,12 +102,13 @@ Result<Steps> reattach(const Timeline& tl, const Places& before) {
             }
             Clip next = d;
             const auto was = before.find(d.id);
-            const Clip* primary = tl.find_clip(d.anchor->primary);
+            const Located* found = locate(index, d.anchor->primary);
+            const Clip* primary = found != nullptr ? found->clip : nullptr;
             if (was == before.end() || moved(d, t, was->second)) {
                 // The edit moved or made the dependent itself: connect it where it now starts,
                 // or let it go if it no longer starts on the primary.
                 next.anchor.reset();
-                if (primary != nullptr && tl.track_of(primary->id)->id != t.id &&
+                if (primary != nullptr && found->track->id != t.id &&
                     primary->time_map.is_constant() && !primary->anchor &&
                     d.start_ticks() >= primary->start_ticks() &&
                     d.start_ticks() < primary->end_ticks()) {
@@ -97,7 +123,7 @@ Result<Steps> reattach(const Timeline& tl, const Places& before) {
                 }
                 continue;
             }
-            if (const Clip* host = host_of(tl, *d.anchor, before); host != nullptr) {
+            if (const Clip* host = host_of(tl, index, *d.anchor, before); host != nullptr) {
                 auto at = attach_tick(*host, d.anchor->source, tl.timebase());
                 if (!at) {
                     return std::unexpected(at.error());
