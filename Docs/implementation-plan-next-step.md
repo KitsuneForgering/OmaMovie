@@ -7,13 +7,14 @@ work by OmaMovie's own release path, not by competitor feature count:
 1. **Enforce the existing CI (M10):** the PR workflow runs, but `master` has no
    protection/ruleset requiring its checks. Require test/lint/fuzz success before
    merge; extend eligible sanitizer coverage to a bounded Session/app path.
-2. **Close completed-output correctness (M7):** inject export write/sync failures,
-   force a slow export across a project switch, and externally check selected
-   decoded frames/samples and the caption sidecar from the pinned snapshot.
+2. **Completed-output correctness (M7) — done 2026-10-12:** write failures are injected
+   with `RLIMIT_FSIZE`, a 1,200-frame export survives a project switch, and selected
+   frames and samples are matched to their source by an independent decode. The
+   two-hour 1080p export with cuts, looks and a dissolve is the remaining long-output check.
 3. **Finish one editing path (M6/M8):** exercise import → source marks → exact edit
-   → playback → save/reopen → export on Omarchy. Verify visible roll/slip/slide,
-   model/UI agreement and a clear retimed-audio policy; record corrections and
-   measured latency before claiming the workflow ready.
+   → playback → save/reopen → export on Omarchy. Roll/slip/slide now have keyboard,
+   pointer, menu and two-up paths with tests; the corrections, latency and retimed-audio
+   policy need the [manual sessions](m6-walkthrough.md) before the workflow is called ready.
 4. **Prove release packaging and recovery (M7/M10):** launch the installed package
    in a disposable Omarchy environment and reopen/recover the same test project.
 5. **Expand only for a named hand-off (M8/M9):** portable project, one interchange
