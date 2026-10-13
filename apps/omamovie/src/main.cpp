@@ -1141,8 +1141,27 @@ int main(int argc, char** argv) {
          }},
         {"keyframes drawer", after(400), [&] {
              screenshot(window, "OMA_GUI_SMOKE_KEYFRAMES_SCREENSHOT");
-             window->setProperty("drawer", QString());
              window->setProperty("cropMore", false);
+             window->setProperty("drawer", QStringLiteral("info"));
+         }},
+        {"dopesheet", after(300), [&] {
+             // The Info drawer's dopesheet shows the three transform keys; clicking the last
+             // one moves the playhead onto it (the clip's end, where Ken Burns put it).
+             screenshot(window, "OMA_GUI_SMOKE_DOPESHEET_SCREENSHOT");
+             auto keys = items_named("dopeKey");
+             keys.removeIf([](const QQuickItem* i) { return !i->isVisible(); });
+             const QVariantMap first = session.clips().front().toMap();
+             const double end = first.value("start").toDouble() + first.value("duration").toDouble();
+             if (keys.size() == 3) {
+                 (void)window->grabWindow(); // click what was drawn (see the Picture menu check)
+                 const auto last = std::ranges::max(keys, {}, [&](QQuickItem* k) { return center_of(k).x(); });
+                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, center_of(last).toPoint());
+             }
+             const bool ok = keys.size() == 3 && std::abs(session.position() - end) < 1.0 / session.frameRate();
+             if (!ok) std::printf("GUI smoke: dopesheet failed (%lld keys, playhead %.3f, end %.3f)\n",
+                                  static_cast<long long>(keys.size()), session.position(), end);
+             r.looks = r.looks && ok;
+             window->setProperty("drawer", QString());
              for (int i = 0; i < 3; ++i) session.undo();
              r.looks = r.looks && session.motion().value("keys").toInt() == 0;
              window->requestActivate();
