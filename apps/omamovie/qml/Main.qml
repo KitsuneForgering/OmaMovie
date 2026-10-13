@@ -56,6 +56,7 @@ ApplicationWindow {
     property bool volumeMore: false // the Volume drawer's "More" level (ui-design §6)
     property bool cropMore: false   // the Crop drawer's "More" level: position, scale, rotation
     property bool colorMore: false  // the Color drawer's "More" level: grading (ADR-0012)
+    property bool scopeParade: false // the Color drawer's waveform shows the RGB parade
     property string gradeTab: "wheels" // wheels, curves or lut
     property int curveChannel: 0       // 0 master, 1-3 red, green, blue
     // Keep the filter previews in step with the selection while the Effects drawer is open.
@@ -360,6 +361,10 @@ ApplicationWindow {
         property OmaAction openProject: OmaAction {
             text: "Open project…"; keys: "Ctrl+O"
             onTriggered: root.confirmDiscard("Open another project", () => openDialog.open())
+        }
+        property OmaAction toggleParade: OmaAction {
+            text: "Show RGB parade or luma waveform"
+            onTriggered: root.scopeParade = !root.scopeParade
         }
         property OmaAction importTimeline: OmaAction {
             text: "Import OpenTimelineIO…"

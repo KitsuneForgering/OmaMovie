@@ -2,8 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import OmaMovie
 
-// Scopes (M9) of the frame at the playhead, beside the grading controls: a luma waveform and a
-// vectorscope. New ones are asked for shortly after the playhead stops or an edit changes the
+// Scopes (M9) of the frame at the playhead, beside the grading controls: a luma waveform (or an
+// RGB parade) and a vectorscope. New ones are asked for shortly after the playhead stops or an edit changes the
 // frame, never while playing; they are measurements, so they are shown untinted (ui-design §10).
 RowLayout {
     id: scopes
@@ -22,7 +22,14 @@ RowLayout {
             Image { id: picture; anchors.fill: parent; fillMode: Image.Stretch; cache: false }
         }
     }
-    Scope { objectName: "lumaWaveform"; label: "LUMA"; source: session.scopeImage; scopeWidth: 192 }
+    // Luma or RGB parade in the same place: the title or the palette's action switches them.
+    Scope {
+        objectName: "lumaWaveform"
+        label: root.scopeParade ? "RGB PARADE ⇄" : "LUMA ⇄"
+        source: root.scopeParade ? session.paradeImage : session.scopeImage
+        scopeWidth: 192
+        TapHandler { onTapped: actions.toggleParade.trigger() }
+    }
     Scope { objectName: "vectorscope"; label: "VECTORSCOPE"; source: session.vectorscopeImage }
     Timer {
         id: refresh

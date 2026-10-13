@@ -1,8 +1,6 @@
-// Scopes (M9): the frame at the playhead rendered small on the CPU reference compositor (the
-// same render graph the viewer draws, so grading and looks are measured), display-encoded and
-// turned into a luma waveform and a vectorscope. On the job worker, on request (paused frame,
-// scopes shown): it is not in the playback path, so the CPU render is no readback of the
-// viewer (CLAUDE.md §7.2).
+// Scopes (M9): a luma waveform, an RGB parade and a vectorscope of the frame at the playhead, from
+// a small CPU render of the viewer's graph (scope_frame.hpp). On the job worker, on request only:
+// not in the playback path, so it is no readback of the viewer (CLAUDE.md §7.2).
 #include "scope_frame.hpp"
 #include "scopes.hpp"
 #include "session.hpp"
@@ -14,6 +12,10 @@ QString Session::scopeImage() const {
 }
 QString Session::vectorscopeImage() const {
     return vectorscope_image_;
+}
+
+QString Session::paradeImage() const {
+    return parade_image_;
 }
 
 void Session::requestScopes() {
@@ -30,21 +32,26 @@ void Session::requestScopes() {
         const auto save = [&](const QImage& image, const char* name) {
             const QString file =
                 QStringLiteral("%1/%2-%3.png").arg(dir, QLatin1String(name)).arg(request % 2);
-            return !display.isNull() && image.save(file)
+            return image.save(file)
                        ? QUrl::fromLocalFile(file).toString() + QStringLiteral("?%1").arg(request)
                        : QString();
         };
-        const QString wave =
-            display.isNull() ? QString() : save(luma_waveform(display), "waveform");
-        const QString vector =
-            display.isNull() ? QString() : save(vectorscope(display), "vectorscope");
+        QString wave;
+        QString vector;
+        QString parade;
+        if (!display.isNull()) {
+            wave = save(luma_waveform(display), "waveform");
+            vector = save(vectorscope(display), "vectorscope");
+            parade = save(rgb_parade(display), "parade");
+        }
         QMetaObject::invokeMethod(
             this,
-            [this, request, wave, vector] {
+            [this, request, wave, vector, parade] {
                 if (request != scope_request_)
                     return;
                 scope_image_ = wave;
                 vectorscope_image_ = vector;
+                parade_image_ = parade;
                 emit scopeImageChanged();
             },
             Qt::QueuedConnection);

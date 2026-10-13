@@ -13,6 +13,8 @@
 // bottom, brighter where more pixels share a level. `picture.width()` × 256 grayscale.
 [[nodiscard]] QImage level_waveform(const QImage& picture,
                                     const std::function<int(QRgb)>& level_of);
+// An RGB parade: the red, green and blue waveforms side by side, each a third of the width.
+[[nodiscard]] QImage rgb_parade(const QImage& picture);
 
 // A luma waveform: one column per picture column, Y' (BT.709 weights on the display-encoded
 // values) from 0 at the bottom to 255 at the top, brighter where more pixels share a level.

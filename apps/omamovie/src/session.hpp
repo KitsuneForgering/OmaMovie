@@ -128,6 +128,7 @@ class Session final : public QObject {
     // A luma waveform of the frame at the playhead (session_scopes.cpp); "" until requested.
     Q_PROPERTY(QString scopeImage READ scopeImage NOTIFY scopeImageChanged)
     Q_PROPERTY(QString vectorscopeImage READ vectorscopeImage NOTIFY scopeImageChanged)
+    Q_PROPERTY(QString paradeImage READ paradeImage NOTIFY scopeImageChanged)
     // Captions (ADR-0017): {id, start, duration, text} in seconds, sorted.
     Q_PROPERTY(QVariantList captions READ captions NOTIFY sequenceChanged)
     // The selected clip's transform at the playhead (keyframes evaluated): posX, posY, scale,
@@ -469,6 +470,7 @@ public:
     [[nodiscard]] QVariantMap edgeFrames() const;
     [[nodiscard]] QString scopeImage() const;
     [[nodiscard]] QString vectorscopeImage() const;
+    [[nodiscard]] QString paradeImage() const;
     Q_INVOKABLE void requestScopes();
     [[nodiscard]] QVariantList captions() const;
     // The caption text under `seconds` (the viewer's overlay), empty when none.
@@ -729,6 +731,7 @@ private:
     oma::JobHandle edge_job_;
     QString scope_image_;
     QString vectorscope_image_;
+    QString parade_image_;
     unsigned scope_request_ = 0;
     oma::JobHandle scope_job_;
     QStringList import_report_; // of the last timeline import (UI thread)
