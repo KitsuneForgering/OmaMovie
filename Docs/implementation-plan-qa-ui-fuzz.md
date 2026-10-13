@@ -1,7 +1,7 @@
 ## QA — application workflows and stateful fuzzing
 
-Extend the existing offscreen `tests/app` Session tests and GUI smoke with a small
-Qt Test/QML Test driver for the real QML tree. Reuse `ActionRegistry`, public
+Extend the existing offscreen `tests/app` Session tests and the Qt Test smoke embedded
+in `main.cpp` with a small driver for the real QML tree. Reuse `ActionRegistry`, public
 `Session` methods and existing edit commands; add only stable lookup IDs, fixture
 loading and bounded async wait helpers. A pure Session test cannot detect stale QML
 bindings or a wrong action route; the driver must inspect both model and visible UI.
@@ -30,7 +30,9 @@ Give actions semantic IDs in the existing `ActionRegistry`; give QML elements st
 `source.mark_in`, `source.mark_out`. Derive dynamic clip IDs from model IDs.
 Never locate by screen position, translated text or unstable delegate index.
 Use the same IDs for accessibility and future agent automation, without a duplicate
-registry. Introduce IDs only for controls a workflow actually needs.
+registry. `ActionRegistry::trigger(id)` covers discrete actions today; parameterized
+edits still call `Session`. Add a typed parameter schema only for a proven CLI/agent
+workflow, keeping core commands typed. Introduce IDs only for controls needed now.
 
 Expand current parser fuzzing to stateful project load/save and serialized project
 mutations, command sequences, time maps, interchange/import formats, metadata and

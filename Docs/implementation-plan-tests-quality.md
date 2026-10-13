@@ -12,7 +12,7 @@
 | M8 effects | Registry/command contract; editable stack and presets; CPU/GPU frames, saved-project and decoded-export checks |
 | M9 | Fuzzing of every importer; small fixtures per compatibility level |
 | M10 | Seeded stateful edits with exact undo/redo; workflow and recovery checks; concurrency and sustained stress; reproducible fuzzing and release evidence |
-| M11 | Before/after module inventory; responsive-layout and keyboard walkthrough; affected M10 workflows and performance baselines rerun |
+| M11 | Targeted ownership inventory; responsive-layout and keyboard walkthrough; affected M10 workflows and performance baselines rerun |
 
 **Long-form gate (proposed, after M7 export, before claiming support):** run the
 [declared workload set and protocol](Research/long-form-editing.md#proposed-gate-before-optimizations)
@@ -27,7 +27,9 @@ not for every long video or hardware configuration. Use the observed dominant co
 to choose between QML model work, decoder/proxy work, preview rendering or project
 storage changes. This gate has not run.
 
-Benchmarks (`tools/bench`) always record hardware, driver, FFmpeg version, codec and decode path (`CLAUDE.md` §23).
+Current audit flags and `Research/evidence` measurements record their fixtures and
+hardware; the proposed `tools/bench` runner is not implemented. Future benchmarks
+must record hardware, driver, FFmpeg version, codec, decode path, build and cache state.
 
 The [QA strategy](implementation-plan-qa.md) defines the regression rule, distinct
 test layers, v0.1 scope and QA-1–QA-6 rollout. It extends these milestone gates;

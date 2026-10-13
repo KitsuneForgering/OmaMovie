@@ -26,12 +26,15 @@ frame selection, async races, CPU/GPU divergence, import/export, persistence and
 desynchronization. Reduce property/fuzzer findings to permanent deterministic cases.
 If a regression test is impractical, record why and retain a reproducible case.
 
-**v0.1 required:** preserve the existing deterministic, sanitizer, parser-fuzz,
-CPU/GPU and M10 workflow/recovery gates for shipped Intel/software paths. Keep CI
-required on pull requests with GCC and Clang × Debug, Release, ASan/UBSan and TSan;
+**v0.1 required:** preserve deterministic, sanitizer, parser-fuzz, CPU/GPU and M10
+workflow/recovery gates for shipped Intel/software paths. Require CI checks before
+merging pull requests with GCC and Clang × Debug, Release, ASan/UBSan and TSan;
 clang-format, clang-tidy, unit/integration tests and bounded fuzz smoke runs remain
 gates. Add the regression rule to reviews. A fast, seeded timeline state/undo test
 should join normal CI when QA-2 is ready; it does not replace the current M5 tests.
+As audited on 2026-10-12, the workflow runs on PRs but GitHub has no required-check
+ruleset; CMake excludes app/Session tests from ASan/TSan. Close these scope gaps
+before describing application-level sanitizer or enforced-merge coverage as done.
 
 **Recommended for v0.1:** QA-1 and a bounded QA-2 pilot; a small offscreen UI
 workflow pilot if stable on CI. Incomplete QA-3–QA-6 breadth does not block v0.1;

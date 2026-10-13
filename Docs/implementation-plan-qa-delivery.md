@@ -12,6 +12,10 @@ Use deterministic synchronization for race regressions, then longer stress loops
 
 CI on every pull request remains mandatory: GCC and Clang; Debug, Release,
 ASan/UBSan and TSan; format, tidy, unit/integration and bounded fuzz smoke runs.
+Require those checks through branch protection/ruleset and verify merge rejection
+on a failing PR. Today the workflow fires, but the branch does not enforce it.
+Today app/Session tests build only in Debug/Release; add a bounded sanitizer
+application path when stable and report any supported-path exclusion explicitly.
 Fast fixed-seed properties join normal `make test` once stable. Keep categories
 `fast`, `integration`, `gpu`, `fuzz`, `stress`, `performance` only when scheduling
 needs them; `fast` must cover ordinary edit and persistence failures. Hardware,

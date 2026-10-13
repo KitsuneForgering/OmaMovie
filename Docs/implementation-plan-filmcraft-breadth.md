@@ -14,7 +14,7 @@ Premiere, not measurements against OmaMovie. We did not build or run FilmCraft h
 
 | FilmCraft workflow | OmaMovie evidence | Decision |
 |---|---|---|
-| Source-to-timeline and precise trims | `libs/timeline` has roll/slip/slide commands; M6 source marks exist, but source playback and complete keyboard/pointer trim paths remain open | Finish one end-to-end editing task before expanding effect count (M6 item below) |
+| Source-to-timeline and precise trims | Source playback and marked placement exist; roll/slip/slide have commands, keyboard actions and storyline pointer gestures, but one visible task plus decoded-content checks remain open | Finish that task before expanding effect count (M6) |
 | Audio and titles | OmaMovie has clip EQ/noise controls and basic generated titles; no track routing or rich text layout | Prioritize retimed-audio correctness; pilot stems and typography only for demonstrated tasks (M8/M9) |
 | Deliverables and interchange | OmaMovie exports four MP4/Matroska/WebM profiles and SRT and plans OTIO/FCPXML; FilmCraft reports additional professional codecs and AAF/OMF | Finish reliable output/snapshot behavior, then validate one named hand-off format rather than counting extensions (M7/M9) |
 | Runtime quality | OmaMovie has Intel GPU/Wayland tests and long-form clip-count evidence; FilmCraft reports incomplete Linux and real-media coverage | Keep same-hardware, independently decoded outputs and workflow tests as the comparison gate (M10) |
@@ -27,6 +27,9 @@ exact revisions, GPU, driver and codec. Until then, feature existence is a sourc
 comparison; relative speed and fidelity are unknown.
 
 Milestone checkboxes record implemented deliverables. Validation requires separate evidence.
+The [2026-10-12 engineering assessment](analysis/omamovie-2026-10-12.md) compares
+implementation, owned media surface and test gates separately from feature breadth;
+neither editor was built or run in an equivalent task here.
 S1/S2 and M0/M3 numbers below are prior reports, not rerun by the documentation audit.
 New acceptance criteria are proposed pilot criteria set before future measurements; changes
 to them must be recorded, rather than choosing thresholds after seeing results.

@@ -17,7 +17,7 @@
 - *Stored duration*: a clip stores its timeline duration (per the ADR-0002 review note, duration cannot be derived from source displacement alone once freeze exists); speed changes recompute it, rounding down to the grid to stay inside the source.
 - *History*: primitives record exactly what they changed, so undo restores exact prior state; editing operations plan their primitives on first apply and redo re-applies the same plan. IDs only grow, even across undo. Ripple affects the edited track only.
 - *Media and history*: importing registers media with `Editor::add_media`, outside the history (undoing an edit never unregisters media the library still shows); `Editor::clear_history` drops undo/redo after a new project's initial tracks (and, later, after loading).
-- *Not yet*: magnetism/snapping policy, caption clips, keyframes, transitions, track-linked (sync-locked) ripple, a timeline-wide limit on history size, and the Qt model that exposes the timeline to QML (M6).
+- *Still open at this boundary*: track-linked (sync-locked) ripple and a timeline-wide history-memory policy. Magnetism, captions, transform/opacity/volume keys, transitions and the Qt clip model were implemented later in M6/M8; effect/color keys and a dopesheet remain open there. Measure realistic long histories before imposing a cap or replacing primitive-based undo.
 
 **Done when**: every operation is tested, including combinations and undo/redo of
 transactions; render graph snapshots for known states.
