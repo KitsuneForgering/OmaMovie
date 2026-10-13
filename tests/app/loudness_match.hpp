@@ -23,13 +23,15 @@ inline std::vector<float> first_channel(const QString& movie) {
     return samples;
 }
 
-// The source frame heard in the middle of exported frame `k` (-1 for silence).
-inline int heard_frame(const std::vector<float>& samples, int k) {
-    if (samples.size() < static_cast<std::size_t>(k + 1) * 1600)
+// The source frame heard in exported frame `k` over samples [at, at + length) of it (by default
+// its middle half; at 2x one source frame is the first half), or -1 for silence.
+inline int heard_frame(const std::vector<float>& samples, int k, int at = 400, int length = 800) {
+    const auto from = static_cast<std::size_t>(k) * 1600 + static_cast<std::size_t>(at);
+    const auto to = from + static_cast<std::size_t>(length);
+    if (samples.size() < to)
         return -2;
     double sum = 0;
-    for (std::size_t i = static_cast<std::size_t>(k) * 1600 + 400;
-         i < static_cast<std::size_t>(k) * 1600 + 1200; ++i)
+    for (std::size_t i = from; i < to; ++i)
         sum += static_cast<double>(samples[i]) * samples[i];
-    return static_cast<int>(std::lround(std::sqrt(sum / 800) * std::sqrt(2.0) / 0.9 * 31 - 1));
+    return static_cast<int>(std::lround(std::sqrt(sum / length) * std::sqrt(2.0) / 0.9 * 31 - 1));
 }
