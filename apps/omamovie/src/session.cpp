@@ -3225,10 +3225,14 @@ void Session::openSource(int index) {
 void Session::seekSource(double seconds) {
     if (source_index_ < 0 || !std::isfinite(seconds)) return;
     setFrame(std::llround(seconds * frameRate())); // routed to the source playhead
+    if (playing())
+        startPlayback();
 }
 
 void Session::closeSource() {
-    if (source_index_ < 0) return;
+    if (source_index_ < 0)
+        return;
+    pause();
     source_index_ = -1;
     source_timeline_.reset();
     emit sourceChanged();
@@ -3297,16 +3301,16 @@ void Session::setSpeed(int speed) {
         pause();
         return;
     }
-    if (source_index_ >= 0) {
-        // ponytail: the source viewer steps and scrubs only; playing it needs its own clock and
-        // audio. Starting the sequence here would play something the viewer does not show.
-        setNotice(QStringLiteral("The source viewer does not play yet: step with ← → or drag its bar"));
+    if (!hasMedia())
         return;
-    }
-    if (!hasMedia()) return;
+    const bool source = source_index_ >= 0;
+    const std::int64_t current = source ? source_frame_ : frame();
+    const std::int64_t last = source ? std::max<std::int64_t>(0, source_frames_ - 1) : lastFrame();
     // From an end, play back into the sequence.
-    if (speed > 0 && frame() >= lastFrame()) setFrame(0);
-    if (speed < 0 && frame() <= 0) setFrame(lastFrame());
+    if (speed > 0 && current >= last)
+        setFrame(0);
+    if (speed < 0 && current <= 0)
+        setFrame(last);
     speed_ = speed;
     startPlayback();
     tick_.start(std::max(4, static_cast<int>(500.0 / frameRate())));
@@ -3319,12 +3323,16 @@ void Session::startPlayback() {
     audio_.stop();
     scheduler_.stop();
     wanted_.reset();
-    play_from_frame_ = frame();
+    if (!snapshot_)
+        refreshSnapshot();
+    const bool source = source_index_ >= 0 && source_timeline_;
+    const auto timeline = source ? source_timeline_ : snapshot_;
+    play_from_frame_ = source ? source_frame_ : frame();
     clock_.restart();
-    if (!snapshot_) refreshSnapshot();
     if (speed_ == 1) {
         // The playhead sits on the frame grid; audio starts at the sample at or before it.
-        if (auto r = audio_.start(*snapshot_, *paths_, playhead_ / ticksPerSample()); !r) {
+        const std::int64_t start = source ? source_frame_ * ticksPerFrame() : playhead_;
+        if (auto r = audio_.start(*timeline, *paths_, start / ticksPerSample()); !r) {
             setNotice(QStringLiteral("Playing without audio: %1").arg(message(r.error())));
         } else if (!audio_.on_device() && !warned_silent_) {
             warned_silent_ = true;
@@ -3339,12 +3347,14 @@ void Session::startPlayback() {
     }
     adapt_shown_ = 0;
     adapt_dropped_base_ = scheduler_.dropped();
-    scheduler_.start(snapshot_, paths_, luts_, canvas_width_, canvas_height_, ticksPerFrame(), frame(), speed_, lastFrame());
+    scheduler_.start(timeline, paths_, luts_, canvas_width_, canvas_height_, ticksPerFrame(),
+                     play_from_frame_, speed_, source ? source_frames_ - 1 : lastFrame());
     last_restart_ms_ = static_cast<double>(restart.nsecsElapsed()) / 1e6;
 }
 
 void Session::pause() {
-    if (speed_ == 0) return;
+    if (speed_ == 0)
+        return;
     speed_ = 0;
     tick_.stop();
     audio_.stop();
@@ -3470,18 +3480,29 @@ void Session::onTick() {
         // display. Prepare the next frame so that the visible image follows the device clock.
         target = audio_.audible_sample() * ticksPerSample() / ticksPerFrame() + 1;
     } else {
-        const double elapsed = static_cast<double>(clock_.nsecsElapsed()) * 1e-9 * frameRate() * speed_;
+        const double elapsed =
+            static_cast<double>(clock_.nsecsElapsed()) * 1e-9 * frameRate() * speed_;
         target = play_from_frame_ + static_cast<std::int64_t>(std::floor(elapsed));
     }
-    const bool at_end = speed_ > 0 ? target >= lastFrame() : target <= 0;
-    target = std::clamp<std::int64_t>(target, 0, lastFrame());
+    const bool source = source_index_ >= 0;
+    const std::int64_t last = source ? std::max<std::int64_t>(0, source_frames_ - 1) : lastFrame();
+    const bool at_end = speed_ > 0 ? target >= last : target <= 0;
+    target = std::clamp<std::int64_t>(target, 0, last);
     if (auto shown = scheduler_.take(target)) {
-        playhead_ = shown->frame * ticksPerFrame();
-        if (preview_ != nullptr) preview_->setFrame(std::move(shown->view));
+        if (source)
+            source_frame_ = shown->frame;
+        else
+            playhead_ = shown->frame * ticksPerFrame();
+        if (preview_ != nullptr)
+            preview_->setFrame(std::move(shown->view));
         adaptPreview();
-        emit positionChanged();
+        if (source)
+            emit sourceChanged();
+        else
+            emit positionChanged();
     }
-    if (at_end && frame() == target) pause();
+    if (at_end && (source ? source_frame_ : frame()) == target)
+        pause();
 }
 
 // ------------------------------------------------------------------- viewer frames (paused)
