@@ -12,6 +12,10 @@
 // `picture` is any 8-bit RGB(A) image; the result is `picture.width()` × 256 grayscale.
 [[nodiscard]] QImage luma_waveform(const QImage& picture);
 
+// A vectorscope: each pixel's BT.709 colour difference (Cb right, Cr up) on a 256 × 256 plane
+// centred on neutral, from the display-encoded values; the edge is full saturation (±0.5).
+[[nodiscard]] QImage vectorscope(const QImage& picture);
+
 // Linear premultiplied RGBA (the compositor's working space, ADR-0006) as an sRGB-encoded 8-bit
 // image: the display transform, for previews and scopes only.
 [[nodiscard]] QImage to_srgb_image(const oma::compositor::RgbaImage& image);

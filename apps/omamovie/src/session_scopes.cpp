@@ -1,17 +1,19 @@
 // Scopes (M9): the frame at the playhead rendered small on the CPU reference compositor (the
 // same render graph the viewer draws, so grading and looks are measured), display-encoded and
-// turned into a luma waveform. On the job worker, on request (paused frame, scopes shown): it is
-// not in the playback path, so the CPU render is no readback of the viewer (CLAUDE.md §7.2).
+// turned into a luma waveform and a vectorscope. On the job worker, on request (paused frame,
+// scopes shown): it is not in the playback path, so the CPU render is no readback of the
+// viewer (CLAUDE.md §7.2).
+#include "scope_frame.hpp"
 #include "scopes.hpp"
 #include "session.hpp"
-#include "viewer_frame.hpp"
 
 #include <QUrl>
 
-#include <vector>
-
 QString Session::scopeImage() const {
     return scope_image_;
+}
+QString Session::vectorscopeImage() const {
+    return vectorscope_image_;
 }
 
 void Session::requestScopes() {
@@ -23,26 +25,26 @@ void Session::requestScopes() {
     scope_job_ = workers_.submit("scopes", [this, request, dir, timeline = editor_->timeline(),
                                             paths = paths_, luts = luts_, frame = frame(),
                                             tpf = ticksPerFrame()](oma::JobContext&) {
-        QString url;
-        auto built = build_viewer_frame(timeline, *paths, *luts, 256, 144, frame, tpf, frames_);
-        if (built) {
-            std::vector<oma::compositor::LayerInput> inputs;
-            for (const Picture& p : (*built)->pictures)
-                inputs.push_back({.frame = p.frame.get(),
-                                  .color = p.color,
-                                  .rotation = p.rotation,
-                                  .sample_aspect = p.sample_aspect});
-            auto rendered = oma::compositor::CpuCompositor{}.render((*built)->graph, inputs);
-            const QString file = QStringLiteral("%1/scope-%2.png").arg(dir).arg(request % 2);
-            if (rendered && luma_waveform(to_srgb_image(*rendered)).save(file))
-                url = QUrl::fromLocalFile(file).toString() + QStringLiteral("?%1").arg(request);
-        }
+        const QImage display = small_frame(timeline, *paths, *luts, frame, tpf, frames_);
+        // Two files per scope, reused: the query makes QML reload them.
+        const auto save = [&](const QImage& image, const char* name) {
+            const QString file =
+                QStringLiteral("%1/%2-%3.png").arg(dir, QLatin1String(name)).arg(request % 2);
+            return !display.isNull() && image.save(file)
+                       ? QUrl::fromLocalFile(file).toString() + QStringLiteral("?%1").arg(request)
+                       : QString();
+        };
+        const QString wave =
+            display.isNull() ? QString() : save(luma_waveform(display), "waveform");
+        const QString vector =
+            display.isNull() ? QString() : save(vectorscope(display), "vectorscope");
         QMetaObject::invokeMethod(
             this,
-            [this, request, url] {
+            [this, request, wave, vector] {
                 if (request != scope_request_)
                     return;
-                scope_image_ = url;
+                scope_image_ = wave;
+                vectorscope_image_ = vector;
                 emit scopeImageChanged();
             },
             Qt::QueuedConnection);
