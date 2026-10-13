@@ -15,19 +15,11 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "file_bytes.hpp"
+
 #include "oma_test.hpp"
 
 namespace {
-bool put(const QString& path, const char* bytes) {
-    QFile file(path);
-    return file.open(QIODevice::WriteOnly) && file.write(bytes) == QByteArray(bytes).size();
-}
-
-QByteArray get(const QString& path) {
-    QFile file(path);
-    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
-}
-
 bool crash_and_recover(PublishStep stop, bool keep) {
     QTemporaryDir dir;
     if (!dir.isValid())

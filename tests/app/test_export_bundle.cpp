@@ -5,19 +5,11 @@
 #include <filesystem>
 
 #include "export_bundle_publish.hpp"
+#include "file_bytes.hpp"
+
 #include "oma_test.hpp"
 
 namespace {
-bool put(const QString& path, const char* value) {
-    QFile file(path);
-    return file.open(QIODevice::WriteOnly) && file.write(value) == QByteArray(value).size();
-}
-
-QByteArray get(const QString& path) {
-    QFile file(path);
-    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
-}
-
 bool restores_previous_pair_if_second_publish_fails() {
     QTemporaryDir dir;
     const QString stage = dir.filePath("stage");
