@@ -15,7 +15,7 @@ external project → importer → ProjectIR (ADR-0008) → converter → OmaMovi
 
 | Format | Versions | Level | Evidence |
 |---|---|---|---|
-| OpenTimelineIO JSON (`.otio`) | Timeline.1, Stack.1, Track.1, Clip.1/2, Gap.1, Transition.1, ExternalReference.1, MissingReference.1, RationalTime.1, TimeRange.1 | 2 in the libraries (reader + converter); report via `oma-project import`; not yet in the app | `tests/importers` (hand-written file per the OTIO specification), `fuzz_otio`, `tests/project` (`from_ir`); no application's actual export checked |
+| OpenTimelineIO JSON (`.otio`) | Timeline.1, Stack.1, Track.1, Clip.1/2, Gap.1, Transition.1, ExternalReference.1, MissingReference.1, RationalTime.1, TimeRange.1 | 2: imported in the app (Import OpenTimelineIO…) and reported by `oma-project import` | `tests/importers` (hand-written file per the OTIO specification), `fuzz_otio`, `tests/project` (`from_ir`), `tests/app/test_import_timeline.cpp`, GUI smoke; no application's actual export checked |
 | FCPXML / `.fcpxmld` | — | none | Not started |
 | CMX 3600 EDL | — | none | Not started |
 | Kdenlive (MLT XML) | — | none | Not started |
