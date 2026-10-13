@@ -9,7 +9,8 @@ import OmaMovie
 // Reads the window's ids (root, actions, session) from the document that places it.
 Rectangle {
     Layout.fillWidth: true
-    Layout.preferredHeight: 64 + (dopeSheet.visible ? dopeSheet.implicitHeight + 8 : 0)
+    // The facts take one row wide and two compact; the dopesheet adds its rows below them.
+    Layout.preferredHeight: facts.implicitHeight + 20 + (dopeSheet.visible ? dopeSheet.implicitHeight + 10 : 0)
     visible: !root.viewerOnly && root.drawer === "info" && !!session.info.name
     color: colors.dark_background
     GridLayout {
