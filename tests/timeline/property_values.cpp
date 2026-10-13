@@ -39,6 +39,9 @@ void choose_values(Rng& rng, Op& op, const Extent& e) {
         const auto& s = kSpeeds.at(static_cast<std::size_t>(rng.between(0, kSpeeds.size() - 1)));
         op.a = s[0];
         op.b = s[1];
+    } else if (op.kind == Kind::Ramp) {
+        op.a = rng.between(0, 4); // halves: 0 and a sign change are refused
+        op.b = rng.between(-1, 4);
     } else if (op.kind == Kind::Connect) {
         op.b = rng.between(0, e.tracks - 1);
         op.c = rng.between(0, 3);

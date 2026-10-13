@@ -11,7 +11,7 @@
 namespace {
 
 // Also counts useful work, so a generator whose steps are all rejected fails instead of passing
-// vacuously. 48 seeds × 60 steps gave 2306 transitions and 277 of 400 step pairs (generator v2).
+// vacuously. 48 seeds × 60 steps gave 2187 transitions and 296 of 441 step pairs (generator v3).
 bool covers_enough(const property::Totals& totals) {
     return !totals.standard || (totals.transitions >= 1800 && totals.interactions.size() >= 220);
 }

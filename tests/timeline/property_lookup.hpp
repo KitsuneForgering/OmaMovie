@@ -19,6 +19,9 @@ namespace property {
                                               std::int64_t index);
 [[nodiscard]] oma::timeline::ClipId clip_id(const oma::timeline::Timeline& tl, std::int64_t track,
                                             std::int64_t index);
+// A speed ramp over the whole clip; null clip gives an invalid ID the edit rejects.
+[[nodiscard]] std::unique_ptr<oma::timeline::Command> ramp(const Op& op,
+                                                           const oma::timeline::Clip* clip);
 // Append, Insert or Overwrite. Media 0 is the camera (300 frames), 1 the music (60 s at 48 kHz),
 // 2 the still picture.
 [[nodiscard]] std::unique_ptr<oma::timeline::Command> placement(const Op& op,

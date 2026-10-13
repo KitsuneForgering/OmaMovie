@@ -12,12 +12,11 @@
 namespace property {
 
 // Field use per kind (times in frames; `clip` picks the media of Append/Insert/Overwrite):
-//   Append        clip=media b=source in c=duration
-//   Insert, Overwrite   clip=media a=at b=source in c=duration
+//   Append, Insert, Overwrite   clip=media a=at (not Append) b=source in c=duration
 //   Split   a=offset in the clip   Freeze   a=offset b=length c=ripple   Slip, Slide   a=delta
 //   TrimStart, TrimEnd   a=delta of that edge c=ripple   Roll   a=delta of the clip's end
 //   Move          b=track index a=start      RippleMove    a=at
-//   Speed         a/b speed c=ripple         Connect       b=track index c=clip index
+//   Speed   a/b c=ripple   Ramp   a/2 to b/2   Connect   b=track index c=clip index
 enum class Kind {
     Append,
     Insert,
@@ -37,10 +36,11 @@ enum class Kind {
     Freeze,
     Connect,
     Disconnect,
+    Ramp,
     Undo,
     Redo
 };
-inline constexpr int kKinds = 20;
+inline constexpr int kKinds = 21;
 
 struct Op {
     Kind kind = Kind::Undo;

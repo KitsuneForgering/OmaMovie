@@ -49,11 +49,11 @@ std::unique_ptr<Command> to_command(const Op& op, Editor& editor) {
         return edit::connect(id, clip_id(tl, op.b, op.c));
     case Kind::Disconnect:
         return edit::disconnect(id);
-    case Kind::Undo:
-    case Kind::Redo:
+    case Kind::Ramp:
+        return ramp(op, clip);
+    default: // Undo and Redo go through the Editor, not a command
         return nullptr;
     }
-    return nullptr;
 }
 
 } // namespace property
