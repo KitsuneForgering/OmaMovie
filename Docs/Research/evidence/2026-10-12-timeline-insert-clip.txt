@@ -1,0 +1,19 @@
+Timeline: inserting clips into a long track (2026-10-12)
+
+Bench (scratch, not versioned): tests/timeline/fixture.hpp's 30 fps fixture; N edit::append
+steps of 5 frames each executed as one transaction, against the release libs (g++ -O2).
+Found while the M6 long-timeline audit spent 1.7-2.2 s building 5,000 clips.
+
+Cause: InsertClip::apply pushed the clip at the end and re-sorted the whole track
+(O(n log n) moves of large Clip values per insert), so building n clips cost O(n² log n).
+Tracks are sorted after every primitive command, so the clip now goes in at
+upper_bound(start) instead.
+
+              before        after
+   1,000      44.4 ms        2.5 ms
+   5,000   1,247.8 ms       34.3 ms
+  20,000  29,486.3 ms      993.5 ms
+
+Still O(n) per insert: the duplicate-ID check (Timeline::find_clip) and range_free scan the
+track. At the 5,000-clip long-form gate that is 34 ms for the whole build, so they stay.
+timeline_tests (423 checks) pass, also under ASan/UBSan.
