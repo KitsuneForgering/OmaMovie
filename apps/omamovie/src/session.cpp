@@ -1111,64 +1111,6 @@ void Session::deleteSelected(bool ripple) {
     if (auto command = deleteCommand(ripple)) run(std::move(command));
 }
 
-void Session::previewDelete(bool ripple) { previewCommand(deleteCommand(ripple)); }
-
-void Session::previewTrim(double id, bool head, int frames) {
-    // A drag sends several pointer events per snapped frame; each preview simulates the edit on
-    // a copy of the timeline, so repeat it only when the result can differ.
-    const TrimPreview key{.clip = id, .head = head, .frames = frames,
-                          .revision = editor_ ? editor_->revision() : 0};
-    if (trim_preview_ == key) return;
-    previewCommand(frames == 0 ? nullptr : trimCommand(tl::ClipId(static_cast<std::uint64_t>(id)), head, frames));
-    trim_preview_ = key;
-}
-
-void Session::clearEditScope() {
-    trim_preview_.reset();
-    if (edit_scope_.isEmpty()) return;
-    edit_scope_.clear();
-    emit editScopeChanged();
-}
-
-void Session::previewCommand(std::unique_ptr<tl::Command> command) {
-    if (!editor_ || !command) {
-        clearEditScope();
-        return;
-    }
-    // ponytail: copies the timeline per preview (O(clips)); fine for a hover or a drag step at
-    // the long-form gate's 5,000 clips. Keep the copy if previews ever run every frame.
-    const tl::Timeline& before = editor_->timeline();
-    tl::Editor trial{tl::Timeline(before)};
-    if (!trial.execute(std::move(command))) {
-        clearEditScope();
-        return;
-    }
-    std::unordered_map<std::uint64_t, std::int64_t> after;
-    for (const tl::Track& track : trial.timeline().tracks()) {
-        for (const tl::Clip& c : track.clips) after.emplace(c.id.value(), c.start_ticks());
-    }
-    QVariantMap moved;
-    QVariantList removed;
-    for (const tl::Track& track : before.tracks()) {
-        for (const tl::Clip& c : track.clips) {
-            const auto it = after.find(c.id.value());
-            const QString key = QString::number(c.id.value());
-            if (it == after.end()) {
-                removed.push_back(static_cast<double>(c.id.value()));
-            } else if (it->second != c.start_ticks()) {
-                moved.insert(key, it->second < c.start_ticks() ? -1 : 1);
-            }
-        }
-    }
-    int markers = 0;
-    for (const tl::Marker& m : before.markers()) {
-        const tl::Marker* now = trial.timeline().find_marker(m.id);
-        markers += now == nullptr || now->time != m.time ? 1 : 0;
-    }
-    edit_scope_ = {{"active", true}, {"moved", moved}, {"removed", removed}, {"markers", markers}};
-    emit editScopeChanged();
-}
-
 std::unique_ptr<tl::Command> Session::trimCommand(tl::ClipId clip, bool head, int frames) const {
     const tl::Clip* c = editor_ ? editor_->timeline().find_clip(clip) : nullptr;
     if (c == nullptr) return nullptr;
