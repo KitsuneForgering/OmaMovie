@@ -1,7 +1,7 @@
 # ADR-0008 — ProjectIR and preservation of external data
 
-**Status: Proposed (2026-10-13).** The IR shape below is proposed for implementation; the OTIO
-parsing route (last section) needs the maintainer's choice before the first importer lands.
+**Status: Accepted (2026-10-13).** The maintainer accepted the IR shape and chose option 1 below
+(an own reader on simdjson, no OpenTimelineIO dependency) for the OTIO pilot.
 
 ## Context
 
@@ -27,7 +27,7 @@ a structured report (§16.4). Project files are untrusted input (§18).
   available media ranges when known, and that clip media ids exist; importers run it before
   handing an IR to the converter.
 
-## Open choice: how to read OTIO
+## OTIO reading (chosen: 1)
 
 1. **Own reader on simdjson** (no new dependency): a pinned subset of the OTIO JSON schemas
    (Timeline.1, Stack.1, Track.1, Clip.2, Gap.1, Transition.1, ExternalReference.1,
