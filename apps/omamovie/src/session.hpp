@@ -394,6 +394,8 @@ public:
     Q_INVOKABLE void kenBurns();
     // Fit, no crop, no transform or keys: one command.
     Q_INVOKABLE void resetClipFraming();
+    // Lays out the selected clip above the storyline: 0 picture-in-picture, 1 split screen.
+    Q_INVOKABLE void applyLayout(int preset);
     // The transition into a storyline clip from the clip before it: a TransitionKind, or -1 to
     // remove it, lasting `seconds` (snapped to whole frames).
     Q_INVOKABLE void setTransition(double clip, int kind, double seconds);
