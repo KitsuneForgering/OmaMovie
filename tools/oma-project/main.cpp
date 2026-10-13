@@ -7,7 +7,9 @@
 namespace {
 
 int usage() {
-    std::fputs("usage: oma-project inspect|validate|dump <file>\n", stderr);
+    std::fputs("usage: oma-project inspect|validate|dump <file.omamovie>\n"
+               "       oma-project import <file.otio>\n",
+               stderr);
     return 2;
 }
 
@@ -17,6 +19,8 @@ int main(int argc, char** argv) {
     if (argc != 3)
         return usage();
     const std::string_view command(argv[1]);
+    if (command == "import")
+        return run_import(argv[2]);
     if (command != "inspect" && command != "validate" && command != "dump")
         return usage();
 

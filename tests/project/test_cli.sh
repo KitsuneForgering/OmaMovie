@@ -21,3 +21,12 @@ fi
 if "$cli" unknown "$file" >/dev/null 2>&1; then
     exit 1
 fi
+
+# The OTIO import report (CLAUDE.md §16.4): missing media becomes reported gaps; a file next to
+# the OTIO by relative path is found and its clip placed.
+"$cli" import tests/importers/fixtures/basic.otio | grep -qx 'level reached: 2'
+"$cli" import tests/importers/fixtures/basic.otio | grep -q 'media file not found'
+"$cli" import tests/importers/fixtures/relative.otio | grep -qx 'media found: 1 of 1 (not probed)'
+if "$cli" import tests/importers/fixtures/relative.otio | grep -q '^issue:'; then
+    exit 1
+fi
