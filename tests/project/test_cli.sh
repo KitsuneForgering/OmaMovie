@@ -30,3 +30,13 @@ fi
 if "$cli" import tests/importers/fixtures/relative.otio | grep -q '^issue:'; then
     exit 1
 fi
+
+# diff (CLAUDE.md §16.7): equal projects exit 0; different ones list their lines and exit 1.
+other=tests/fuzz/corpus/project/effects.json
+"$cli" diff "$other" "$other" >/dev/null
+printf '%s\n' '{"format":"omamovie-project","format_version":1}' > "$file"
+status=0
+"$cli" diff "$file" "$other" > "$file.out" || status=$?
+test "$status" -eq 1
+grep -q '^+[0-9]*: ' "$file.out"
+rm -f "$file.out"

@@ -33,6 +33,7 @@ if(OMA_BUILD_TESTS)
     add_subdirectory(tests/project-ir)
     add_subdirectory(tests/importers)
     add_subdirectory(tests/project)
+    add_subdirectory(tests/oma-project)
 endif()
 
 # The app and its headless Session tests: debug and release only (as in ADR-0001).
