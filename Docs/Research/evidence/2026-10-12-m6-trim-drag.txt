@@ -1,0 +1,30 @@
+M6 edge-trim drag preview (2026-10-12)
+
+Machine: Intel Iris Xe (TigerLake), Qt 6.11, BUILD=release (omamovie target).
+Command: OMA_AUDIT_ZOOM=60 build/release/omamovie --m6-timeline-audit N
+After the routine edits, the audit drags the tail of the middle storyline clip with 100
+pointer events, four per frame of trim (0..25 frames), calling Session::previewTrim as
+TimelineView.qml does. Each event is timed from the call to the end of the first Qt frame
+that began after it. "Scope updates" counts editScopeChanged signals, i.e. previews that
+copied the timeline and simulated the trim. Release = trimClip of 25 frames, then undo.
+
+Before (every pointer event simulated the trim):
+  500 clips:   97 scope updates; drag event p50 16.7 / p95 26.6 / max  46.7 ms
+  5,000 clips: 97 scope updates; drag event p50 16.6 / p95 26.5 / max 161.9 ms
+
+After (Session skips a preview whose clip, edge, frames and editor revision are unchanged):
+  500 clips:   25 scope updates; drag event p50 16.6 / p95 20.5 / max  27.6 ms
+  5,000 clips: 25 scope updates; drag event p50 16.6-16.8 / p95 23.8-27.0 / max 147.6-195.3 ms
+  5,000 clips fitted (no OMA_AUDIT_ZOOM): p95 18.6-21.0 / max 25.2-25.4 ms
+  Release (trim + undo): 39-64 ms. Peak RSS (VmHWM) 0.80-0.94 GB for the whole audit.
+
+Where the time goes at 5,000 clips: one simulated preview costs 10-29 ms on the UI thread
+(timeline copy, trim with storyline ripple moving ~2,500 clips, and a QVariantMap of every
+moved clip for QML). The single 150-195 ms event at a working zoom recurs at event 56-57 and
+is not a preview call (that event repeated the previous frame and was skipped); it is a
+frame-side stall, absent when the sequence is fitted. Its cause is not identified here.
+
+Against the proposed long-form gate (p95 < 100 ms, no routine stall > 250 ms) the drag
+passes at 5,000 clips, so the copy-and-simulate preview algorithm is kept. If it is changed
+later, the cheaper shape is to report moved clips as a range of the ripple (O(affected)
+data for QML) rather than one map entry per moved clip.
