@@ -885,6 +885,11 @@ Rectangle {
                 onObjectRemoved: (index, object) => overlayMenu.removeMenu(object)
             }
             AdjustItem { adjustment: actions.info; drawerName: "info" }
+            Menu {
+                title: "Layout"
+                MenuItem { objectName: "layoutPipItem"; action: actions.layoutPip }
+                MenuItem { action: actions.layoutSplit }
+            }
             MenuSeparator {}
             MenuItem { text: "Split here"; onTriggered: { session.seek(overlayMenu.at); actions.split.trigger() } }
             ClipTimingMenu { at: overlayMenu.at }

@@ -263,6 +263,17 @@ ApplicationWindow {
             enabled: actions.slideEarlier.enabled
             onTriggered: session.nudgeSlide(1)
         }
+        // Intent presets (M8): ordinary framing on a clip above the storyline (session_layouts).
+        property OmaAction layoutPip: OmaAction {
+            text: "Picture in picture"
+            enabled: actions.editing && session.selectedClip > 0
+            onTriggered: session.applyLayout(0)
+        }
+        property OmaAction layoutSplit: OmaAction {
+            text: "Split screen (right half)"
+            enabled: actions.layoutPip.enabled
+            onTriggered: session.applyLayout(1)
+        }
         property OmaAction speedDouble: OmaAction {
             text: "Set video speed to 2x"; enabled: actions.videoClip
             onTriggered: session.setClipSpeed(2, 1)
