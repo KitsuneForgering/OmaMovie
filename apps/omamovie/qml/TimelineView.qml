@@ -117,12 +117,14 @@ Rectangle {
     }
 
     // Drag a clip edge to trim; committed as one command on release. The storyline is
-    // magnetic (ripple trim, ui-design §7.3); lanes are not.
+    // magnetic (ripple trim, ui-design §7.3); lanes are not. Alt+drag rolls the cut instead:
+    // the neighbour on that side gives or takes the frames and nothing else moves.
     component TrimEdge: MouseArea {
         required property Item owner
         required property var clip
         readonly property double clipId: clip.id
         property bool head
+        property bool rolling: false
         property real pressX: 0
         width: 8
         height: parent.height
@@ -136,7 +138,10 @@ Rectangle {
             color: root.accent
             opacity: parent.containsMouse || parent.pressed ? 0.9 : 0
         }
-        onPressed: (mouse) => { pressX = mapToItem(timelineScroll.contentItem, mouse.x, 0).x }
+        onPressed: (mouse) => {
+            pressX = mapToItem(timelineScroll.contentItem, mouse.x, 0).x
+            rolling = (mouse.modifiers & Qt.AltModifier) !== 0
+        }
         onPositionChanged: (mouse) => {
             if (!pressed) return
             const edge = head ? clip.start : clip.start + clip.duration
@@ -144,7 +149,9 @@ Rectangle {
             const snapped = timelinePanel.snap(edge + dx / timelinePanel.scale, 0, clipId)
             if (head) owner.headDrag = (snapped - edge) * timelinePanel.scale
             else owner.tailDrag = (snapped - edge) * timelinePanel.scale
-            session.previewTrim(clipId, head, Math.round((snapped - edge) * session.frameRate))
+            const frames = Math.round((snapped - edge) * session.frameRate)
+            if (rolling) session.previewRoll(clipId, head, frames)
+            else session.previewTrim(clipId, head, frames)
         }
         onReleased: {
             const dx = head ? owner.headDrag : owner.tailDrag
@@ -152,8 +159,9 @@ Rectangle {
             owner.tailDrag = 0
             timelinePanel.unsnap()
             const frames = Math.round(dx / timelinePanel.scale * session.frameRate)
-            if (frames !== 0) session.trimClip(clipId, head, frames)
-            else session.clearEditScope()
+            if (frames === 0) session.clearEditScope()
+            else if (rolling) session.rollCut(clipId, head, frames)
+            else session.trimClip(clipId, head, frames)
         }
     }
 

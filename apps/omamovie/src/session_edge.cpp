@@ -9,11 +9,10 @@ QVariantMap Session::edgeFrames() const {
     return edge_frames_;
 }
 
-void Session::showEdge(EdgeEdit edit) {
+void Session::showEdge(EdgeEdit edit, oma::timeline::ClipId clip) {
     if (!editor_)
         return;
-    const auto sides =
-        edge_sides(editor_->timeline(), selected_clip_, edit, ticksPerFrame(), *paths_);
+    const auto sides = edge_sides(editor_->timeline(), clip, edit, ticksPerFrame(), *paths_);
     if (!sides)
         return;
     const unsigned request = ++edge_request_;

@@ -433,6 +433,9 @@ public:
     Q_INVOKABLE void stepFrames(int frames);
     Q_INVOKABLE void previewDelete(bool ripple);
     Q_INVOKABLE void previewTrim(double id, bool head, int frames);
+    // Rolls the cut on `id`'s head or tail by `frames` (Alt+drag of a clip edge).
+    Q_INVOKABLE void previewRoll(double id, bool head, int frames);
+    Q_INVOKABLE void rollCut(double id, bool head, int frames);
     // What Append (0), Insert (1) or Overwrite (2) of the selected library item would do.
     Q_INVOKABLE void previewPlace(int how);
     Q_INVOKABLE void clearEditScope();
@@ -680,11 +683,15 @@ private:
         double clip;
         bool head;
         int frames;
+        bool roll = false; // a roll of the cut instead of a trim
         std::uint64_t revision;
         bool operator==(const TrimPreview&) const = default;
     };
     std::optional<TrimPreview> trim_preview_;
-    void showEdge(EdgeEdit edit);
+    [[nodiscard]] std::optional<oma::timeline::ClipId> cutOwner(oma::timeline::ClipId clip, bool head) const;
+    [[nodiscard]] std::unique_ptr<oma::timeline::Command> rollCommand(oma::timeline::ClipId clip, bool head,
+                                                                      int frames) const;
+    void showEdge(EdgeEdit edit, oma::timeline::ClipId clip);
     QVariantMap edge_frames_;
     unsigned edge_request_ = 0;
     oma::JobHandle edge_job_;
