@@ -19,6 +19,7 @@ void run_export_success_tests();
 void run_export_crash_tests();
 void run_export_snapshot_tests();
 void run_trim_preview_tests();
+void run_recordings_tests();
 
 int main(int argc, char* argv[]) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
@@ -43,5 +44,6 @@ int main(int argc, char* argv[]) {
     run_export_crash_tests();
     run_export_snapshot_tests();
     run_trim_preview_tests();
+    run_recordings_tests();
     return cest_result();
 }

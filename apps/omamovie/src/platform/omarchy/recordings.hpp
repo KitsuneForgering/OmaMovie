@@ -13,11 +13,12 @@ namespace omarchy {
 
 // ${OMARCHY_SCREENRECORD_DIR:-${XDG_VIDEOS_DIR:-$HOME/Videos}}, as the capture script picks it.
 [[nodiscard]] std::filesystem::path recordings_dir();
+// The recording in progress, as the capture script names it in a temporary file; empty if none.
+[[nodiscard]] std::filesystem::path current_recording();
 
 struct Recording {
     std::filesystem::path path;
     std::filesystem::file_time_type modified;
-    std::uintmax_t size = 0;
     // Still being written: the capture script names it as the current recording and it
     // changed within the last few seconds. Not offered for editing until it settles.
     bool growing = false;
