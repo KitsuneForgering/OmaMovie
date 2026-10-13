@@ -44,6 +44,9 @@ constexpr std::size_t kMaxItems = 100000; // media, tracks, clips per track, mar
 // the numeric values.
 constexpr std::array kTrackKinds{"video", "audio", "caption"};
 constexpr std::array kFits{"fit", "fill", "stretch", "native"};
+// ADR-0019; "auto" is never written, so a media item without an override looks as before.
+constexpr std::array kColorMatrices{"auto", "bt601", "bt709", "bt2020"};
+constexpr std::array kColorRanges{"auto", "limited", "full"};
 constexpr std::array kBlends{"normal", "add", "multiply", "screen"};
 constexpr std::array kFilters{"none", "black_and_white", "sepia", "vintage", "cool",
                               "warm", "vignette"};
@@ -993,6 +996,10 @@ Result<std::string> to_json(const Document& doc, const std::filesystem::path& pr
         w.field("has_video", m.info.has_video);
         w.field("has_audio", m.info.has_audio);
         w.field("still", m.info.still);
+        if (m.info.color_matrix != tl::MediaColorMatrix::Auto)
+            w.field("color_matrix", name_of(kColorMatrices, m.info.color_matrix));
+        if (m.info.color_range != tl::MediaColorRange::Auto)
+            w.field("color_range", name_of(kColorRanges, m.info.color_range));
         w.field("audio_only", m.audio_only);
         w.end_object();
     }
@@ -1159,6 +1166,8 @@ Result<Document> from_json(std::string_view json, const std::filesystem::path& p
         ref.info.has_video = r(get_or<bool>(m, "has_video", false, at));
         ref.info.has_audio = r(get_or<bool>(m, "has_audio", false, at));
         ref.info.still = r(get_or<bool>(m, "still", false, at));
+        ref.info.color_matrix = r(get_enum(m, "color_matrix", kColorMatrices, tl::MediaColorMatrix::Auto, at));
+        ref.info.color_range = r(get_enum(m, "color_range", kColorRanges, tl::MediaColorRange::Auto, at));
         ref.audio_only = r(get_or<bool>(m, "audio_only", false, at));
         doc.media.push_back(std::move(ref));
     }

@@ -25,7 +25,8 @@ namespace oma::project {
 // 4 (2026-10-06): a clip's `filter` and `sharpness` became an ordered `effects` list (ADR-0016).
 // 5 (2026-10-07): the sequence may carry `captions` (ADR-0017).
 // 6 (2026-10-08): clips may carry `opacity_keys` and `gain_keys` (keyed opacity and volume).
-inline constexpr int kFormatVersion = 6;
+// 7 (2026-10-13): media may carry `color_matrix` and `color_range` overrides (ADR-0019).
+inline constexpr int kFormatVersion = 7;
 
 // Identifies a media file for relinking: its size and a hash of its first and last 64 KiB.
 // Duration and streams travel in the MediaInfo next to it.
