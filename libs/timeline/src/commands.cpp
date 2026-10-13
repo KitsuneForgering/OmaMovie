@@ -67,6 +67,10 @@ public:
         }
     }
 
+    [[nodiscard]] bool changed_nothing() const noexcept override {
+        return std::ranges::all_of(steps_, [](const auto& step) { return step->changed_nothing(); });
+    }
+
 private:
     std::string name_;
     Steps steps_;
@@ -95,6 +99,10 @@ public:
     }
 
     void revert(Timeline& timeline) noexcept override { plan_->revert(timeline); }
+
+    [[nodiscard]] bool changed_nothing() const noexcept override {
+        return plan_ && plan_->changed_nothing();
+    }
 
 private:
     std::string name_;
@@ -211,6 +219,8 @@ public:
         }
     }
 
+    [[nodiscard]] bool changed_nothing() const noexcept override { return clip_ == old_; }
+
 private:
     Clip clip_;
     Clip old_;
@@ -271,6 +281,8 @@ public:
             }
         }
     }
+
+    [[nodiscard]] bool changed_nothing() const noexcept override { return shifted_.empty(); }
 
 private:
     TrackId track_;

@@ -19,6 +19,8 @@ struct ClipPlace {
 using Places = std::unordered_map<ClipId, ClipPlace>;
 
 [[nodiscard]] bool has_anchors(const Timeline& tl);
+// Whether any clip is connected to `primary`.
+[[nodiscard]] bool has_dependents(const Timeline& tl, ClipId primary);
 [[nodiscard]] Places places(const Timeline& tl);
 // The steps that re-attach connected clips after an edit (ADR-0014), given where every clip
 // was before it. Empty when nothing needs to change.

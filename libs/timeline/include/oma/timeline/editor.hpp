@@ -35,6 +35,10 @@ public:
     // Undoes a successful apply. Called only in reverse order of application, so the state it
     // finds is the one its apply left behind.
     virtual void revert(Timeline& timeline) noexcept = 0;
+    // After a successful apply: whether the timeline is exactly as before (a trim dragged back to
+    // where it started, disconnecting a clip that was not connected). Editor::execute then
+    // records nothing, so no Undo entry does nothing.
+    [[nodiscard]] virtual bool changed_nothing() const noexcept { return false; }
 };
 
 class Editor {
@@ -51,7 +55,8 @@ public:
     [[nodiscard]] Result<void> add_lut(LutInfo lut);
 
     // Applies a command, checks every timeline invariant and records it for undo; clears the
-    // redo stack. A failing command or a broken invariant leaves the timeline unchanged.
+    // redo stack. A failing command or a broken invariant leaves the timeline unchanged. A
+    // command that changes nothing succeeds without touching the history or the revision.
     [[nodiscard]] Result<void> execute(std::unique_ptr<Command> command);
 
     [[nodiscard]] bool can_undo() const noexcept;

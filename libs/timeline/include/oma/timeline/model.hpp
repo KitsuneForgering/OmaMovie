@@ -386,6 +386,8 @@ struct Clip {
     // Exact end: start + duration.
     [[nodiscard]] std::int64_t start_ticks() const noexcept;
     [[nodiscard]] std::int64_t end_ticks() const noexcept;
+
+    friend bool operator==(const Clip&, const Clip&) = default;
 };
 
 struct Track {

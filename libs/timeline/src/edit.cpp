@@ -1,5 +1,6 @@
 #include "oma/timeline/edit.hpp"
 
+#include "anchors.hpp"
 #include "commands.hpp"
 #include "mutation.hpp"
 
@@ -515,9 +516,12 @@ std::unique_ptr<Command> move_clip(ClipId id, TrackId track, RationalTime start)
             return error(ErrorCode::InvalidArgument, "tracks of different kinds",
                          detail::clip_context(id));
         }
+        Steps steps;
+        if (tl.track_of(id)->id == track && *s == (*c)->start_ticks()) {
+            return steps; // where it already is: no edit
+        }
         Clip moved = **c;
         moved.start = tl.at(*s);
-        Steps steps;
         steps.push_back(detail::erase_clip(id));
         steps.push_back(detail::insert_clip(track, moved));
         return steps;
@@ -542,6 +546,9 @@ std::unique_ptr<Command> ripple_move(ClipId id, RationalTime at) {
             return error(ErrorCode::InvalidArgument, "negative time", detail::clip_context(id));
         }
         Steps steps;
+        if (*s == (*c)->start_ticks()) {
+            return steps; // back where it was: no edit, and its transitions stay
+        }
         for (const Clip& other : track.clips) {
             if (other.id == id) {
                 continue;
@@ -619,6 +626,21 @@ std::unique_ptr<Command> connect(ClipId dependent, ClipId primary) {
         auto p = get_clip(tl, primary);
         if (!d || !p) {
             return std::unexpected(!d ? d.error() : p.error());
+        }
+        // Checked here, not left to validate(): Editor drops a same-track anchor while it follows
+        // connections, which would turn this edit into an Undo entry that does nothing.
+        if (tl.track_of(dependent) == tl.track_of(primary)) {
+            return error(ErrorCode::InvalidArgument, "the primary clip is on the same track",
+                         detail::clip_context(dependent));
+        }
+        if ((*p)->anchor || !(*p)->time_map.is_constant()) {
+            return error(ErrorCode::InvalidArgument,
+                         "the primary clip is connected itself or changes speed",
+                         detail::clip_context(primary));
+        }
+        if (detail::has_dependents(tl, dependent)) {
+            return error(ErrorCode::InvalidArgument, "other clips are connected to this clip",
+                         detail::clip_context(dependent));
         }
         if ((*d)->start_ticks() < (*p)->start_ticks() || (*d)->start_ticks() >= (*p)->end_ticks()) {
             return error(ErrorCode::InvalidArgument, "the clip does not start on the primary clip",

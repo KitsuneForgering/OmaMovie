@@ -19,6 +19,10 @@ Result<void> Editor::execute(std::unique_ptr<Command> command) {
     if (auto r = command->apply(timeline_); !r) {
         return r;
     }
+    if (command->changed_nothing()) {
+        command->revert(timeline_); // restores the exact representation the replacement swapped
+        return {};
+    }
     if (anchored) {
         auto fixes = detail::reattach(timeline_, before);
         if (!fixes) {

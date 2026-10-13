@@ -74,6 +74,13 @@ bool has_anchors(const Timeline& tl) {
     });
 }
 
+bool has_dependents(const Timeline& tl, ClipId primary) {
+    return std::ranges::any_of(tl.tracks(), [&](const Track& t) {
+        return std::ranges::any_of(
+            t.clips, [&](const Clip& c) { return c.anchor && c.anchor->primary == primary; });
+    });
+}
+
 Places places(const Timeline& tl) {
     Places out;
     for (const Track& t : tl.tracks()) {
