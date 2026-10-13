@@ -35,7 +35,8 @@ Translation rule: **macOS `Cmd` becomes `Ctrl`**, `Option` becomes `Alt`. OmaMov
 | `Delete` | Remove and close the gap |
 | `Shift+Delete` | Replace with a gap |
 | `Ctrl+D` | Change duration |
-| `M` | Add marker |
+| `M` | Add marker (removes the one at the playhead) |
+| `Ctrl+;` / `Ctrl+'` | Previous / next marker |
 | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
 
 **Tools**
