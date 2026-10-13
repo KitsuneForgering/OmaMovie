@@ -10,7 +10,8 @@ set(FUZZ_LINK -fsanitize=fuzzer,address,undefined)
 add_executable(fuzz_cube
     fuzz_cube.cpp
     ${CMAKE_SOURCE_DIR}/libs/compositor/src/grade.cpp
-    ${CMAKE_SOURCE_DIR}/libs/base/src/error.cpp)
+    ${CMAKE_SOURCE_DIR}/libs/base/src/error.cpp
+    ${CMAKE_SOURCE_DIR}/libs/base/src/error_strings.cpp)
 target_include_directories(fuzz_cube PRIVATE
     ${CMAKE_SOURCE_DIR}/libs/base/include ${CMAKE_SOURCE_DIR}/libs/compositor/include)
 target_compile_options(fuzz_cube PRIVATE ${FUZZ_FLAGS})
@@ -32,7 +33,8 @@ target_link_libraries(fuzz_project PRIVATE ${SIMDJSON_LIBRARIES})
 add_executable(fuzz_subtitles
     fuzz_subtitles.cpp
     ${CMAKE_SOURCE_DIR}/libs/project/src/subtitles.cpp
-    ${CMAKE_SOURCE_DIR}/libs/base/src/error.cpp)
+    ${CMAKE_SOURCE_DIR}/libs/base/src/error.cpp
+    ${CMAKE_SOURCE_DIR}/libs/base/src/error_strings.cpp)
 target_include_directories(fuzz_subtitles PRIVATE
     ${CMAKE_SOURCE_DIR}/libs/project/include ${CMAKE_SOURCE_DIR}/libs/base/include)
 target_compile_options(fuzz_subtitles PRIVATE ${FUZZ_FLAGS})
