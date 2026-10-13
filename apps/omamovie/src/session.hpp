@@ -67,6 +67,7 @@ class Session final : public QObject {
     Q_PROPERTY(QVariantList recordings READ recordings NOTIFY recordingsChanged)
     Q_PROPERTY(QVariantList recentProjects READ recentProjects NOTIFY recentProjectsChanged)
     Q_PROPERTY(QVariantList recoveredProjects READ recoveredProjects NOTIFY recoveredChanged)
+    Q_PROPERTY(QVariantList recoveredExports READ recoveredExports NOTIFY exportRecoveryChanged)
     Q_PROPERTY(QString recordingsFolder READ recordingsFolder NOTIFY recordingsChanged)
     Q_PROPERTY(int selectedMedia READ selectedMedia NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList clips READ clips NOTIFY sequenceChanged)
@@ -245,6 +246,8 @@ public:
     // or discarded.
     static constexpr int kAutosaveSeconds = 30;
     [[nodiscard]] QVariantList recoveredProjects() const;
+    [[nodiscard]] QVariantList recoveredExports() const;
+    Q_INVOKABLE void resolveInterruptedExport(const QString& id, bool keep_current);
     Q_INVOKABLE void restoreRecovered(const QString& file);
     Q_INVOKABLE void discardRecovered(const QString& file);
     // Prior versions of a project file, newest first: {file, when}. Restoring opens one as
@@ -470,6 +473,7 @@ signals:
     void recordingsChanged();
     void recentProjectsChanged();
     void recoveredChanged();
+    void exportRecoveryChanged();
     // Another launch handed files to this instance; QML guards unsaved work, then openFiles().
     void openRequested(const QStringList& paths);
     void storylineViewChanged();
@@ -682,6 +686,8 @@ private:
     oma::JobHandle frame_job_;
     oma::JobHandle save_job_; // never cancelled: a save the user asked for completes
     oma::JobHandle export_job_;
+    oma::JobHandle recovery_job_;
+    bool recovery_busy_ = false;
     double export_progress_ = -1; // UI thread
     QString exported_file_;
     ExportStats export_stats_; // of the last finished export (UI thread)

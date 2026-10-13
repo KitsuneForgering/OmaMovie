@@ -1,6 +1,7 @@
 #include "session.hpp"
 
 #include "autosave.hpp"
+#include "export_recovery.hpp"
 #include "caption_io.hpp"
 #include "export_requirements.hpp"
 #include "export_bundle.hpp"
@@ -419,6 +420,45 @@ QVariantList Session::recoveredProjects() const {
                                 {QStringLiteral("when"), QLocale().toString(r.when, QLocale::ShortFormat)}});
     }
     return rows;
+}
+
+QVariantList Session::recoveredExports() const {
+    QVariantList rows;
+    for (const auto& record : export_recovery::pending()) {
+        const auto status = export_recovery::state(record);
+        rows.append(QVariantMap{{"id", QString::fromStdString(record.stage.string())},
+                                {"name", QString::fromStdString(record.movie.filename().string())},
+                                {"path", QString::fromStdString(record.movie.string())},
+                                {"completed", status == export_recovery::State::Completed}});
+    }
+    return rows;
+}
+
+void Session::resolveInterruptedExport(const QString& id, bool keep_current) {
+    if (recovery_busy_) return;
+    for (const auto& record : export_recovery::pending()) {
+        if (QString::fromStdString(record.stage.string()) != id) continue;
+        if (keep_current && export_recovery::state(record) != export_recovery::State::Completed) {
+            setNotice(QStringLiteral("The export pair is incomplete; restore the previous output."));
+            return;
+        }
+        recovery_busy_ = true;
+        recovery_job_ = export_pool_.submit("recover export", [this, record, keep_current](oma::JobContext&) {
+            const auto result = keep_current ? export_recovery::keep_current(record)
+                                             : export_recovery::restore_previous(record);
+            const QString why = result ? QString() : message(result.error());
+            QMetaObject::invokeMethod(this, [this, why] {
+                recovery_busy_ = false;
+                setNotice(why.isEmpty() ? QStringLiteral("Export recovery finished")
+                                        : QStringLiteral("Export recovery failed: %1").arg(why));
+                emit exportRecoveryChanged();
+            }, Qt::QueuedConnection);
+            return oma::Result<void>{};
+        });
+        return;
+    }
+    setNotice(QStringLiteral("This interrupted export is no longer available."));
+    emit exportRecoveryChanged();
 }
 
 void Session::restoreRecovered(const QString& file) {
@@ -1944,6 +1984,7 @@ void Session::exportMovie(const QUrl& url, const QString& profile) {
                 }
             }
             emit exportChanged();
+            emit exportRecoveryChanged();
         }, Qt::QueuedConnection);
         return oma::Result<void>{};
     });

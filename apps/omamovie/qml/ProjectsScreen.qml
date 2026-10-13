@@ -84,6 +84,55 @@ Item {
             font.pixelSize: 12
         }
 
+        UiText {
+            Layout.topMargin: 16
+            visible: session.recoveredExports.length > 0
+            text: "EXPORTS LEFT BY AN UNEXPECTED CLOSE"
+            color: colors.yellow
+            font.pixelSize: 11
+            font.bold: true
+        }
+        Flow {
+            Layout.fillWidth: true
+            spacing: 10
+            visible: session.recoveredExports.length > 0
+            Repeater {
+                model: session.recoveredExports
+                delegate: Rectangle {
+                    id: exportCard
+                    required property var modelData
+                    objectName: "recoveredExport"
+                    width: 470
+                    height: 64
+                    radius: 8
+                    color: colors.dark_background
+                    border.color: colors.yellow
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        UiText {
+                            Layout.fillWidth: true
+                            text: exportCard.modelData.name + (exportCard.modelData.completed ? " · complete pair" : " · interrupted")
+                            color: root.fg
+                            elide: Text.ElideMiddle
+                            ToolTip.text: exportCard.modelData.path
+                            ToolTip.visible: exportHover.hovered
+                            HoverHandler { id: exportHover }
+                        }
+                        OmaButton {
+                            text: "Restore previous"
+                            onClicked: session.resolveInterruptedExport(exportCard.modelData.id, false)
+                        }
+                        OmaButton {
+                            text: "Keep current"
+                            enabled: exportCard.modelData.completed
+                            onClicked: session.resolveInterruptedExport(exportCard.modelData.id, true)
+                        }
+                    }
+                }
+            }
+        }
+
         // Autosaves left behind by a crash (CLAUDE.md §14): restore one as unsaved changes to its
         // project, or let it go.
         UiText {

@@ -1,9 +1,12 @@
 #include "export_bundle.hpp"
 #include "export_bundle_publish.hpp"
+#include "export_recovery.hpp"
 
 #include <cstdlib>
+#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
+#include <sys/file.h>
 #include <system_error>
 #include <unistd.h>
 
@@ -13,27 +16,65 @@ oma::Result<void>
 export_movie_bundle(ExportRequest request, std::optional<std::string> captions,
                     const std::function<bool(std::int64_t, std::int64_t)>& progress,
                     ExportStats* stats) {
-    const fs::path movie = request.file;
+    std::error_code absolute_error;
+    const fs::path movie = fs::absolute(request.file, absolute_error);
+    if (absolute_error)
+        return oma::make_error(oma::ErrorCode::IoError, oma::Category::Encode,
+                               "cannot resolve export destination", request.file.string());
     const fs::path sidecar = movie.parent_path() / (movie.stem().string() + ".srt");
+    for (const auto& pending : export_recovery::pending()) {
+        if (pending.movie == movie)
+            return oma::make_error(oma::ErrorCode::InvalidData, oma::Category::Encode,
+                                   "resolve the interrupted export before reusing this destination",
+                                   movie.string());
+    }
     std::string pattern = (movie.parent_path() / ".omamovie-export-XXXXXX").string();
     if (::mkdtemp(pattern.data()) == nullptr)
         return oma::make_error(oma::ErrorCode::IoError, oma::Category::Encode,
                                "cannot stage export", movie.string());
     const fs::path stage(pattern);
+    const int active_fd = ::open((stage / ".active").c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+    if (active_fd < 0 || ::flock(active_fd, LOCK_EX | LOCK_NB) != 0) {
+        if (active_fd >= 0)
+            ::close(active_fd);
+        std::error_code ignored;
+        fs::remove_all(stage, ignored);
+        return oma::make_error(oma::ErrorCode::IoError, oma::Category::Encode,
+                               "cannot lock export stage", stage.string());
+    }
     struct Cleanup {
         fs::path path;
+        int active_fd;
         ~Cleanup() {
             std::error_code ec;
             const bool movie_backup = fs::exists(path / "previous-movie", ec);
-            if (ec)
+            if (ec) {
+                ::close(active_fd);
                 return;
+            }
             const bool caption_backup = fs::exists(path / "previous-captions", ec);
-            if (!ec && !movie_backup && !caption_backup)
+            if (!ec && !movie_backup && !caption_backup) {
                 fs::remove_all(path, ec);
+                if (!ec)
+                    export_recovery::forget(path);
+            }
+            ::close(active_fd);
         }
-    } cleanup{stage};
+    } cleanup{stage, active_fd};
     const fs::path staged_movie = stage / movie.filename();
     const fs::path staged_sidecar = stage / sidecar.filename();
+    std::error_code inspection;
+    const export_recovery::Record record{
+        .stage = stage,
+        .movie = movie,
+        .sidecar = captions ? std::optional<fs::path>(sidecar) : std::nullopt,
+        .had_movie = fs::exists(movie, inspection),
+        .had_sidecar = captions && fs::exists(sidecar, inspection)};
+    if (inspection)
+        return oma::make_error(oma::ErrorCode::IoError, oma::Category::Encode,
+                               "cannot inspect previous export", movie.string());
+    if (auto remembered = export_recovery::remember(record); !remembered)
+        return remembered;
     if (captions) {
         std::ofstream out(staged_sidecar, std::ios::binary);
         out.write(captions->data(), static_cast<std::streamsize>(captions->size()));
