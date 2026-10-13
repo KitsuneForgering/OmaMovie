@@ -1,6 +1,7 @@
 #include "oma/media/probe.hpp"
 
 #include "ffmpeg.hpp"
+#include "oma/base/log.hpp"
 #include "stream_info.hpp"
 
 extern "C" {
@@ -18,6 +19,17 @@ extern "C" {
 namespace oma::media {
 
 namespace {
+
+// A container or stream length. Crafted files can declare a negative one (found by fuzz_probe):
+// that is no length at all, like AV_NOPTS_VALUE, rather than a value downstream must distrust.
+std::optional<RationalTime> length_of(std::int64_t value, Rational timebase) {
+    auto t = ff::to_time(value, timebase);
+    if (t && t->value() < 0) {
+        log_warn(Category::Media, "ignoring a negative declared duration ({})", t->value());
+        return std::nullopt;
+    }
+    return t;
+}
 
 // Packets read to judge whether the frame rate is constant.
 constexpr int kVfrSamplePackets = 48;
@@ -193,7 +205,7 @@ StreamInfo describe_stream(const AVStream& st, std::string_view demuxer) {
     if (auto tb = ff::to_timebase(st.time_base)) {
         s.timebase = *tb;
         s.start = ff::to_time(st.start_time, *tb);
-        s.duration = ff::to_time(st.duration, *tb);
+        s.duration = length_of(st.duration, *tb);
     }
     if (st.nb_frames > 0) {
         s.frame_count = st.nb_frames;
@@ -216,7 +228,7 @@ Result<MediaInfo> probe(const std::filesystem::path& path) {
 
     MediaInfo info;
     info.container = fmt.iformat->name;
-    info.duration = ff::to_time(fmt.duration, Rational::literal(1, AV_TIME_BASE));
+    info.duration = length_of(fmt.duration, Rational::literal(1, AV_TIME_BASE));
     info.bit_rate = fmt.bit_rate;
 
     for (unsigned i = 0; i < fmt.nb_streams; ++i) {
