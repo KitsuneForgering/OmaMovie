@@ -93,6 +93,7 @@ build/release/omamovie --export-audit FILE OUT.mp4 # export one file, per-phase 
 make oma-project               # build the native project inspect/validate/dump CLI
 make BUILD=release DESTDIR=dir PREFIX=/usr install  # the installed tree (PKGBUILD, release tarball)
 makepkg -si                    # build and install the Arch package from the PKGBUILD
+scripts/package-check.sh       # PKGBUILD build/check/install + GUI smoke in clean containers (podman)
 ```
 
 Commits and releases:
