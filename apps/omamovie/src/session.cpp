@@ -789,15 +789,11 @@ void Session::relinkMedia(int index, const QUrl& url) {
     if (index < 0 || index >= static_cast<int>(library_.size()) || !library_[static_cast<std::size_t>(index)].missing) return;
     const QString path = url.toLocalFile();
     if (path.isEmpty()) return;
-    const auto ref = [](const LibraryItem& i) {
-        return oma::project::MediaRef{.info = i.media, .path = i.path.toStdString(), .name = i.name.toStdString(),
-                                      .audio_only = i.audio_only, .fingerprint = i.fingerprint};
-    };
     relink_roots_.push_back(std::filesystem::path(path.toStdString()).parent_path());
-    importFile(path, false, ref(library_[static_cast<std::size_t>(index)]));
+    importFile(path, false, mediaRef(library_[static_cast<std::size_t>(index)]));
     // The others moved together, most likely: look for them by name and content there too.
     for (std::size_t i = 0; i < library_.size(); ++i) {
-        if (static_cast<int>(i) != index && library_[i].missing) importFile(library_[i].path, false, ref(library_[i]));
+        if (static_cast<int>(i) != index && library_[i].missing) importFile(library_[i].path, false, mediaRef(library_[i]));
     }
 }
 
@@ -1721,13 +1717,7 @@ QString Session::projectName() const {
 
 oma::project::Document Session::document() const {
     oma::project::Document doc;
-    for (const LibraryItem& i : library_) {
-        doc.media.push_back({.info = i.media,
-                             .path = std::filesystem::path(i.path.toStdString()),
-                             .name = i.name.toStdString(),
-                             .audio_only = i.audio_only,
-                             .fingerprint = i.fingerprint});
-    }
+    for (const LibraryItem& i : library_) doc.media.push_back(mediaRef(i));
     if (editor_) {
         for (const tl::LutInfo& l : editor_->timeline().luts()) {
             const auto file = lut_paths_.find(l.id.value());

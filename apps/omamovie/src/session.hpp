@@ -406,6 +406,9 @@ public:
     Q_INVOKABLE void resetClipFraming();
     // Lays out the selected clip above the storyline: 0 picture-in-picture, 1 split screen.
     Q_INVOKABLE void applyLayout(int preset);
+    // How the selected clip's media is read (ADR-0019): matrix 0 auto, 1 BT.601, 2 BT.709,
+    // 3 BT.2020; range 0 auto, 1 limited, 2 full. One undoable edit.
+    Q_INVOKABLE void setMediaColor(int matrix, int range);
     // Built-in effect presets [{id, name}] and applying one to the selected clip (one edit).
     Q_PROPERTY(QVariantList effectPresets READ effectPresets CONSTANT)
     [[nodiscard]] QVariantList effectPresets() const;
@@ -722,6 +725,8 @@ private:
         bool operator==(const TrimPreview&) const = default;
     };
     std::optional<TrimPreview> trim_preview_;
+    // A library item as the project file stores it, with the timeline's color interpretation.
+    [[nodiscard]] oma::project::MediaRef mediaRef(const LibraryItem& item) const;
     [[nodiscard]] std::optional<oma::timeline::ClipId> cutOwner(oma::timeline::ClipId clip, bool head) const;
     [[nodiscard]] std::unique_ptr<oma::timeline::Command> rollCommand(oma::timeline::ClipId clip, bool head,
                                                                       int frames) const;
