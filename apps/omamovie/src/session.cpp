@@ -1,6 +1,7 @@
 #include "session.hpp"
 
 #include "autosave.hpp"
+#include "media_entry.hpp"
 #include "export_recovery.hpp"
 #include "caption_io.hpp"
 #include "export_requirements.hpp"
@@ -640,24 +641,13 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
         const bool audio_only = !probed->best_video;
         const auto& stream =
             probed->streams[static_cast<std::size_t>(audio_only ? *probed->best_audio : *probed->best_video)];
-        const oma::Rational tb = stream.timebase;
         LibraryItem item;
         item.path = source;
         item.name = QFileInfo(source).fileName();
         item.audio_only = audio_only;
-        item.media.id = id;
-        item.media.start = stream.start.value_or(*oma::RationalTime::make(0, tb));
-        const auto length = stream.duration ? stream.duration : probed->duration;
-        if (length) {
-            auto in_tb = length->rescaled(item.media.start.timebase(), oma::Rounding::Floor);
-            item.media.duration = in_tb.value_or(oma::RationalTime{});
-            item.seconds = length->seconds_approx();
-        } else {
-            item.media.duration = *oma::RationalTime::make(0, item.media.start.timebase());
-        }
-        item.media.has_video = !audio_only;
-        item.media.has_audio = probed->best_audio.has_value();
-        item.media.still = stream.video && stream.video->still_image;
+        const auto entry = media_entry(*probed, id); // the stream chosen above exists
+        item.media = entry->info;
+        if (entry->length) item.seconds = entry->length->seconds_approx();
         if (item.media.still) item.seconds = static_cast<double>(kStillSeconds);
         item.details.insert("codec", QString::fromStdString(stream.codec));
         if (stream.audio && audio_only) {
