@@ -15,6 +15,7 @@ void run_scalar_key_tests();
 void run_detach_tests();
 void run_effect_preset_tests();
 void run_media_color_tests();
+void run_property_tests();
 void run_no_op_edit_tests();
 
 int main(int argc, char* argv[]) {
@@ -34,6 +35,7 @@ int main(int argc, char* argv[]) {
     run_detach_tests();
     run_effect_preset_tests();
     run_media_color_tests();
+    run_property_tests();
     run_no_op_edit_tests();
     return cest_result();
 }

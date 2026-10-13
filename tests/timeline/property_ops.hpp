@@ -1,0 +1,60 @@
+#pragma once
+
+// Stateful edit properties (M10, Docs/implementation-plan-qa-timeline.md): one generated step. It
+// names clips by position, not ID, so a shrunk log still replays; an empty position is rejected.
+
+#include "oma/timeline/editor.hpp"
+
+#include <cstdint>
+#include <memory>
+#include <string>
+
+namespace property {
+
+// Field use per kind (times in frames; `clip` picks the media of Append/Insert/Overwrite):
+//   Append        clip=media b=source in c=duration
+//   Insert, Overwrite   clip=media a=at b=source in c=duration
+//   Split   a=offset in the clip   Freeze   a=offset b=length c=ripple   Slip, Slide   a=delta
+//   TrimStart, TrimEnd   a=delta of that edge c=ripple   Roll   a=delta of the clip's end
+//   Move          b=track index a=start      RippleMove    a=at
+//   Speed         a/b speed c=ripple         Connect       b=track index c=clip index
+enum class Kind {
+    Append,
+    Insert,
+    Overwrite,
+    Split,
+    TrimStart,
+    TrimEnd,
+    RippleDelete,
+    Remove,
+    Roll,
+    Slip,
+    Slide,
+    Move,
+    RippleMove,
+    Speed,
+    Reverse,
+    Freeze,
+    Connect,
+    Disconnect,
+    Undo,
+    Redo
+};
+inline constexpr int kKinds = 20;
+
+struct Op {
+    Kind kind = Kind::Undo;
+    int track = 0;
+    int clip = 0;
+    std::int64_t a = 0;
+    std::int64_t b = 0;
+    std::int64_t c = 0;
+};
+
+// The step as a C++ initializer, so a minimized log pastes into a regression test.
+[[nodiscard]] std::string to_string(const Op& op);
+// The edit a step asks for; null for Undo and Redo.
+[[nodiscard]] std::unique_ptr<oma::timeline::Command> to_command(const Op& op,
+                                                                 oma::timeline::Editor& editor);
+
+} // namespace property
