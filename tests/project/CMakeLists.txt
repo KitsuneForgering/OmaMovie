@@ -1,6 +1,6 @@
 # libs/project tests: save/load round trips, refused and broken files, atomic replacement.
 file(GLOB SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
-oma_test(project_tests SOURCES ${SOURCES} LIBS project timeline base)
+oma_test(project_tests SOURCES ${SOURCES} LIBS project timeline project-ir base)
 
 # The oma-project CLI, exercised end to end.
 add_test(NAME cli COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/test_cli.sh $<TARGET_FILE:oma-project>)
