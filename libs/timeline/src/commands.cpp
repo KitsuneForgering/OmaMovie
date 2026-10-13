@@ -126,8 +126,11 @@ public:
             return error(ErrorCode::InvalidArgument, "the range is occupied",
                          std::format("{} on {}", clip_context(clip_.id), track_context(track_)));
         }
-        t->clips.push_back(clip_);
-        sort_clips(*t);
+        // Tracks are kept sorted, so one search places the clip; re-sorting the whole track on
+        // every insert made building a long sequence O(n² log n).
+        const auto at =
+            std::ranges::upper_bound(t->clips, clip_.start_ticks(), {}, &Clip::start_ticks);
+        t->clips.insert(at, clip_);
         return {};
     }
 
