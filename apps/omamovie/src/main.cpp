@@ -507,6 +507,20 @@ int main(int argc, char** argv) {
                 ripple.push_back(timed([&] { session.deleteSelected(true); }));
                 undo_ms.push_back(timed([&] { session.undo(); }));
             }
+            // A continuous tail drag on a middle clip: four pointer events per frame of trim, as
+            // at a working zoom, so most events repeat the previous snapped frame.
+            std::vector<double> drag;
+            int scopes = 0;
+            const auto counter = QObject::connect(&session, &Session::editScopeChanged, &application,
+                                                  [&scopes] { ++scopes; });
+            const QVariantList list = session.clips();
+            const double dragged = list[list.size() / 2].toMap().value("id").toDouble();
+            constexpr int kDragEvents = 100;
+            for (int i = 1; i <= kDragEvents; ++i)
+                drag.push_back(timed([&] { session.previewTrim(dragged, false, i / 4); }));
+            QObject::disconnect(counter);
+            std::vector<double> release{timed([&] { session.trimClip(dragged, false, kDragEvents / 4); })};
+            release.push_back(timed([&] { session.undo(); }));
             const auto summary = [](std::vector<double> v) {
                 std::ranges::sort(v);
                 return std::array<double, 3>{v[v.size() / 2], v[v.size() * 95 / 100], v.back()};
@@ -517,14 +531,21 @@ int main(int argc, char** argv) {
             };
             std::ifstream status("/proc/self/status");
             std::string rss;
-            for (std::string l; std::getline(status, l);) if (l.rfind("VmRSS", 0) == 0) rss = l.substr(6);
-            std::printf("M6 timeline audit: %d clips, model build %.1f ms, open %.1f ms (save, load, reimport, UI), RSS%s\n",
-                        clips, build_ms, open_ms, rss.c_str());
+            std::string peak;
+            for (std::string l; std::getline(status, l);) {
+                if (l.rfind("VmRSS", 0) == 0) rss = l.substr(6);
+                if (l.rfind("VmHWM", 0) == 0) peak = l.substr(6);
+            }
+            std::printf("M6 timeline audit: %d clips, model build %.1f ms, open %.1f ms (save, load, reimport, UI), RSS%s, peak%s\n",
+                        clips, build_ms, open_ms, rss.c_str(), peak.c_str());
             line("seek", seek);
             line("select", select);
             line("split", split);
             line("ripple del", ripple);
             line("undo", undo_ms);
+            std::printf("  trim drag: %d pointer events, %d scope updates\n", kDragEvents, scopes);
+            line("drag event", drag);
+            line("trim, undo", release);
             application.exit(0);
         });
         return application.exec();
