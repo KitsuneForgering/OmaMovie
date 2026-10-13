@@ -11,7 +11,7 @@
 | M7 | Save/load, migrations, failure injection + directory durability; loader fuzzing; independently checked export |
 | M8 effects | Registry/command contract; editable stack and presets; CPU/GPU frames, saved-project and decoded-export checks |
 | M9 | Fuzzing of every importer; small fixtures per compatibility level |
-| M10 | Randomized edits; workflow and recovery checks; concurrency and sustained stress; reproducible fuzzing and release evidence |
+| M10 | Seeded stateful edits with exact undo/redo; workflow and recovery checks; concurrency and sustained stress; reproducible fuzzing and release evidence |
 | M11 | Before/after module inventory; responsive-layout and keyboard walkthrough; affected M10 workflows and performance baselines rerun |
 
 **Long-form gate (proposed, after M7 export, before claiming support):** run the
@@ -28,5 +28,10 @@ to choose between QML model work, decoder/proxy work, preview rendering or proje
 storage changes. This gate has not run.
 
 Benchmarks (`tools/bench`) always record hardware, driver, FFmpeg version, codec and decode path (`CLAUDE.md` §23).
+
+The [QA strategy](implementation-plan-qa.md) defines the regression rule, distinct
+test layers, v0.1 scope and QA-1–QA-6 rollout. It extends these milestone gates;
+generated checks complement deterministic regressions. Pull-request CI remains
+required for GCC/Clang, sanitizer builds, fuzz smoke, format and tidy.
 
 [← Implementation plan](implementation-plan.md)

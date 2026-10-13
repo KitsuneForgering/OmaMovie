@@ -50,7 +50,7 @@ Evidence, milestones and acceptance criteria; update completed work and record s
 ## 4. Decisions and ADRs
 [Decisions adrs](implementation-plan-decisions-adrs.md)
 ## 5. Tests and quality per milestone
-[Tests quality](implementation-plan-tests-quality.md)
+[Tests quality](implementation-plan-tests-quality.md) · [QA strategy](implementation-plan-qa.md)
 ## 6. Hardware matrix
 [Hardware matrix](implementation-plan-hardware-matrix.md)
 ## 7. Risks
