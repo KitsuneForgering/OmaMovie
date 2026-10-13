@@ -1,5 +1,7 @@
 #pragma once
 
+#include "edge_frames.hpp"
+
 #include "audio_player.hpp"
 #include "clip_list_model.hpp"
 #include "recent_projects.hpp"
@@ -117,6 +119,8 @@ class Session final : public QObject {
     // removed: [clipIds], markers: count moved}. Filled by the preview calls, simulated on a
     // copy of the timeline with the very command the edit runs, so it cannot disagree with it.
     Q_PROPERTY(QVariantMap editScope READ editScope NOTIFY editScopeChanged)
+    // {serial, left, right}: image URLs of the two frames around the last roll/slip/slide.
+    Q_PROPERTY(QVariantMap edgeFrames READ edgeFrames NOTIFY edgeFramesChanged)
     // Captions (ADR-0017): {id, start, duration, text} in seconds, sorted.
     Q_PROPERTY(QVariantList captions READ captions NOTIFY sequenceChanged)
     // The selected clip's transform at the playhead (keyframes evaluated): posX, posY, scale,
@@ -433,6 +437,7 @@ public:
     Q_INVOKABLE void previewPlace(int how);
     Q_INVOKABLE void clearEditScope();
     [[nodiscard]] QVariantMap editScope() const;
+    [[nodiscard]] QVariantMap edgeFrames() const;
     [[nodiscard]] QVariantList captions() const;
     // The caption text under `seconds` (the viewer's overlay), empty when none.
     Q_INVOKABLE QString captionAt(double seconds) const;
@@ -466,6 +471,7 @@ public:
 
 signals:
     void editScopeChanged();
+    void edgeFramesChanged();
     void sourceChanged();
     void exportChanged();
     void cacheCleared();
@@ -678,6 +684,10 @@ private:
         bool operator==(const TrimPreview&) const = default;
     };
     std::optional<TrimPreview> trim_preview_;
+    void showEdge(EdgeEdit edit);
+    QVariantMap edge_frames_;
+    unsigned edge_request_ = 0;
+    oma::JobHandle edge_job_;
     // The commands behind Delete/Lift and trimming, shared by the edits and their previews.
     [[nodiscard]] std::unique_ptr<oma::timeline::Command> deleteCommand(bool ripple) const;
     [[nodiscard]] std::unique_ptr<oma::timeline::Command> trimCommand(oma::timeline::ClipId clip, bool head, int frames) const;

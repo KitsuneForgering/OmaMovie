@@ -337,6 +337,8 @@ Rectangle {
             horizontalAlignment: Text.AlignHCenter
         }
     }
+    EdgeFrames { anchors.centerIn: parent; z: 5 }
+
     // Notices (Session::notice): a short explanation after an action that did less than asked,
     // and the lasting one after the GPU device is lost.
     Rectangle {
