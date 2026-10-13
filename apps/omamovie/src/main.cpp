@@ -791,6 +791,8 @@ int main(int argc, char** argv) {
         QStringList launched, forwarded;
         double menu_clip = 0;
         bool menu_audio_muted = false;
+        qsizetype overlay_clips = 0;
+        qsizetype storyline_clips = 0;
         QString undo_before_title;
         int title_pixels = 0;
         qsizetype clips_after_edit = 0;
@@ -1400,8 +1402,21 @@ int main(int argc, char** argv) {
              }
              if (picture_item) QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, center_of(picture_item).toPoint());
              // The storyline and lane menus each hold one; only the open submenu's is visible.
-             auto color_items = items_named("pictureColorItem");
-             color_items.removeIf([](const QQuickItem* i) { return !i->isVisible(); });
+             // The submenu repositions itself after opening: click once its place is stable.
+             const auto visible_color = [&] {
+                 auto items = items_named("pictureColorItem");
+                 items.removeIf([](const QQuickItem* i) { return !i->isVisible(); });
+                 return items;
+             };
+             QPointF last(-1, -1);
+             for (int stable = 0, waited = 0; stable < 3 && waited < 1000; waited += 20) {
+                 QTest::qWait(20);
+                 const auto items = visible_color();
+                 const QPointF at = items.empty() ? QPointF(-1, -1) : center_of(items.front());
+                 stable = at == last && !items.empty() ? stable + 1 : 0;
+                 last = at;
+             }
+             const auto color_items = visible_color();
              if (!color_items.empty()) QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
                                                        center_of(color_items.front()).toPoint());
              const bool color_from_menu = window->property("drawer").toString() == QStringLiteral("color");
@@ -1822,7 +1837,38 @@ int main(int argc, char** argv) {
                                  session.info().value("hasAudio").toBool();
              if (!ok) std::printf("GUI smoke: overlay menu has wrong branches\n");
              r.menu_keys = r.menu_keys && ok;
-             press(Qt::Key_Escape);
+             // Keyboard activation of the menu's Delete: it must remove this lane clip, not the
+             // storyline clip, in one undoable step.
+             auto* menu = window->findChild<QObject*>(QStringLiteral("overlayMenu"));
+             const int count = menu ? menu->property("count").toInt() : 0;
+             int target = -1;
+             for (int i = 0; i < count; ++i) {
+                 QQuickItem* item = nullptr;
+                 QMetaObject::invokeMethod(menu, "itemAt", Q_RETURN_ARG(QQuickItem*, item), Q_ARG(int, i));
+                 if (item && item->property("text").toString() == QStringLiteral("Delete")) target = i;
+             }
+             saved.overlay_clips = 0;
+             for (const QVariant& lane : session.videoTracks()) saved.overlay_clips += lane.toMap().value("clips").toList().size();
+             saved.storyline_clips = session.clips().size();
+             if (target < 0) { r.menu_keys = false; std::printf("GUI smoke: overlay menu has no Delete\n"); press(Qt::Key_Escape); return; }
+             menu->setProperty("currentIndex", target);
+             press(Qt::Key_Return);
+         }},
+        {"overlay delete", after(250), [&] {
+             const auto lanes = [&] {
+                 qsizetype n = 0;
+                 for (const QVariant& lane : session.videoTracks()) n += lane.toMap().value("clips").toList().size();
+                 return n;
+             };
+             const bool removed = lanes() + 1 == saved.overlay_clips && session.clips().size() == saved.storyline_clips;
+             session.undo();
+             const bool undone = lanes() == saved.overlay_clips;
+             session.redo();
+             const bool redone = lanes() + 1 == saved.overlay_clips;
+             session.undo();
+             const bool ok = removed && undone && redone && lanes() == saved.overlay_clips;
+             if (!ok) std::printf("GUI smoke: overlay menu Delete (removed %d, undo %d, redo %d)\n", removed, undone, redone);
+             r.menu_keys = r.menu_keys && ok;
          }},
         {"cut menu", after(250), [&] {
              // Nothing selected and the playhead on a cut: the cut's transition menu.
