@@ -40,9 +40,22 @@ target_include_directories(fuzz_subtitles PRIVATE
 target_compile_options(fuzz_subtitles PRIVATE ${FUZZ_FLAGS})
 target_link_options(fuzz_subtitles PRIVATE ${FUZZ_LINK})
 
-set_target_properties(fuzz_cube fuzz_project fuzz_subtitles PROPERTIES
+file(GLOB IMPORTERS_LIB_SOURCES ${CMAKE_SOURCE_DIR}/libs/importers/src/*.cpp)
+file(GLOB PROJECT_IR_LIB_SOURCES ${CMAKE_SOURCE_DIR}/libs/project-ir/src/*.cpp)
+add_executable(fuzz_otio fuzz_otio.cpp
+    ${IMPORTERS_LIB_SOURCES} ${PROJECT_IR_LIB_SOURCES} ${BASE_LIB_SOURCES})
+target_include_directories(fuzz_otio PRIVATE
+    ${CMAKE_SOURCE_DIR}/libs/importers/include ${CMAKE_SOURCE_DIR}/libs/importers/src
+    ${CMAKE_SOURCE_DIR}/libs/project-ir/include ${CMAKE_SOURCE_DIR}/libs/base/include)
+target_include_directories(fuzz_otio SYSTEM PRIVATE ${SIMDJSON_INCLUDE_DIRS})
+target_compile_options(fuzz_otio PRIVATE ${FUZZ_FLAGS})
+target_link_options(fuzz_otio PRIVATE ${FUZZ_LINK})
+target_link_libraries(fuzz_otio PRIVATE ${SIMDJSON_LIBRARIES})
+
+set_target_properties(fuzz_cube fuzz_project fuzz_subtitles fuzz_otio PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 file(MAKE_DIRECTORY
     ${CMAKE_BINARY_DIR}/cube-corpus
     ${CMAKE_BINARY_DIR}/project-corpus
-    ${CMAKE_BINARY_DIR}/subtitles-corpus)
+    ${CMAKE_BINARY_DIR}/subtitles-corpus
+    ${CMAKE_BINARY_DIR}/otio-corpus)

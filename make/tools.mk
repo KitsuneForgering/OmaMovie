@@ -12,6 +12,8 @@ fuzz:
 	@# libstdc++'s stable_sort buffer meets the same new/free mismatch under clang's sanitizers.
 	$(Q)ASAN_OPTIONS=alloc_dealloc_mismatch=0 build/fuzz/fuzz_subtitles -runs=$(FUZZ_RUNS) -max_len=65536 \
 		build/fuzz/subtitles-corpus tests/fuzz/corpus/subtitles
+	$(Q)ASAN_OPTIONS=alloc_dealloc_mismatch=0 build/fuzz/fuzz_otio -runs=$(FUZZ_RUNS) -max_len=65536 \
+		build/fuzz/otio-corpus tests/fuzz/corpus/otio
 
 spikes:
 	$(Q)cmake --preset spikes
