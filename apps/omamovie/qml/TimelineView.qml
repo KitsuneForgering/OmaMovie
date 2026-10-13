@@ -1179,6 +1179,7 @@ Rectangle {
             height: timelineScroll.height
             color: colors.yellow || root.fg
         }
+        MarkerFlags { panel: timelinePanel }
         // The playhead across the timeline.
         Rectangle {
             id: playhead

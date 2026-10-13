@@ -263,6 +263,18 @@ ApplicationWindow {
             enabled: actions.slideEarlier.enabled
             onTriggered: session.nudgeSlide(1)
         }
+        property OmaAction marker: OmaAction {
+            text: "Add or remove marker"; keys: "M"; enabled: actions.media
+            onTriggered: session.toggleMarker()
+        }
+        property OmaAction nextMarker: OmaAction {
+            text: "Go to next marker"; keys: "Ctrl+'"; enabled: session.markers.length > 0
+            onTriggered: session.seekMarker(1)
+        }
+        property OmaAction previousMarker: OmaAction {
+            text: "Go to previous marker"; keys: "Ctrl+;"; enabled: actions.nextMarker.enabled
+            onTriggered: session.seekMarker(-1)
+        }
         // Intent presets (M8): ordinary framing on a clip above the storyline (session_layouts).
         property OmaAction layoutPip: OmaAction {
             text: "Picture in picture"
