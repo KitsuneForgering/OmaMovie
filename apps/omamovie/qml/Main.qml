@@ -361,6 +361,10 @@ ApplicationWindow {
             text: "Open project…"; keys: "Ctrl+O"
             onTriggered: root.confirmDiscard("Open another project", () => openDialog.open())
         }
+        property OmaAction importTimeline: OmaAction {
+            text: "Import OpenTimelineIO…"
+            onTriggered: root.confirmDiscard("Import a timeline", () => timelineImport.choose())
+        }
         property OmaAction exportMovie: OmaAction {
             text: "Export…"; keys: "Ctrl+E"; enabled: actions.editing && session.clips.length > 0 && session.exportProgress < 0
             onTriggered: exportDialog.open()
@@ -915,6 +919,7 @@ ApplicationWindow {
 
     CommandPalette { id: palette }
     SettingsDialog { id: settingsDialog; commandPalette: palette }
+    ImportTimeline { id: timelineImport }
 
     // Every action's shortcut, registered in one place: the registry lists every declared action.
     Repeater {
