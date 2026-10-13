@@ -1,9 +1,7 @@
 #include "frame_match.hpp"
-#include "session.hpp"
-#include "wait_for.hpp"
+#include "slip_export.hpp"
 
 #include <QFileInfo>
-#include <QTemporaryDir>
 
 #include "oma_test.hpp"
 
@@ -12,22 +10,10 @@ namespace {
 // 0..14 and then 12..26, checked by an independent decode of both files.
 bool exports_the_slipped_frames() {
     QTemporaryDir dir;
-    Session session;
-    session.setSilent(true);
     const QString media =
         QFileInfo("tests/fixtures/generated/h264_30fps_aac.mp4").absoluteFilePath();
-    session.open(media);
-    if (!dir.isValid() ||
-        !wait_for([&] { return session.clips().size() == 1 && !session.importsPending(); }))
-        return false;
-    session.seek(0.5);
-    session.splitAtPlayhead();
-    session.selectClip(session.clips().at(1).toMap().value("id").toDouble());
-    session.nudgeSlip(-3);
-    const QString movie = dir.filePath("slip.mp4");
-    session.setExportEncoder("software");
-    session.exportMovie(QUrl::fromLocalFile(movie), "mp4-h264");
-    if (!wait_for([&] { return session.exportProgress() < 0; }, 60000))
+    const QString movie = export_slipped(dir, media);
+    if (movie.isEmpty())
         return false;
     const QByteArray source = gray_frames(media);
     const QByteArray out = gray_frames(movie);
