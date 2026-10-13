@@ -1,9 +1,9 @@
+#include "decoded_frames.hpp"
 #include "session.hpp"
 #include "wait_for.hpp"
 
 #include <QFile>
 #include <QFileInfo>
-#include <QProcess>
 #include <QTemporaryDir>
 
 #include "oma_test.hpp"
@@ -35,12 +35,7 @@ bool export_survives_project_switch() {
     QFile captions(dir.filePath("movie.srt"));
     if (!captions.open(QIODevice::ReadOnly) || !captions.readAll().contains("Pinned caption"))
         return false;
-    QProcess probe;
-    probe.start("ffprobe",
-                {"-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries",
-                 "stream=nb_read_frames", "-of", "default=nw=1:nk=1", output});
-    return probe.waitForFinished(10000) && probe.exitCode() == 0 &&
-           probe.readAllStandardOutput().trimmed() == "30";
+    return decoded_frames(output) == 30;
 }
 } // namespace
 

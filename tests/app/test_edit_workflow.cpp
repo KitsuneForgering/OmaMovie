@@ -1,8 +1,8 @@
+#include "decoded_frames.hpp"
 #include "session.hpp"
 #include "wait_for.hpp"
 
 #include <QFileInfo>
-#include <QProcess>
 #include <QTemporaryDir>
 
 #include <cmath>
@@ -56,12 +56,7 @@ bool source_edit_round_trips_to_decoded_movie() {
     if (!wait_for([&] { return reopened.exportProgress() < 0; }) ||
         reopened.exportedFile() != movie)
         return false;
-    QProcess probe;
-    probe.start("ffprobe",
-                {"-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries",
-                 "stream=nb_read_frames", "-of", "default=nw=1:nk=1", movie});
-    return probe.waitForFinished(10000) && probe.exitCode() == 0 &&
-           probe.readAllStandardOutput().trimmed() == "35";
+    return decoded_frames(movie) == 35;
 }
 } // namespace
 
