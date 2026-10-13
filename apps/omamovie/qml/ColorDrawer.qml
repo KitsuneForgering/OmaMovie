@@ -190,6 +190,7 @@ Rectangle {
                 onCommitted: session.setClipLut(session.info.lut || 0, lutAmount.slider.value)
             }
         }
+        LumaWaveform { visible: root.width >= 760 } // at 640 px the grading controls need the room
     }
     Binding { target: lutAmount.slider; property: "value"; value: session.info.lutAmount === undefined ? 1 : session.info.lutAmount; when: !lutAmount.slider.pressed }
     Binding { target: exposureControl.slider; property: "from"; value: -2 }
