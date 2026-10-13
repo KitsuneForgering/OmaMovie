@@ -38,8 +38,8 @@ duration) or a list of **segments** that cover the clip exactly.
   tick range (a ramp cut inside keeps its exact speeds at the cut), so split, trims and
   ripple operate on segmented clips without approximation. Changing a clip's constant
   speed replaces a segmented map with a constant one.
-- Clip audio stays silent for any map other than constant 1× until time-stretching exists
-  (current behaviour for other speeds); freeze is silent by definition.
+- Constant speed s > 0 plays its sound resampled (2026-10-13: decoded at rate / s, pitch follows
+  speed) when rate / s is whole; other maps stay silent and say so; freeze is silent by definition.
 - Persistence: a constant map keeps the `speed` field; a segmented map is a `time_map`
   array of `{kind, length, speed | from, to}` with rationals as strings. The format
   version increases with a migration that leaves older files unchanged, so an older
