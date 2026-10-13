@@ -24,6 +24,13 @@
 
 namespace oma::playback {
 
+// The rate a clip's media is decoded at so that it plays at the clip's constant speed s > 0 in
+// a mix at `out`: out / s, one decoded sample per mixed sample, so pitch follows speed (like
+// tape). None when the clip has no sound at its speed: freeze, reverse and ramps (ADR-0013),
+// and speeds that would make the rate fractional.
+[[nodiscard]] std::optional<oma::SampleRate> retimed_rate(const oma::timeline::Clip& clip,
+                                                          oma::SampleRate out);
+
 class TimelineAudio {
 public:
     TimelineAudio(oma::timeline::Timeline timeline,
@@ -51,6 +58,7 @@ private:
     struct Stream {
         std::uint64_t media = 0;             // media ID
         oma::timeline::NoiseReduction noise; // what the decoder was opened with
+        std::int32_t rate_hz = 0;            // and at which rate (retimed_rate)
         oma::audio::EffectChain effects;     // the clip's, configured from its audio properties
         std::unique_ptr<oma::media::AudioDecoder> decoder;
         std::optional<oma::media::AudioBuffer> buffer;
@@ -75,10 +83,10 @@ private:
     [[nodiscard]] Span span_of(const oma::timeline::Track& track, std::size_t index) const;
     [[nodiscard]] oma::Result<void> mix_clip(const oma::timeline::Clip& clip, const Span& span,
                                              std::span<float> out, std::int64_t first);
-    // The clip's stream: its own, one handed over by a finished clip of the same media that
-    // stopped at `media_sample`, or a newly opened decoder.
+    // The clip's stream: its own, one handed over by a finished clip of the same media and
+    // decode rate that stopped at `media_sample`, or a newly opened decoder.
     [[nodiscard]] oma::Result<Stream*> stream(const oma::timeline::Clip& clip,
-                                              std::int64_t media_sample);
+                                              std::int64_t media_sample, oma::SampleRate drate);
 
     oma::timeline::Timeline timeline_;
     std::unordered_map<std::uint64_t, std::string> paths_; // media ID -> file

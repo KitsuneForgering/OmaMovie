@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <limits>
 #include <utility>
 
 namespace oma::playback {
@@ -39,6 +40,20 @@ std::int64_t sample_at(const oma::RationalTime& t, std::int64_t ticks, oma::Rati
 
 } // namespace
 
+std::optional<oma::SampleRate> retimed_rate(const tl::Clip& clip, oma::SampleRate out) {
+    if (!clip.time_map.is_constant()) {
+        return std::nullopt;
+    }
+    const oma::Rational speed = clip.time_map.speed();
+    const auto hz = static_cast<std::int64_t>(out.hz()) * speed.den();
+    if (speed.num() <= 0 || hz % speed.num() != 0 ||
+        hz / speed.num() > std::numeric_limits<std::int32_t>::max()) {
+        return std::nullopt;
+    }
+    auto r = oma::SampleRate::make(static_cast<std::int32_t>(hz / speed.num()));
+    return r ? std::optional(*r) : std::nullopt;
+}
+
 TimelineAudio::TimelineAudio(tl::Timeline timeline,
                              std::unordered_map<std::uint64_t, std::string> paths,
                              oma::SampleRate rate, int channels)
@@ -57,8 +72,9 @@ void TimelineAudio::set_timeline(tl::Timeline timeline,
     std::erase_if(streams_, [&](auto& entry) {
         Stream& s = entry.second;
         const tl::Clip* clip = timeline_.find_clip(tl::ClipId{entry.first});
+        const auto drate = clip != nullptr ? retimed_rate(*clip, rate_) : std::nullopt;
         if (clip == nullptr || s.failed || s.media != clip->media.value() ||
-            !(s.noise == clip->audio.noise)) {
+            !(s.noise == clip->audio.noise) || !drate || s.rate_hz != drate->hz()) {
             return true;
         }
         configure_effects(s.effects, clip->audio, rate_.hz());
@@ -127,8 +143,8 @@ TimelineAudio::Span TimelineAudio::span_of(const tl::Track& track, std::size_t i
     return span;
 }
 
-oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip,
-                                                          std::int64_t media_sample) {
+oma::Result<TimelineAudio::Stream*>
+TimelineAudio::stream(const tl::Clip& clip, std::int64_t media_sample, oma::SampleRate drate) {
     if (const auto own = streams_.find(clip.id.value()); own != streams_.end()) {
         own->second.used_in = pass_;
         return &own->second;
@@ -136,7 +152,8 @@ oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip,
     const auto continued = std::ranges::find_if(streams_, [&](const auto& entry) {
         const Stream& s = entry.second;
         return s.finished && !s.failed && s.media == clip.media.value() &&
-               s.noise == clip.audio.noise && s.next_sample == media_sample;
+               s.noise == clip.audio.noise && s.rate_hz == drate.hz() &&
+               s.next_sample == media_sample;
     });
     if (continued != streams_.end()) {
         auto node = streams_.extract(continued);
@@ -151,6 +168,7 @@ oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip,
     Stream& s = streams_[clip.id.value()];
     s.media = clip.media.value();
     s.noise = clip.audio.noise;
+    s.rate_hz = drate.hz();
     configure_effects(s.effects, clip.audio, rate_.hz());
     s.used_in = pass_;
     s.next_sample = -1; // forces the first seek
@@ -161,7 +179,7 @@ oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip,
                                "clip media has no file");
     }
     oma::media::AudioDecoderOptions options;
-    options.sample_rate = rate_;
+    options.sample_rate = drate;
     options.channels = channels_;
     options.denoise = clip.audio.noise.amount;
     options.noise_floor_db = clip.audio.noise.floor_db;
@@ -176,8 +194,9 @@ oma::Result<TimelineAudio::Stream*> TimelineAudio::stream(const tl::Clip& clip,
 
 oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, const Span& span,
                                           std::span<float> out, std::int64_t first) {
-    if (!clip.time_map.is_constant() || clip.time_map.speed() != oma::Rational::literal(1, 1)) {
-        return {}; // needs time-stretching (v0.2 speed work); freeze and reverse too (ADR-0013)
+    const auto drate = retimed_rate(clip, rate_);
+    if (!drate) {
+        return {};
     }
     const auto frames = static_cast<std::int64_t>(out.size() / static_cast<std::size_t>(channels_));
     const std::int64_t a = span.first;
@@ -185,10 +204,23 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, const Span& span
     // Transitions play the media past the clip's edges; the window was checked to have it.
     const std::int64_t from = std::max(a - span.lead, first);
     const std::int64_t to = std::min(b + span.tail, first + frames);
-    const std::int64_t media_sample =
-        sample_at(clip.source_in, (from * ticks_per_sample_) - clip.start_ticks(),
-                  timeline_.timebase(), rate_.hz());
-    auto opened = stream(clip, media_sample);
+    // In decoder samples: (source_in + ticks · timebase · speed) · out / speed.
+    const oma::Rational tb = timeline_.timebase();
+    const oma::Rational speed = clip.time_map.speed();
+    std::int64_t num = 0;
+    std::int64_t den = 0;
+    if (__builtin_mul_overflow(tb.num(), speed.num(), &num) ||
+        __builtin_mul_overflow(tb.den(), speed.den(), &den)) {
+        return oma::make_error(oma::ErrorCode::Overflow, oma::Category::Audio,
+                               "clip speed overflows the sequence timebase");
+    }
+    auto unit = oma::Rational::make(num, den);
+    if (!unit) {
+        return std::unexpected(unit.error());
+    }
+    const std::int64_t media_sample = sample_at(
+        clip.source_in, (from * ticks_per_sample_) - clip.start_ticks(), *unit, drate->hz());
+    auto opened = stream(clip, media_sample, *drate);
     if (!opened) {
         return std::unexpected(opened.error());
     }
@@ -198,7 +230,7 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, const Span& span
     }
     if (s.next_sample != media_sample) {
         // A jump (first block, a seek, or a cut back into this media): reposition exactly.
-        auto t = oma::RationalTime::make(media_sample, rate_.timebase());
+        auto t = oma::RationalTime::make(media_sample, drate->timebase());
         if (!t) {
             return std::unexpected(t.error());
         }
@@ -212,16 +244,16 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, const Span& span
         s.next_sample = media_sample;
         s.effects.reset();
     }
-    // Keyed volume in clip samples: a key's source time minus the clip's source start (sound
-    // plays only at 1×, so source and clip time advance together). Reused buffer: no allocation
+    // Keyed volume in clip samples: a key's source time minus the clip's source start, counted at
+    // the decoder's rate (one decoded sample per sequence sample). Reused buffer: no allocation
     // once it has grown.
     gain_points_.clear();
     if (!clip.audio.gain_keys.empty()) {
         const std::int64_t base =
-            rate_.time_to_sample(clip.source_in, oma::Rounding::Nearest).value_or(0);
+            drate->time_to_sample(clip.source_in, oma::Rounding::Nearest).value_or(0);
         for (const oma::timeline::ScalarKey& k : clip.audio.gain_keys) {
             gain_points_.push_back(
-                {.sample = rate_.time_to_sample(k.at, oma::Rounding::Nearest).value_or(0) - base,
+                {.sample = drate->time_to_sample(k.at, oma::Rounding::Nearest).value_or(0) - base,
                  .gain = static_cast<float>(k.value),
                  .interpolation = static_cast<std::uint8_t>(k.interpolation)});
         }
@@ -281,7 +313,11 @@ oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, const Span& span
     return {};
 }
 
-int TimelineAudio::channels() const noexcept { return channels_; }
-std::size_t TimelineAudio::open_streams() const noexcept { return streams_.size(); }
+int TimelineAudio::channels() const noexcept {
+    return channels_;
+}
+std::size_t TimelineAudio::open_streams() const noexcept {
+    return streams_.size();
+}
 
 } // namespace oma::playback

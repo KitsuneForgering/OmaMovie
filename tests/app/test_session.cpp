@@ -436,7 +436,8 @@ bool export_allows_intentional_silence() {
     pt::Sequence retimed = pt::make_sequence();
     const auto clip = pt::place(retimed, 0, 0, 3200);
     return clip.valid() &&
-           retimed.editor.execute(tl::edit::set_speed(clip, pt::q(2, 1), false)).has_value() &&
+           // 7/11 has no whole decode rate, so it stays silent; 2x and 1/2 now play their sound.
+           retimed.editor.execute(tl::edit::set_speed(clip, pt::q(7, 11), false)).has_value() &&
            render(retimed, QStringLiteral("retimed.mp4"));
 }
 
