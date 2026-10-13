@@ -2444,6 +2444,18 @@ int main(int argc, char** argv) {
              if (!r.device_lost) std::printf("GUI smoke: device loss failed (notice '%s', dirty %d)\n",
                                              qPrintable(session.notice()), session.dirty());
          }},
+        {"timeline import", after(100), [&] {
+             session.importTimeline(QUrl::fromLocalFile(QFileInfo(QStringLiteral("tests/importers/fixtures/basic.otio")).absoluteFilePath()));
+         }},
+        {"import report", [&] { return !session.importReport().isEmpty() || run->elapsed() > 5000; }, [&] {
+             // basic.otio names a file that is not there: the report opens and lists it.
+             auto* report = window->findChild<QObject*>(QStringLiteral("importReport"));
+             const bool ok = report && report->property("opened").toBool() &&
+                             !session.importReport().filter(QStringLiteral("media file not found")).isEmpty();
+             if (!ok) std::printf("GUI smoke: import report not shown (%lld notes)\n", static_cast<long long>(session.importReport().size()));
+             r.project = r.project && ok;
+             if (report) QMetaObject::invokeMethod(report, "close");
+         }},
         {"finish", after(100), [&] {
              const bool edits = r.imported && r.split && r.undone && r.redone && r.rippled && r.inserted &&
                                 r.overwritten && r.trimmed && r.played && r.audio && r.volume && r.muted &&
