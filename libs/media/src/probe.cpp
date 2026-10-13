@@ -1,5 +1,6 @@
 #include "oma/media/probe.hpp"
 
+#include "color_codes.hpp"
 #include "ffmpeg.hpp"
 #include "oma/base/log.hpp"
 #include "stream_info.hpp"
@@ -104,11 +105,17 @@ VideoInfo video_info(const AVStream& st, std::string_view demuxer) {
         v.pixel_format = desc->name;
         v.bit_depth = desc->comp[0].depth;
     }
-    v.color = {.matrix = static_cast<std::uint8_t>(par.color_space),
-               .primaries = static_cast<std::uint8_t>(par.color_primaries),
-               .transfer = static_cast<std::uint8_t>(par.color_trc),
-               .range = to_range(par.color_range),
-               .chroma_location = static_cast<std::uint8_t>(par.chroma_location)};
+    using ff::defined_or;
+    v.color = {.matrix = static_cast<std::uint8_t>(
+                   defined_or(par.color_space, AVCOL_SPC_NB, AVCOL_SPC_UNSPECIFIED)),
+               .primaries = static_cast<std::uint8_t>(
+                   defined_or(par.color_primaries, AVCOL_PRI_NB, AVCOL_PRI_UNSPECIFIED)),
+               .transfer = static_cast<std::uint8_t>(
+                   defined_or(par.color_trc, AVCOL_TRC_NB, AVCOL_TRC_UNSPECIFIED)),
+               .range =
+                   to_range(defined_or(par.color_range, AVCOL_RANGE_NB, AVCOL_RANGE_UNSPECIFIED)),
+               .chroma_location = static_cast<std::uint8_t>(
+                   defined_or(par.chroma_location, AVCHROMA_LOC_NB, AVCHROMA_LOC_UNSPECIFIED))};
     v.rotation = rotation_of(par);
     if (auto sar = ff::to_rational(par.sample_aspect_ratio); sar && sar->is_positive()) {
         v.sample_aspect = *sar;

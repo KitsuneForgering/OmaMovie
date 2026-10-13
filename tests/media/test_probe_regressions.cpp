@@ -16,5 +16,16 @@ void run_probe_regression_tests() {
                 negative = negative || (s.duration && s.duration->value() < 0);
             expect(negative).toBeFalsy();
         });
+        // Found by fuzz_probe (2026-10-13): a stream declares color space 100, which FFmpeg's enum
+        // does not define. The probe reports it as unspecified instead of loading an invalid enum.
+        it("reads an undefined color space as unspecified", {
+            auto info = oma::media::probe("tests/fuzz/corpus/probe/undefined-color.mkv");
+            bool defined = true;
+            if (info)
+                for (const auto& s : info->streams)
+                    if (s.video)
+                        defined = defined && s.video->color.matrix < 20;
+            expect(defined).toBeTruthy();
+        });
     });
 }
