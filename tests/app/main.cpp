@@ -26,6 +26,7 @@ void run_edge_frames_tests();
 void run_roll_cut_tests();
 void run_slip_slide_tests();
 void run_export_frames_tests();
+void run_export_audio_tests();
 
 int main(int argc, char* argv[]) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
@@ -57,5 +58,6 @@ int main(int argc, char* argv[]) {
     run_roll_cut_tests();
     run_slip_slide_tests();
     run_export_frames_tests();
+    run_export_audio_tests();
     return cest_result();
 }
