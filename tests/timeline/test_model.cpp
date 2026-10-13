@@ -146,15 +146,16 @@ void run_model_tests() {
             expect(trim_round_trip_is_exact(10010)).toBeTruthy();
         });
 
-        it("rounds media times down to the media grid only on evaluation", {
+        it("rounds media times to the nearest media tick only on evaluation", {
             OddGrid g = odd_grid();
             const Timeline& tl = g.editor.timeline();
             // The sequence tick is 1/48000 s, 0.32 of a 1/15360 media tick: still 15360.
             auto at_one = evaluate(tl, tl.at(1));
             expect(at_one->video.front().media_time.value()).toBe(15360LL);
-            // One frame (2002 ticks) is 640.64 media ticks: floor to 640.
+            // One frame (2002 ticks) is 640.64 media ticks: nearest is 641, as a muxer rounds a
+            // frame time into a coarse container timebase.
             auto at_frame = evaluate(tl, tl.at(2002));
-            expect(at_frame->video.front().media_time.value()).toBe(16000LL);
+            expect(at_frame->video.front().media_time.value()).toBe(16001LL);
         });
     });
 }

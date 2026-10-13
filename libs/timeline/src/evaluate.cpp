@@ -32,7 +32,10 @@ Result<RationalTime> media_time(const Timeline& tl, const Clip& c, const MediaIn
         return std::unexpected(exact.error());
     }
     if (!c.time_map.backward(ticks - c.start_ticks())) {
-        return exact->rescaled(m.start.timebase(), Rounding::Floor);
+        // Nearest, not Floor: a container with a coarse timebase (Matroska's 1 ms) stores each
+        // frame time rounded to the nearest tick, so frame 14 at 30 fps is 467 ms for an exact
+        // 466.67 ms; flooring the request to 466 ms showed frame 13.
+        return exact->rescaled(m.start.timebase(), Rounding::Nearest);
     }
     auto up = exact->rescaled(m.start.timebase(), Rounding::Ceil);
     if (!up) {
