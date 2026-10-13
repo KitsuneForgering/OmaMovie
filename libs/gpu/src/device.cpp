@@ -9,6 +9,10 @@
 #define VULKAN_HPP_RAII_NO_EXCEPTIONS
 #define VULKAN_HPP_USE_STD_EXPECTED
 #define VULKAN_HPP_NO_CONSTRUCTORS
+// Without exceptions Vulkan-Hpp asserts on every failed result before returning it, so a debug
+// build aborted where a release build returns the error (a driver failing vkCreateDevice when it
+// cannot write its cache). Errors are handled through std::expected in every build.
+#define VULKAN_HPP_ASSERT_ON_RESULT(condition)
 #include <vulkan/vulkan_raii.hpp>
 
 #include <algorithm>
