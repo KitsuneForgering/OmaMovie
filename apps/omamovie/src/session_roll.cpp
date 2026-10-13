@@ -33,7 +33,8 @@ void Session::previewRoll(double id, bool head, int frames) {
     const TrimPreview key{.clip = id,
                           .head = head,
                           .frames = frames,
-                          .roll = true,
+                          .edit = EdgeEdit::Roll,
+                          .trim = false,
                           .revision = editor_ ? editor_->revision() : 0};
     if (trim_preview_ == key)
         return;

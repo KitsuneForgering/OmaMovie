@@ -1129,20 +1129,6 @@ void Session::trimClip(double id, bool head, int frames) {
     }
 }
 
-void Session::nudgeSlip(int frames) {
-    if (!editor_ || !selected_clip_.valid() || frames == 0) return;
-    const tl::Timeline& t = editor_->timeline();
-    if (run(tl::edit::slip(selected_clip_, t.at(static_cast<std::int64_t>(frames) * ticksPerFrame()))))
-        showEdge(EdgeEdit::Slip, selected_clip_);
-}
-
-void Session::nudgeSlide(int frames) {
-    if (!editor_ || !selected_clip_.valid() || frames == 0) return;
-    const tl::Timeline& t = editor_->timeline();
-    if (run(tl::edit::slide(selected_clip_, t.at(static_cast<std::int64_t>(frames) * ticksPerFrame()))))
-        showEdge(EdgeEdit::Slide, selected_clip_);
-}
-
 void Session::moveClip(double id, int lanes, int frames) {
     if (!editor_ || (lanes == 0 && frames == 0)) return;
     const tl::ClipId clip(static_cast<std::uint64_t>(id));

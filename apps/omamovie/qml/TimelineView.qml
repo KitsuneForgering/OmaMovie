@@ -584,9 +584,13 @@ Rectangle {
                     preventStealing: true
                     property real pressX: 0
                     property bool moving: false
+                    property int shift: 0 // Alt: slip, Alt+Shift: slide (Session::slipClip)
+                    property int shiftFrames: 0
                     cursorShape: moving ? Qt.ClosedHandCursor : Qt.ArrowCursor
                     // A click selects the clip and moves the playhead to it; a right
                     // click opens its menu; a drag moves it to another cut (magnetic).
+                    // Alt+drag slips its content (the picture follows the pointer) and
+                    // Alt+Shift+drag slides it between its neighbours.
                     onPressed: (mouse) => {
                         session.selectClip(modelData.id)
                         const at = modelData.start + mouse.x / timelinePanel.scale
@@ -597,6 +601,8 @@ Rectangle {
                         }
                         pressX = mapToItem(timelineScroll.contentItem, mouse.x, 0).x
                         moving = false
+                        shift = !(mouse.modifiers & Qt.AltModifier) ? 0 : (mouse.modifiers & Qt.ShiftModifier) ? 2 : 1
+                        shiftFrames = 0
                         session.seek(at)
                     }
                     onPositionChanged: (mouse) => {
@@ -604,6 +610,13 @@ Rectangle {
                         const x = mapToItem(timelineScroll.contentItem, mouse.x, 0).x
                         if (!moving && Math.abs(x - pressX) < 6) return
                         moving = true
+                        if (shift !== 0) {
+                            const frames = Math.round((x - pressX) / timelinePanel.scale * session.frameRate)
+                            shiftFrames = shift === 1 ? -frames : frames
+                            if (shift === 2) clipItem.moveX = frames / session.frameRate * timelinePanel.scale
+                            session.previewSlip(modelData.id, shift === 2, shiftFrames)
+                            return
+                        }
                         clipItem.moveX = x - pressX
                         dropMarker.moving = modelData.id
                         dropMarker.movingStart = modelData.start
@@ -618,10 +631,13 @@ Rectangle {
                     onReleased: (mouse) => {
                         const seconds = timelineScroll.secondsAt(mapToItem(timelineScroll.contentItem, mouse.x, 0).x)
                         const wasMoving = moving
+                        const frames = shiftFrames
                         settle() // before the edit, which rebuilds this delegate
-                        if (wasMoving) session.reorderClip(modelData.id, seconds)
+                        if (shift !== 0 && frames !== 0) session.slipClip(modelData.id, shift === 2, frames)
+                        else if (shift !== 0) session.clearEditScope()
+                        else if (wasMoving) session.reorderClip(modelData.id, seconds)
                     }
-                    onCanceled: settle()
+                    onCanceled: { if (shift !== 0) session.clearEditScope(); settle() }
                 }
                 TrimEdge { owner: clipItem; clip: modelData; head: true; anchors.left: parent.left; visible: clipItem.detailed }
                 TrimEdge { owner: clipItem; clip: modelData; head: false; anchors.right: parent.right; visible: clipItem.detailed }

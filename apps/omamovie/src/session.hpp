@@ -436,6 +436,9 @@ public:
     // Rolls the cut on `id`'s head or tail by `frames` (Alt+drag of a clip edge).
     Q_INVOKABLE void previewRoll(double id, bool head, int frames);
     Q_INVOKABLE void rollCut(double id, bool head, int frames);
+    // Slips a clip's content or slides the clip between its neighbours (Alt / Alt+Shift drag).
+    Q_INVOKABLE void previewSlip(double id, bool slide, int frames);
+    Q_INVOKABLE void slipClip(double id, bool slide, int frames);
     // What Append (0), Insert (1) or Overwrite (2) of the selected library item would do.
     Q_INVOKABLE void previewPlace(int how);
     Q_INVOKABLE void clearEditScope();
@@ -680,11 +683,12 @@ private:
     QVariantMap edit_scope_;
     // The trim whose consequences edit_scope_ shows, to skip identical drag steps.
     struct TrimPreview {
-        double clip;
-        bool head;
-        int frames;
-        bool roll = false; // a roll of the cut instead of a trim
-        std::uint64_t revision;
+        double clip = 0;
+        bool head = false;
+        int frames = 0;
+        EdgeEdit edit = EdgeEdit::Slip; // roll, slip or slide; ignored for a trim
+        bool trim = true;
+        std::uint64_t revision = 0;
         bool operator==(const TrimPreview&) const = default;
     };
     std::optional<TrimPreview> trim_preview_;
