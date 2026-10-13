@@ -125,6 +125,8 @@ class Session final : public QObject {
     Q_PROPERTY(QVariantMap editScope READ editScope NOTIFY editScopeChanged)
     // {serial, left, right}: image URLs of the two frames around the last roll/slip/slide.
     Q_PROPERTY(QVariantMap edgeFrames READ edgeFrames NOTIFY edgeFramesChanged)
+    // A luma waveform of the frame at the playhead (session_scopes.cpp); "" until requested.
+    Q_PROPERTY(QString scopeImage READ scopeImage NOTIFY scopeImageChanged)
     // Captions (ADR-0017): {id, start, duration, text} in seconds, sorted.
     Q_PROPERTY(QVariantList captions READ captions NOTIFY sequenceChanged)
     // The selected clip's transform at the playhead (keyframes evaluated): posX, posY, scale,
@@ -464,6 +466,8 @@ public:
     // Moves the playhead to the next (direction > 0) or previous marker.
     Q_INVOKABLE void seekMarker(int direction);
     [[nodiscard]] QVariantMap edgeFrames() const;
+    [[nodiscard]] QString scopeImage() const;
+    Q_INVOKABLE void requestScopes();
     [[nodiscard]] QVariantList captions() const;
     // The caption text under `seconds` (the viewer's overlay), empty when none.
     Q_INVOKABLE QString captionAt(double seconds) const;
@@ -498,6 +502,7 @@ public:
 signals:
     void editScopeChanged();
     void edgeFramesChanged();
+    void scopeImageChanged();
     void importReportChanged();
     void sourceChanged();
     void exportChanged();
@@ -720,6 +725,9 @@ private:
     QVariantMap edge_frames_;
     unsigned edge_request_ = 0;
     oma::JobHandle edge_job_;
+    QString scope_image_;
+    unsigned scope_request_ = 0;
+    oma::JobHandle scope_job_;
     QStringList import_report_; // of the last timeline import (UI thread)
     // The commands behind Delete/Lift and trimming, shared by the edits and their previews.
     [[nodiscard]] std::unique_ptr<oma::timeline::Command> deleteCommand(bool ripple) const;

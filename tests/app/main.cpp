@@ -34,6 +34,7 @@ void run_layout_tests();
 void run_marker_tests();
 void run_effect_preset_app_tests();
 void run_import_timeline_tests();
+void run_scope_tests();
 
 int main(int argc, char* argv[]) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
@@ -73,5 +74,6 @@ int main(int argc, char* argv[]) {
     run_marker_tests();
     run_effect_preset_app_tests();
     run_import_timeline_tests();
+    run_scope_tests();
     return cest_result();
 }
