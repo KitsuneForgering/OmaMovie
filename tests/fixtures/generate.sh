@@ -37,6 +37,14 @@ if has_encoder libx264; then
         -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a aac -shortest "$out/h264_30fps_aac.mp4"
     note h264_30fps_aac.mp4
 
+    # The same picture with sound whose loudness steps up each video frame (frame k plays
+    # 0.9·(k+1)/31 of full scale), so a decoded window of audio names its source frame.
+    ff -f lavfi -i "$(video_src 30)" \
+        -f lavfi -i "aevalsrc='0.9*(floor(t*30)+1)/31*sin(2*PI*440*t)':s=48000:d=1" \
+        -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a pcm_s16le -shortest \
+        "$out/h264_30fps_steps.mkv"
+    note h264_30fps_steps.mkv
+
     # NTSC rates (exact fractions).
     ff -f lavfi -i "$(video_src 30000/1001)" -c:v libx264 -preset veryfast -pix_fmt yuv420p \
         "$out/h264_29.97fps.mp4"
