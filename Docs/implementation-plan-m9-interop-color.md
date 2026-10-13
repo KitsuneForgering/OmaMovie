@@ -1,0 +1,21 @@
+### M9 — Interop and color
+
+- [ ] `libs/project-ir` + importer framework + import report + `Docs/interop.md` with levels per format.
+- [ ] OTIO pilot first using a pinned library/schema and actual versioned exports; evaluate FCPXML, EDL and Kdenlive subsets with fixtures. For FCPXML, pin an exported version, cover both `.fcpxml` and applicable `.fcpxmld` bundles, and check rational timing, connected clips, gaps, media references and unsupported objects before claiming any support level. Report floating-to-rational conversion loss and unsupported effects.
+- [ ] `oma-project diff | convert`.
+- [ ] Color management presets, `.cube` LUTs, scopes; HDR gated by independent vectors and an actual display/preview/export contract.
+- [ ] Conditional **audio-role and stem** pilot for a project that must deliver dialogue and music separately. Keep the current stereo program mix as the baseline; add user-visible role labels to audio-bearing clips/tracks only if they make this hand-off clearer than muting and exporting twice. Decide how clip role, track mute, connected audio, fades, EQ/noise reduction and transitions contribute to each stem; snapshot the routing with the export request. Verify that independently decoded stems recombine to the program within declared gain/codec tolerances and that no source channel is dropped or duplicated without an explicit downmix rule. Start with two stereo roles; defer surround, arbitrary buses and a mixer UI until a real delivery task needs them. Profile simultaneous decode/mix cost and bound exported files and memory ([Final Cut Pro role exports](https://support.apple.com/en-ca/guide/final-cut-pro/verc9c84cdbc/mac), [Resolve Fairlight guide](https://documents.blackmagicdesign.com/UserManuals/DaVinci-Resolve-18-Fairlight-Audio-Post.pdf)).
+- [ ] Conditional nested-sequence pilot only if a repeated-intro, chapter or multi-output task shows a material advantage over copying editable clips or exporting/reimporting a segment. Begin with two named sequences and one reference, not unrestricted nesting. Define source-time mapping, audio/caption and effect ordering, edit propagation, cycle rejection, undo, cache invalidation and missing-media behavior before changing the native DTO or ProjectIR. Compare edit time and output fidelity with the simpler alternatives; independently decode exports before claiming reusable sequence support. Kdenlive documents live references and multiple sequences, but that establishes availability, not demand in OmaMovie ([Kdenlive sequences](https://docs.kdenlive.org/en/cutting_and_assembling/sequence.html)).
+- [ ] Conditional export queue and multi-output pilot after one-export snapshot correctness and long-export recovery pass M7/M10. Test a real task that needs two aspect ratios or separate chapter outputs against exporting each version manually. Every queued job must pin its own project snapshot, media/effect dependencies, caption snapshot, destination and settings; edits or project switches must not change it. Bound concurrent decode/encode, RAM and disk on the Intel target; verify each decoded output and sidecar independently, including cancellation, duplicate destinations and a failed job that does not corrupt the next one. Do not infer a speedup from queueing: it may only save operator time ([Kdenlive rendering and job queue](https://docs.kdenlive.org/en/exporting/render.html)).
+
+**Research**: [davinci-resolve](Research/davinci-resolve.md), [premiere-pro](Research/premiere-pro.md), [final-cut-pro](Research/final-cut-pro.md), `CLAUDE.md` §16.
+
+The four advanced candidates above are documentary hypotheses, not v0.1 release gates or
+measured user demand. Source review: official ITU-R, FFmpeg and Kdenlive pages accessed
+2026-10-08; the Kdenlive manual identifies itself as 26.08. The documents describe
+mechanisms and available controls, not OmaMovie performance or comparative task results.
+The decisive missing evidence is same-machine task comparison plus independently checked
+exports. Existing M6/M7 correctness and M8 mask/caption work take precedence. No
+competitor workflow, model inference or new-feature benchmark was executed for this addition.
+
+[← Implementation plan](implementation-plan.md)
