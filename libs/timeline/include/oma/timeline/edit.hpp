@@ -110,7 +110,8 @@ struct ClipSource {
                                                       std::optional<Transition> transition);
 // Detaches a video clip's sound into audio clip `audio` on the audio track `lane`, at the same
 // time and source range with the same audio adjustments, so the two can be trimmed apart (J- and
-// L-cuts). The video clip then plays no sound. The range on the lane must be free.
+// L-cuts). The video clip then plays no sound. The range on the lane must be free. The sound is
+// connected to the picture (ADR-0014) when the picture can host a connection.
 [[nodiscard]] std::unique_ptr<Command> detach_audio(ClipId video, TrackId lane, ClipId audio);
 
 [[nodiscard]] std::unique_ptr<Command> add_marker(MarkerId id, RationalTime at, std::string name);

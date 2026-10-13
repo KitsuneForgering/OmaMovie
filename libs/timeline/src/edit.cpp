@@ -837,6 +837,11 @@ std::unique_ptr<Command> detach_audio(ClipId video, TrackId lane, ClipId audio) 
         Clip sound = **c;
         sound.id = audio;
         sound.video = {};
+        // Connected to its picture (ADR-0014), so edits that move the picture move its sound.
+        // A picture that is itself connected cannot host one; the sound then shares its anchor.
+        if ((*c)->time_map.is_constant() && !(*c)->anchor) {
+            sound.anchor = Anchor{.primary = video, .source = (*c)->source_in};
+        }
         Clip picture = **c;
         picture.audio_detached = true;
         Steps steps;
