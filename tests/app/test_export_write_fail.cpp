@@ -16,6 +16,9 @@
 namespace {
 // Writes fail with EFBIG past `limit` bytes per file (RLIMIT_FSIZE) while the export runs: the
 // previous movie and captions stay, no stage or recovery record is left, nothing is announced.
+// Only failures before rendering are injected here: the limit is process-wide, and a software
+// Vulkan driver (lavapipe) backs device memory with memfd files, so a low limit turns its
+// mapped writes into SIGBUS. The movie writer's disk-full path is in tests/media.
 bool write_failure_keeps_previous_pair(rlim_t limit) {
     QTemporaryDir dir;
     Session session;
@@ -53,7 +56,5 @@ void run_export_write_fail_tests() {
            { expect(write_failure_keeps_previous_pair(1)).toBeTruthy(); });
         it("keeps the previous pair when the captions cannot be staged",
            { expect(write_failure_keeps_previous_pair(700)).toBeTruthy(); });
-        it("keeps the previous pair when the movie cannot be written",
-           { expect(write_failure_keeps_previous_pair(8192)).toBeTruthy(); });
     });
 }
