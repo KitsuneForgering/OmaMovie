@@ -84,7 +84,7 @@ make -j CXX=clang++ test       # another compiler (CI runs g++ and clang++)
 make format | make format-check
 make tidy                      # clang-tidy on the libs (warnings are errors)
 make fixtures                  # regenerate test media in tests/fixtures/generated/ (ffmpeg)
-make fuzz                      # libFuzzer targets for untrusted-file parsers (clang); FUZZ_RUNS=n
+make fuzz                      # libFuzzer targets for untrusted-file parsers (clang); FUZZ_RUNS=n, FUZZ_PROBE_SECONDS=s
 make spikes                    # M1 spikes in tools/spikes (Docs/spikes/)
 make run-gui                   # Qt/Vulkan editor shell; GUI_FILE=path or RUN_GUI_SMOKE=1
 build/release/omamovie --m4-audit FILE SECONDS    # A/V sync, per-stage timing (opens a window)

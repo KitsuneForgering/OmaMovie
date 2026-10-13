@@ -11,6 +11,7 @@ DESTDIR      ?=
 LICENSE_NAME ?= omamovie
 V            ?= 0
 FUZZ_RUNS    ?= 200000
+FUZZ_PROBE_SECONDS ?= 600
 
 VALID_BUILDS := debug release asan tsan
 ifeq ($(filter $(BUILD),$(VALID_BUILDS)),)

@@ -14,8 +14,9 @@ fuzz:
 		build/fuzz/subtitles-corpus tests/fuzz/corpus/subtitles
 	$(Q)ASAN_OPTIONS=alloc_dealloc_mismatch=0 build/fuzz/fuzz_otio -runs=$(FUZZ_RUNS) -max_len=65536 \
 		build/fuzz/otio-corpus tests/fuzz/corpus/otio
+	@# Each probe input runs FFmpeg's demuxers (~125 runs/s): bounded by time as well as runs.
 	$(Q)ASAN_OPTIONS=alloc_dealloc_mismatch=0 build/fuzz/fuzz_probe -runs=$(FUZZ_RUNS) -max_len=65536 \
-		-timeout=10 build/fuzz/probe-corpus tests/fuzz/corpus/probe
+		-timeout=10 -max_total_time=$(FUZZ_PROBE_SECONDS) build/fuzz/probe-corpus tests/fuzz/corpus/probe
 
 spikes:
 	$(Q)cmake --preset spikes
@@ -40,7 +41,7 @@ help:
 	@echo '  format        apply clang-format     | format-check  check without changing'
 	@echo '  tidy          run clang-tidy on the libs'
 	@echo '  fixtures      generate test media in tests/fixtures/generated (needs ffmpeg)'
-	@echo '  fuzz          run the parser fuzz targets with clang (libFuzzer) [FUZZ_RUNS=n]'
+	@echo '  fuzz          run the parser fuzz targets with clang (libFuzzer) [FUZZ_RUNS=n FUZZ_PROBE_SECONDS=s]'
 	@echo '  spikes        build the M1 spikes in tools/spikes (Vulkan + FFmpeg + Qt Quick/RHI)'
 	@echo '  install       install the app tree [DESTDIR=dir PREFIX=/usr/local] (BUILD=release)'
 	@echo '  run-gui       open the Qt editor shell [GUI_FILE=path; RUN_GUI_SMOKE=1]'
