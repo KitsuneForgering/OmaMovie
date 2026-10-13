@@ -1163,6 +1163,23 @@ int main(int argc, char** argv) {
              r.looks = r.looks && ok;
              window->setProperty("drawer", QString());
              for (int i = 0; i < 3; ++i) session.undo();
+             session.seek(0.3);
+             actions.trigger(QStringLiteral("marker"));
+             session.seek(0);
+         }},
+        {"marker flag", after(250), [&] {
+             // M left a flag at 0.3 s on the timeline; clicking it brings the playhead back.
+             auto flags = items_named("markerFlag");
+             flags.removeIf([](const QQuickItem* i) { return !i->isVisible(); });
+             if (flags.size() == 1) {
+                 (void)window->grabWindow(); // click what was drawn
+                 QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, center_of(flags.front()).toPoint());
+             }
+             const bool ok = flags.size() == 1 && std::abs(session.position() - 0.3) < 1.0 / session.frameRate();
+             if (!ok) std::printf("GUI smoke: marker flag failed (%lld flags, playhead %.3f)\n",
+                                  static_cast<long long>(flags.size()), session.position());
+             r.looks = r.looks && ok;
+             session.undo();
              r.looks = r.looks && session.motion().value("keys").toInt() == 0;
              window->requestActivate();
          }},
@@ -2083,8 +2100,9 @@ int main(int argc, char** argv) {
                          actions.search(QStringLiteral(":speed 2x")).value(0).toMap().value("id") == QStringLiteral("speedDouble") &&
                          actions.search(QStringLiteral(":normalize-audio")).value(0).toMap().value("id") == QStringLiteral("normalizeAudio") &&
                          actions.search(QString()).size() == actions.actions().size() &&
-                         actions.remap(QStringLiteral("snapping"), QStringLiteral("m")).isEmpty() &&
-                         !actions.remap(QStringLiteral("zoomFit"), QStringLiteral("M")).isEmpty() &&
+                         // A free key, spelled in two cases (M is the marker shortcut).
+                         actions.remap(QStringLiteral("snapping"), QStringLiteral("f8")).isEmpty() &&
+                         !actions.remap(QStringLiteral("zoomFit"), QStringLiteral("F8")).isEmpty() &&
                          !actions.remap(QStringLiteral("snapping"), QStringLiteral("Space")).isEmpty();
              // Default shortcuts: only Escape is shared, by two actions never enabled together.
              const QStringList shared = actions.conflicts();
@@ -2111,7 +2129,7 @@ int main(int argc, char** argv) {
              auto* palette = window->findChild<QObject*>(QStringLiteral("commandPalette"));
              r.palette_keys = window->property("snapping").toBool() != saved.snapping && palette &&
                               !palette->property("opened").toBool();
-             press(Qt::Key_M); // the remapped shortcut toggles it back
+             press(Qt::Key_F8); // the remapped shortcut toggles it back
          }},
         {"remapped key", after(250), [&] {
              r.palette_keys = r.palette_keys && window->property("snapping").toBool() == saved.snapping;
