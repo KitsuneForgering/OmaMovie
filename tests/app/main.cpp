@@ -29,6 +29,7 @@ void run_export_frames_tests();
 void run_export_audio_tests();
 void run_export_write_fail_tests();
 void run_export_switch_tests();
+void run_key_tracks_tests();
 
 int main(int argc, char* argv[]) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
@@ -63,5 +64,6 @@ int main(int argc, char* argv[]) {
     run_export_audio_tests();
     run_export_write_fail_tests();
     run_export_switch_tests();
+    run_key_tracks_tests();
     return cest_result();
 }

@@ -96,6 +96,8 @@ class Session final : public QObject {
     Q_PROPERTY(QObject* waveforms READ waveforms CONSTANT)
     Q_PROPERTY(double selectedClip READ selectedClip NOTIFY selectionChanged)
     Q_PROPERTY(QVariantMap info READ info NOTIFY selectionChanged)
+    // [{name, times: [sequence seconds], start, end}] per animated parameter of the selected clip.
+    Q_PROPERTY(QVariantList keyTracks READ keyTracks NOTIFY selectionChanged)
     Q_PROPERTY(bool hasMedia READ hasMedia NOTIFY sequenceChanged)
     // The project file (ADR-0007): its name ("Untitled project" before the first save), its
     // path, and whether the session changed since it was saved or opened.
@@ -443,6 +445,7 @@ public:
     Q_INVOKABLE void previewPlace(int how);
     Q_INVOKABLE void clearEditScope();
     [[nodiscard]] QVariantMap editScope() const;
+    [[nodiscard]] QVariantList keyTracks() const;
     [[nodiscard]] QVariantMap edgeFrames() const;
     [[nodiscard]] QVariantList captions() const;
     // The caption text under `seconds` (the viewer's overlay), empty when none.
