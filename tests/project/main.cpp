@@ -4,6 +4,7 @@ void run_document_tests();
 void run_subtitle_tests();
 void run_from_ir_tests();
 void run_media_color_format_tests();
+void run_edit_round_trip_tests();
 
 int main(int argc, char* argv[]) {
     cest_init(argc, argv);
@@ -11,5 +12,6 @@ int main(int argc, char* argv[]) {
     run_subtitle_tests();
     run_from_ir_tests();
     run_media_color_format_tests();
+    run_edit_round_trip_tests();
     return cest_result();
 }
