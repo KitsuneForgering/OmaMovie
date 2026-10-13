@@ -429,6 +429,8 @@ public:
     Q_INVOKABLE void stepFrames(int frames);
     Q_INVOKABLE void previewDelete(bool ripple);
     Q_INVOKABLE void previewTrim(double id, bool head, int frames);
+    // What Append (0), Insert (1) or Overwrite (2) of the selected library item would do.
+    Q_INVOKABLE void previewPlace(int how);
     Q_INVOKABLE void clearEditScope();
     [[nodiscard]] QVariantMap editScope() const;
     [[nodiscard]] QVariantList captions() const;
@@ -523,6 +525,8 @@ private:
     bool run(std::unique_ptr<oma::timeline::Command> command);
     void afterEdit();
     void placeSelected(int how);
+    [[nodiscard]] std::unique_ptr<oma::timeline::Command>
+    placeCommand(int how, oma::timeline::ClipId id, const oma::timeline::edit::ClipSource& clip);
     bool placeAudio(int how, oma::timeline::ClipId id, const oma::timeline::edit::ClipSource& clip,
                     std::int64_t start, std::optional<std::size_t> preferred = std::nullopt);
     [[nodiscard]] std::int64_t ticksAt(double seconds) const;

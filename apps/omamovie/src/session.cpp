@@ -976,11 +976,8 @@ void Session::placeSelected(int how) {
         return;
     }
     const tl::ClipId id = editor_->new_clip_id();
-    const auto at = editor_->timeline().at(playhead_);
     const bool done = source.audio_only ? placeAudio(how, id, *clip, playhead_)
-                      : how == 0        ? run(tl::edit::append(primary_, id, *clip))
-                      : how == 1        ? run(tl::edit::insert(primary_, id, at, *clip))
-                                        : run(tl::edit::overwrite(primary_, id, at, *clip));
+                                        : run(placeCommand(how, id, *clip));
     if (done) {
         selected_clip_ = id;
         emit selectionChanged();

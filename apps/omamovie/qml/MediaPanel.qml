@@ -266,9 +266,10 @@ Rectangle {
                     }
                     MenuItem { action: actions.openSource }
                     MenuSeparator {}
-                    MenuItem { action: actions.append }
-                    MenuItem { action: actions.insert }
-                    MenuItem { action: actions.overwrite }
+                    // Highlighting (pointer or arrow keys) shows what the placement would do.
+                    MenuItem { action: actions.append; onHighlightedChanged: highlighted ? session.previewPlace(0) : session.clearEditScope() }
+                    MenuItem { action: actions.insert; onHighlightedChanged: highlighted ? session.previewPlace(1) : session.clearEditScope() }
+                    MenuItem { objectName: "menuOverwrite"; action: actions.overwrite; onHighlightedChanged: highlighted ? session.previewPlace(2) : session.clearEditScope() }
                     MenuItem { action: actions.connect }
                 }
                 UiText {

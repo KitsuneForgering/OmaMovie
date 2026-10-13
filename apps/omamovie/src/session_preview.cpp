@@ -21,6 +21,24 @@ void Session::previewTrim(double id, bool head, int frames) {
     trim_preview_ = key;
 }
 
+// As placeSelected would run it; sound items go to lanes and are not previewed.
+void Session::previewPlace(int how) {
+    const bool valid =
+        editor_ && selected_media_ >= 0 && selected_media_ < static_cast<int>(library_.size());
+    const LibraryItem* item =
+        valid ? &library_[static_cast<std::size_t>(selected_media_)] : nullptr;
+    const auto clip = item != nullptr && !item->audio_only ? sourceFor(*item) : std::nullopt;
+    previewCommand(clip ? placeCommand(how, editor_->new_clip_id(), *clip) : nullptr);
+}
+
+std::unique_ptr<tl::Command> Session::placeCommand(int how, tl::ClipId id,
+                                                   const tl::edit::ClipSource& clip) {
+    const auto at = editor_->timeline().at(playhead_);
+    return how == 0   ? tl::edit::append(primary_, id, clip)
+           : how == 1 ? tl::edit::insert(primary_, id, at, clip)
+                      : tl::edit::overwrite(primary_, id, at, clip);
+}
+
 void Session::clearEditScope() {
     trim_preview_.reset();
     if (edit_scope_.isEmpty())

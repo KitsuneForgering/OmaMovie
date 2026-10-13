@@ -158,18 +158,20 @@ Rectangle {
     }
 
     // What a pending edit does to this clip (session.editScope, simulated with the real command):
-    // an arrow when it will move, a red outline when it will go. Shown before trims and deletes.
+    // an arrow when it will move, a red outline when it will go, a yellow one when part of it
+    // will be replaced. Shown before trims, deletes and placements.
     component ScopeMark: Rectangle {
         required property var clip
         readonly property int shift: session.editScope.active && session.editScope.moved[clip.id] ? session.editScope.moved[clip.id] : 0
         readonly property bool going: !!session.editScope.active && session.editScope.removed.indexOf(clip.id) >= 0
+        readonly property bool cut: !!session.editScope.active && session.editScope.cut.indexOf(clip.id) >= 0
         objectName: "scopeMark"
-        visible: shift !== 0 || going
+        visible: shift !== 0 || going || cut
         anchors.fill: parent
         radius: 4
         color: going ? Qt.rgba(1, 0.3, 0.3, 0.18) : Qt.rgba(1, 1, 1, 0.10)
-        border.color: going ? (colors.red || "#ff6b6b") : root.accent
-        border.width: going ? 2 : 1
+        border.color: going ? (colors.red || "#ff6b6b") : cut ? (colors.yellow || root.accent) : root.accent
+        border.width: going || cut ? 2 : 1
         z: 5
         Icon {
             visible: parent.shift !== 0

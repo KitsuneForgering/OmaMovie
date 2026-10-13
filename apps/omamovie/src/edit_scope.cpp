@@ -18,6 +18,7 @@ QVariantMap edit_scope(const tl::Timeline& before, const tl::Timeline& after) {
     }
     QVariantMap moved;
     QVariantList removed;
+    QVariantList cut;
     for (const tl::Track& track : before.tracks()) {
         for (const tl::Clip& c : track.clips) {
             const auto it = now.find(c.id.value());
@@ -29,6 +30,8 @@ QVariantMap edit_scope(const tl::Timeline& before, const tl::Timeline& after) {
             const Span s = it->second;
             if (s.start != c.start_ticks())
                 moved.insert(QString::number(c.id.value()), s.start < c.start_ticks() ? -1 : 1);
+            if (s.end - s.start < c.end_ticks() - c.start_ticks())
+                cut.push_back(id);
         }
     }
     int markers = 0;
@@ -39,5 +42,6 @@ QVariantMap edit_scope(const tl::Timeline& before, const tl::Timeline& after) {
     return {{"active", true},
             {"moved", moved},
             {"removed", removed},
+            {"cut", cut},
             {"markers", markers}};
 }
