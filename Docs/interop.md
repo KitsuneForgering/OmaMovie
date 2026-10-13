@@ -15,10 +15,12 @@ external project → importer → ProjectIR (ADR-0008) → converter → OmaMovi
 
 | Format | Versions | Level | Evidence |
 |---|---|---|---|
-| OpenTimelineIO JSON (`.otio`) | — | none yet | Pilot planned: own reader on simdjson for a pinned schema subset (ADR-0008) |
+| OpenTimelineIO JSON (`.otio`) | Timeline.1, Stack.1, Track.1, Clip.1/2, Gap.1, Transition.1, ExternalReference.1, MissingReference.1, RationalTime.1, TimeRange.1 | 2 in ProjectIR only; none in a project | `tests/importers` (hand-written file per the OTIO specification), `fuzz_otio`; no converter yet, and no application's actual export checked |
 | FCPXML / `.fcpxmld` | — | none | Not started |
 | CMX 3600 EDL | — | none | Not started |
 | Kdenlive (MLT XML) | — | none | Not started |
 
 `libs/project-ir` (2026-10-13) holds the IR, its validation (`tests/project-ir`) and the import
-report every importer fills; no importer exists yet.
+report every importer fills. `libs/importers` reads OTIO into it: NTSC rates become exact
+fractions, other float rates and sub-thousandth frame times are rounded and reported, effects,
+markers, generators and nested stacks are kept as opaque objects and reported.
