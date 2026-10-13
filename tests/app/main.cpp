@@ -1,6 +1,6 @@
 // Headless tests of the app's Session (the editor state behind the QML), without a window:
 // Qt's offscreen platform and private XDG folders, so the user's settings, recent projects,
-// autosaves and caches are never touched.
+// autosaves, caches and screen recordings are never touched.
 #include <QDir>
 #include <QGuiApplication>
 #include <QTemporaryDir>
@@ -27,8 +27,8 @@ void run_edge_frames_tests();
 int main(int argc, char* argv[]) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
     QTemporaryDir home;
-    for (const char* name :
-         {"XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME"}) {
+    for (const char* name : {"XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME",
+                             "OMARCHY_SCREENRECORD_DIR"}) {
         QDir(home.path()).mkpath(QString::fromLatin1(name));
         qputenv(name, home.filePath(QString::fromLatin1(name)).toLocal8Bit());
     }
