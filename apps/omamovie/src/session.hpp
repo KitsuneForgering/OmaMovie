@@ -294,6 +294,10 @@ public:
     // Replaces the session with a saved project: its library is imported again (thumbnails,
     // details) under the saved IDs, the timeline is restored as saved.
     Q_INVOKABLE void openProject(const QUrl& url);
+    // Opens an OpenTimelineIO file as a new, unsaved project; its notes go to importReport.
+    Q_INVOKABLE void importTimeline(const QUrl& url);
+    Q_PROPERTY(QStringList importReport READ importReport NOTIFY importReportChanged)
+    [[nodiscard]] QStringList importReport() const;
     Q_INVOKABLE void importUrl(const QUrl& url);
 
     Q_INVOKABLE void selectMedia(int index);
@@ -494,6 +498,7 @@ public:
 signals:
     void editScopeChanged();
     void edgeFramesChanged();
+    void importReportChanged();
     void sourceChanged();
     void exportChanged();
     void cacheCleared();
@@ -715,6 +720,7 @@ private:
     QVariantMap edge_frames_;
     unsigned edge_request_ = 0;
     oma::JobHandle edge_job_;
+    QStringList import_report_; // of the last timeline import (UI thread)
     // The commands behind Delete/Lift and trimming, shared by the edits and their previews.
     [[nodiscard]] std::unique_ptr<oma::timeline::Command> deleteCommand(bool ripple) const;
     [[nodiscard]] std::unique_ptr<oma::timeline::Command> trimCommand(oma::timeline::ClipId clip, bool head, int frames) const;

@@ -1954,7 +1954,7 @@ void Session::applyProject(oma::project::Document doc, const QString& path) {
         restoring_version_ = false;
     } else {
         project_path_ = path;
-        rememberProject(path);
+        if (!path.isEmpty()) rememberProject(path); // an import has no file yet
     }
     canvas_width_ = doc.canvas_width;
     canvas_height_ = doc.canvas_height;

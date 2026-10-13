@@ -14,7 +14,7 @@ set_target_properties(omamovie PROPERTIES
 target_include_directories(omamovie PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_options(omamovie PRIVATE ${OMA_TEST_WARNINGS})
 target_link_libraries(omamovie PRIVATE
-    oma_project oma_playback oma_timeline oma_audio oma_compositor oma_media oma_gpu oma_base
+    oma_project oma_importers oma_project-ir oma_playback oma_timeline oma_audio oma_compositor oma_media oma_gpu oma_base
     Qt6::Quick Qt6::Test Qt6::DBus Qt6::GuiPrivate)
 
 # Headless Session tests: the app sources without main.cpp, Qt's offscreen platform.
@@ -31,7 +31,7 @@ target_include_directories(app_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/tests/support ${CMAKE_SOURCE_DIR}/third_party/cest)
 target_compile_options(app_tests PRIVATE ${OMA_TEST_WARNINGS})
 target_link_libraries(app_tests PRIVATE
-    oma_project oma_playback oma_timeline oma_audio oma_compositor oma_media oma_gpu oma_base
+    oma_project oma_importers oma_project-ir oma_playback oma_timeline oma_audio oma_compositor oma_media oma_gpu oma_base
     Qt6::Quick Qt6::Test Qt6::DBus Qt6::GuiPrivate)
 add_dependencies(app_tests fixtures)
 
