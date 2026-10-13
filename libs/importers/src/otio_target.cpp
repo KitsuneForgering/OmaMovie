@@ -1,11 +1,11 @@
-#include "commands.hpp"
+#include "oma/importers/otio.hpp"
 
 #include <charconv>
 #include <string>
 
-// file:// URLs with %XX escapes (a malformed escape is kept as text), or paths relative to the
-// OTIO file.
-std::filesystem::path local_path(const std::string& target, const std::filesystem::path& dir) {
+namespace oma::importers {
+
+std::filesystem::path otio_local_path(const std::string& target, const std::filesystem::path& dir) {
     if (!target.starts_with("file://"))
         return dir / target;
     std::string path;
@@ -22,3 +22,5 @@ std::filesystem::path local_path(const std::string& target, const std::filesyste
     }
     return path;
 }
+
+} // namespace oma::importers

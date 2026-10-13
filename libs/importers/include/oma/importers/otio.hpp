@@ -10,6 +10,8 @@
 #include "oma/project_ir/ir.hpp"
 #include "oma/project_ir/report.hpp"
 
+#include <filesystem>
+#include <string>
 #include <string_view>
 
 namespace oma::importers {
@@ -21,5 +23,10 @@ struct Imported {
 
 // The file's text, at most 64 MiB, nesting at most 64 levels and 100,000 items.
 [[nodiscard]] Result<Imported> import_otio(std::string_view json);
+
+// A media target as a local path: a file:// URL with %XX escapes (a malformed escape is kept as
+// text), or a path relative to `dir`, the folder of the OTIO file.
+[[nodiscard]] std::filesystem::path otio_local_path(const std::string& target,
+                                                    const std::filesystem::path& dir);
 
 } // namespace oma::importers

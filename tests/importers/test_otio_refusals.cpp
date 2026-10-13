@@ -41,3 +41,14 @@ void run_otio_refusal_tests() {
         });
     });
 }
+
+void run_otio_path_tests() {
+    describe("OTIO media paths", {
+        it("decodes file URLs and resolves relative targets", {
+            using oma::importers::otio_local_path;
+            expect(otio_local_path("file:///a%20b/c.mov", "/x") == "/a b/c.mov").toBeTruthy();
+            expect(otio_local_path("file:///bad%zz.mov", "/x") == "/bad%zz.mov").toBeTruthy();
+            expect(otio_local_path("media/c.mov", "/x") == "/x/media/c.mov").toBeTruthy();
+        });
+    });
+}
