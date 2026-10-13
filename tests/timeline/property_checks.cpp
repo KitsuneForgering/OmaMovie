@@ -40,11 +40,12 @@ std::optional<Failure> Checker::accepted(const Op& op, const State& after) {
         return Failure{"no-op", "an accepted edit left the timeline unchanged: " + to_string(op)};
     if (auto broken = broken_structure(fx_.editor.timeline()); !broken.empty())
         return Failure{"invariant", broken};
+    // A clip ID never seen in any earlier state is new, and must exceed every ID handed out
+    // before: IDs only grow, even across undo.
     std::uint64_t largest = largest_id_;
     for (const auto& track : fx_.editor.timeline().tracks())
         for (const auto& clip : track.clips)
-            if (past_.back().text.find(std::format("clip {} ", clip.id.value())) ==
-                std::string::npos) {
+            if (seen_.insert(clip.id.value()).second) {
                 if (clip.id.value() <= largest_id_)
                     return Failure{"id-reuse",
                                    std::format("new clip {} reuses an ID", clip.id.value())};

@@ -44,6 +44,7 @@ private:
     std::vector<State> past_;   // S0 … current
     std::vector<State> future_; // states a redo brings back, the next one last
     std::uint64_t largest_id_ = 0;
+    std::set<std::uint64_t> seen_; // every clip ID any state has held
     int transitions_ = 0;
     std::set<std::pair<Kind, Kind>> pairs_;
     std::optional<Kind> last_;
