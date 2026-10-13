@@ -1,6 +1,7 @@
 #include "session.hpp"
 
 #include "autosave.hpp"
+#include "color_interpretation.hpp"
 #include "media_entry.hpp"
 #include "scopes.hpp"
 #include "export_recovery.hpp"
@@ -2451,8 +2452,10 @@ void Session::requestFilterPreviews() {
     const std::uint32_t height = std::max<std::uint32_t>(2, width * canvas_height_ / std::max<std::uint32_t>(1, canvas_width_));
     const QString dir = thumbnails_.path();
     previews_job_.cancel(); // an older request still queued would only be thrown away
-    previews_job_ = workers_.submit("filter-previews", [this, request, generation, path, at, video, height, dir](oma::JobContext& job) {
+    const tl::MediaInfo media = *editor_->timeline().find_media(c->media); // c is a library clip
+    previews_job_ = workers_.submit("filter-previews", [this, request, generation, path, at, video, height, dir, media](oma::JobContext& job) {
         auto picture = frames_.picture_at(path, at);
+        if (picture) interpret(picture->color, media); // ADR-0019
         QVariantList urls;
         if (picture) {
             oma::compositor::LayerInput input{.frame = picture->frame.get(),

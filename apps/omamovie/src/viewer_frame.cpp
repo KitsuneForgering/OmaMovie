@@ -1,5 +1,7 @@
 #include "viewer_frame.hpp"
 
+#include "color_interpretation.hpp"
+
 #include "oma/timeline/effects.hpp"
 #include "oma/timeline/evaluate.hpp"
 
@@ -91,6 +93,8 @@ oma::Result<std::shared_ptr<ViewerFrame>> build_viewer_frame(const tl::Timeline&
                 continue; // media not in the library (cannot happen while the library only grows)
             }
             picture = frames.picture_at(path->second, layer.media_time);
+            if (const tl::MediaInfo* m = timeline.find_media(layer.media); picture && m != nullptr)
+                interpret(picture->color, *m); // ADR-0019
         }
         if (!picture) {
             return std::unexpected(picture.error());
