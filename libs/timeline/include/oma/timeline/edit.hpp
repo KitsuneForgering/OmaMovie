@@ -125,6 +125,9 @@ struct ClipSource {
 // keys) are pixels of the canvas, so they scale by the same ratio on each axis and every layer
 // keeps its place relative to the frame. From an unset canvas (0) nothing is rescaled.
 [[nodiscard]] std::unique_ptr<Command> set_canvas(std::uint32_t width, std::uint32_t height);
+// How a media item's picture is read (ADR-0019): every clip of it follows.
+[[nodiscard]] std::unique_ptr<Command> set_media_color(MediaId id, MediaColorMatrix matrix,
+                                                       MediaColorRange range);
 // The whole list at once (an import), one undo entry.
 [[nodiscard]] std::unique_ptr<Command> replace_captions(std::vector<Caption> captions);
 

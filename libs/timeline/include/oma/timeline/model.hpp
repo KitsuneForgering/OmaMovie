@@ -23,6 +23,10 @@ namespace detail {
 class Mutation;
 } // namespace detail
 
+// How a media item's YUV is read (ADR-0019): Auto keeps what the stream declares.
+enum class MediaColorMatrix : std::uint8_t { Auto, Bt601, Bt709, Bt2020 };
+enum class MediaColorRange : std::uint8_t { Auto, Limited, Full };
+
 // What the timeline knows about a media item. The library/probe layer fills it; the timeline
 // only needs enough to validate references and source ranges.
 struct MediaInfo {
@@ -33,6 +37,8 @@ struct MediaInfo {
     bool has_video = false;
     bool has_audio = false;
     bool still = false; // an image: any source range is valid
+    MediaColorMatrix color_matrix = MediaColorMatrix::Auto;
+    MediaColorRange color_range = MediaColorRange::Auto;
 };
 
 // A 3D color lookup table the project uses (ADR-0012). Its entries live outside the model (the
