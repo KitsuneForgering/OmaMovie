@@ -98,6 +98,8 @@ class Session final : public QObject {
     Q_PROPERTY(QVariantMap info READ info NOTIFY selectionChanged)
     // [{name, times: [sequence seconds], start, end}] per animated parameter of the selected clip.
     Q_PROPERTY(QVariantList keyTracks READ keyTracks NOTIFY selectionChanged)
+    // [{id, time (seconds, display), name}] in time order.
+    Q_PROPERTY(QVariantList markers READ markers NOTIFY sequenceChanged)
     Q_PROPERTY(bool hasMedia READ hasMedia NOTIFY sequenceChanged)
     // The project file (ADR-0007): its name ("Untitled project" before the first save), its
     // path, and whether the session changed since it was saved or opened.
@@ -448,6 +450,11 @@ public:
     Q_INVOKABLE void clearEditScope();
     [[nodiscard]] QVariantMap editScope() const;
     [[nodiscard]] QVariantList keyTracks() const;
+    [[nodiscard]] QVariantList markers() const;
+    // Adds a marker at the playhead, or removes the one there.
+    Q_INVOKABLE void toggleMarker();
+    // Moves the playhead to the next (direction > 0) or previous marker.
+    Q_INVOKABLE void seekMarker(int direction);
     [[nodiscard]] QVariantMap edgeFrames() const;
     [[nodiscard]] QVariantList captions() const;
     // The caption text under `seconds` (the viewer's overlay), empty when none.

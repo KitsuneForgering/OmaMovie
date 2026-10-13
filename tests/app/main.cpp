@@ -31,6 +31,7 @@ void run_export_write_fail_tests();
 void run_export_switch_tests();
 void run_key_tracks_tests();
 void run_layout_tests();
+void run_marker_tests();
 
 int main(int argc, char* argv[]) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
@@ -67,5 +68,6 @@ int main(int argc, char* argv[]) {
     run_export_switch_tests();
     run_key_tracks_tests();
     run_layout_tests();
+    run_marker_tests();
     return cest_result();
 }
