@@ -21,6 +21,7 @@ void run_export_snapshot_tests();
 void run_trim_preview_tests();
 void run_recordings_tests();
 void run_place_preview_tests();
+void run_source_range_tests();
 
 int main(int argc, char* argv[]) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
@@ -47,5 +48,6 @@ int main(int argc, char* argv[]) {
     run_trim_preview_tests();
     run_recordings_tests();
     run_place_preview_tests();
+    run_source_range_tests();
     return cest_result();
 }
