@@ -52,10 +52,18 @@ target_compile_options(fuzz_otio PRIVATE ${FUZZ_FLAGS})
 target_link_options(fuzz_otio PRIVATE ${FUZZ_LINK})
 target_link_libraries(fuzz_otio PRIVATE ${SIMDJSON_LIBRARIES})
 
-set_target_properties(fuzz_cube fuzz_project fuzz_subtitles fuzz_otio PROPERTIES
+# The probe goes through the media library as built (FFmpeg is the system library), so this
+# target checks OmaMovie's handling of what FFmpeg reports rather than FFmpeg's own parsers.
+add_executable(fuzz_probe fuzz_probe.cpp)
+target_compile_options(fuzz_probe PRIVATE ${FUZZ_FLAGS})
+target_link_options(fuzz_probe PRIVATE ${FUZZ_LINK})
+target_link_libraries(fuzz_probe PRIVATE oma_media)
+
+set_target_properties(fuzz_cube fuzz_project fuzz_subtitles fuzz_otio fuzz_probe PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 file(MAKE_DIRECTORY
     ${CMAKE_BINARY_DIR}/cube-corpus
     ${CMAKE_BINARY_DIR}/project-corpus
     ${CMAKE_BINARY_DIR}/subtitles-corpus
-    ${CMAKE_BINARY_DIR}/otio-corpus)
+    ${CMAKE_BINARY_DIR}/otio-corpus
+    ${CMAKE_BINARY_DIR}/probe-corpus)

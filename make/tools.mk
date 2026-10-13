@@ -14,6 +14,8 @@ fuzz:
 		build/fuzz/subtitles-corpus tests/fuzz/corpus/subtitles
 	$(Q)ASAN_OPTIONS=alloc_dealloc_mismatch=0 build/fuzz/fuzz_otio -runs=$(FUZZ_RUNS) -max_len=65536 \
 		build/fuzz/otio-corpus tests/fuzz/corpus/otio
+	$(Q)ASAN_OPTIONS=alloc_dealloc_mismatch=0 build/fuzz/fuzz_probe -runs=$(FUZZ_RUNS) -max_len=65536 \
+		-timeout=10 build/fuzz/probe-corpus tests/fuzz/corpus/probe
 
 spikes:
 	$(Q)cmake --preset spikes
