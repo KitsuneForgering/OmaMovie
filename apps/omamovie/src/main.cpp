@@ -1399,7 +1399,9 @@ int main(int argc, char** argv) {
                  QMetaObject::invokeMethod(storyline_menu, "itemAt", Q_RETURN_ARG(QQuickItem*, picture_item), Q_ARG(int, 0));
              }
              if (picture_item) QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, center_of(picture_item).toPoint());
-             const auto color_items = items_named("pictureColorItem");
+             // The storyline and lane menus each hold one; only the open submenu's is visible.
+             auto color_items = items_named("pictureColorItem");
+             color_items.removeIf([](const QQuickItem* i) { return !i->isVisible(); });
              if (!color_items.empty()) QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
                                                        center_of(color_items.front()).toPoint());
              const bool color_from_menu = window->property("drawer").toString() == QStringLiteral("color");
