@@ -1416,7 +1416,15 @@ int main(int argc, char** argv) {
                  stable = at == last && !items.empty() ? stable + 1 : 0;
                  last = at;
              }
-             const auto color_items = visible_color();
+             // A user clicks what was drawn. grabWindow() polishes and syncs the scene as a frame
+             // does (waiting for frameSwapped alone did not): clicking before that hit the item
+             // below Color or nothing, though the drawn menu was right (checked on a capture).
+             auto color_items = visible_color();
+             if (!color_items.empty()) {
+                 QTest::mouseMove(window, center_of(color_items.front()).toPoint());
+                 (void)window->grabWindow();
+                 color_items = visible_color();
+             }
              if (!color_items.empty()) QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
                                                        center_of(color_items.front()).toPoint());
              const bool color_from_menu = window->property("drawer").toString() == QStringLiteral("color");
