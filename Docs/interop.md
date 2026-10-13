@@ -29,4 +29,4 @@ markers, generators and nested stacks are kept as opaque objects and reported.
 becomes the storyline, gaps stay as space, SMPTE dissolves become the next clip's transition
 (other transitions become reported hard cuts), media the app cannot resolve leaves reported
 gaps, and a timecode start is reported (sequences start at zero). Opaque objects are not saved
-in the native project yet; that loss belongs in the report once the app shows it.
+in the native project yet; the converter reports how many (2026-10-13) so the loss is never silent.
