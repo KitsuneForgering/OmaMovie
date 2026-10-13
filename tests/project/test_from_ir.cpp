@@ -32,5 +32,20 @@ void run_from_ir_tests() {
             };
             expect(mentions("gone.mov") && mentions("lost")).toBeTruthy();
         });
+
+        it("reports source objects the project cannot save", {
+            ir::Timeline t = sample();
+            std::get<ir::Clip>(t.tracks[0].items[0])
+                .unsupported.push_back({.format = "otio",
+                                        .original_id = "a",
+                                        .schema = "LinearTimeWarp.1",
+                                        .raw = "{}",
+                                        .fields = {}});
+            ir::ImportReport report;
+            expect(oma::project::from_ir(t, resolve, report).has_value()).toBeTruthy();
+            expect(std::ranges::any_of(report.issues, [](const ir::ImportIssue& i) {
+                return i.reason == "1 source objects are not saved in the project";
+            })).toBeTruthy();
+        });
     });
 }

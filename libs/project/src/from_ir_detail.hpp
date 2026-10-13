@@ -21,6 +21,8 @@ void issue(ir::ImportReport& report, std::string object, std::string reason, std
 void resolve_media(timeline::Editor& editor, const ir::Timeline& timeline,
                    const ResolveMedia& resolve, Document& doc, MediaIds& ids,
                    ir::ImportReport& report);
+// Reports how many objects the import kept as opaque (CLAUDE.md §16.3) the project cannot save.
+void report_unsaved(const ir::Timeline& timeline, ir::ImportReport& report);
 // Sequence ticks for a source length, reporting when it is not on the sequence grid.
 [[nodiscard]] std::int64_t ticks_of(const timeline::Timeline& t, const RationalTime& length,
                                     const std::string& who, ir::ImportReport& report);

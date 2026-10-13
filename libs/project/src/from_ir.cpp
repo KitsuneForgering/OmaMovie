@@ -50,6 +50,7 @@ Result<Document> from_ir(const ir::Timeline& timeline, const ResolveMedia& resol
     if (timeline.global_start && timeline.global_start->value() != 0)
         from_ir_detail::issue(report, timeline.name, "the sequence starts at a timecode offset",
                               "OmaMovie sequences start at zero");
+    from_ir_detail::report_unsaved(timeline, report);
     doc.timeline = editor.timeline();
     return doc;
 }
