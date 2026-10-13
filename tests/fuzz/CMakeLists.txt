@@ -20,11 +20,13 @@ target_link_options(fuzz_cube PRIVATE ${FUZZ_LINK})
 file(GLOB PROJECT_LIB_SOURCES ${CMAKE_SOURCE_DIR}/libs/project/src/*.cpp)
 file(GLOB TIMELINE_LIB_SOURCES ${CMAKE_SOURCE_DIR}/libs/timeline/src/*.cpp)
 file(GLOB BASE_LIB_SOURCES ${CMAKE_SOURCE_DIR}/libs/base/src/*.cpp)
+file(GLOB PROJECT_IR_LIB_SOURCES ${CMAKE_SOURCE_DIR}/libs/project-ir/src/*.cpp)
 add_executable(fuzz_project fuzz_project.cpp
-    ${PROJECT_LIB_SOURCES} ${TIMELINE_LIB_SOURCES} ${BASE_LIB_SOURCES})
+    ${PROJECT_LIB_SOURCES} ${TIMELINE_LIB_SOURCES} ${PROJECT_IR_LIB_SOURCES} ${BASE_LIB_SOURCES})
 target_include_directories(fuzz_project PRIVATE
     ${CMAKE_SOURCE_DIR}/libs/timeline/include ${CMAKE_SOURCE_DIR}/libs/timeline/src
-    ${CMAKE_SOURCE_DIR}/libs/project/include ${CMAKE_SOURCE_DIR}/libs/base/include)
+    ${CMAKE_SOURCE_DIR}/libs/project/include ${CMAKE_SOURCE_DIR}/libs/project-ir/include
+    ${CMAKE_SOURCE_DIR}/libs/base/include)
 target_include_directories(fuzz_project SYSTEM PRIVATE ${SIMDJSON_INCLUDE_DIRS})
 target_compile_options(fuzz_project PRIVATE ${FUZZ_FLAGS})
 target_link_options(fuzz_project PRIVATE ${FUZZ_LINK})
@@ -41,7 +43,6 @@ target_compile_options(fuzz_subtitles PRIVATE ${FUZZ_FLAGS})
 target_link_options(fuzz_subtitles PRIVATE ${FUZZ_LINK})
 
 file(GLOB IMPORTERS_LIB_SOURCES ${CMAKE_SOURCE_DIR}/libs/importers/src/*.cpp)
-file(GLOB PROJECT_IR_LIB_SOURCES ${CMAKE_SOURCE_DIR}/libs/project-ir/src/*.cpp)
 add_executable(fuzz_otio fuzz_otio.cpp
     ${IMPORTERS_LIB_SOURCES} ${PROJECT_IR_LIB_SOURCES} ${BASE_LIB_SOURCES})
 target_include_directories(fuzz_otio PRIVATE
@@ -52,8 +53,12 @@ target_compile_options(fuzz_otio PRIVATE ${FUZZ_FLAGS})
 target_link_options(fuzz_otio PRIVATE ${FUZZ_LINK})
 target_link_libraries(fuzz_otio PRIVATE ${SIMDJSON_LIBRARIES})
 
-# The probe goes through the media library as built (FFmpeg is the system library), so this
-# target checks OmaMovie's handling of what FFmpeg reports rather than FFmpeg's own parsers.
+# The probe goes through the media library (FFmpeg is the uninstrumented system library), so this
+# target checks OmaMovie's handling of what FFmpeg reports rather than FFmpeg's own parsers. The
+# media and base libraries are instrumented so coverage and ASan reach OmaMovie's probe code.
+set(FUZZ_LIB_FLAGS -fsanitize=fuzzer-no-link,address,undefined -fno-sanitize-recover=all)
+target_compile_options(oma_media PRIVATE ${FUZZ_LIB_FLAGS})
+target_compile_options(oma_base PRIVATE ${FUZZ_LIB_FLAGS})
 add_executable(fuzz_probe fuzz_probe.cpp)
 target_compile_options(fuzz_probe PRIVATE ${FUZZ_FLAGS})
 target_link_options(fuzz_probe PRIVATE ${FUZZ_LINK})

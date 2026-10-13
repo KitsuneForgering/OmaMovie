@@ -10,7 +10,10 @@ add_subdirectory(libs/project-ir)
 add_subdirectory(libs/importers)
 add_subdirectory(libs/project)
 
-add_subdirectory(tools/oma-project)
+# A fuzz build instruments libraries for libFuzzer (tests/fuzz), which only fuzzer executables link.
+if(NOT OMA_BUILD_FUZZ)
+    add_subdirectory(tools/oma-project)
+endif()
 
 # --- tests ---
 # Fixtures: the ffmpeg generator, stamped so it runs once (like the old TEST_PREREQS).
