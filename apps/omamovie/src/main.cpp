@@ -801,6 +801,8 @@ int main(int argc, char** argv) {
         qsizetype clips_after_edit = 0;
         QString crashed;
         double key_position = 0;
+        bool lost_playing = false;
+        double lost_position = 0;
     } saved;
     const auto lane_count = [&] { return session.audioTracks().size(); };
     // The first clip of an audio lane, as QML sees it.
@@ -2538,16 +2540,30 @@ int main(int argc, char** argv) {
              screenshot(window, "OMA_GUI_SMOKE_LIBRARY_SCREENSHOT");
              window->setProperty("libraryOverlay", false);
              screenshot(window, "OMA_GUI_SMOKE_SCREENSHOT");
-             // Simulated device loss (M4): the viewer stops and explains, editing and saving go on.
-             // Last, because nothing may use the device afterwards.
+             // Simulated device loss (M4) during playback (M10): the viewer stops and explains while
+             // the sound, the transport, editing and saving go on. Last, because nothing may use the
+             // device afterwards.
+             session.seek(0);
+             session.togglePlay();
+         }},
+        {"device lost while playing", after(300), [&] {
+             saved.lost_playing = session.playing();
              device->mark_lost();
-             session.seek(session.position() < 0.15 ? 0.2 : 0.1); // a new position, so a new frame is asked for
          }},
         {"device lost shown", [&] { return session.notice().contains(QStringLiteral("graphics device")) || run->elapsed() > 3000; }, [&] {
              screenshot(window, "OMA_GUI_SMOKE_DEVICE_LOST_SCREENSHOT");
-             r.device_lost = session.notice().contains(QStringLiteral("graphics device")) && !session.failed();
-             if (!r.device_lost) std::printf("GUI smoke: device loss not shown (notice '%s', failed %d, status '%s')\n",
-                                             qPrintable(session.notice()), session.failed(), qPrintable(session.status()));
+             r.device_lost = saved.lost_playing && session.notice().contains(QStringLiteral("graphics device")) && !session.failed();
+             if (!r.device_lost) std::printf("GUI smoke: device loss not shown (playing before %d, notice '%s', failed %d, status '%s')\n",
+                                             saved.lost_playing, qPrintable(session.notice()), session.failed(), qPrintable(session.status()));
+             saved.lost_position = session.position();
+         }},
+        {"playing after loss", after(300), [&] {
+             // The audio clock keeps running without the GPU; pausing still works.
+             const bool advanced = session.playing() && session.position() > saved.lost_position;
+             session.pause();
+             r.device_lost = r.device_lost && advanced && !session.playing();
+             if (!r.device_lost) std::printf("GUI smoke: transport after device loss failed (advanced %d, playing %d)\n",
+                                             advanced, session.playing());
              session.selectClip(session.clips().front().toMap().value("id").toDouble());
              session.setClipOpacity(0.5);
              r.device_lost = r.device_lost && session.dirty();
