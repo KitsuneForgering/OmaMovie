@@ -74,6 +74,11 @@ if has_encoder libx264; then
     ff -f lavfi -i "$(video_src 30000/1001)" -c:v libx264 -preset veryfast -pix_fmt yuv420p \
         "$out/h264_29.97fps.mp4"
     note h264_29.97fps.mp4
+    # One keyframe for 10 s: a seek decodes up to 300 frames forward, long enough for a newer
+    # request to supersede it (scrubbing tests).
+    ff -f lavfi -i "$(video_src 30 10)" -c:v libx264 -preset veryfast -pix_fmt yuv420p \
+        -x264-params keyint=300:min-keyint=300:scenecut=0 "$out/h264_long_gop.mp4"
+    note h264_long_gop.mp4
     ff -f lavfi -i "$(video_src 24000/1001)" -c:v libx264 -preset veryfast -pix_fmt yuv420p \
         "$out/h264_23.976fps.mp4"
     note h264_23.976fps.mp4
