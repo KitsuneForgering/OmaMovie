@@ -26,7 +26,7 @@ product decision. A passing synthetic gate is evidence for the declared workload
 not for every long video or hardware configuration. Use the observed dominant cost
 to choose between QML model work, decoder/proxy work, preview rendering or project
 storage changes. The combined gate has not run; its 5,000-clip part failed on 2026-10-14
-(split p95 136–147 ms, [evidence status](implementation-plan-evidence-2026-10-14.md)).
+(split p95 136–147 ms) and passes after a fix (84–93 ms, [evidence status](implementation-plan-evidence-2026-10-14.md)).
 
 Current audit flags and `Research/evidence` measurements record their fixtures and
 hardware; the proposed `tools/bench` runner is not implemented. Future benchmarks

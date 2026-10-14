@@ -32,3 +32,21 @@ Conclusion: the 5,000-clip gate (p95 < 100 ms) still fails, but the hypothesis "
 operations plus model/UI update exceed the budget" is rejected for the typical edit; the
 failure is a ~110-140 ms stall in specific rounds. Next: time the phases (command, model
 mutation, notifications, QML delegates, first frame) of the stalled rounds only.
+
+== Cause and fix (same day)
+Phase stamps (temporary): in a stalled sample the edit call took 17-37 ms and the frame showing
+it synced and ended by ~24-40 ms; the audit's loop then saw nothing until ~108-140 ms, so the
+GUI thread was busy after the frame. A hypothesis that the audit raced with frame begin was
+tested by waiting for the first frame synced after the edit instead: the stalls stayed, so it
+was rejected and that change reverted.
+A timed QGuiApplication::notify (temporary) found the long events: QEvent::MetaCall functors
+posted to QQmlApplicationEngine, 84-105 ms each. Five main-thread stacks captured under gdb
+50 ms into such an event (temporary watchdog sending SIGUSR1): all in
+QV4::GCStateMachine::transition -> QMetaType::destroy(QList<QVariant>) -> ~QVariant(QMap<QString,
+QVariant>): the QML engine's incremental garbage collector freeing whole clip lists, a sweep step
+QV4_GC_TIMELIMIT=5 did not shorten. Main.qml had nine bindings reading `session.clips.length`
+(menu enable states), each handing JS a reference to the 5,000-map list.
+Fix (72cc2ca): Session::clipCount (int, same NOTIFY) for those bindings. 3 runs, 5,000 clips:
+  split p95 90.4 / 92.9 / 84.4 (was 136-147), ripple 43.1 / 33.7 / 33.4 (108), undo 33.0 /
+  33.3 / 33.8 (126-131), seek 25, select 25-26, trim drag 16.9-17.0; RSS 388-399 MB (581-612).
+The gate (p95 < 100 ms) passes. Split keeps one ~85-93 ms sample per run, not yet explained.
