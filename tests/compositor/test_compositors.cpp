@@ -387,6 +387,50 @@ void gpu_matches_cpu_with_looks() {
     expect(diff.over_tolerance <= cpu->pixels.size() / 4 / 500).toBeTruthy();
 }
 
+// Every look this build ships (FilterKind after None), alone at full and half amount on one
+// layer, agrees with the CPU reference: a shader branch with no CPU twin would fail here.
+void gpu_matches_cpu_for_every_look() {
+    const oma::gpu::Device* device = compositor_test_device();
+    if (device == nullptr) {
+        return;
+    }
+    auto a = decode_first("h264_30fps_aac.mp4");
+    if (!a.frame) {
+        std::printf("    (skipped: fixture missing)\n");
+        return;
+    }
+    const std::array<LayerInput, 1> inputs{a.input()};
+    auto vk = VulkanCompositor::create(*device);
+    expect(vk.has_value()).toBeTruthy();
+    if (!vk) {
+        return;
+    }
+    constexpr auto kLast = static_cast<int>(oma::compositor::FilterKind::Vignette);
+    int checked = 0;
+    for (int kind = 1; kind <= kLast; ++kind) {
+        for (const double amount : {1.0, 0.5}) {
+            RenderGraph g = native_graph(320, 180);
+            g.layers[0].looks = {
+                {.kind = static_cast<oma::compositor::FilterKind>(kind), .amount = amount}};
+            const auto cpu = CpuCompositor{}.render(g, inputs);
+            const bool rendered = (*vk)->render(g, inputs).has_value();
+            const auto gpu = (*vk)->read_output();
+            if (!cpu || !rendered || !gpu) {
+                expect(false).toBeTruthy();
+                return;
+            }
+            const auto diff = compare(*gpu, *cpu, kTolerance);
+            if (diff.over_tolerance > cpu->pixels.size() / 4 / 500) {
+                std::printf("    look %d at %.1f: max difference %.5f\n", kind, amount,
+                            static_cast<double>(diff.max_abs));
+                expect(false).toBeTruthy();
+            }
+            ++checked;
+        }
+    }
+    expect(checked).toEqual(2 * kLast);
+}
+
 // A strong blur on a 640x360 still: its sigma (7.2 px) reduces the source by 2 before the
 // gaussian (src/look.hpp Detail), with a crop so the reduced grid starts off the origin.
 void gpu_matches_cpu_with_reduced_blur() {
@@ -859,6 +903,8 @@ void run_vulkan_compositor_tests() {
         it("matches the CPU reference on uploaded frames", { gpu_matches_cpu_with_uploads(); });
         it("matches the CPU reference with color adjustments and filters",
            { gpu_matches_cpu_with_looks(); });
+        it("matches the CPU reference for every shipped look",
+           { gpu_matches_cpu_for_every_look(); });
         it("matches the CPU reference with a reduced blur",
            { gpu_matches_cpu_with_reduced_blur(); });
         it("matches the CPU reference on zero-copy GPU frames",
