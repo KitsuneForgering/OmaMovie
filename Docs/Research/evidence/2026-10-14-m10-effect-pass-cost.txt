@@ -1,0 +1,22 @@
+M10 effects contract: pass cost per shipped effect (2026-10-14)
+
+Intel Iris Xe (TGL GT2), Mesa 26.2.2, release build. compositor_tests "measures each effect
+pass at 1080p and 4K": one decoded 1080p H.264 layer (screenrecording_like.mp4) filling the
+output, 20 warmed renders per case, submit to completion. Three runs; deltas against "no effect".
+
+Before the reduce-down change:
+  1080p  no effect 2.43-2.46 ms; each look -0.15..+0.58 (noise); blur (detail -0.6/-1.0) -0.2..+0.5;
+         sharpen (+0.6) +4.87 / +4.97 / +5.40 ms
+  4K     no effect 8.23-8.87 ms; each look -0.84..+0.79 (noise); blur -1.9..-3.2;
+         sharpen +6.50 / +7.03 / +8.14 ms
+After (ReduceDown skipped when the detail factor is 1, an identity full-size copy):
+  1080p  sharpen +4.91 / +3.77 / +4.34 ms  (mean 5.08 -> 4.34)
+  4K     sharpen +6.79 / +6.83 / +7.55 ms  (mean 7.22 -> 7.06, within noise)
+
+Reading: looks are fused in the layer pass and cost nothing measurable. Blur reduces the source
+first, so the composite reads a small intermediate and can come out faster than no effect.
+Sharpen runs at full source resolution (sigma 1.2 px at 1080p, factor 1): linearize, two
+9-tap gaussian passes and the composite reading both images; at 1080p60 it takes about a
+quarter to a third of the 16.7 ms frame on this iGPU. Further options, not taken: bilinear
+pair sampling (5 fetches instead of 9 per pass, changes border taps against the CPU reference)
+or a fused 2-pass blur at full resolution. Memory per pass was not measured.
