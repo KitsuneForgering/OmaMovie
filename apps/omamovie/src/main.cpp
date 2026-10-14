@@ -766,7 +766,9 @@ int main(int argc, char** argv) {
         bool controls = false, lanes = false, looks = false, transitions = false, dragdrop = false;
         bool tab = false, guard = false, grading = false, project = false, recordings = false, connected = false, timing = false;
         bool palette = false, palette_keys = false, theme = false, launch = false, settings = false, menu_keys = false, titles = false, autosave = false;
-        bool device_lost = false, layout = true;
+        bool device_lost = false, layout = true, key_workflow = false;
+        qsizetype key_clips = 0;
+        double key_in = 0;
         double after_steps = 0;
     } r;
     const auto clip_count = [&] { return session.clips().size(); };
@@ -798,6 +800,7 @@ int main(int argc, char** argv) {
         int title_pixels = 0;
         qsizetype clips_after_edit = 0;
         QString crashed;
+        double key_position = 0;
     } saved;
     const auto lane_count = [&] { return session.audioTracks().size(); };
     // The first clip of an audio lane, as QML sees it.
@@ -826,6 +829,11 @@ int main(int argc, char** argv) {
     const auto press = [&](Qt::Key key) {
         r.keys_focused = r.keys_focused && QGuiApplication::focusWindow() == window;
         QTest::keyClick(window, key);
+    };
+    // A shortcut with modifiers, as a user types it.
+    const auto chord = [&](Qt::Key key, Qt::KeyboardModifiers mods) {
+        r.keys_focused = r.keys_focused && QGuiApplication::focusWindow() == window;
+        QTest::keyClick(window, key, mods);
     };
     const auto click_button = [&](const char* name) {
         auto* button = window->findChild<QQuickItem*>(QString::fromLatin1(name));
@@ -2468,6 +2476,64 @@ int main(int argc, char** argv) {
              r.project = r.project && opened;
              session.closeSource();
          }},
+        // The edit workflow by keyboard only (M10): mark a source range (Shift+O, I, Shift+Right, O,
+        // Escape), append it (E), split it (Ctrl+B), delete the part under the playhead (Delete),
+        // save (Ctrl+S), undo back (Ctrl+Z) and play (Space). File dialogs are left out.
+        {"key workflow", after(150), [&] {
+             window->requestActivate();
+             session.selectMedia(0);
+             r.key_clips = clip_count();
+             chord(Qt::Key_O, Qt::ShiftModifier);
+         }},
+        {"key source marks", after(250), [&] {
+             r.key_workflow = session.source().value("open").toBool();
+             chord(Qt::Key_I, Qt::NoModifier);
+             r.key_in = session.source().value("in").toDouble();
+             chord(Qt::Key_Right, Qt::ShiftModifier);
+             chord(Qt::Key_O, Qt::NoModifier);
+             const double out = session.source().value("out").toDouble();
+             // Out keeps the frame under the playhead: 11 frames from in.
+             r.key_workflow = r.key_workflow && std::abs(out - r.key_in - (11.0 / 30.0)) < 1e-9;
+             if (!r.key_workflow) std::printf("GUI smoke: keyboard source marks failed (in %.4f, out %.4f, open %d)\n",
+                                              r.key_in, out, session.source().value("open").toBool());
+             chord(Qt::Key_Escape, Qt::NoModifier);
+         }},
+        {"key append", after(200), [&] {
+             const bool left = !session.source().value("open").toBool();
+             chord(Qt::Key_E, Qt::NoModifier);
+             const bool appended = clip_count() == r.key_clips + 1 &&
+                                   std::abs(session.clips().back().toMap().value("duration").toDouble() - 11.0 / 30.0) < 1e-9;
+             // Into the appended clip, 5 frames past its start (End would be the sound lanes' end).
+             chord(Qt::Key_Home, Qt::NoModifier);
+             const double appended_at = session.clips().back().toMap().value("start").toDouble();
+             for (int i = 0; i < std::lround(appended_at * 30.0) / 10; ++i) chord(Qt::Key_Right, Qt::ShiftModifier);
+             for (int i = 0; i < (std::lround(appended_at * 30.0) % 10) + 5; ++i) chord(Qt::Key_Right, Qt::NoModifier);
+             chord(Qt::Key_A, Qt::ControlModifier | Qt::ShiftModifier); // deselect: Delete takes the clip at the playhead
+             chord(Qt::Key_B, Qt::ControlModifier);
+             const bool split = clip_count() == r.key_clips + 2;
+             chord(Qt::Key_Delete, Qt::NoModifier);
+             const bool deleted = clip_count() == r.key_clips + 1;
+             chord(Qt::Key_S, Qt::ControlModifier);
+             r.key_workflow = r.key_workflow && left && appended && split && deleted;
+             if (!r.key_workflow) std::printf("GUI smoke: keyboard edit failed (left source %d, appended %d, split %d, deleted %d, clips %lld from %lld)\n",
+                                              left, appended, split, deleted, static_cast<long long>(clip_count()),
+                                              static_cast<long long>(r.key_clips));
+         }},
+        {"key saved", [&] { return !session.dirty() || run->elapsed() > 4000; }, [&] {
+             const bool saved_by_key = !session.dirty();
+             for (int i = 0; i < 3; ++i) chord(Qt::Key_Z, Qt::ControlModifier);
+             const bool undone = clip_count() == r.key_clips;
+             saved.key_position = session.position();
+             chord(Qt::Key_Space, Qt::NoModifier);
+             r.key_workflow = r.key_workflow && saved_by_key && undone;
+             if (!r.key_workflow) std::printf("GUI smoke: keyboard save/undo failed (saved %d, undone %d)\n", saved_by_key, undone);
+         }},
+        {"key played", after(400), [&] {
+             const bool played = session.playing() || session.position() != saved.key_position;
+             chord(Qt::Key_Space, Qt::NoModifier);
+             r.key_workflow = r.key_workflow && played;
+             if (!played) std::printf("GUI smoke: keyboard playback did not start\n");
+         }},
         {"device lost", after(300), [&] {
              screenshot(window, "OMA_GUI_SMOKE_LIBRARY_SCREENSHOT");
              window->setProperty("libraryOverlay", false);
@@ -2509,7 +2575,7 @@ int main(int argc, char** argv) {
                                 r.overwritten && r.trimmed && r.played && r.audio && r.volume && r.muted &&
                                 r.gpu_viewer && r.shuttle && r.lanes && r.looks && r.transitions && r.dragdrop && r.guard &&
                                 r.grading && r.project && r.recordings && r.connected && r.timing && r.palette && r.theme && r.launch && r.settings && r.titles && r.autosave && r.device_lost && r.layout;
-             const bool keys = r.space && r.escape && r.stepped && r.tab && r.palette_keys && r.menu_keys;
+             const bool keys = r.space && r.escape && r.stepped && r.tab && r.palette_keys && r.menu_keys && r.key_workflow;
              std::printf("GUI smoke: edits %s (import %d, split %d, undo %d, redo %d, ripple delete %d, "
                          "insert %d, overwrite %d, trim %d, play %d, audio %d, volume %d, mute %d, "
                          "GPU viewer %d, J/K/L %d, audio lanes %d, video looks %d, transitions %d, drag and drop %d, "
@@ -2518,8 +2584,8 @@ int main(int argc, char** argv) {
                          r.inserted, r.overwritten, r.trimmed, r.played, r.audio, r.volume, r.muted,
                          r.gpu_viewer, r.shuttle, r.lanes, r.looks, r.transitions, r.dragdrop, r.guard, r.grading, r.project, r.recordings, r.connected, r.timing, r.palette, r.theme, r.launch, r.settings, r.titles, r.autosave, r.device_lost);
              if (r.keys_focused) {
-                 std::printf("GUI smoke: keyboard %s (Tab %d, Space %d, Escape %d, Right x3 -> %.4fs, palette %d, menus %d)\n",
-                             keys ? "PASS" : "FAIL", r.tab, r.space, r.escape, r.after_steps, r.palette_keys, r.menu_keys);
+                 std::printf("GUI smoke: keyboard %s (Tab %d, Space %d, Escape %d, Right x3 -> %.4fs, palette %d, menus %d, edit workflow %d)\n",
+                             keys ? "PASS" : "FAIL", r.tab, r.space, r.escape, r.after_steps, r.palette_keys, r.menu_keys, r.key_workflow);
              } else {
                  std::printf("GUI smoke: keyboard skipped (window not focused throughout)\n");
              }
