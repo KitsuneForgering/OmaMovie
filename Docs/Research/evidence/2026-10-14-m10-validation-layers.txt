@@ -1,0 +1,28 @@
+M10 concurrency/lifetime: Vulkan validation layers over the test suites (2026-10-14)
+
+Machine: Intel Iris Xe (TGL GT2), Mesa 26.2.2-arch1.1, Vulkan 1.4.354,
+vulkan-validation-layers 1.4.357.0-1. Debug build at commit 383eb9a.
+The layer was confirmed inserted (VK_LOADER_DEBUG=layer: instance and device layer).
+
+Run 1, core validation:
+  VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation
+  gpu_tests, compositor_tests, app_tests (all, incl. the Session stress tests): exit 0,
+  0 "Validation Error".
+
+Run 2, synchronization validation + best practices, errors/warnings/perf reported:
+  VK_LAYER_ENABLES=VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT:
+                   VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT
+  VK_LAYER_REPORT_FLAGS=error,warn,perf
+  compositor_tests: exit 0, 0 errors, 0 SYNC-HAZARD.
+    26 BestPractices-vkBindImageMemory-small-dedicated-allocation
+    13 BestPractices-vkBindBufferMemory-small-dedicated-allocation
+       (known: VMA evaluated and not adopted, 16 setup-time allocations, M2)
+    20 BestPractices-ImageBarrierAccessLayout
+       (gpu::transition uses ALL_COMMANDS with MEMORY_READ|WRITE for every layout change:
+        conservative and correct; narrowing it is an unmeasured optimization, left as is)
+     3 VALIDATION-SETTINGS (settings given by environment variables)
+  app_tests and gpu_tests with synchronization validation (error,warn): exit 0, 0 errors,
+  0 SYNC-HAZARD; only VALIDATION-SETTINGS notices.
+
+Not covered: the live Qt window (presentation, swapchain resize) under validation, which
+needs the GUI smoke with the layer; NVIDIA/AMD drivers.
