@@ -879,8 +879,8 @@ void measures_1080p_three_layers() {
 }
 
 // M10 effects contract: the cost of each shipped effect pass at 1080p and 4K output, on one
-// decoded 1080p layer filling the frame (20 warmed renders each, submit to completion). Printed for the
-// record (Research/evidence), not asserted: timings depend on the device and its load.
+// decoded 1080p layer filling the frame (20 warmed renders each, submit to completion). Printed for
+// the record (Research/evidence), not asserted: timings depend on the device and its load.
 void measures_effect_passes() {
     const oma::gpu::Device* device = compositor_test_device();
     if (device == nullptr) {
