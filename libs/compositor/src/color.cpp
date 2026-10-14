@@ -206,6 +206,8 @@ double to_linear(double v, Transfer transfer) noexcept {
     return v;
 }
 
-Mat3 Mat3::identity() noexcept { return {}; }
+Mat3 Mat3::identity() noexcept {
+    return {};
+}
 
 } // namespace oma::compositor

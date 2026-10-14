@@ -48,7 +48,7 @@ private:
 template <typename T>
 using Result = std::expected<T, Error>;
 
-[[nodiscard]] std::unexpected<Error>
-make_error(ErrorCode code, Category category, std::string message, std::string context = {});
+[[nodiscard]] std::unexpected<Error> make_error(ErrorCode code, Category category,
+                                                std::string message, std::string context = {});
 
 } // namespace oma

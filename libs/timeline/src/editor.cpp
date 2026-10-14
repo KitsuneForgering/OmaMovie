@@ -136,9 +136,17 @@ CaptionId Editor::new_caption_id() noexcept {
     return CaptionId(detail::Mutation(timeline_).allocate_id());
 }
 
-const Timeline& Editor::timeline() const noexcept { return timeline_; }
-bool Editor::can_undo() const noexcept { return !undo_.empty(); }
-bool Editor::can_redo() const noexcept { return !redo_.empty(); }
-std::uint64_t Editor::revision() const noexcept { return revision_; }
+const Timeline& Editor::timeline() const noexcept {
+    return timeline_;
+}
+bool Editor::can_undo() const noexcept {
+    return !undo_.empty();
+}
+bool Editor::can_redo() const noexcept {
+    return !redo_.empty();
+}
+std::uint64_t Editor::revision() const noexcept {
+    return revision_;
+}
 
 } // namespace oma::timeline

@@ -12,8 +12,8 @@ Op generate(Rng& rng, const Timeline& tl) {
     const bool past = rng.between(0, 9) == 0;
     op.track = static_cast<int>(rng.between(0, past ? tracks : tracks - 1));
     const auto all = tl.tracks(); // a view of the timeline's tracks
-    const auto& clips = op.track < tracks ? all[static_cast<std::size_t>(op.track)].clips
-                                          : all.front().clips;
+    const auto& clips =
+        op.track < tracks ? all[static_cast<std::size_t>(op.track)].clips : all.front().clips;
     const auto count = static_cast<std::int64_t>(clips.size());
     op.clip = static_cast<int>(rng.between(0, count == 0 || past ? count : count - 1));
     const Clip* clip = op.clip < count ? &clips[static_cast<std::size_t>(op.clip)] : nullptr;

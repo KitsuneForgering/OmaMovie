@@ -9,12 +9,24 @@
 
 namespace oma::media::ff {
 
-void FormatCloser::operator()(AVFormatContext* p) const noexcept { avformat_close_input(&p); }
-void CodecFreer::operator()(AVCodecContext* p) const noexcept { avcodec_free_context(&p); }
-void FrameFreer::operator()(AVFrame* p) const noexcept { av_frame_free(&p); }
-void PacketFreer::operator()(AVPacket* p) const noexcept { av_packet_free(&p); }
-void BufferUnref::operator()(AVBufferRef* p) const noexcept { av_buffer_unref(&p); }
-void SwrFreer::operator()(SwrContext* p) const noexcept { swr_free(&p); }
+void FormatCloser::operator()(AVFormatContext* p) const noexcept {
+    avformat_close_input(&p);
+}
+void CodecFreer::operator()(AVCodecContext* p) const noexcept {
+    avcodec_free_context(&p);
+}
+void FrameFreer::operator()(AVFrame* p) const noexcept {
+    av_frame_free(&p);
+}
+void PacketFreer::operator()(AVPacket* p) const noexcept {
+    av_packet_free(&p);
+}
+void BufferUnref::operator()(AVBufferRef* p) const noexcept {
+    av_buffer_unref(&p);
+}
+void SwrFreer::operator()(SwrContext* p) const noexcept {
+    swr_free(&p);
+}
 
 namespace {
 

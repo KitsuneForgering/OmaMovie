@@ -46,5 +46,4 @@ std::strong_ordering operator<=>(Rational a, Rational b) noexcept {
                  : (c > 0 ? std::strong_ordering::greater : std::strong_ordering::equal);
 }
 
-
 } // namespace oma

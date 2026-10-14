@@ -1166,8 +1166,10 @@ Result<Document> from_json(std::string_view json, const std::filesystem::path& p
         ref.info.has_video = r(get_or<bool>(m, "has_video", false, at));
         ref.info.has_audio = r(get_or<bool>(m, "has_audio", false, at));
         ref.info.still = r(get_or<bool>(m, "still", false, at));
-        ref.info.color_matrix = r(get_enum(m, "color_matrix", kColorMatrices, tl::MediaColorMatrix::Auto, at));
-        ref.info.color_range = r(get_enum(m, "color_range", kColorRanges, tl::MediaColorRange::Auto, at));
+        ref.info.color_matrix =
+            r(get_enum(m, "color_matrix", kColorMatrices, tl::MediaColorMatrix::Auto, at));
+        ref.info.color_range =
+            r(get_enum(m, "color_range", kColorRanges, tl::MediaColorRange::Auto, at));
         ref.audio_only = r(get_or<bool>(m, "audio_only", false, at));
         doc.media.push_back(std::move(ref));
     }

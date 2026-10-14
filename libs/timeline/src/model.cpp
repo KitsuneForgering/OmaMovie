@@ -17,7 +17,9 @@ using detail::error;
 
 TimeMap::TimeMap(Rational speed) noexcept : speed_(speed) {}
 Timeline::Timeline(FrameRate rate, Rational timebase) noexcept : rate_(rate), timebase_(timebase) {}
-std::int64_t Clip::end_ticks() const noexcept { return start.value() + duration.value(); }
+std::int64_t Clip::end_ticks() const noexcept {
+    return start.value() + duration.value();
+}
 
 Result<TimeMap> TimeMap::constant(Rational speed) {
     if (!speed.is_positive()) {
@@ -746,20 +748,46 @@ Result<void> Timeline::validate() const {
     return {};
 }
 
-bool TimeMap::is_constant() const noexcept { return segments_.empty(); }
-Rational TimeMap::speed() const noexcept { return speed_; }
-std::span<const TimeSegment> TimeMap::segments() const noexcept { return segments_; }
+bool TimeMap::is_constant() const noexcept {
+    return segments_.empty();
+}
+Rational TimeMap::speed() const noexcept {
+    return speed_;
+}
+std::span<const TimeSegment> TimeMap::segments() const noexcept {
+    return segments_;
+}
 
-std::int64_t Clip::start_ticks() const noexcept { return start.value(); }
+std::int64_t Clip::start_ticks() const noexcept {
+    return start.value();
+}
 
-FrameRate Timeline::frame_rate() const noexcept { return rate_; }
-Rational Timeline::timebase() const noexcept { return timebase_; }
-std::span<const Track> Timeline::tracks() const noexcept { return tracks_; }
-std::span<const Marker> Timeline::markers() const noexcept { return markers_; }
-std::span<const Caption> Timeline::captions() const noexcept { return captions_; }
-std::uint32_t Timeline::canvas_width() const noexcept { return canvas_width_; }
-std::uint32_t Timeline::canvas_height() const noexcept { return canvas_height_; }
-std::span<const MediaInfo> Timeline::media() const noexcept { return media_; }
-std::span<const LutInfo> Timeline::luts() const noexcept { return luts_; }
+FrameRate Timeline::frame_rate() const noexcept {
+    return rate_;
+}
+Rational Timeline::timebase() const noexcept {
+    return timebase_;
+}
+std::span<const Track> Timeline::tracks() const noexcept {
+    return tracks_;
+}
+std::span<const Marker> Timeline::markers() const noexcept {
+    return markers_;
+}
+std::span<const Caption> Timeline::captions() const noexcept {
+    return captions_;
+}
+std::uint32_t Timeline::canvas_width() const noexcept {
+    return canvas_width_;
+}
+std::uint32_t Timeline::canvas_height() const noexcept {
+    return canvas_height_;
+}
+std::span<const MediaInfo> Timeline::media() const noexcept {
+    return media_;
+}
+std::span<const LutInfo> Timeline::luts() const noexcept {
+    return luts_;
+}
 
 } // namespace oma::timeline

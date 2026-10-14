@@ -198,8 +198,14 @@ Result<std::uint64_t> DiskCache::evict(std::uint64_t over, std::uint64_t down_to
     return removed;
 }
 
-const std::filesystem::path& DiskCache::dir() const noexcept { return dir_; }
-std::uint64_t DiskCache::budget() const noexcept { return budget_.load(std::memory_order_relaxed); }
-void DiskCache::set_budget(std::uint64_t bytes) noexcept { budget_.store(bytes, std::memory_order_relaxed); }
+const std::filesystem::path& DiskCache::dir() const noexcept {
+    return dir_;
+}
+std::uint64_t DiskCache::budget() const noexcept {
+    return budget_.load(std::memory_order_relaxed);
+}
+void DiskCache::set_budget(std::uint64_t bytes) noexcept {
+    budget_.store(bytes, std::memory_order_relaxed);
+}
 
 } // namespace oma

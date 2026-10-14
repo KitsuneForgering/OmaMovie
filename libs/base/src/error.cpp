@@ -23,9 +23,17 @@ std::string Error::summary() const {
                        context_);
 }
 
-ErrorCode Error::code() const noexcept { return code_; }
-Category Error::category() const noexcept { return category_; }
-const std::string& Error::message() const noexcept { return message_; }
-const std::string& Error::context() const noexcept { return context_; }
+ErrorCode Error::code() const noexcept {
+    return code_;
+}
+Category Error::category() const noexcept {
+    return category_;
+}
+const std::string& Error::message() const noexcept {
+    return message_;
+}
+const std::string& Error::context() const noexcept {
+    return context_;
+}
 
 } // namespace oma

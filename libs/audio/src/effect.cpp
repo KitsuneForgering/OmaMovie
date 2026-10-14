@@ -25,7 +25,9 @@ void EffectChain::process(std::span<float> samples, int channels, std::int64_t s
     }
 }
 
-std::size_t EffectChain::size() const noexcept { return effects_.size(); }
+std::size_t EffectChain::size() const noexcept {
+    return effects_.size();
+}
 
 void EffectChain::resize(std::size_t count) {
     if (count < effects_.size()) {

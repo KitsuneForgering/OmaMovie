@@ -7,7 +7,9 @@
 
 namespace oma::audio {
 
-bool Equalizer::active() const noexcept { return active_; }
+bool Equalizer::active() const noexcept {
+    return active_;
+}
 
 namespace {
 

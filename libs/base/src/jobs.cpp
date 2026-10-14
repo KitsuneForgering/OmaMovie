@@ -214,14 +214,26 @@ void JobPool::worker_loop(const std::stop_token& stop) {
     }
 }
 
-CancellationToken CancellationSource::token() const { return CancellationToken(flag_); }
-void CancellationSource::cancel() noexcept { flag_->store(true, std::memory_order_release); }
+CancellationToken CancellationSource::token() const {
+    return CancellationToken(flag_);
+}
+void CancellationSource::cancel() noexcept {
+    flag_->store(true, std::memory_order_release);
+}
 
-const CancellationToken& JobContext::token() const noexcept { return token_; }
-bool JobContext::is_cancelled() const noexcept { return token_.is_cancelled(); }
+const CancellationToken& JobContext::token() const noexcept {
+    return token_;
+}
+bool JobContext::is_cancelled() const noexcept {
+    return token_.is_cancelled();
+}
 
-bool JobHandle::valid() const noexcept { return shared_ != nullptr; }
+bool JobHandle::valid() const noexcept {
+    return shared_ != nullptr;
+}
 
-std::size_t JobPool::worker_count() const noexcept { return worker_count_; }
+std::size_t JobPool::worker_count() const noexcept {
+    return worker_count_;
+}
 
 } // namespace oma

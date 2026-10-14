@@ -34,8 +34,14 @@ void SampleRing::discard_until(std::uint64_t mark) noexcept {
     }
 }
 
-int SampleRing::channels() const noexcept { return channels_; }
-std::size_t SampleRing::capacity() const noexcept { return mask_ + 1; }
-std::uint64_t SampleRing::written() const noexcept { return head_.load(std::memory_order_acquire); }
+int SampleRing::channels() const noexcept {
+    return channels_;
+}
+std::size_t SampleRing::capacity() const noexcept {
+    return mask_ + 1;
+}
+std::uint64_t SampleRing::written() const noexcept {
+    return head_.load(std::memory_order_acquire);
+}
 
 } // namespace oma::audio

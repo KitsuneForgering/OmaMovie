@@ -1,5 +1,5 @@
-#include "session.hpp"
 #include "../playback/playback_test.hpp"
+#include "session.hpp"
 
 #include "oma/media/probe.hpp"
 
@@ -85,8 +85,8 @@ bool precise_nudges_keep_one_edit_per_step() {
     const double cut = s.clips().at(1).toMap().value("start").toDouble();
     s.selectClip(first);
     s.nudgeRoll(-1);
-    const bool rolled = std::abs(s.clips().at(1).toMap().value("start").toDouble() -
-                                 (cut - 1.0 / 30.0)) < 1e-9;
+    const bool rolled =
+        std::abs(s.clips().at(1).toMap().value("start").toDouble() - (cut - 1.0 / 30.0)) < 1e-9;
     s.undo();
     const bool roll_undo = std::abs(s.clips().at(1).toMap().value("start").toDouble() - cut) < 1e-9;
     s.selectClip(second);
@@ -96,10 +96,11 @@ bool precise_nudges_keep_one_edit_per_step() {
                                   (source + 1.0 / 30.0)) < 1e-9 &&
                          std::abs(s.clips().at(1).toMap().value("start").toDouble() - cut) < 1e-9;
     s.undo();
-    const bool slip_undo = std::abs(s.clips().at(1).toMap().value("sourceIn").toDouble() - source) < 1e-9;
+    const bool slip_undo =
+        std::abs(s.clips().at(1).toMap().value("sourceIn").toDouble() - source) < 1e-9;
     s.nudgeSlide(1);
-    const bool slid = std::abs(s.clips().at(1).toMap().value("start").toDouble() -
-                               (cut + 1.0 / 30.0)) < 1e-9;
+    const bool slid =
+        std::abs(s.clips().at(1).toMap().value("start").toDouble() - (cut + 1.0 / 30.0)) < 1e-9;
     s.undo();
     return rolled && roll_undo && slipped && slip_undo && slid &&
            std::abs(s.clips().at(1).toMap().value("start").toDouble() - cut) < 1e-9;
@@ -114,7 +115,7 @@ bool source_range_works_for_overwrite_and_connect() {
     s.markIn();
     s.seekSource(0.5);
     s.markOut(); // [6, 16): ten source frames
-    s.seek(0);  // sequence playhead; source marks remain on the library item
+    s.seek(0);   // sequence playhead; source marks remain on the library item
     s.overwriteSelected();
     const QVariantList overwritten = s.clips();
     if (overwritten.isEmpty() ||
@@ -153,8 +154,10 @@ bool marked_source_range_survives_project_reopen() {
     Session reopened;
     reopened.setSilent(true);
     reopened.openProject(QUrl::fromLocalFile(path));
-    if (!wait_until([&] { return reopened.projectPath() == path &&
-                                  reopened.clips().size() == 2 && !reopened.importsPending(); }))
+    if (!wait_until([&] {
+            return reopened.projectPath() == path && reopened.clips().size() == 2 &&
+                   !reopened.importsPending();
+        }))
         return false;
     const QVariantMap clip = reopened.clips().at(1).toMap();
     return std::abs(clip.value("sourceIn").toDouble() - 0.2) < 1e-9 &&
@@ -351,21 +354,21 @@ bool export_refuses_broken_audio() {
     if (!previous.open(QIODevice::WriteOnly) || previous.write("previous") != 8)
         return false;
     previous.close();
-    ExportRequest request{.timeline = seq.editor.timeline(),
-                          .paths = {{pt::kTone.value(), dir.filePath(QStringLiteral("missing.wav")).toStdString()}},
-                          .luts = {},
-                          .file = file.toStdString(),
-                          .width = 32,
-                          .height = 32,
-                          .frames = 1,
-                          .ticks_per_frame = 1600,
-                          .audio_rate = pt::rate(),
-                          .encoder = ExportRequest::Encoder::Software};
+    ExportRequest request{
+        .timeline = seq.editor.timeline(),
+        .paths = {{pt::kTone.value(), dir.filePath(QStringLiteral("missing.wav")).toStdString()}},
+        .luts = {},
+        .file = file.toStdString(),
+        .width = 32,
+        .height = 32,
+        .frames = 1,
+        .ticks_per_frame = 1600,
+        .audio_rate = pt::rate(),
+        .encoder = ExportRequest::Encoder::Software};
     const auto result = export_timeline(request, [](std::int64_t, std::int64_t) { return true; });
     if (result || !previous.open(QIODevice::ReadOnly))
         return false;
-    return previous.readAll() == "previous" &&
-           QDir(dir.path()).entryList(QDir::Files).size() == 1;
+    return previous.readAll() == "previous" && QDir(dir.path()).entryList(QDir::Files).size() == 1;
 }
 
 bool export_refuses_audio_failure_after_good_block() {
@@ -388,19 +391,21 @@ bool export_refuses_audio_failure_after_good_block() {
     if (!previous.open(QIODevice::WriteOnly) || previous.write("previous") != 8)
         return false;
     previous.close();
-    ExportRequest request{.timeline = seq.editor.timeline(),
-                          .paths = {{pt::kTone.value(), pt::fixture("tone_44100.wav").string()},
-                                    {pt::kNoisy.value(), dir.filePath(QStringLiteral("missing.wav")).toStdString()}},
-                          .luts = {},
-                          .file = file.toStdString(),
-                          .width = 32,
-                          .height = 32,
-                          .frames = 2,
-                          .ticks_per_frame = 1600,
-                          .audio_rate = pt::rate(),
-                          .encoder = ExportRequest::Encoder::Software};
+    ExportRequest request{
+        .timeline = seq.editor.timeline(),
+        .paths = {{pt::kTone.value(), pt::fixture("tone_44100.wav").string()},
+                  {pt::kNoisy.value(), dir.filePath(QStringLiteral("missing.wav")).toStdString()}},
+        .luts = {},
+        .file = file.toStdString(),
+        .width = 32,
+        .height = 32,
+        .frames = 2,
+        .ticks_per_frame = 1600,
+        .audio_rate = pt::rate(),
+        .encoder = ExportRequest::Encoder::Software};
     ExportStats stats;
-    const auto result = export_timeline(request, [](std::int64_t, std::int64_t) { return true; }, &stats);
+    const auto result =
+        export_timeline(request, [](std::int64_t, std::int64_t) { return true; }, &stats);
     if (result || !previous.open(QIODevice::ReadOnly))
         return false;
     return stats.frames == 1 && previous.readAll() == "previous" &&
@@ -421,7 +426,8 @@ bool export_allows_intentional_silence() {
                               .ticks_per_frame = 1600,
                               .audio_rate = pt::rate(),
                               .encoder = ExportRequest::Encoder::Software};
-        const auto result = export_timeline(request, [](std::int64_t, std::int64_t) { return true; });
+        const auto result =
+            export_timeline(request, [](std::int64_t, std::int64_t) { return true; });
         return result.has_value() && QFileInfo::exists(dir.filePath(name));
     };
     pt::Sequence empty = pt::make_sequence();
@@ -458,8 +464,7 @@ bool export_captions_use_start_snapshot() {
     if (!wait_until([&] { return s.exportProgress() < 0; }, 60000) || s.exportedFile() != file)
         return false;
     QFile sidecar(dir.filePath(QStringLiteral("movie.srt")));
-    return sidecar.open(QIODevice::ReadOnly) &&
-           sidecar.readAll().contains("Before export") &&
+    return sidecar.open(QIODevice::ReadOnly) && sidecar.readAll().contains("Before export") &&
            s.captionAt(0).contains(QStringLiteral("After export started"));
 }
 

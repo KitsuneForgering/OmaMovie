@@ -58,7 +58,8 @@ struct alignas(16) LayerParams {
     std::array<std::int32_t, 4> curve_count{};
     std::array<std::array<float, 4>, 4 * kMaxCurvePoints> curve{};
 };
-static_assert(sizeof(LayerParams) == std::size_t{97} * 16U, "LayerParams must match the std140 block");
+static_assert(sizeof(LayerParams) == std::size_t{97} * 16U,
+              "LayerParams must match the std140 block");
 
 // Bits of LayerParams::grade[0], an int in the std140 block the shaders read.
 inline constexpr std::int32_t kGradeCdl = 1;
