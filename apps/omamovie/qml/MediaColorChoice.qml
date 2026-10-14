@@ -13,13 +13,13 @@ ColumnLayout {
     UiText {
         text: choice.range ? "RANGE" : "READ COLOR AS"
         color: root.muted
-        font.pixelSize: 11
+        font.pixelSize: Math.round(11 * appSettings.textScale)
         font.bold: true
     }
     ComboBox {
         objectName: choice.range ? "mediaColorRange" : "mediaColorMatrix"
         Layout.preferredWidth: 150
-        font.pixelSize: 11
+        font.pixelSize: Math.round(11 * appSettings.textScale)
         focusPolicy: Qt.TabFocus
         model: choice.range ? ["As the file says", "Limited (TV)", "Full (PC)"]
                             : ["As the file says", "BT.601 (SD)", "BT.709 (HD)", "BT.2020"]

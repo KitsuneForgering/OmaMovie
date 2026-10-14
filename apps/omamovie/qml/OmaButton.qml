@@ -55,7 +55,7 @@ AbstractButton {
                 text: control.text
                 color: content.tint
                 opacity: control.enabled ? 1 : 0.55
-                font.pixelSize: 12
+                font.pixelSize: Math.round(12 * appSettings.textScale)
                 anchors.verticalCenter: parent.verticalCenter
             }
         }

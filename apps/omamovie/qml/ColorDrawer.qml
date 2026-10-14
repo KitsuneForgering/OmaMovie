@@ -158,7 +158,7 @@ Rectangle {
                 wrapMode: Text.WordWrap
                 text: "Click to add a point, drag to move it, double-click to remove it."
                 color: root.muted
-                font.pixelSize: 11
+                font.pixelSize: Math.round(11 * appSettings.textScale)
             }
         }
         ColumnLayout { // LUT
@@ -171,7 +171,7 @@ Rectangle {
                 ComboBox {
                     id: lutChoice
                     Layout.preferredWidth: 200
-                    font.pixelSize: 11
+                    font.pixelSize: Math.round(11 * appSettings.textScale)
                     focusPolicy: Qt.TabFocus
                     Keys.onShortcutOverride: (event) => event.accepted = root.sliderKeys.includes(event.key) || event.key === Qt.Key_Space
                     textRole: "name"

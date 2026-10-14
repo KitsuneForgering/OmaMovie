@@ -14,7 +14,7 @@ RowLayout {
         property alias source: picture.source
         property real scopeWidth: 108
         spacing: 4
-        UiText { id: title; color: root.muted; font.pixelSize: 11; font.bold: true }
+        UiText { id: title; color: root.muted; font.pixelSize: Math.round(11 * appSettings.textScale); font.bold: true }
         Rectangle {
             Layout.preferredWidth: parent.scopeWidth
             Layout.preferredHeight: 108

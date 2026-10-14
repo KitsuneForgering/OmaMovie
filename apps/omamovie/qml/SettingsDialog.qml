@@ -28,14 +28,14 @@ Popup {
     component Heading: UiText {
         Layout.topMargin: 14
         color: colors.dark_foreground
-        font.pixelSize: 11
+        font.pixelSize: Math.round(11 * appSettings.textScale)
         font.bold: true
         font.letterSpacing: 1
     }
     component Note: UiText {
         Layout.fillWidth: true
         color: colors.dark_foreground
-        font.pixelSize: 11
+        font.pixelSize: Math.round(11 * appSettings.textScale)
         wrapMode: Text.Wrap
     }
     // One choice of a setting; Tab reaches the group, the arrows move within it.
@@ -50,7 +50,7 @@ Popup {
             leftPadding: choice.indicator.width + choice.spacing
             text: choice.text
             color: choice.enabled ? colors.foreground : colors.dark_foreground
-            font.pixelSize: 12
+            font.pixelSize: Math.round(12 * appSettings.textScale)
             verticalAlignment: Text.AlignVCenter
         }
     }
@@ -67,7 +67,7 @@ Popup {
         RowLayout {
             Layout.fillWidth: true
             Layout.margins: 14
-            UiText { text: "Settings"; color: colors.foreground; font.pixelSize: 16; font.bold: true }
+            UiText { text: "Settings"; color: colors.foreground; font.pixelSize: Math.round(16 * appSettings.textScale); font.bold: true }
             Item { Layout.fillWidth: true }
             OmaButton { objectName: "resetSettings"; text: "Reset all"; onClicked: appSettings.resetAll() }
             OmaButton { id: closeButton; text: "Done"; primary: true; onClicked: settingsDialog.close() }
@@ -127,6 +127,13 @@ Popup {
 
                 Heading { text: "APPEARANCE" }
                 Note { text: "Follows the Omarchy theme and font" + (settingsDialog.system.font ? " (" + settingsDialog.system.font + ")" : "") + ". The viewer never takes theme colours." }
+                RowLayout {
+                    spacing: 0
+                    UiText { text: "Text size:"; color: colors.foreground; font.pixelSize: Math.round(12 * appSettings.textScale); rightPadding: 8 }
+                    Choice { objectName: "textSize100"; text: "100 %"; value: "100"; current: appSettings.textSize; onChosen: v => appSettings.textSize = v }
+                    Choice { objectName: "textSize115"; text: "115 %"; value: "115"; current: appSettings.textSize; onChosen: v => appSettings.textSize = v }
+                    Choice { objectName: "textSize130"; text: "130 %"; value: "130"; current: appSettings.textSize; onChosen: v => appSettings.textSize = v }
+                }
 
                 Heading { text: "KEYBOARD" }
                 RowLayout {
@@ -141,7 +148,7 @@ Popup {
                 Note { objectName: "cacheNote"; text: "Thumbnails and waveforms are kept in " + (settingsDialog.system.cache || "the cache folder") + ", oldest first out past the limit. Clearing it loses nothing but the time to rebuild them. The folder follows XDG_CACHE_HOME." }
                 RowLayout {
                     spacing: 0
-                    UiText { text: "Limit for each:"; color: colors.foreground; font.pixelSize: 12; rightPadding: 8 }
+                    UiText { text: "Limit for each:"; color: colors.foreground; font.pixelSize: Math.round(12 * appSettings.textScale); rightPadding: 8 }
                     Choice { text: "256 MB"; value: "256"; current: appSettings.cacheLimit; onChosen: v => appSettings.cacheLimit = v }
                     Choice { text: "512 MB"; value: "512"; current: appSettings.cacheLimit; onChosen: v => appSettings.cacheLimit = v }
                     Choice { text: "1 GB"; value: "1024"; current: appSettings.cacheLimit; onChosen: v => appSettings.cacheLimit = v }

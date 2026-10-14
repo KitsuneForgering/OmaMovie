@@ -23,7 +23,7 @@ Rectangle {
             Layout.fillHeight: true
             Layout.margins: 8
             spacing: 4
-            UiText { text: "SOURCES"; color: root.muted; font.pixelSize: 10; font.bold: true; Layout.bottomMargin: 4 }
+            UiText { text: "SOURCES"; color: root.muted; font.pixelSize: Math.round(10 * appSettings.textScale); font.bold: true; Layout.bottomMargin: 4 }
             OmaButton {
                 text: "Project"
                 selected: root.librarySource === "project"
@@ -54,8 +54,8 @@ Rectangle {
                 Layout.preferredHeight: 40
                 Layout.leftMargin: 12
                 Layout.rightMargin: 8
-                UiText { text: "Recordings"; color: root.fg; font.pixelSize: 12; font.bold: true }
-                UiText { text: session.recordings.length; color: root.muted; font.pixelSize: 11 }
+                UiText { text: "Recordings"; color: root.fg; font.pixelSize: Math.round(12 * appSettings.textScale); font.bold: true }
+                UiText { text: session.recordings.length; color: root.muted; font.pixelSize: Math.round(11 * appSettings.textScale) }
                 Item { Layout.fillWidth: true }
             }
             ListView {
@@ -90,7 +90,7 @@ Rectangle {
                             Layout.fillWidth: true
                             text: modelData.title
                             color: root.fg
-                            font.pixelSize: 12
+                            font.pixelSize: Math.round(12 * appSettings.textScale)
                             elide: Text.ElideMiddle
                         }
                         UiText {
@@ -98,7 +98,7 @@ Rectangle {
                             text: modelData.growing ? "Still recording…"
                                                     : modelData.when + (modelData.noAudio ? " · no audio" : "")
                             color: root.muted
-                            font.pixelSize: 11
+                            font.pixelSize: Math.round(11 * appSettings.textScale)
                             elide: Text.ElideRight
                         }
                     }
@@ -120,7 +120,7 @@ Rectangle {
                     wrapMode: Text.WordWrap
                     text: "No screen recordings in " + session.recordingsFolder
                     color: root.muted
-                    font.pixelSize: 11
+                    font.pixelSize: Math.round(11 * appSettings.textScale)
                 }
             }
         }
@@ -134,8 +134,8 @@ Rectangle {
                 Layout.preferredHeight: 40
                 Layout.leftMargin: 12
                 Layout.rightMargin: 8
-                UiText { text: "Media"; color: root.fg; font.pixelSize: 12; font.bold: true }
-                UiText { text: session.media.length; color: root.muted; font.pixelSize: 11 }
+                UiText { text: "Media"; color: root.fg; font.pixelSize: Math.round(12 * appSettings.textScale); font.bold: true }
+                UiText { text: session.media.length; color: root.muted; font.pixelSize: Math.round(11 * appSettings.textScale) }
                 Item { Layout.fillWidth: true }
                 // The selected item onto the timeline; the chevron offers insert and overwrite.
                 OmaButton {
@@ -204,7 +204,7 @@ Rectangle {
                                 color: colors.green || root.fg
                             }
                         }
-                        UiText { Layout.fillWidth: true; text: modelData.name; color: root.fg; font.pixelSize: 12; elide: Text.ElideMiddle }
+                        UiText { Layout.fillWidth: true; text: modelData.name; color: root.fg; font.pixelSize: Math.round(12 * appSettings.textScale); elide: Text.ElideMiddle }
                         // A marked range (source viewer) is what Add/Insert/Overwrite will use: say so.
                         UiText {
                             objectName: "mediaRange"
@@ -213,7 +213,7 @@ Rectangle {
                                            + (modelData.markOut >= 0 ? root.timecode(modelData.markOut - 1 / session.frameRate) : "end")
                                          : root.timecode(modelData.duration)
                             color: ranged ? (colors.yellow || root.accent) : root.muted
-                            font.pixelSize: 11
+                            font.pixelSize: Math.round(11 * appSettings.textScale)
                         }
                     }
                     // Click selects, double click appends, dragging carries the item
@@ -280,7 +280,7 @@ Rectangle {
                     wrapMode: Text.WordWrap
                     text: "Import videos" + root.shortcutText(actions.importMedia)
                     color: root.muted
-                    font.pixelSize: 11
+                    font.pixelSize: Math.round(11 * appSettings.textScale)
                 }
             }
         }

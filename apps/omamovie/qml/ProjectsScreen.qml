@@ -15,7 +15,7 @@ Item {
         anchors.leftMargin: 24
         anchors.rightMargin: 24
         height: 60
-        UiText { text: "OmaMovie"; color: root.fg; font.pixelSize: 18; font.bold: true }
+        UiText { text: "OmaMovie"; color: root.fg; font.pixelSize: Math.round(18 * appSettings.textScale); font.bold: true }
         Item { Layout.fillWidth: true }
         OmaButton { objectName: "settingsButton"; action: actions.settings; iconName: "settings"; showLabel: false }
         OmaButton { objectName: "openProject"; action: actions.openProject; iconName: "open" }
@@ -38,7 +38,7 @@ Item {
             Layout.topMargin: 16
             text: "CURRENT PROJECT"
             color: root.muted
-            font.pixelSize: 11
+            font.pixelSize: Math.round(11 * appSettings.textScale)
             font.bold: true
             font.letterSpacing: 1
         }
@@ -66,13 +66,13 @@ Item {
                 UiText {
                     text: session.projectName + (session.dirty ? " · unsaved changes" : "")
                     color: root.fg
-                    font.pixelSize: 13
+                    font.pixelSize: Math.round(13 * appSettings.textScale)
                     font.bold: true
                 }
                 UiText {
                     text: session.media.length + " item" + (session.media.length === 1 ? "" : "s") + " in the library"
                     color: root.muted
-                    font.pixelSize: 11
+                    font.pixelSize: Math.round(11 * appSettings.textScale)
                 }
             }
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: session.continueProject() }
@@ -81,7 +81,7 @@ Item {
             visible: session.media.length === 0
             text: "Nothing open yet. Start a new project or open a saved one."
             color: root.muted
-            font.pixelSize: 12
+            font.pixelSize: Math.round(12 * appSettings.textScale)
         }
 
         UiText {
@@ -89,7 +89,7 @@ Item {
             visible: session.recoveredExports.length > 0
             text: "EXPORTS LEFT BY AN UNEXPECTED CLOSE"
             color: colors.yellow
-            font.pixelSize: 11
+            font.pixelSize: Math.round(11 * appSettings.textScale)
             font.bold: true
         }
         Flow {
@@ -140,7 +140,7 @@ Item {
             visible: session.recoveredProjects.length > 0
             text: "RECOVERED AFTER AN UNEXPECTED CLOSE"
             color: colors.yellow
-            font.pixelSize: 11
+            font.pixelSize: Math.round(11 * appSettings.textScale)
             font.bold: true
             font.letterSpacing: 1
         }
@@ -167,8 +167,8 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 2
-                            UiText { Layout.fillWidth: true; text: recoveredCard.modelData.name; color: root.fg; font.pixelSize: 12; font.bold: true; elide: Text.ElideRight }
-                            UiText { Layout.fillWidth: true; text: "autosaved " + recoveredCard.modelData.when; color: root.muted; font.pixelSize: 11; elide: Text.ElideRight }
+                            UiText { Layout.fillWidth: true; text: recoveredCard.modelData.name; color: root.fg; font.pixelSize: Math.round(12 * appSettings.textScale); font.bold: true; elide: Text.ElideRight }
+                            UiText { Layout.fillWidth: true; text: "autosaved " + recoveredCard.modelData.when; color: root.muted; font.pixelSize: Math.round(11 * appSettings.textScale); elide: Text.ElideRight }
                         }
                         OmaButton {
                             objectName: "restoreRecovered"
@@ -194,7 +194,7 @@ Item {
             visible: session.recentProjects.length > 0
             text: "RECENT PROJECTS"
             color: root.muted
-            font.pixelSize: 11
+            font.pixelSize: Math.round(11 * appSettings.textScale)
             font.bold: true
             font.letterSpacing: 1
         }
@@ -221,7 +221,7 @@ Item {
                             Layout.fillWidth: true
                             text: recentCard.modelData.name
                             color: root.fg
-                            font.pixelSize: 12
+                            font.pixelSize: Math.round(12 * appSettings.textScale)
                             font.bold: true
                             elide: Text.ElideRight
                         }
@@ -229,7 +229,7 @@ Item {
                             Layout.fillWidth: true
                             text: recentCard.modelData.when + " · " + recentCard.modelData.folder
                             color: root.muted
-                            font.pixelSize: 11
+                            font.pixelSize: Math.round(11 * appSettings.textScale)
                             elide: Text.ElideMiddle
                         }
                     }
@@ -281,7 +281,7 @@ Item {
             Layout.topMargin: 16
             text: "RECENT RECORDINGS"
             color: root.muted
-            font.pixelSize: 11
+            font.pixelSize: Math.round(11 * appSettings.textScale)
             font.bold: true
             font.letterSpacing: 1
         }
@@ -289,7 +289,7 @@ Item {
             visible: session.recordings.length === 0
             text: "No screen recordings in " + session.recordingsFolder + "."
             color: root.muted
-            font.pixelSize: 12
+            font.pixelSize: Math.round(12 * appSettings.textScale)
         }
         Flow {
             Layout.fillWidth: true
@@ -328,7 +328,7 @@ Item {
                                 Layout.fillWidth: true
                                 text: modelData.title
                                 color: root.fg
-                                font.pixelSize: 12
+                                font.pixelSize: Math.round(12 * appSettings.textScale)
                                 elide: Text.ElideMiddle
                                 ToolTip.visible: titleHover.hovered
                                 ToolTip.text: modelData.name
@@ -338,7 +338,7 @@ Item {
                                 text: modelData.growing ? "Still recording…"
                                                         : modelData.when + (modelData.noAudio ? " · no audio" : "")
                                 color: root.muted
-                                font.pixelSize: 11
+                                font.pixelSize: Math.round(11 * appSettings.textScale)
                             }
                         }
                         OmaButton {

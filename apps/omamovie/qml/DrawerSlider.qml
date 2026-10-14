@@ -12,9 +12,9 @@ ColumnLayout {
     spacing: 0
     Layout.fillWidth: true
     RowLayout {
-        UiText { text: drawerSlider.label; color: root.muted; font.pixelSize: 10; font.bold: true }
+        UiText { text: drawerSlider.label; color: root.muted; font.pixelSize: Math.round(10 * appSettings.textScale); font.bold: true }
         Item { Layout.fillWidth: true }
-        UiText { text: drawerSlider.readout; color: root.fg; font.pixelSize: 11 }
+        UiText { text: drawerSlider.readout; color: root.fg; font.pixelSize: Math.round(11 * appSettings.textScale) }
     }
     Slider {
         id: control

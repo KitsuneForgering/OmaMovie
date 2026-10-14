@@ -323,7 +323,7 @@ Rectangle {
         height: 16
         radius: 8
         color: Qt.rgba(0, 0, 0, 0.55)
-        UiText { id: badgeText; anchors.centerIn: parent; text: parent.timing; color: "white"; font.pixelSize: 10 }
+        UiText { id: badgeText; anchors.centerIn: parent; text: parent.timing; color: "white"; font.pixelSize: Math.round(10 * appSettings.textScale) }
     }
     // A fade ramp over each end of a clip, as long as the fade.
     component FadeRamps: Shape {
@@ -555,7 +555,7 @@ Rectangle {
                     verticalAlignment: Text.AlignVCenter
                     text: captionItem.modelData.text.replace(/\n/g, " · ")
                     color: root.fg
-                    font.pixelSize: 11
+                    font.pixelSize: Math.round(11 * appSettings.textScale)
                     elide: Text.ElideRight
                 }
                 MouseArea {
@@ -648,7 +648,7 @@ Rectangle {
                     anchors.bottomMargin: 4
                     text: modelData.name
                     color: root.fg
-                    font.pixelSize: 11
+                    font.pixelSize: Math.round(11 * appSettings.textScale)
                     elide: Text.ElideRight
                 }
                 // A drag moves the clip to another cut (magnetic); the rest is ClipDrag's.
@@ -1017,7 +1017,7 @@ Rectangle {
                             anchors.leftMargin: 8
                             text: overlayItem.modelData.name
                             color: root.fg
-                            font.pixelSize: 11
+                            font.pixelSize: Math.round(11 * appSettings.textScale)
                             elide: Text.ElideRight
                         }
                         // A drag moves the clip in time (snapping) and across lanes.
@@ -1135,7 +1135,7 @@ Rectangle {
                                 width: parent.width - 30
                                 text: soundItem.modelData.name
                                 color: root.fg
-                                font.pixelSize: 11
+                                font.pixelSize: Math.round(11 * appSettings.textScale)
                                 elide: Text.ElideRight
                                 anchors.verticalCenter: parent.verticalCenter
                             }
@@ -1204,7 +1204,7 @@ Rectangle {
             y: 12
             text: "Add clips with " + actions.append.keys + " or by double-clicking them in the library."
             color: root.muted
-            font.pixelSize: 11
+            font.pixelSize: Math.round(11 * appSettings.textScale)
         }
     }
 

@@ -83,12 +83,12 @@ Rectangle {
             spacing: 18
             ColumnLayout {
                 spacing: 2
-                UiText { text: "EQUALIZER"; color: root.muted; font.pixelSize: 10; font.bold: true }
+                UiText { text: "EQUALIZER"; color: root.muted; font.pixelSize: Math.round(10 * appSettings.textScale); font.bold: true }
                 ComboBox {
                     id: eqPreset
                     objectName: "audioEqPreset"
                     Layout.preferredWidth: 140
-                    font.pixelSize: 11
+                    font.pixelSize: Math.round(11 * appSettings.textScale)
                     focusPolicy: Qt.TabFocus
                     Keys.onShortcutOverride: (event) => event.accepted = root.sliderKeys.includes(event.key) || event.key === Qt.Key_Space
                     model: root.eqPresets.map(p => p.name).concat(["Custom"])

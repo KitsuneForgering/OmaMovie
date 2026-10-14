@@ -140,12 +140,21 @@ int main(int argc, char** argv) {
         smoke ? smoke_recordings.filePath(QStringLiteral("fontconfig"))
               : QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/fontconfig"));
     theme.load();
-    application.setFont(theme.font());
     Session session;
     session.setNotifications(true); // desktop notifications for long jobs (M7); audits opt out
     AppSettings app_settings(smoke ? smoke_recordings.filePath(QStringLiteral("settings.ini"))
                                    : QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) +
                                          QStringLiteral("/omamovie/settings.ini"));
+    // Controls inherit the application font: the Omarchy font at the chosen text size.
+    const auto apply_font = [&] {
+        QFont font = theme.font();
+        const double scale = app_settings.textScale();
+        if (font.pointSizeF() > 0) font.setPointSizeF(font.pointSizeF() * scale);
+        else if (font.pixelSize() > 0) font.setPixelSize(static_cast<int>(std::lround(font.pixelSize() * scale)));
+        application.setFont(font);
+    };
+    apply_font();
+    QObject::connect(&app_settings, &AppSettings::changed, &application, apply_font);
     session.setRecentProjectsFile(smoke ? smoke_recordings.filePath(QStringLiteral("recent.ini"))
                                         : QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) +
                                               QStringLiteral("/omamovie/recent.ini"));
@@ -164,7 +173,7 @@ int main(int argc, char** argv) {
                      [&] { engine.rootContext()->setContextProperty("colors", theme.palette()); });
     engine.rootContext()->setContextProperty("uiFont", theme.font().family());
     QObject::connect(&theme, &omarchy::Theme::fontChanged, &engine, [&] {
-        application.setFont(theme.font());
+        apply_font();
         engine.rootContext()->setContextProperty("uiFont", theme.font().family());
     });
     engine.load(QUrl::fromLocalFile(qml_dir() + QStringLiteral("/Main.qml")));

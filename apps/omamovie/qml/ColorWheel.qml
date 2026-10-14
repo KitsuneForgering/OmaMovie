@@ -27,7 +27,7 @@ ColumnLayout {
         Layout.alignment: Qt.AlignHCenter
         text: wheel.label
         color: colors.dark_foreground
-        font.pixelSize: 10
+        font.pixelSize: Math.round(10 * appSettings.textScale)
         font.bold: true
     }
     Item {

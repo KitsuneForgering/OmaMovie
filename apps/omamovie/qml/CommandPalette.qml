@@ -95,7 +95,7 @@ Popup {
             visible: palette.message !== ""
             text: palette.message
             color: palette.recording !== "" && palette.message.startsWith("Press") ? colors.dark_foreground : colors.yellow
-            font.pixelSize: 11
+            font.pixelSize: Math.round(11 * appSettings.textScale)
             wrapMode: Text.Wrap
         }
         ListView {
@@ -123,14 +123,14 @@ Popup {
                         text: row.modelData.text
                         color: row.modelData.enabled ? colors.foreground : colors.dark_foreground
                         elide: Text.ElideRight
-                        font.pixelSize: 13
+                        font.pixelSize: Math.round(13 * appSettings.textScale)
                     }
                     Button {
                         flat: true
                         Layout.preferredHeight: 24
                         text: palette.recording === row.modelData.id ? "…"
                               : row.modelData.keys !== "" ? row.modelData.keys : "Add shortcut"
-                        font.pixelSize: 11
+                        font.pixelSize: Math.round(11 * appSettings.textScale)
                         font.bold: row.modelData.keys !== row.modelData.defaultKeys
                         focusPolicy: Qt.NoFocus
                         onClicked: palette.record(row.index)
@@ -144,7 +144,7 @@ Popup {
                         visible: row.modelData.keys !== row.modelData.defaultKeys
                         Layout.preferredHeight: 24
                         text: "Reset"
-                        font.pixelSize: 11
+                        font.pixelSize: Math.round(11 * appSettings.textScale)
                         focusPolicy: Qt.NoFocus
                         onClicked: { actionRegistry.reset(row.modelData.id); palette.refresh() }
                     }

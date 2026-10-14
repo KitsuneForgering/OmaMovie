@@ -19,7 +19,7 @@ Rectangle {
         text: session.source.open ? root.timecode(session.source.position) + (root.narrow ? "" : " / " + root.timecode(session.source.duration))
                                   : root.timecode(session.position) + (root.narrow ? "" : " / " + root.timecode(session.duration))
         color: session.hasMedia ? root.fg : root.muted
-        font.pixelSize: 12
+        font.pixelSize: Math.round(12 * appSettings.textScale)
     }
     Row {
         anchors.centerIn: parent
@@ -48,7 +48,7 @@ Rectangle {
             visible: session.speed !== 0 && session.speed !== 1
             text: (session.speed < 0 ? "−" : "") + Math.abs(session.speed) + "×"
             color: root.accent
-            font.pixelSize: 12
+            font.pixelSize: Math.round(12 * appSettings.textScale)
             font.bold: true
         }
         OmaButton {

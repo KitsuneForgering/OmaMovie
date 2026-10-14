@@ -10,14 +10,14 @@ ColumnLayout {
     id: sheet
     spacing: 4
     visible: session.keyTracks.length > 0
-    UiText { text: "KEYS"; color: root.muted; font.pixelSize: 11; font.bold: true }
+    UiText { text: "KEYS"; color: root.muted; font.pixelSize: Math.round(11 * appSettings.textScale); font.bold: true }
     Repeater {
         model: session.keyTracks
         delegate: RowLayout {
             id: row
             required property var modelData
             Layout.fillWidth: true
-            UiText { text: row.modelData.name; color: root.fg; font.pixelSize: 12; Layout.preferredWidth: 80 }
+            UiText { text: row.modelData.name; color: root.fg; font.pixelSize: Math.round(12 * appSettings.textScale); Layout.preferredWidth: 80 }
             Item {
                 id: lane
                 Layout.fillWidth: true

@@ -250,7 +250,7 @@ Rectangle {
         visible: !session.hasMedia && !session.failed
         text: session.media.length ? "Opening…" : "Import a video to start" + root.shortcutText(actions.importMedia)
         color: "#8f9095"
-        font.pixelSize: 12
+        font.pixelSize: Math.round(12 * appSettings.textScale)
     }
     // Source viewer (M6 pilot): a band that names the item and carries its own playhead and
     // in/out range, so it is never mistaken for the sequence (whose playhead does not move).
@@ -270,13 +270,13 @@ Rectangle {
             anchors.rightMargin: 12
             spacing: 4
             RowLayout {
-                UiText { text: "SOURCE"; color: colors.yellow || root.accent; font.pixelSize: 11; font.bold: true }
-                UiText { Layout.fillWidth: true; text: session.source.name || ""; color: "white"; font.pixelSize: 12; elide: Text.ElideMiddle }
+                UiText { text: "SOURCE"; color: colors.yellow || root.accent; font.pixelSize: Math.round(11 * appSettings.textScale); font.bold: true }
+                UiText { Layout.fillWidth: true; text: session.source.name || ""; color: "white"; font.pixelSize: Math.round(12 * appSettings.textScale); elide: Text.ElideMiddle }
                 UiText {
                     text: session.source.in >= 0 || session.source.out >= 0
                           ? "In " + (session.source.in >= 0 ? root.timecode(session.source.in) : "start") + " · Out " + (session.source.out >= 0 ? root.timecode(session.source.out - 1 / session.frameRate) : "end")
                           : "I and O mark the part to use"
-                    color: "white"; font.pixelSize: 11
+                    color: "white"; font.pixelSize: Math.round(11 * appSettings.textScale)
                 }
                 OmaButton { text: "Clear"; implicitHeight: 24; visible: session.source.in >= 0 || session.source.out >= 0; onClicked: session.clearMarks() }
                 OmaButton { objectName: "closeSource"; text: "Back to sequence"; implicitHeight: 24; onClicked: session.closeSource() }
@@ -332,7 +332,7 @@ Rectangle {
             width: Math.min(implicitWidth, parent.parent.width - 72)
             text: parent.text
             color: "white"
-            font.pixelSize: 16
+            font.pixelSize: Math.round(16 * appSettings.textScale)
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
         }
@@ -359,7 +359,7 @@ Rectangle {
             width: Math.min(implicitWidth, parent.parent.width - 48)
             text: session.notice
             color: root.fg
-            font.pixelSize: 12
+            font.pixelSize: Math.round(12 * appSettings.textScale)
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
         }
@@ -380,7 +380,7 @@ Rectangle {
             width: parent.width - 24
             text: session.status
             color: colors.red || "#ff8a8a"
-            font.pixelSize: 11
+            font.pixelSize: Math.round(11 * appSettings.textScale)
             elide: Text.ElideRight
         }
     }

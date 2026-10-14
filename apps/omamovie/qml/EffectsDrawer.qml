@@ -69,7 +69,7 @@ Rectangle {
                     horizontalAlignment: Text.AlignHCenter
                     text: modelData.name
                     color: chosen ? root.accent : root.fg
-                    font.pixelSize: 11
+                    font.pixelSize: Math.round(11 * appSettings.textScale)
                     elide: Text.ElideRight
                 }
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
@@ -99,7 +99,7 @@ Rectangle {
                         Layout.fillWidth: true
                         text: modelData.known ? modelData.name : modelData.name + " (unavailable)"
                         color: modelData.known ? root.fg : root.muted
-                        font.pixelSize: 11
+                        font.pixelSize: Math.round(11 * appSettings.textScale)
                         elide: Text.ElideRight
                     }
                     OmaButton {

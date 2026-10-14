@@ -38,7 +38,7 @@ Item {
                 text: "• " + modelData
                 color: root.fg
                 wrapMode: Text.Wrap
-                font.pixelSize: 12
+                font.pixelSize: Math.round(12 * appSettings.textScale)
             }
         }
     }

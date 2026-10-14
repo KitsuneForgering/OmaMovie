@@ -37,7 +37,7 @@ Rectangle {
                 placeholderText: "Title text"
                 wrapMode: TextEdit.Wrap
                 color: colors.foreground
-                font.pixelSize: 13
+                font.pixelSize: Math.round(13 * appSettings.textScale)
                 // Follows the selected title unless it is being typed in.
                 Binding on text { value: session.info.titleText || ""; when: !textField.activeFocus }
                 onTextChanged: if (activeFocus) typing.restart()
@@ -50,7 +50,7 @@ Rectangle {
             spacing: 6
             Layout.preferredWidth: 260
             RowLayout {
-                UiText { text: "SIZE"; color: root.muted; font.pixelSize: 10; font.bold: true }
+                UiText { text: "SIZE"; color: root.muted; font.pixelSize: Math.round(10 * appSettings.textScale); font.bold: true }
                 Slider {
                     id: sizeSlider
                     objectName: "titleSize"

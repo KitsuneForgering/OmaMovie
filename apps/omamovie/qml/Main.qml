@@ -665,7 +665,7 @@ ApplicationWindow {
                 text: session.exportProgress >= 0 ? "Exporting… " + Math.round(session.exportProgress * 100) + "%"
                                                   : "Exported " + session.exportedFile.split("/").pop()
                 color: root.fg
-                font.pixelSize: 12
+                font.pixelSize: Math.round(12 * appSettings.textScale)
                 elide: Text.ElideMiddle
             }
             ProgressBar { Layout.fillWidth: true; visible: session.exportProgress >= 0; value: Math.max(0, session.exportProgress) }
@@ -752,7 +752,7 @@ ApplicationWindow {
                     objectName: "projectName"
                     text: session.projectName + (session.dirty ? " •" : "")
                     color: root.fg
-                    font.pixelSize: 13
+                    font.pixelSize: Math.round(13 * appSettings.textScale)
                     font.bold: true
                     elide: Text.ElideRight
                 }
@@ -815,7 +815,7 @@ ApplicationWindow {
                                 text: ({ color: "Color", crop: "Crop and framing", volume: "Volume", effects: "Effects",
                                          info: "Info", title: "Title" })[root.drawer] + (session.info.name ? " — " + session.info.name : "")
                                 color: root.fg
-                                font.pixelSize: 12
+                                font.pixelSize: Math.round(12 * appSettings.textScale)
                                 font.bold: true
                                 elide: Text.ElideRight
                             }

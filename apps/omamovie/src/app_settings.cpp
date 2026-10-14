@@ -13,6 +13,7 @@ const QStringList kQualities{QStringLiteral("auto"), QStringLiteral("full"), QSt
 const QStringList kCacheLimits{QStringLiteral("512"), QStringLiteral("256"), QStringLiteral("1024"),
                                QStringLiteral("4096")}; // the default first
 const QStringList kExportEncoders{QStringLiteral("auto"), QStringLiteral("hardware"), QStringLiteral("software")};
+const QStringList kTextSizes{QStringLiteral("100"), QStringLiteral("115"), QStringLiteral("130")};
 const QStringList kDecodePaths{QStringLiteral("auto"), QStringLiteral("hardware"), QStringLiteral("software")};
 
 QString one_of(const QString& value, const QStringList& allowed) {
@@ -33,6 +34,7 @@ AppSettings::AppSettings(QString settings_file, QObject* parent)
     recordings_folder_ = folder_or_default(settings.value("recordings/folder").toString());
     cache_limit_ = one_of(settings.value("cache/limit_mb").toString(), kCacheLimits);
     export_encoder_ = one_of(settings.value("export/encoder").toString(), kExportEncoders);
+    text_size_ = one_of(settings.value("appearance/text_size").toString(), kTextSizes);
     startup_decode_path_ = decode_path_;
 }
 
@@ -82,6 +84,13 @@ void AppSettings::setExportEncoder(const QString& value) {
     store("export/encoder", valid, kExportEncoders.front());
 }
 
+void AppSettings::setTextSize(const QString& value) {
+    const QString valid = one_of(value, kTextSizes);
+    if (valid == text_size_) return;
+    text_size_ = valid;
+    store("appearance/text_size", valid, kTextSizes.front());
+}
+
 void AppSettings::setSystem(QVariantMap system) {
     system_ = std::move(system);
     emit systemChanged();
@@ -93,6 +102,7 @@ void AppSettings::resetAll() {
     setRecordingsFolder(QString());
     setCacheLimit(kCacheLimits.front());
     setExportEncoder(kExportEncoders.front());
+    setTextSize(kTextSizes.front());
 }
 
 QString AppSettings::previewQuality() const { return preview_quality_; }
@@ -101,5 +111,7 @@ QString AppSettings::recordingsFolder() const { return recordings_folder_; }
 QString AppSettings::startupDecodePath() const { return startup_decode_path_; }
 QString AppSettings::cacheLimit() const { return cache_limit_; }
 QString AppSettings::exportEncoder() const { return export_encoder_; }
+QString AppSettings::textSize() const { return text_size_; }
+double AppSettings::textScale() const { return text_size_.toDouble() / 100.0; }
 QVariantMap AppSettings::system() const { return system_; }
 void AppSettings::refreshSystem() { emit systemRequested(); }
