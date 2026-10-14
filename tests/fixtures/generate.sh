@@ -45,6 +45,23 @@ if has_encoder libx264; then
         "$out/h264_30fps_steps.mkv"
     note h264_30fps_steps.mkv
 
+    # Shaped like an omarchy-capture-screenrecording file (gpu-screen-recorder, probed on real
+    # recordings 2026-10-13): H.264 High 1080p60 CFR without B-frames, time base 1/15360, BT.709
+    # limited range, and AAC LC stereo at 96 kHz running 0.1 s past the video. Frame k plays a
+    # tone of 120·(k+4) Hz: whole cycles in any 1/120 s window, so the strongest DFT bin of
+    # decoded audio names its source frame whatever gain the codec adds (loudness steps of 1/67
+    # did not survive AAC). Real recordings may have no sound at all: the silent copy covers that.
+    recorder=(-c:v libx264 -preset veryfast -profile:v high -bf 0 -pix_fmt yuv420p
+        -color_range tv -colorspace bt709 -color_primaries bt709 -color_trc bt709
+        -video_track_timescale 15360)
+    ff -f lavfi -i "testsrc2=size=1920x1080:rate=60:duration=1" \
+        -f lavfi -i "aevalsrc='0.5*sin(2*PI*120*(floor(t*60)+4)*t)|0.5*sin(2*PI*120*(floor(t*60)+4)*t)':s=96000:d=1.1" \
+        "${recorder[@]}" -c:a aac -b:a 256k "$out/screenrecording_like.mp4"
+    note screenrecording_like.mp4
+    ff -f lavfi -i "testsrc2=size=1920x1080:rate=60:duration=1" "${recorder[@]}" \
+        "$out/screenrecording_silent.mp4"
+    note screenrecording_silent.mp4
+
     # NTSC rates (exact fractions).
     ff -f lavfi -i "$(video_src 30000/1001)" -c:v libx264 -preset veryfast -pix_fmt yuv420p \
         "$out/h264_29.97fps.mp4"
