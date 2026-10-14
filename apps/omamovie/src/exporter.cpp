@@ -9,11 +9,39 @@
 
 #include <chrono>
 #include <optional>
+#include <span>
 #include <vector>
+
+namespace {
+
+// One frame on the GPU, encoded to BT.709 RGBA8 and read back for the encoder.
+oma::Result<std::vector<std::uint8_t>> render_gpu(oma::compositor::VulkanCompositor& gpu,
+                                                  const ViewerFrame& view,
+                                                  std::span<const oma::compositor::LayerInput> in) {
+    if (auto rendered = gpu.render(view.graph, in); !rendered)
+        return std::unexpected(rendered.error());
+    if (auto encoded = gpu.encode_display(oma::compositor::VulkanCompositor::Transfer::Bt709);
+        !encoded)
+        return std::unexpected(encoded.error());
+    return gpu.read_display();
+}
+
+} // namespace
 
 oma::Result<void> export_timeline(const ExportRequest& request,
                                   const std::function<bool(std::int64_t, std::int64_t)>& progress,
                                   ExportStats* stats) {
+    // Declared before the export's compositor, so it outlives it (§8.1).
+    std::unique_ptr<oma::gpu::Device> device;
+    if (auto created = oma::gpu::Device::create())
+        device = std::move(*created);
+    return export_timeline_on(request, device.get(), progress, stats);
+}
+
+oma::Result<void>
+export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
+                   const std::function<bool(std::int64_t, std::int64_t)>& progress,
+                   ExportStats* stats) {
     using Clock = std::chrono::steady_clock;
     ExportStats local;
     ExportStats& st = stats != nullptr ? *stats : local;
@@ -28,11 +56,8 @@ oma::Result<void> export_timeline(const ExportRequest& request,
     // Software decode: export does not compete with the viewer's hardware decoder, and every
     // frame needs a CPU readback for the software encoder anyway.
     FrameSource frames(nullptr);
-    // Destroyed after the compositor (declaration order): nothing outlives its device (§8.1).
-    std::unique_ptr<oma::gpu::Device> device;
     std::unique_ptr<oma::compositor::VulkanCompositor> gpu;
-    if (auto created = oma::gpu::Device::create()) {
-        device = std::move(*created);
+    if (device != nullptr) {
         if (auto compositor = oma::compositor::VulkanCompositor::create(*device))
             gpu = std::move(*compositor);
     }
@@ -44,7 +69,7 @@ oma::Result<void> export_timeline(const ExportRequest& request,
     // quality differ.
     using Encoder = ExportRequest::Encoder;
     constexpr std::uint32_t kIntel = 0x8086;
-    const bool validated = device && device->info().vendor_id == kIntel;
+    const bool validated = device != nullptr && device->info().vendor_id == kIntel;
     const bool h264 = request.profile == oma::media::OutputProfile::Mp4H264Aac ||
                       request.profile == oma::media::OutputProfile::MatroskaH264Aac;
     const bool try_hardware = h264 && (request.encoder == Encoder::Hardware ||
@@ -59,7 +84,7 @@ oma::Result<void> export_timeline(const ExportRequest& request,
     if (try_hardware) {
         auto hw = base;
         hw.encoder = oma::media::VideoEncoder::VaApi;
-        if (device)
+        if (device != nullptr)
             hw.render_node = device->info().render_node;
         writer = oma::media::VideoWriter::create(request.file, static_cast<int>(request.width),
                                                  static_cast<int>(request.height), rate, hw);
@@ -108,19 +133,26 @@ oma::Result<void> export_timeline(const ExportRequest& request,
             // readback per frame, the documented exception for export until a hardware encoder
             // takes GPU frames (CLAUDE.md §7.2). Measured: a float readback plus CPU encoding
             // cost ~43 ms per 1080p frame (Research/evidence/2026-10-07-m7-export.txt).
-            auto rendered = gpu->render((*view)->graph, inputs);
-            if (!rendered)
-                return std::unexpected(rendered.error());
-            auto encoded = gpu->encode_display(oma::compositor::VulkanCompositor::Transfer::Bt709);
-            if (!encoded)
-                return std::unexpected(encoded.error());
-            auto pixels = gpu->read_display();
-            if (!pixels)
+            auto pixels = render_gpu(*gpu, **view, inputs);
+            if (!pixels && pixels.error().code() == oma::ErrorCode::DeviceLost) {
+                // A lost device takes no more work (ADR-0005). The CPU reference renders the
+                // same graph within the compositors' agreed tolerance, so the export finishes,
+                // slower, instead of discarding the frames already written.
+                oma::log_warn(oma::Category::Encode,
+                              "export: GPU device lost at frame {}, continuing on the CPU "
+                              "reference (slow)",
+                              k);
+                gpu.reset();
+            } else if (!pixels) {
                 return std::unexpected(pixels.error());
-            lap(st.render);
-            if (auto w = (*writer)->write_rgba(*pixels, static_cast<int>(request.width) * 4); !w)
-                return w;
-        } else {
+            } else {
+                lap(st.render);
+                if (auto w = (*writer)->write_rgba(*pixels, static_cast<int>(request.width) * 4);
+                    !w)
+                    return w;
+            }
+        }
+        if (!gpu) {
             auto image = oma::compositor::CpuCompositor{}.render((*view)->graph, inputs);
             if (!image)
                 return std::unexpected(image.error());

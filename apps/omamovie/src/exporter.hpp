@@ -52,6 +52,17 @@ export_timeline(const ExportRequest& request,
                 const std::function<bool(std::int64_t, std::int64_t)>& progress,
                 ExportStats* stats = nullptr);
 
+namespace oma::gpu {
+class Device;
+}
+
+// The same export on a caller's Vulkan device (nullptr: the CPU reference), which must outlive the
+// call. If the device is lost mid-export, the remaining frames render on the CPU reference.
+[[nodiscard]] oma::Result<void>
+export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
+                   const std::function<bool(std::int64_t, std::int64_t)>& progress,
+                   ExportStats* stats = nullptr);
+
 // Linear-light premultiplied RGBA (the compositor's output) to packed RGB24 with the BT.709
 // transfer function, as the encoder expects. Exposed for the smoke check.
 void encode_bt709(const float* rgba, std::size_t pixels, std::uint8_t* rgb);
