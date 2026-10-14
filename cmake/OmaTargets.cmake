@@ -11,6 +11,13 @@ if(CMAKE_BUILD_TYPE STREQUAL "tsan")
     list(REMOVE_ITEM OMA_LIB_WARNINGS -Wnull-dereference)
 endif()
 set(OMA_TEST_WARNINGS -Wall -Wextra -Wshadow)
+# GCC 16 at -O2 reports -Wstringop-overflow and -Warray-bounds inside libstdc++'s
+# uninitialized_copy / destroy_at for small vectors in two tests (test_video_writer.cpp,
+# test_waveform.cpp; false positives, present before 2026-10-14). Tests only; the libraries keep
+# both checks in every build.
+if(CMAKE_BUILD_TYPE STREQUAL "release" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    list(APPEND OMA_TEST_WARNINGS -Wno-stringop-overflow -Wno-array-bounds)
+endif()
 if(OMA_WERROR)
     list(APPEND OMA_LIB_WARNINGS -Werror)
     list(APPEND OMA_TEST_WARNINGS -Werror)
