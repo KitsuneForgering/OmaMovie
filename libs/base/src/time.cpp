@@ -72,11 +72,11 @@ double RationalTime::seconds_approx() const noexcept {
 }
 
 std::strong_ordering operator<=>(const RationalTime& a, const RationalTime& b) noexcept {
-    using detail::i128;
+    using detail::Int128;
     // value * num fits in 126 bits; compare_fractions never forms larger products.
     const int c = detail::compare_fractions(
-        static_cast<i128>(a.value_) * a.timebase_.num(), a.timebase_.den(),
-        static_cast<i128>(b.value_) * b.timebase_.num(), b.timebase_.den());
+        static_cast<Int128>(a.value_) * a.timebase_.num(), a.timebase_.den(),
+        static_cast<Int128>(b.value_) * b.timebase_.num(), b.timebase_.den());
     return c < 0 ? std::strong_ordering::less
                  : (c > 0 ? std::strong_ordering::greater : std::strong_ordering::equal);
 }
@@ -158,9 +158,17 @@ Result<std::int64_t> SampleRate::time_to_sample(const RationalTime& t, Rounding 
     return rescale(t.value(), t.timebase(), timebase(), rounding);
 }
 
-const RationalTime& TimeRange::start() const noexcept { return start_; }
-const RationalTime& TimeRange::duration() const noexcept { return duration_; }
-const RationalTime& TimeRange::end() const noexcept { return end_; }
-bool TimeRange::empty() const noexcept { return duration_.value() == 0; }
+const RationalTime& TimeRange::start() const noexcept {
+    return start_;
+}
+const RationalTime& TimeRange::duration() const noexcept {
+    return duration_;
+}
+const RationalTime& TimeRange::end() const noexcept {
+    return end_;
+}
+bool TimeRange::empty() const noexcept {
+    return duration_.value() == 0;
+}
 
 } // namespace oma
