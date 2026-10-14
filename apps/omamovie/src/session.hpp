@@ -785,6 +785,8 @@ private:
     // Accessed only by the import job worker; its lifetime extends past worker shutdown.
     std::unique_ptr<oma::media::MediaImporter> importer_;
     FrameSource frames_;      // job worker only
+    // Paused-viewer requests made so far (UI thread writes, job worker reads to stop a superseded frame).
+    std::atomic<std::uint64_t> viewer_requests_{0};
     AudioPlayer audio_;
     WaveformStore waveforms_;
     bool warned_silent_ = false;
