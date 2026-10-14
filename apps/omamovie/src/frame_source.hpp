@@ -12,6 +12,7 @@
 
 #include <cstddef>
 #include <deque>
+#include <functional>
 #include <list>
 #include <memory>
 #include <optional>
@@ -59,8 +60,13 @@ public:
                                                QSize box,
                                                const oma::timeline::MediaInfo* media = nullptr);
 
+    // Lets a seek's decode-forward stop early (VideoDecoder::set_interrupt); a stream stopped
+    // that way is dropped, so the next request opens and seeks it afresh. Empty: never.
+    void set_interrupt(std::function<bool()> interrupted);
+
 private:
     const oma::gpu::Device* device_ = nullptr;
+    std::function<bool()> interrupted_;
     struct TitleEntry {
         oma::timeline::Title title;
         std::uint32_t width = 0;

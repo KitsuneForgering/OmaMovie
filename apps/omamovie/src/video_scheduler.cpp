@@ -23,6 +23,8 @@ void VideoScheduler::start(std::shared_ptr<const oma::timeline::Timeline> timeli
                                                     paths = std::move(paths), luts = std::move(luts), width, height,
                                                     ticks_per_frame,
                                                     from, stride, last](oma::JobContext& ctx) {
+        // A stop() mid-seek returns after one decoded frame, not a whole GOP of catch-up.
+        frames_.set_interrupt([&ctx] { return ctx.is_cancelled(); });
         std::int64_t next = from;
         while (!ctx.is_cancelled()) {
             // Never prepare a frame the clock has already passed.
@@ -39,8 +41,10 @@ void VideoScheduler::start(std::shared_ptr<const oma::timeline::Timeline> timeli
             auto view = build_viewer_frame(*timeline, *paths, *luts, width, height, next, ticks_per_frame, frames_);
             if (device_ != nullptr) device_->leave();
             if (!view) {
-                const std::scoped_lock lock(error_mutex_);
-                error_ = view.error().summary();
+                if (!ctx.is_cancelled()) { // a stop() is not a playback error
+                    const std::scoped_lock lock(error_mutex_);
+                    error_ = view.error().summary();
+                }
                 break;
             }
             if (!queue->push(Frame{.frame = next, .view = std::move(*view)})) {
@@ -48,6 +52,7 @@ void VideoScheduler::start(std::shared_ptr<const oma::timeline::Timeline> timeli
             }
             next += stride;
         }
+        frames_.set_interrupt({}); // `ctx` ends with this job
         return oma::Result<void>{};
     });
 }

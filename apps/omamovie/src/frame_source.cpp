@@ -70,6 +70,7 @@ oma::Result<FrameSource::Stream*> FrameSource::stream(const std::string& path, c
     if (!decoder) {
         return std::unexpected(decoder.error());
     }
+    (*decoder)->set_interrupt(interrupted_);
     if (streams_.size() >= kMaxStreams) {
         for (const auto& f : streams_.back().history) history_bytes_ -= bytes_of(*f);
         streams_.pop_back();
@@ -182,9 +183,19 @@ oma::Result<Picture> FrameSource::picture_at(const std::string& path, const oma:
     const bool forward = reaches(s, t);
     if (forward) s.backward = false; // playing on: back to a short history
     if (auto r = forward ? advance(s, t) : seek(s, t); !r) {
+        if (r.error().code() == oma::ErrorCode::Cancelled) {
+            // Stopped mid-seek: its decoder and history no longer describe one position.
+            for (const auto& f : s.history) history_bytes_ -= bytes_of(*f);
+            streams_.remove_if([&](const Stream& other) { return &other == &s; });
+        }
         return std::unexpected(r.error());
     }
     return picture_of(s, s.current);
+}
+
+void FrameSource::set_interrupt(std::function<bool()> interrupted) {
+    interrupted_ = std::move(interrupted);
+    for (Stream& s : streams_) s.decoder->set_interrupt(interrupted_);
 }
 
 Picture FrameSource::picture_of(const Stream& s, std::shared_ptr<oma::media::VideoFrame> frame) const {
