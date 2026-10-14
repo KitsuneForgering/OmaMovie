@@ -44,7 +44,7 @@ struct alignas(16) LayerParams {
     // factor; then the gaussian weights, center first, four per vector.
     std::array<float, 4> detail{};
     std::array<std::array<float, 4>, (kMaxBlurRadius + 4) / 4> weights{};
-    // Grading (grade.hpp): which stages run (GradeStage bits) and the LUT size; the LUT amount;
+    // Grading (grade.hpp): which stages run (the kGrade* bits) and the LUT size; the LUT amount;
     // the CDL (saturation in slope.w); the LUT domain minimum and (size - 1) / its extent; the
     // point counts of the master, red, green and blue curves; and their points (x, y, tangent),
     // kMaxCurvePoints per curve.
@@ -60,12 +60,10 @@ struct alignas(16) LayerParams {
 };
 static_assert(sizeof(LayerParams) == std::size_t{97} * 16U, "LayerParams must match the std140 block");
 
-// Bits of LayerParams::grade[0].
-enum GradeStage : std::int32_t {
-    kGradeCdl = 1,
-    kGradeCurves = 2,
-    kGradeLut = 4,
-};
+// Bits of LayerParams::grade[0], an int in the std140 block the shaders read.
+inline constexpr std::int32_t kGradeCdl = 1;
+inline constexpr std::int32_t kGradeCurves = 2;
+inline constexpr std::int32_t kGradeLut = 4;
 
 struct PreparedLayer {
     LayerParams params;

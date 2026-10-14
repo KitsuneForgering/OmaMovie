@@ -9,7 +9,7 @@
 
 namespace oma {
 
-enum class ErrorCode : std::uint16_t {
+enum class ErrorCode : std::uint8_t {
     InvalidArgument,
     Overflow,
     OutOfRange,
