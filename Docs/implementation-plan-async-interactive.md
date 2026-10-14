@@ -44,7 +44,8 @@ decode submits to the queue and stays admitted. More queues need an ADR and vali
 - [x] Paused hardware frames decoded on the job worker with the software path's contract;
   the render thread only composites. *Done (2026-10-14, [evidence](Research/evidence/2026-10-14-async-scrub.txt))*:
   UI gap p95 221 → 12 ms (1080p), 1323 → 12 ms (4K H.264), 254 → 16–19 ms (4K HEVC); both
-  UI gates pass; first-frame latency unchanged at 1080p; cancellation latency is not logged yet. Remaining: the 4K composite in sync (~11 ms).
+  UI gates pass; first-frame latency unchanged at 1080p. Cancellation latency (now in the audit): 4K
+  hardware 150 → 5 ms p50 / 8.5 ms p95 after keeping stopped decoders open; gate passes. Remaining: the 4K composite in sync (~11 ms).
 - [x] Tests (`tests/app/test_paused_frames.cpp`): order of publication, final frame, project
   switch and destruction with a seek in flight, device loss; software and VA-API. Validation
   and synchronization validation, TSan and ASan/LSan clean.

@@ -21,6 +21,8 @@
 - Paused scrub UI event-loop gap p95: 221 → 12 ms at 1080p, 1323 → 12 ms at 4K H.264,
   254 → 16–19 ms at 4K HEVC; first-frame latency unchanged at 1080p (62 / 290 ms p50 / p95).
   Vulkan core and synchronization validation report no errors in the scrub audits or app tests.
+- Cancellation latency is measured by the scrub audit. Closing the stopped decoder first cost
+  ~150 ms at 4K in hardware; it now stays open and seeks again: 5 ms p50, 8.5 ms p95.
 - The remaining UI cost is the composite inside Qt's sync phase (~11 ms at 4K). Moving it out
   of sync is a separate change to ADR-0005's viewer handoff.
 - During a continuous drag over long GOPs, a request superseded before it finishes shows
