@@ -13,44 +13,28 @@ Rectangle {
     // Shift+F10 or the Menu key: the selected clip's menu at the clip; with nothing selected,
     // the cut's or the timeline's at the playhead.
     function openClipMenu() {
-        for (const c of session.clips) {
-            if (c.id !== session.selectedClip) continue
+        const target = session.clipMenuTarget()
+        const at = timelinePanel.origin + (target.start ?? session.position) * timelinePanel.scale
+        const host = timelineScroll.contentItem
+        const storylineBottom = timelinePanel.storylineY + timelinePanel.storylineHeight
+        if (target.kind === "storyline") {
             storylineMenu.at = session.position
-            storylineMenu.popup(timelineScroll.contentItem, timelinePanel.origin + c.start * timelinePanel.scale, timelinePanel.storylineY + timelinePanel.storylineHeight)
-            return
+            storylineMenu.popup(host, at, storylineBottom)
+        } else if (target.kind === "audio") {
+            soundMenu.at = session.position
+            soundMenu.popup(host, at, timelinePanel.laneY(target.lane) + timelinePanel.laneHeight)
+        } else if (target.kind === "video") {
+            const menu = target.title ? titleMenu : overlayMenu
+            menu.at = session.position
+            menu.popup(host, at, timelinePanel.videoLaneY(target.lane) + timelinePanel.laneHeight)
+        } else if (target.kind === "cut") {
+            transitionMenu.clipId = target.clipId
+            transitionMenu.kind = target.transitionKind
+            transitionMenu.popup(host, at, storylineBottom)
+        } else {
+            emptyMenu.at = session.position
+            emptyMenu.popup(host, at, storylineBottom)
         }
-        for (let lane = 0; lane < session.audioTracks.length; ++lane) {
-            for (const c of session.audioTracks[lane].clips) {
-                if (c.id !== session.selectedClip) continue
-                soundMenu.at = session.position
-                soundMenu.popup(timelineScroll.contentItem, timelinePanel.origin + c.start * timelinePanel.scale,
-                                timelinePanel.laneY(lane) + timelinePanel.laneHeight)
-                return
-            }
-        }
-        for (let lane = 0; lane < session.videoTracks.length; ++lane) {
-            for (const c of session.videoTracks[lane].clips) {
-                if (c.id !== session.selectedClip) continue
-                const menu = session.info.isTitle ? titleMenu : overlayMenu
-                menu.at = session.position
-                menu.popup(timelineScroll.contentItem, timelinePanel.origin + c.start * timelinePanel.scale,
-                           timelinePanel.videoLaneY(lane) + timelinePanel.laneHeight)
-                return
-            }
-        }
-        // Nothing selected: the cut under the playhead (within half a frame), else the timeline.
-        const x = timelinePanel.origin + session.position * timelinePanel.scale
-        const y = timelinePanel.storylineY + timelinePanel.storylineHeight
-        const cuts = session.clips
-        for (let i = 1; i < cuts.length; ++i) {
-            if (Math.abs(cuts[i].start - session.position) * session.frameRate > 0.5) continue
-            transitionMenu.clipId = cuts[i].id
-            transitionMenu.kind = cuts[i].transitionSet ? cuts[i].transitionKind : -1
-            transitionMenu.popup(timelineScroll.contentItem, x, y)
-            return
-        }
-        emptyMenu.at = session.position
-        emptyMenu.popup(timelineScroll.contentItem, x, y)
     }
 
     // The storyline clip a connected clip follows (ADR-0014): the hovered connected clip's,

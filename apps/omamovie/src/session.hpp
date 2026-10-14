@@ -338,6 +338,10 @@ public:
     // `seconds`. storylineCut answers which one, for the drop marker; `moving` is the clip being
     // dragged (0 for none), whose own edges are where it already is.
     Q_INVOKABLE double storylineCut(double seconds, double moving) const;
+    // The keyboard context menu's target: {kind: "storyline" | "audio" | "video", lane, start,
+    // title} for the selected clip, {kind: "cut", clipId, transitionKind} for the storyline cut
+    // within half a frame of the playhead, else {kind: "empty"}.
+    Q_INVOKABLE QVariantMap clipMenuTarget() const;
     // Snapping (ui-design §7.2): where a span of `length` seconds dragged to `seconds` lands
     // when either end comes within `tolerance` of a clip edge on any track (other than clip
     // `exclude`), the playhead or zero. Returns {start, line}: the adjusted start and the edge
