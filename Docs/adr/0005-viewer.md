@@ -25,4 +25,7 @@ Qt's `vkDeviceWaitIdle`.
 - Decoding stays in software for now (one plane upload per frame): hardware
   frames come from a decode thread and need the admission protocol above.
 
+*Amended 2026-10-14 by [ADR-0020](0020-async-execution-boundary.md)*: paused hardware frames
+are decoded on the session's job worker and handed over with `setFrame`; sync only composites.
+
 [Return to 0005-qt-vulkan-interop.md](0005-qt-vulkan-interop.md)

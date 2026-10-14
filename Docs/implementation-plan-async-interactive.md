@@ -39,12 +39,15 @@ or stale result publishes no frame, edits nothing and adds no history.
 admission because they submit nothing; composition stays on the render thread. Vulkan Video
 decode submits to the queue and stays admitted. More queues need an ADR and validation.
 
-- [ ] Spike: libuv vs the existing `JobPool` for submit / cancel / latest-wins / lifetime.
-- [ ] Paused hardware frames decoded on the viewer worker with the software path's contract;
-  the render thread only composites. Before/after `--m4-scrub-audit` at 1080p and 4K.
-- [ ] Tests: superseded request publishes nothing, final frame is the latest request, session
-  destruction and project switch with a request in flight, device loss in flight; TSan, ASan,
-  validation layers with synchronization validation.
+- [x] Spike: libuv vs `JobPool` (2026-10-14): equal latency (171.8 vs 171.5 ms), no capability
+  gained; not adopted ([ADR-0020](adr/0020-async-execution-boundary.md)).
+- [x] Paused hardware frames decoded on the job worker with the software path's contract;
+  the render thread only composites. *Done (2026-10-14, [evidence](Research/evidence/2026-10-14-async-scrub.txt))*:
+  UI gap p95 221 → 12 ms (1080p), 1323 → 12 ms (4K H.264), 254 → 16–19 ms (4K HEVC); both
+  UI gates pass; first-frame latency unchanged at 1080p; cancellation latency is not logged yet. Remaining: the 4K composite in sync (~11 ms).
+- [x] Tests (`tests/app/test_paused_frames.cpp`): order of publication, final frame, project
+  switch and destruction with a seek in flight, device loss; software and VA-API. Validation
+  and synchronization validation, TSan and ASan/LSan clean.
 - [ ] Decide whether scrub needs its own worker instead of sharing imports' (measure an
   import running during a scrub first).
 

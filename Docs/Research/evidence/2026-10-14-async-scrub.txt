@@ -1,0 +1,77 @@
+Async paused scrub (ADR-0020) and the libuv spike (2026-10-14)
+
+Machine: Intel Core i5-1135G7 (4 cores / 8 threads), Iris Xe (TGL GT2), Mesa 26.2.2, iHD 26.2.4,
+BUILD=release. Fixtures: FilmCraft's recipes (2026-10-14-filmcraft-equivalent-benchmarks.txt):
+a1080.mp4 (H.264 1080p23.976, GOP 250), a2160.mp4 (H.264 2160p, ~170 Mbit/s, GOP 250),
+hevc2160.mp4 (HEVC 2160p). Command: omamovie --m4-scrub-audit FILE 24 (paused seeks every
+500 ms to pseudo-random positions; the gap is the longest wait between ticks of a 2 ms UI
+timer per seek window). hw = default VA-API, sw = OMA_PREVIEW_HARDWARE=0; OMA_PREVIEW_SCALE=1.
+Before = 6d3a6c5 (paused hardware frames decoded in Qt's sync phase; the audit fix that prints
+first-frame latency for scrubs); after = c0365c4 (decoded on the job worker, latest wins).
+
+Note on "without a frame in 500 ms": before, a blocked UI could not issue the next seek, so a
+slow seek was still counted when it arrived (up to 1.48 s); after, the next seek supersedes it.
+At 4K H.264 the two columns are therefore not comparable; the UI gap is.
+
+== Before
+a1080.mp4     hw run1 load 1.21  UI event-loop gap p50 66.85 p95 220.26 max 263.38 ms, first composited frame p50 66.85 p95 220.25 max 263.38 ms, 0 without a frame in 500 ms
+a1080.mp4     hw run2 load 1.14  UI event-loop gap p50 66.83 p95 221.28 max 261.93 ms, first composited frame p50 66.82 p95 221.28 max 261.93 ms, 0 without a frame in 500 ms
+a1080.mp4     sw run1 load 0.97  UI event-loop gap p50 8.84 p95 11.47 max 14.36 ms, first composited frame p50 220.38 p95 457.62 max 478.78 ms, 0 without a frame in 500 ms
+a1080.mp4     sw run2 load 1.19  UI event-loop gap p50 9.02 p95 14.86 max 15.06 ms, first composited frame p50 240.47 p95 468.78 max 499.72 ms, 0 without a frame in 500 ms
+a2160.mp4     hw run1 load 1.22  UI event-loop gap p50 469.72 p95 1320.92 max 1481.65 ms, first composited frame p50 332.08 p95 1320.91 max 1484.47 ms, 0 without a frame in 500 ms
+a2160.mp4     hw run2 load 1.00  UI event-loop gap p50 469.39 p95 1325.83 max 1481.38 ms, first composited frame p50 329.99 p95 1325.83 max 1484.45 ms, 0 without a frame in 500 ms
+a2160.mp4     sw run1 load 0.78  UI event-loop gap p50 3.50 p95 24.90 max 33.31 ms, first composited frame p50 109.40 p95 519.05 max 519.05 ms, 13 without a frame in 500 ms
+a2160.mp4     sw run2 load 1.04  UI event-loop gap p50 3.49 p95 24.07 max 28.67 ms, first composited frame p50 49.96 p95 506.45 max 506.45 ms, 15 without a frame in 500 ms
+hevc2160.mp4  hw run1 load 2.94  UI event-loop gap p50 175.80 p95 252.52 max 273.65 ms, first composited frame p50 183.49 p95 252.52 max 273.65 ms, 0 without a frame in 500 ms
+hevc2160.mp4  hw run2 load 2.56  UI event-loop gap p50 174.99 p95 254.04 max 282.49 ms, first composited frame p50 174.98 p95 254.04 max 282.49 ms, 0 without a frame in 500 ms
+hevc2160.mp4  sw run1 load 2.35  UI event-loop gap p50 3.37 p95 25.00 max 27.33 ms, first composited frame p50 70.84 p95 472.09 max 472.09 ms, 11 without a frame in 500 ms
+hevc2160.mp4  sw run2 load 2.81  UI event-loop gap p50 5.91 p95 23.23 max 25.82 ms, first composited frame p50 111.02 p95 437.25 max 437.25 ms, 11 without a frame in 500 ms
+
+== After (the first two rows ran at load 6-8 right after a build; see the interleaved rerun)
+a1080.mp4     hw run1 load 8.00  UI event-loop gap p50 6.57 p95 12.05 max 12.27 ms, first composited frame p50 63.09 p95 277.80 max 293.31 ms, 0 without a frame in 500 ms
+a1080.mp4     hw run2 load 6.31  UI event-loop gap p50 5.42 p95 12.03 max 16.36 ms, first composited frame p50 61.04 p95 295.31 max 302.70 ms, 0 without a frame in 500 ms
+a1080.mp4     sw run1 load 5.42  UI event-loop gap p50 8.70 p95 14.99 max 15.08 ms, first composited frame p50 140.98 p95 410.47 max 479.88 ms, 2 without a frame in 500 ms
+a1080.mp4     sw run2 load 4.35  UI event-loop gap p50 9.40 p95 14.14 max 15.59 ms, first composited frame p50 151.56 p95 434.96 max 469.85 ms, 2 without a frame in 500 ms
+a2160.mp4     hw run1 load 4.05  UI event-loop gap p50 2.92 p95 12.05 max 12.27 ms, first composited frame p50 243.54 p95 371.61 max 371.61 ms, 14 without a frame in 500 ms
+a2160.mp4     hw run2 load 3.58  UI event-loop gap p50 2.70 p95 12.07 max 13.92 ms, first composited frame p50 250.57 p95 372.33 max 372.33 ms, 14 without a frame in 500 ms
+a2160.mp4     sw run1 load 2.92  UI event-loop gap p50 2.99 p95 23.27 max 32.62 ms, first composited frame p50 2.46 p95 477.19 max 477.19 ms, 14 without a frame in 500 ms
+a2160.mp4     sw run2 load 3.19  UI event-loop gap p50 3.51 p95 25.61 max 32.49 ms, first composited frame p50 3.15 p95 508.33 max 508.33 ms, 13 without a frame in 500 ms
+hevc2160.mp4  hw run1 load 3.45  UI event-loop gap p50 11.71 p95 16.35 max 19.29 ms, first composited frame p50 141.85 p95 254.97 max 279.97 ms, 0 without a frame in 500 ms
+hevc2160.mp4  hw run2 load 3.23  UI event-loop gap p50 11.77 p95 18.85 max 20.82 ms, first composited frame p50 144.73 p95 256.80 max 275.11 ms, 0 without a frame in 500 ms
+hevc2160.mp4  sw run1 load 2.93  UI event-loop gap p50 3.18 p95 23.34 max 26.49 ms, first composited frame p50 104.85 p95 427.90 max 427.90 ms, 11 without a frame in 500 ms
+hevc2160.mp4  sw run2 load 2.94  UI event-loop gap p50 8.05 p95 23.27 max 33.86 ms, first composited frame p50 90.93 p95 465.58 max 465.58 ms, 11 without a frame in 500 ms
+
+== Interleaved 1080p hardware, low load
+before load 2.55  UI event-loop gap p50 63.76 p95 293.23 max 301.17 ms, first composited frame p50 63.76 p95 293.22 max 301.16 ms, 0 without a frame in 500 ms
+after  load 2.14  UI event-loop gap p50 5.64 p95 12.73 max 13.16 ms, first composited frame p50 61.49 p95 291.20 max 305.63 ms, 0 without a frame in 500 ms
+before load 1.81  UI event-loop gap p50 63.99 p95 288.82 max 296.43 ms, first composited frame p50 63.98 p95 288.82 max 296.42 ms, 0 without a frame in 500 ms
+after  load 1.61  UI event-loop gap p50 6.13 p95 14.36 max 14.40 ms, first composited frame p50 63.75 p95 298.09 max 298.81 ms, 0 without a frame in 500 ms
+
+== Vulkan validation (VK_LAYER_KHRONOS_validation, synchronization validation, errors), after
+Layer insertion confirmed with VK_LOADER_DEBUG=layer (instance and device).
+--m4-scrub-audit a1080.mp4 24 and hevc2160.mp4 24, hardware: exit 0, 0 Validation Error,
+0 SYNC-HAZARD (timings under the layer are not comparable). app_tests (101 tests, including
+tests/app/test_paused_frames.cpp on the VA-API path): exit 0, 0 errors, 0 SYNC-HAZARD.
+
+== libuv spike (scratch program, not committed; libuv 1.52.1 from the system)
+A burst of 20 requests 15 ms apart; each request decodes 1..100 frames (uniform, seed 7) of
+3 ms each, stopping between frames when superseded; 10 rounds, means.
+  A oma::JobPool, one worker, Session's pattern (one in flight, one wanted, request counter)
+  B uv_queue_work on libuv's pool, uv_cancel for queued work, the same counter for running
+    work, publication in after_work on the loop thread
+  C oma::JobPool FIFO without cancellation
+A JobPool latest-wins : last request published after   171.5 ms,  147.5 frames decoded, 1 stale published
+B libuv  latest-wins  : last request published after   171.8 ms,  149.3 frames decoded, 1 stale published
+C JobPool FIFO        : last request published after  2879.6 ms, 1026.7 frames decoded, 190 stale published
+"stale published" counts superseded requests that completed; the app's publication check drops
+them. libuv cannot interrupt a running work callback, so B needs A's flag; B also adds libuv's
+process-wide pool (4 threads by default) and a loop thread beside Qt's.
+
+== 5,000-clip timeline audit (--m6-timeline-audit 5000), unchanged by this work, 3 runs
+split p95 135.6 / 138.3 / 146.9 ms, ripple delete 107.6 / 108.2 / 108.6, undo 128.1 / 130.6 /
+125.5; trim drag p95 17.0. 2026-10-06 (same audit, fitted): split 25.3, ripple 20.2, undo 17.9.
+
+== Sanitizers, after (c0365c4)
+make -j BUILD=tsan test: 13/13 suites passed; app_tests run directly under the same TSAN_OPTIONS:
+101 tests passed, including all five paused-frame tests (VA-API on this machine), 0 reports.
+make -j BUILD=asan test (ASan, LSan, UBSan): 13/13 suites passed.
