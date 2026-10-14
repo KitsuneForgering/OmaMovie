@@ -7,6 +7,8 @@
 #include <QVariantMap>
 
 void notify_desktop(const QString& summary, const QString& body) {
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected()) return; // no session bus (a bare TTY, CI): nobody to tell
     QDBusMessage call = QDBusMessage::createMethodCall(
         QStringLiteral("org.freedesktop.Notifications"), QStringLiteral("/org/freedesktop/Notifications"),
         QStringLiteral("org.freedesktop.Notifications"), QStringLiteral("Notify"));
@@ -14,5 +16,5 @@ void notify_desktop(const QString& summary, const QString& body) {
     call << QStringLiteral("OmaMovie") << 0U << QStringLiteral("omamovie") << summary << body << QStringList()
          << QVariantMap{{QStringLiteral("desktop-entry"), QStringLiteral("omamovie")}} << -1;
     // Asynchronous: a missing daemon must not block the UI thread.
-    QDBusConnection::sessionBus().asyncCall(call);
+    bus.asyncCall(call);
 }

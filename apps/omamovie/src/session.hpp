@@ -158,7 +158,8 @@ public:
     void setRecordingsFolderOverride(const QString& folder);
     // Automated runs: never play through the speakers.
     void setSilent(bool silent);
-    // Desktop notifications (export finished); the smoke and audits turn them off.
+    // Desktop notifications (export finished): off until the app turns them on (main.cpp); the
+    // smoke and audits leave them off.
     void setNotifications(bool on);
     // From Settings: "auto", "hardware" or "software" for the next exports.
     void setExportEncoder(const QString& choice);
@@ -781,7 +782,7 @@ private:
     AudioPlayer audio_;
     WaveformStore waveforms_;
     bool warned_silent_ = false;
-    bool notifications_ = true;
+    bool notifications_ = false; // the app opts in (main.cpp); tests and audits stay quiet
     QString export_encoder_ = QStringLiteral("auto");
     QVariantList filter_previews_;
     unsigned previews_ = 0; // filter preview requests, so a stale result is dropped

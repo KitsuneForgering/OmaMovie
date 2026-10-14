@@ -226,6 +226,7 @@ int main(int argc, char** argv) {
     theme.load();
     application.setFont(theme.font());
     Session session;
+    session.setNotifications(true); // desktop notifications for long jobs (M7); audits opt out
     AppSettings app_settings(smoke ? smoke_recordings.filePath(QStringLiteral("settings.ini"))
                                    : QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) +
                                          QStringLiteral("/omamovie/settings.ini"));
