@@ -540,11 +540,15 @@ int main(int argc, char** argv) {
                 std::erase(first_frame, -1.0);
                 const auto b = summary(blocked);
                 const auto f = first_frame.empty() ? std::array<double, 3>{} : summary(first_frame);
-                std::printf(scrub_audit ? "M4 scrub audit: %zu paused seeks, %s audio, UI event-loop gap p50 %.2f p95 %.2f max %.2f ms, "
-                                        : "M4 seek audit: %zu seeks, %s audio, UI blocked p50 %.2f p95 %.2f max %.2f ms, "
+                // Both heads share the tail: a literal concatenated after the ternary would only
+                // extend its second operand.
+                std::printf("%s: %zu %s, %s audio, %s p50 %.2f p95 %.2f max %.2f ms, "
                             "first composited frame p50 %.2f p95 %.2f max %.2f ms, %lld without a frame "
                             "in 500 ms\n",
-                            blocked.size(), session.audioOnDevice() ? "PipeWire" : "null", b[0], b[1], b[2],
+                            scrub_audit ? "M4 scrub audit" : "M4 seek audit", blocked.size(),
+                            scrub_audit ? "paused seeks" : "seeks",
+                            session.audioOnDevice() ? "PipeWire" : "null",
+                            scrub_audit ? "UI event-loop gap" : "UI blocked", b[0], b[1], b[2],
                             f[0], f[1], f[2], static_cast<long long>(missed));
                 application.exit(0);
                 return;
