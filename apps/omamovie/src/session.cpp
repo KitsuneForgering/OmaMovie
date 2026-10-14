@@ -3,6 +3,7 @@
 #include "autosave.hpp"
 #include "color_interpretation.hpp"
 #include "oma/ingest/media_entry.hpp"
+#include "thumbnail.hpp"
 #include "scopes.hpp"
 #include "export_recovery.hpp"
 #include "caption_io.hpp"
@@ -61,16 +62,6 @@ constexpr std::uint64_t kCacheBudget = std::uint64_t{512} << 20;
 std::filesystem::path cache_dir(const char* kind) {
     const auto root = oma::DiskCache::default_root();
     return root.empty() ? root : root / kind;
-}
-
-// The content a cache key stands for (ADR-0009): the file, its size and time, and the
-// project fingerprint's partial hash, so an edited or replaced file gets new entries.
-std::string media_identity(const QString& path, const oma::project::Fingerprint& fingerprint) {
-    std::error_code ec;
-    const std::filesystem::path file(path.toStdString());
-    const auto time = std::filesystem::last_write_time(file, ec);
-    const auto ns = ec ? 0 : std::chrono::duration_cast<std::chrono::nanoseconds>(time.time_since_epoch()).count();
-    return std::format("{} {} {} {:016x}", file.string(), fingerprint.size, ns, fingerprint.hash);
 }
 
 } // namespace
@@ -704,25 +695,9 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
         }
         // Audio-only media has no picture: the library and the lanes show the sound itself.
         if (!audio_only) {
-            // ADR-0009: the cached PNG when this content was seen before, else decode one.
-            const std::string key = "thumbnail/v1 256x144 " + media_identity(source, item.fingerprint);
-            QFile out(thumbnail_path);
-            if (const auto cached = thumbnail_cache_.get(key); cached && out.open(QIODevice::WriteOnly)) {
-                out.write(reinterpret_cast<const char*>(cached->data()), static_cast<qint64>(cached->size()));
-                out.close();
+            if (write_thumbnail(frames_, thumbnail_cache_, file, media_identity(source, item.fingerprint), item.media,
+                                thumbnail_path))
                 item.thumbnail = QUrl::fromLocalFile(thumbnail_path).toString();
-            } else if (auto first = frames_.image_at(file, item.media.start)) {
-                QByteArray png;
-                QBuffer buffer(&png);
-                buffer.open(QIODevice::WriteOnly);
-                if (first->scaled(256, 144, Qt::KeepAspectRatio, Qt::SmoothTransformation).save(&buffer, "PNG") &&
-                    out.open(QIODevice::WriteOnly) && out.write(png) == png.size()) {
-                    out.close();
-                    item.thumbnail = QUrl::fromLocalFile(thumbnail_path).toString();
-                    (void)thumbnail_cache_.put(key, std::span(reinterpret_cast<const std::uint8_t*>(png.constData()),
-                                                              static_cast<std::size_t>(png.size())));
-                }
-            }
         }
         post_to_ui(this, [this, generation, item = std::move(item), append, relinked]() mutable {
             if (generation != generation_)
@@ -950,6 +925,7 @@ void Session::afterEdit() {
         canvas_height_ = editor_->timeline().canvas_height();
     }
     refreshSnapshot();
+    refreshThumbnails();
     if (selected_clip_.valid() && editor_->timeline().find_clip(selected_clip_) == nullptr) {
         selected_clip_ = {};
         emit selectionChanged();

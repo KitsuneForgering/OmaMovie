@@ -1,5 +1,7 @@
 #include "frame_source.hpp"
 
+#include "color_interpretation.hpp"
+
 #include "title_raster.hpp"
 
 #include <algorithm>
@@ -216,7 +218,8 @@ oma::Result<Picture> FrameSource::title_picture(const oma::timeline::Title& titl
                    .sample_aspect = oma::Rational::literal(1, 1)};
 }
 
-oma::Result<QImage> FrameSource::image_at(const std::string& path, const oma::RationalTime& t) {
+oma::Result<QImage> FrameSource::image_at(const std::string& path, const oma::RationalTime& t,
+                                          const oma::timeline::MediaInfo* media) {
     auto picture = picture_at(path, t);
     if (!picture) {
         return std::unexpected(picture.error());
@@ -226,8 +229,14 @@ oma::Result<QImage> FrameSource::image_at(const std::string& path, const oma::Ra
     if (image.isNull()) {
         return oma::make_error(oma::ErrorCode::Internal, oma::Category::Ui, "cannot allocate the thumbnail");
     }
-    auto copied =
-        frame.copy_rgba({image.bits(), static_cast<std::size_t>(image.sizeInBytes())}, image.bytesPerLine());
+    // The stream's own tags unless the media item reads its YUV otherwise; RGB pictures are kept.
+    std::optional<oma::media::ColorInfo> read_as;
+    if (media != nullptr && picture->color.matrix != 0) {
+        read_as = picture->color;
+        interpret(*read_as, *media);
+    }
+    auto copied = frame.copy_rgba({image.bits(), static_cast<std::size_t>(image.sizeInBytes())},
+                                  image.bytesPerLine(), read_as);
     if (!copied) {
         return std::unexpected(copied.error());
     }

@@ -570,6 +570,8 @@ private:
     [[nodiscard]] const LibraryItem* item(oma::timeline::MediaId id) const;
     bool ensureSequence(const LibraryItem& first);
     [[nodiscard]] std::optional<oma::timeline::edit::ClipSource> sourceFor(const LibraryItem& item) const;
+    // Redraws library thumbnails whose media color reading changed (ADR-0019).
+    void refreshThumbnails();
     bool run(std::unique_ptr<oma::timeline::Command> command);
     void afterEdit();
     void placeSelected(int how);
@@ -737,6 +739,8 @@ private:
     QVariantMap edge_frames_;
     unsigned edge_request_ = 0;
     oma::JobHandle edge_job_;
+    oma::JobHandle thumbnail_job_; // redraws after a color interpretation change
+    unsigned thumbnail_serial_ = 0;
     QString scope_image_;
     QString vectorscope_image_;
     QString parade_image_;
