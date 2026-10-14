@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -32,3 +33,6 @@ line_diff(const std::vector<std::string_view>& a, const std::vector<std::string_
 [[nodiscard]] std::vector<DiffLine> backtrack(const std::vector<std::vector<std::int32_t>>& trace,
                                               const std::vector<std::string_view>& a,
                                               const std::vector<std::string_view>& b);
+
+// The JSON path of each line of a canonical dump, "" for the root (line_paths.cpp).
+[[nodiscard]] std::vector<std::string> line_paths(const std::vector<std::string_view>& lines);

@@ -50,5 +50,13 @@ printf '%s\n' '{"format":"omamovie-project","format_version":1}' > "$file"
 status=0
 "$cli" diff "$file" "$other" > "$file.out" || status=$?
 test "$status" -eq 1
-grep -q '^+[0-9]*: ' "$file.out"
+grep -q "$(printf '^+[0-9]*\t')" "$file.out"
 rm -f "$file.out"
+# A one-field change names its field (reverse engineering by minimal pairs, CLAUDE.md §16.6).
+"$cli" dump "$other" > "$file.a.json"
+sed 's/"width": 1920/"width": 1280/' "$file.a.json" > "$file.b.json"
+status=0
+"$cli" diff "$file.a.json" "$file.b.json" > "$file.out" || status=$?
+test "$status" -eq 1
+test "$(cut -f2 "$file.out" | sort -u)" = "canvas.width"
+rm -f "$file.out" "$file.a.json" "$file.b.json"
