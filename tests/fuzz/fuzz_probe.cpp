@@ -3,6 +3,7 @@
 // never a crash or hang. FFmpeg itself is the system library (not instrumented); this checks
 // OmaMovie's conversion of whatever it reports. Inputs go through a memfd, not the disk.
 
+#include "oma/base/log.hpp"
 #include "oma/media/probe.hpp"
 
 #include <sys/mman.h>
@@ -12,6 +13,13 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+
+// Quiet logging: a warning per input would cost more than the input itself and drown the
+// fuzzer's own output; the code under test runs the same.
+extern "C" int LLVMFuzzerInitialize(int* /*argc*/, char*** /*argv*/) {
+    oma::set_log_level_all(oma::LogLevel::Off);
+    return 0;
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
     const int fd = ::memfd_create("probe", MFD_CLOEXEC);
