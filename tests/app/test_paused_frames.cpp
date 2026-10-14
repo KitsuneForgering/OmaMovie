@@ -25,7 +25,8 @@ struct Bench {
         session->setSilent(true);
         session->setPreview(&item);
         session->open(QFileInfo("tests/fixtures/generated/h264_long_gop.mp4").absoluteFilePath());
-        ready = wait_for([&] { return session->clips().size() == 1 && !session->importsPending(); });
+        ready =
+            wait_for([&] { return session->clips().size() == 1 && !session->importsPending(); });
     }
     ~Bench() {
         session.reset(); // before the item it points to
@@ -49,7 +50,8 @@ std::unique_ptr<oma::gpu::Device> gpu() {
 // (never an older one after a newer one) and the last request is what stays on screen.
 bool latest_request_wins(const oma::gpu::Device* device) {
     Bench b(device);
-    if (!b.ready) return false;
+    if (!b.ready)
+        return false;
     std::vector<std::int64_t> asked;
     std::ptrdiff_t newest_seen = -1;
     bool ordered = true;
@@ -58,7 +60,8 @@ bool latest_request_wins(const oma::gpu::Device* device) {
         asked.push_back(b.session->frame());
         QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
         const auto at = std::ranges::find(asked, b.item.pendingFrame());
-        if (at == asked.end()) continue; // nothing shown yet
+        if (at == asked.end())
+            continue; // nothing shown yet
         ordered = ordered && at - asked.begin() >= newest_seen;
         newest_seen = std::max(newest_seen, at - asked.begin());
     }
@@ -70,7 +73,8 @@ bool latest_request_wins(const oma::gpu::Device* device) {
 // appears, nothing fails and destruction does not wait for a GOP.
 bool abandons_a_seek_in_flight(const oma::gpu::Device* device) {
     Bench b(device);
-    if (!b.ready) return false;
+    if (!b.ready)
+        return false;
     b.session->seek(9.6);
     b.session->newProject();
     wait_for([] { return false; }, 1000);
@@ -88,7 +92,8 @@ bool abandons_a_seek_in_flight(const oma::gpu::Device* device) {
 // told the viewer stopped.
 bool survives_device_loss(const oma::gpu::Device& device) {
     Bench b(&device);
-    if (!b.ready) return false;
+    if (!b.ready)
+        return false;
     device.mark_lost();
     b.session->seek(5.0);
     wait_for([&] { return !b.session->notice().isEmpty(); }, 3000);
@@ -98,12 +103,15 @@ bool survives_device_loss(const oma::gpu::Device& device) {
 
 void run_paused_frames_tests() {
     describe("Paused viewer frames", {
-        it("publish only the latest request (software)", { expect(latest_request_wins(nullptr)).toBeTruthy(); });
+        it("publish only the latest request (software)",
+           { expect(latest_request_wins(nullptr)).toBeTruthy(); });
         it("abandon a seek on project switch and destruction (software)",
            { expect(abandons_a_seek_in_flight(nullptr)).toBeTruthy(); });
         auto device = gpu();
-        if (!device) return; // no Vulkan here: the hardware cases need a device
-        it("publish only the latest request (device)", { expect(latest_request_wins(device.get())).toBeTruthy(); });
+        if (!device)
+            return; // no Vulkan here: the hardware cases need a device
+        it("publish only the latest request (device)",
+           { expect(latest_request_wins(device.get())).toBeTruthy(); });
         it("abandon a seek on project switch and destruction (device)",
            { expect(abandons_a_seek_in_flight(device.get())).toBeTruthy(); });
         it("survive a lost device", { expect(survives_device_loss(*device)).toBeTruthy(); });
