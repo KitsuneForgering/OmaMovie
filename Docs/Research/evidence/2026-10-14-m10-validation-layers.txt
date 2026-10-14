@@ -26,3 +26,19 @@ Run 2, synchronization validation + best practices, errors/warnings/perf reporte
 
 Not covered: the live Qt window (presentation, swapchain resize) under validation, which
 needs the GUI smoke with the layer; NVIDIA/AMD drivers.
+
+Live window (same day), synchronization validation, errors only:
+  make run-gui RUN_GUI_SMOKE=1: PASS, but 7x UNASSIGNED-non-acquired-swapchain-image-used,
+  7x SYNC-HAZARD-WRITE-AFTER-READ and 6x SYNC-HAZARD-WRITE-AFTER-PRESENT, all on Qt's own
+  swapchain frame (a layout transition / render pass on a presentable image whose acquire
+  semaphore the submit did not wait on). OmaMovie never writes swapchain images.
+  - Same counts with OMA_PREVIEW_HARDWARE=0: not the hardware-decode producer thread.
+  - A temporary marker before each smoke grabWindow() call: every error triple follows one of
+    the 7 grabWindow() calls, and nothing else in the run reports.
+  - omamovie --m4-audit on a 36 s recording, 10 s of playback, hardware decode on: 0 errors.
+  - Qt-only controls (qml6 with an animation; a QQuickView calling grabWindow() every 400 ms,
+    also while resizing every 150 ms), Vulkan RHI: 0 errors.
+  So the hazards come from grabWindow() in this app's window: Qt's grab path combined with
+  OmaMovie's frame hooks (queue hold from afterRendering to afterFrameEnd, compositor work in
+  sync), which the controls do not have. Normal use never calls grabWindow(); main.cpp already
+  notes that it disturbed validation. Attribution between Qt and the hooks is not settled.
