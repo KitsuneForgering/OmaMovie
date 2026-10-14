@@ -98,6 +98,7 @@ build/debug/tools/oma-project/oma-project diff A.omamovie B.omamovie  # changed 
 make BUILD=release DESTDIR=dir PREFIX=/usr install  # the installed tree (PKGBUILD, release tarball)
 makepkg -si                    # build and install the Arch package from the PKGBUILD
 scripts/package-check.sh       # PKGBUILD build/check/install + GUI smoke in clean containers (podman)
+scripts/check-includes.sh      # §5.2 include rules the build cannot see (FFmpeg/Qt/Vulkan placement)
 ```
 
 Commits and releases:
