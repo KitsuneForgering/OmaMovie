@@ -42,7 +42,14 @@ void run_color_session_tests();
 
 int main(int argc, char* argv[]) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
+    // The desktop's theme and input-method plugins (GTK, dconf, AT-SPI, fcitx) are not part of
+    // what the tests check, and CI has none: keep local runs the same.
+    qunsetenv("QT_QPA_PLATFORMTHEME");
+    qunsetenv("QT_IM_MODULE");
     QTemporaryDir home;
+    // No session bus, as in CI: an export that finishes while the offscreen app is not active
+    // would otherwise post a real desktop notification.
+    qputenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=" + home.filePath("no-bus").toLocal8Bit());
     for (const char* name : {"XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME",
                              "OMARCHY_SCREENRECORD_DIR"}) {
         QDir(home.path()).mkpath(QString::fromLatin1(name));
