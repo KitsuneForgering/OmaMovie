@@ -39,8 +39,10 @@ if(OMA_BUILD_TESTS)
     add_subdirectory(tests/oma-project)
 endif()
 
-# The app and its headless Session tests: debug and release only (as in ADR-0001).
-if(OMA_BUILD_APP AND (CMAKE_BUILD_TYPE STREQUAL "debug" OR CMAKE_BUILD_TYPE STREQUAL "release"))
+# The app and its headless Session tests, in every build: the sanitizer builds run them too (M10
+# application sanitizer subset). Qt, GLib and libdbus are not instrumented; what that leaves out
+# and why is recorded beside each entry in tests/support/{lsan,tsan}.supp.
+if(OMA_BUILD_APP)
     add_subdirectory(apps/omamovie)
 endif()
 

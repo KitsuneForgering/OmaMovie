@@ -16,15 +16,22 @@ if(OMA_WERROR)
     list(APPEND OMA_TEST_WARNINGS -Werror)
 endif()
 
+# Both sanitizer builds also run offline and on open drivers only: the symbolizer must not fetch
+# debug info over the network mid-test (DEBUGINFOD_URLS; it stalled runs by up to 40 s), and the
+# proprietary NVIDIA Vulkan driver, uninstrumented and outside the v0.1 scope, takes ~10 s to start
+# under TSan and corrupted its thread registry (measured 2026-10-13; CI has lavapipe only).
+set(OMA_SANITIZER_ENV "DEBUGINFOD_URLS=" "VK_LOADER_DRIVERS_DISABLE=*nvidia*")
 if(CMAKE_BUILD_TYPE STREQUAL "asan")
-    set(OMA_TEST_ENV
+    set(OMA_TEST_ENV ${OMA_SANITIZER_ENV}
         "ASAN_OPTIONS=detect_leaks=1:abort_on_error=1:strict_string_checks=1:fast_unwind_on_malloc=0"
         "LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/tests/support/lsan.supp:print_suppressions=0"
         "UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1"
         "VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1")
 elseif(CMAKE_BUILD_TYPE STREQUAL "tsan")
-    set(OMA_TEST_ENV
-        "TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1:suppressions=${CMAKE_SOURCE_DIR}/tests/support/tsan.supp"
+    set(OMA_TEST_ENV ${OMA_SANITIZER_ENV}
+        # die_after_fork=0: the disk-full export check forks a child that starts FFmpeg's threads;
+        # the child only writes and exits, and is judged by its status and output, not by TSan.
+        "TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1:die_after_fork=0:suppressions=${CMAKE_SOURCE_DIR}/tests/support/tsan.supp"
         "VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1")
 endif()
 
