@@ -26,3 +26,14 @@ Sustained cycles (headless): Docs/Research/evidence/2026-10-14-m10-sustained-cyc
 Sizes and change coupling: Docs/analysis/m11-inventory-2026-10-14.md.
 Not recorded yet: screenshots and keyboard walkthroughs at wide, half-width and 640 px with
 a larger font (the GUI smoke checks the 640 px layout fits).
+
+First measured change (same machine, fixture and release build): seeking now skips
+non-reference frames that end before the target (AVDISCARD_NONREF), redoing the seek without
+skipping if a skipped frame was the one on screen. --m4-seek-audit baseline_1080p60.mp4 30,
+two runs each, hardware decode:
+  before: first frame p50 198.9 / 208.4 ms, p95 392.0 / 378.4 ms, max 436.8 / 435.6 ms
+  after:  first frame p50 152.5 / 160.5 ms, p95 292.1 / 280.8 ms, max 324.3 / 368.6 ms
+  (about -23 % p50, -26 % p95). Software decode after the change: p50 109 ms, p95 194 ms,
+  faster than VA-API for seeks on this GOP (worth a look: per-frame hardware latency).
+Exactness: tests/media seeks every frame of h264_vfr.mkv, h264_29.97fps.mp4 and hevc_10bit.mp4
+at its time and mid-gap; skipping on pts <= target without the redo gives 38/28/28 wrong frames.
