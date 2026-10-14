@@ -8,7 +8,6 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <vector>
 
 class QRhiTexture;
@@ -54,20 +53,11 @@ public:
     void setFrame(std::shared_ptr<const ViewerFrame> frame);
     // GUI thread: the sequence frame setFrame gave last, -1 for none (tests, diagnostics).
     [[nodiscard]] std::int64_t pendingFrame() const;
-    // GUI thread: request decode and composition on Qt's render thread, so FFmpeg's Vulkan
-    // work cannot overlap Qt's swapchain teardown or device-idle waits. ponytail: this blocks
-    // presentation during decode; use admitted background decode if full-scene timing requires it.
-    void setRequest(std::shared_ptr<const oma::timeline::Timeline> timeline,
-                    std::shared_ptr<const MediaPaths> paths, std::shared_ptr<const LutTables> luts,
-                    std::uint32_t width, std::uint32_t height, std::int64_t frame,
-                    std::int64_t ticks_per_frame);
-
     // Frames composited and handed to Qt (diagnostics, the smoke check).
     [[nodiscard]] unsigned presentedFrames() const;
     [[nodiscard]] std::int64_t lastCompositedFrame() const;
-    // Per-stage timing for the M4 audit (render thread): how long each composite took
-    // (decode on the render thread for paused hardware frames, render, display encode) and the
-    // time between composites, in milliseconds. Bounded; the oldest samples are dropped.
+    // Per-stage timing for the M4 audit (render thread): how long each composite took (render
+    // and display encode) and the time between composites, in milliseconds. Bounded; the oldest samples are dropped.
     struct Timings {
         std::vector<double> composite_ms;
         std::vector<double> interval_ms;
@@ -93,16 +83,6 @@ private:
 
     const oma::gpu::Device* device_ = nullptr;
     DecodePreference decode_preference_ = DecodePreference::Auto;
-    struct Request {
-        std::shared_ptr<const oma::timeline::Timeline> timeline;
-        std::shared_ptr<const MediaPaths> paths;
-        std::shared_ptr<const LutTables> luts;
-        std::uint32_t width = 0;
-        std::uint32_t height = 0;
-        std::int64_t frame = 0;
-        std::int64_t ticks_per_frame = 0;
-    };
-    std::optional<Request> request_;
     std::shared_ptr<const ViewerFrame> frame_; // written on the GUI thread, read during sync
     unsigned generation_ = 0;
     std::atomic<unsigned> presented_{0};
@@ -114,12 +94,11 @@ private:
 
     // Render thread only. The scene-graph node owns the texture wrapper (and through it the
     // QRhiTexture borrowing the compositor's display image), so Qt releases its own objects;
-    // the item owns the compositor and pilot decoder.
+    // the item owns the compositor.
     unsigned composited_ = 0;
     std::atomic<bool> loss_reported_{false}; // either thread may notice the loss first
     void reportLoss();
     std::unique_ptr<oma::compositor::VulkanCompositor> compositor_;
-    std::unique_ptr<FrameSource> gpu_frames_;
     const void* display_ = nullptr;         // the VkImage of the last encode
     const void* wrapped_ = nullptr;         // the VkImage the node's texture wraps
     QRhiTexture* rhi_texture_ = nullptr;    // owned by the node's QSGTexture

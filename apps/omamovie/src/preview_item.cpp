@@ -78,19 +78,7 @@ void PreviewItem::reportLoss() {
 void PreviewItem::setFrame(std::shared_ptr<const ViewerFrame> frame) {
     // A hidden window draws nothing, so the render thread may never notice a loss: check here.
     if (device_ != nullptr && device_->lost()) reportLoss();
-    request_.reset();
     frame_ = std::move(frame);
-    ++generation_;
-    update();
-}
-
-void PreviewItem::setRequest(std::shared_ptr<const oma::timeline::Timeline> timeline,
-                             std::shared_ptr<const MediaPaths> paths, std::shared_ptr<const LutTables> luts,
-                             std::uint32_t width, std::uint32_t height, std::int64_t frame,
-                             std::int64_t ticks_per_frame) {
-    if (device_ != nullptr && device_->lost()) reportLoss();
-    request_ = Request{.timeline = std::move(timeline), .paths = std::move(paths), .luts = std::move(luts),
-                       .width = width, .height = height, .frame = frame, .ticks_per_frame = ticks_per_frame};
     ++generation_;
     update();
 }
@@ -107,8 +95,6 @@ void PreviewItem::releaseGpu() {
     if (device_ == nullptr || !compositor_) return;
     // Nothing may still sample or write the images being destroyed.
     waitQueueIdle();
-    if (request_) frame_.reset(); // GPU frames may own Vulkan images through FFmpeg
-    gpu_frames_.reset();
     compositor_.reset();
     display_ = nullptr;
     wrapped_ = nullptr;
@@ -134,17 +120,6 @@ bool PreviewItem::composite() {
             return false;
         }
         compositor_ = std::move(*created);
-    }
-    if (request_) {
-        if (!gpu_frames_) gpu_frames_ = std::make_unique<FrameSource>(device_);
-        auto frame = build_viewer_frame(*request_->timeline, *request_->paths, *request_->luts,
-                                        request_->width, request_->height, request_->frame,
-                                        request_->ticks_per_frame, *gpu_frames_);
-        if (!frame) {
-            oma::log_error(oma::Category::Decode, "viewer decode: {}", frame.error().summary());
-            return false;
-        }
-        frame_ = std::move(*frame);
     }
     const ViewerFrame& f = *frame_;
     // A reduced-resolution preview (setScale): same framing, fewer pixels to composite. Export
@@ -202,13 +177,7 @@ QSGNode* PreviewItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData* /*data*
         rhi_texture_ = nullptr;
         return nullptr;
     };
-    if ((!frame_ && !request_) || device_ == nullptr) {
-        if (gpu_frames_) {
-            waitQueueIdle();
-            gpu_frames_.reset();
-        }
-        return drop();
-    }
+    if (!frame_ || device_ == nullptr) return drop();
     const bool encoded = composited_ != generation_;
     if (encoded && !composite()) return drop();
     if (display_ == nullptr || window()->rhi() == nullptr) return drop();
