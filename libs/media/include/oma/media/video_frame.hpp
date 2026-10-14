@@ -2,6 +2,7 @@
 
 #include "oma/base/error.hpp"
 #include "oma/base/time.hpp"
+#include "oma/media/probe.hpp"
 
 #include <vulkan/vulkan_core.h>
 
@@ -120,8 +121,11 @@ public:
 
     // Software preview bridge. Copies a decoded frame into a caller-owned RGBA8 buffer.
     // The destination has at least `stride * height()` bytes; GPU frames are unsupported.
+    // `read_as` replaces the frame's own YUV matrix and range (a media item's interpretation,
+    // ADR-0019); unspecified values fall back as the compositor does.
     [[nodiscard]] Result<void> copy_rgba(std::span<std::uint8_t> destination,
-                                         int destination_stride) const;
+                                         int destination_stride,
+                                         std::optional<ColorInfo> read_as = std::nullopt) const;
 
     // GPU frames only: locks the frame and returns its images (Unsupported on software frames).
     [[nodiscard]] Result<GpuAccess> acquire_gpu();

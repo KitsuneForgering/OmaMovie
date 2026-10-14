@@ -16,6 +16,7 @@ void run_gpu_decode_tests();
 void run_audio_decoder_tests();
 void run_video_writer_tests();
 void run_probe_regression_tests();
+void run_copy_rgba_tests();
 
 namespace {
 
@@ -71,6 +72,7 @@ int main(int argc, char* argv[]) {
     run_audio_decoder_tests();
     run_video_writer_tests();
     run_probe_regression_tests();
+    run_copy_rgba_tests();
     release_media_test_device();
     return cest_result();
 }
