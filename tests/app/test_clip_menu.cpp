@@ -38,7 +38,7 @@ bool targets_follow_selection_and_playhead() {
     s.addTitle();
     const QVariantMap title = s.clipMenuTarget();
     return ok && title.value("kind") == "video" && title.value("lane").toInt() == 0 &&
-           title.value("title").toBool();
+           title.value("title").toBool() && s.videoLaneCount() == 1 && s.audioLaneCount() == 0;
 }
 } // namespace
 

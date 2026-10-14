@@ -2604,6 +2604,9 @@ int Session::clipCount() const {
     return track != nullptr ? static_cast<int>(track->clips.size()) : 0;
 }
 
+int Session::audioLaneCount() const { return static_cast<int>(audioLanes().size()); }
+int Session::videoLaneCount() const { return static_cast<int>(lanes(tl::TrackKind::Video).size()); }
+
 void Session::setStorylineView(double from, double to) {
     if (!std::isfinite(from) || std::isnan(to) || (from == view_from_ && to == view_to_)) return;
     view_from_ = from;

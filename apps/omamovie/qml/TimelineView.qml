@@ -55,8 +55,8 @@ Rectangle {
     // (ui-design §7.1).
     readonly property real laneHeight: 34
     readonly property real laneGap: 4
-    readonly property int lanes: session.audioTracks.length
-    readonly property int videoLanes: session.videoTracks.length
+    readonly property int lanes: session.audioLaneCount
+    readonly property int videoLanes: session.videoLaneCount
     readonly property real storylineY: 4 + videoLanes * (laneHeight + laneGap) + (videoLanes > 0 ? 4 : 0)
     readonly property int captionRows: session.captions.length > 0 ? 1 : 0 // below the audio lanes
     readonly property real storylineHeight:

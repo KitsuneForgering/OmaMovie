@@ -77,6 +77,9 @@ class Session final : public QObject {
     // read of `clips` hands JS its own reference to the whole list, which the QML garbage
     // collector later frees in one uninterruptible sweep (~90 ms at 5,000 clips).
     Q_PROPERTY(int clipCount READ clipCount NOTIFY sequenceChanged)
+    // Lane counts without building every lane's clip list (QML bindings, like clipCount).
+    Q_PROPERTY(int audioLaneCount READ audioLaneCount NOTIFY sequenceChanged)
+    Q_PROPERTY(int videoLaneCount READ videoLaneCount NOTIFY sequenceChanged)
     // The same storyline clips as a model that keeps delegates across edits (long timelines).
     Q_PROPERTY(QObject* storylineClips READ storylineClips CONSTANT)
     // More storyline clips in view than delegates make sense for: the timeline draws them as one
@@ -198,6 +201,8 @@ public:
     [[nodiscard]] int selectedMedia() const;
     [[nodiscard]] QVariantList clips() const;
     [[nodiscard]] int clipCount() const;
+    [[nodiscard]] int audioLaneCount() const;
+    [[nodiscard]] int videoLaneCount() const;
     [[nodiscard]] QVariantList audioTracks() const;
     [[nodiscard]] QVariantList videoTracks() const;
     [[nodiscard]] QObject* storylineClips();
