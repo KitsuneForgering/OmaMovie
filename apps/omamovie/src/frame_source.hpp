@@ -61,7 +61,7 @@ public:
                                                const oma::timeline::MediaInfo* media = nullptr);
 
     // Lets a seek's decode-forward stop early (VideoDecoder::set_interrupt); a stream stopped
-    // that way is dropped, so the next request opens and seeks it afresh. Empty: never.
+    // that way keeps its decoder but loses its position, so the next request seeks it. Empty: never.
     void set_interrupt(std::function<bool()> interrupted);
 
 private:

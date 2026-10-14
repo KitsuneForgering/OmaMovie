@@ -53,6 +53,9 @@ bool FrameSource::reaches(const Stream& s, const oma::RationalTime& t) {
 
 oma::Result<FrameSource::Stream*> FrameSource::stream(const std::string& path, const oma::RationalTime& t) {
     auto it = std::ranges::find_if(streams_, [&](const Stream& s) { return s.path == path && reaches(s, t); });
+    if (it == streams_.end()) { // one with no position (stopped mid-seek) seeks before a new one opens
+        it = std::ranges::find_if(streams_, [&](const Stream& s) { return s.path == path && !s.current; });
+    }
     const auto open = std::ranges::count(streams_, path, &Stream::path);
     if (it == streams_.end() && std::cmp_greater_equal(open, kStreamsPerFile)) {
         // Seek the least recently used decoder of this file.
@@ -184,9 +187,15 @@ oma::Result<Picture> FrameSource::picture_at(const std::string& path, const oma:
     if (forward) s.backward = false; // playing on: back to a short history
     if (auto r = forward ? advance(s, t) : seek(s, t); !r) {
         if (r.error().code() == oma::ErrorCode::Cancelled) {
-            // Stopped mid-seek: its decoder and history no longer describe one position.
+            // Stopped mid-seek: its history no longer describes one position and the decoder must
+            // seek before it is used again, but it stays open. Closing it made the stop cost more
+            // than the seek it stopped (a VA-API decoder at 4K: ~145 ms, ADR-0020).
             for (const auto& f : s.history) history_bytes_ -= bytes_of(*f);
-            streams_.remove_if([&](const Stream& other) { return &other == &s; });
+            s.history.clear();
+            s.current.reset();
+            s.ahead.reset();
+            s.ended = false;
+            s.backward = false;
         }
         return std::unexpected(r.error());
     }

@@ -8,7 +8,7 @@
 
 namespace {
 // A software FrameSource asked for a frame deep into a GOP while the interrupt fires: Cancelled,
-// and the next request (no interrupt) gets the exact frame, so the half-sought stream was dropped.
+// and the next request (no interrupt) gets the exact frame: the half-sought stream seeks again.
 bool recovers_after_an_interrupted_seek() {
     FrameSource frames(nullptr);
     const std::string path =
@@ -45,7 +45,7 @@ bool scrubbing_never_fails() {
 
 void run_frame_source_interrupt_tests() {
     describe("Interrupted viewer seeks", {
-        it("drops a stream stopped mid-seek and finds the exact frame next time",
+        it("re-seeks a stream stopped mid-seek and finds the exact frame next time",
            { expect(recovers_after_an_interrupted_seek()).toBeTruthy(); });
         it("supersedes frames while scrubbing without reporting a failure",
            { expect(scrubbing_never_fails()).toBeTruthy(); });
