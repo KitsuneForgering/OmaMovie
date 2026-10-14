@@ -3,6 +3,7 @@
 #include "autosave.hpp"
 #include "color_interpretation.hpp"
 #include "oma/ingest/media_entry.hpp"
+#include "playback_clock.hpp"
 #include "thumbnail.hpp"
 #include "scopes.hpp"
 #include "export_recovery.hpp"
@@ -3358,21 +3359,14 @@ void Session::onTick() {
         startPlayback();
         return;
     }
-    std::int64_t target = 0;
-    if (speed_ == 1 && audio_.running()) {
-        // Video follows the audio actually heard: drop frames when behind, hold when ahead.
-        // The selected frame still has to cross the Qt render loop before it reaches the
-        // display. Prepare the next frame so that the visible image follows the device clock.
-        target = audio_.audible_sample() * ticksPerSample() / ticksPerFrame() + 1;
-    } else {
-        const double elapsed =
-            static_cast<double>(clock_.nsecsElapsed()) * 1e-9 * frameRate() * speed_;
-        target = play_from_frame_ + static_cast<std::int64_t>(std::floor(elapsed));
-    }
+    // Video follows the audio actually heard (drop when behind, hold when ahead), or the elapsed
+    // time at other speeds (playback_clock.hpp).
     const bool source = source_index_ >= 0;
     const std::int64_t last = source ? std::max<std::int64_t>(0, source_frames_ - 1) : lastFrame();
-    const bool at_end = speed_ > 0 ? target >= last : target <= 0;
-    target = std::clamp<std::int64_t>(target, 0, last);
+    const auto [target, at_end] = tick_target(
+        speed_ == 1 && audio_.running() ? std::optional(audio_.audible_sample()) : std::nullopt,
+        ticksPerSample(), ticksPerFrame(), play_from_frame_,
+        static_cast<double>(clock_.nsecsElapsed()) * 1e-9, frameRate(), speed_, last);
     if (auto shown = scheduler_.take(target)) {
         if (source)
             source_frame_ = shown->frame;
