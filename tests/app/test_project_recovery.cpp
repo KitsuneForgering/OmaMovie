@@ -10,6 +10,10 @@
 
 namespace {
 bool preserves_unknown_fields_after_recovery() {
+    // Earlier tests share the state folder; an autosave one of their Sessions left (slower runs
+    // under sanitizers let its timer fire) would be offered too.
+    for (const auto& left : autosave::list(autosave::dir()))
+        autosave::remove(left.file);
     QTemporaryDir dir;
     if (!dir.isValid())
         return false;
