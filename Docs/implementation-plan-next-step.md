@@ -2,7 +2,14 @@
 
 M5 and Intel M4 are closed; M7 has working project save/load and four selectable
 export profiles. The [current audit](analysis/omamovie-2026-10-12.md) sets the next
-work by OmaMovie's own release path, not by competitor feature count:
+work by OmaMovie's own release path, not by competitor feature count. Revised 2026-10-14
+by the [evidence status](implementation-plan-evidence-2026-10-14.md): two measured
+regressions in interaction come before new breadth.
+
+0. **Paused hardware scrub (M11):** move paused hardware decode off Qt's sync phase with
+   latest-request-wins ([async milestone](implementation-plan-async-interactive.md)).
+0. **5,000-clip structural edits (M6):** split/ripple/undo p95 108–147 ms against a
+   < 100 ms gate (25 ms on 2026-10-06). Bisect and profile before changing any design.
 
 1. **Enforce the existing CI (M10):** the PR workflow runs, but `master` has no
    protection/ruleset requiring its checks. Require test/lint/fuzz success before
@@ -22,7 +29,8 @@ work by OmaMovie's own release path, not by competitor feature count:
 
 Continue Intel device-loss and presentation-latency checks. Test NVIDIA, AMD and
 hybrid paths only on available hardware; keep their claims out of v0.1 until then.
-The measured 5,000-clip UI path does not justify a timeline/index or pooling rewrite.
+The 5,000-clip design (incremental model, level of detail) is not in question, but its
+2026-10-06 numbers no longer hold; a timeline index or pooling rewrite still needs a profile.
 For test/property and long-form expansion, follow the
 [ranked engineering tasks](analysis/omamovie-2026-10-12-priorities.md).
 

@@ -1,6 +1,6 @@
 # Implementation plan — OmaMovie
 
-Evidence, milestones and acceptance criteria; update completed work and record structural changes in an ADR. [Current engineering assessment](analysis/omamovie-2026-10-12.md).
+Evidence, milestones and acceptance criteria; update completed work and record structural changes in an ADR. [Current engineering assessment](analysis/omamovie-2026-10-12.md). Latest: [evidence status 2026-10-14](implementation-plan-evidence-2026-10-14.md) · [async interactive work](implementation-plan-async-interactive.md).
 ## 1. Goal
 [Goal](implementation-plan-goal.md)
 ### Cross-editor workflow gap review (2026-10-11)

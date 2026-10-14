@@ -25,7 +25,8 @@ p95 < 100 ms and no routine edit stall > 250 ms; change it only as an explicit
 product decision. A passing synthetic gate is evidence for the declared workloads,
 not for every long video or hardware configuration. Use the observed dominant cost
 to choose between QML model work, decoder/proxy work, preview rendering or project
-storage changes. This gate has not run.
+storage changes. The combined gate has not run; its 5,000-clip part failed on 2026-10-14
+(split p95 136–147 ms, [evidence status](implementation-plan-evidence-2026-10-14.md)).
 
 Current audit flags and `Research/evidence` measurements record their fixtures and
 hardware; the proposed `tools/bench` runner is not implemented. Future benchmarks
