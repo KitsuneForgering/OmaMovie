@@ -1905,6 +1905,26 @@ int run_gui_smoke(const SmokeContext& context) {
              app_settings.setTextSize(QStringLiteral("130"));
              window->resize(1600, 900);
          }},
+        // Pointer targets (WCAG 2.5.8): every visible, enabled control and mouse area on the edit
+        // screen is at least 24 px each way (slider grooves and handles are parts of their slider).
+        {"target sizes", after(300), [&] {
+             QStringList small;
+             std::function<void(QQuickItem*)> walk = [&](QQuickItem* item) {
+                 if (!item->isVisible() || item->opacity() <= 0) return;
+                 const QString cls = QString::fromLatin1(item->metaObject()->className());
+                 const bool part = cls.contains(QLatin1String("Handle")) || cls.contains(QLatin1String("Groove"));
+                 const bool target = !part && (cls.startsWith(QLatin1String("QQuickMouseArea")) || cls.contains(QLatin1String("Button")) ||
+                                               cls.contains(QLatin1String("Choice")) || cls.contains(QLatin1String("Slider")));
+                 const QPointF at = item->mapToScene(QPointF(0, 0));
+                 const bool shown = at.x() < window->width() && at.y() < window->height() && item->width() > 0 && item->height() > 0;
+                 if (target && shown && item->isEnabled() && (item->width() < 24 || item->height() < 24))
+                     small << QStringLiteral("%1 '%2' %3x%4").arg(cls, item->objectName()).arg(item->width()).arg(item->height());
+                 for (QQuickItem* c : item->childItems()) walk(c);
+             };
+             walk(window->contentItem());
+             if (!small.isEmpty()) std::printf("GUI smoke: targets under 24 px: %s\n", qPrintable(small.join(QStringLiteral("; "))));
+             r.layout = r.layout && small.isEmpty();
+         }},
         {"large text 1600", after(400), [&] { saved.text_ok = large_text_fits("1600"); window->resize(820, 700); }},
         {"large text 820", after(400), [&] { saved.text_ok = large_text_fits("820") && saved.text_ok; window->resize(640, 620); }},
         {"large text 640", after(400), [&] {
