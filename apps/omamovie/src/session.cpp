@@ -1811,9 +1811,10 @@ void Session::exportMovie(const QUrl& url, const QString& profile) {
             }
         }
     }
-    if (!tl::unknown_effects(editor_->timeline()).empty()) {
+    if (const auto unknown = unrendered_export_effect(editor_->timeline())) {
         // ADR-0016: never render a different movie silently.
-        setNotice(QStringLiteral("Some effects come from a newer OmaMovie: remove or disable them before exporting"));
+        setNotice(QStringLiteral("The effect %1 comes from a newer OmaMovie: remove it or turn it off before exporting")
+                      .arg(QString::fromStdString(unknown->definition)));
         return;
     }
     if (const auto missing = missing_export_lut(editor_->timeline(), *luts_)) {
