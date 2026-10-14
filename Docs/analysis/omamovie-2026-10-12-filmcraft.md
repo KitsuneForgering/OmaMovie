@@ -27,4 +27,7 @@ either design automatically safer. The useful transfer is a reproducible,
 externally decoded task and selective property/oracle checks, not a codec rewrite,
 Premiere feature checklist or a second command system.
 
+OmaMovie's run of FilmCraft's benchmark scenarios on 2026-10-14:
+[filmcraft-benchmarks](omamovie-2026-10-14-filmcraft-benchmarks.md).
+
 [← Assessment](omamovie-2026-10-12.md)
