@@ -76,8 +76,8 @@ public:
     // display. Returns when the GPU has finished; the image stays valid until the next call.
     // Later work on this queue (for example Qt sampling it) is ordered after the encode, and the
     // next encode waits for earlier work on the queue before overwriting it. The full SDR/HDR
-    // display policy is ADR-0006's. `Bt709` encodes with the BT.709 OETF instead (export to
-    // SDR video, whose transfer is BT.709).
+    // display policy is ADR-0006's. `Bt709` encodes for BT.709 video instead (export): the
+    // inverse of the BT.1886 EOTF that decoding BT.709 video applies, so levels round-trip.
     enum class Transfer : std::uint8_t { Srgb, Bt709 };
     [[nodiscard]] Result<const gpu::Image*> encode_display(Transfer transfer = Transfer::Srgb);
 

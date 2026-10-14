@@ -743,7 +743,7 @@ void display_encodes_srgb() {
     }
     std::printf("    worst difference %d of 255\n", worst);
     expect(worst <= 1).toBeTruthy();
-    // The export transfer: BT.709 OETF (ITU-R BT.709-6 1.2), within one 8-bit level too.
+    // The export transfer: the inverse of BT.1886 (gamma 2.4), within one 8-bit level too.
     expect((*vk)->encode_display(oma::compositor::VulkanCompositor::Transfer::Bt709).has_value())
         .toBeTruthy();
     const auto video = (*vk)->read_display();
@@ -757,7 +757,7 @@ void display_encodes_srgb() {
             continue;
         }
         const double l = std::clamp(static_cast<double>(linear->pixels[i]), 0.0, 1.0);
-        const double v = l < 0.018 ? 4.5 * l : (1.099 * std::pow(l, 0.45)) - 0.099;
+        const double v = std::pow(l, 1.0 / 2.4);
         worst709 = std::max(worst709, std::abs(static_cast<int>((*video)[i]) -
                                                static_cast<int>(std::lround(v * 255.0))));
     }
