@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <format>
 #include <limits>
 #include <utility>
 
@@ -38,6 +39,13 @@ std::int64_t sample_at(const oma::RationalTime& t, std::int64_t ticks, oma::Rati
     return static_cast<std::int64_t>(floor_div(num, den));
 }
 
+// The sequence timebase holds whole samples (Timeline::default_timebase) unless a project says
+// otherwise; then 0.
+std::int64_t ticks_per_sample(const tl::Timeline& timeline, oma::SampleRate rate) {
+    const auto ticks = timeline.to_ticks(rate.sample_to_time(1));
+    return ticks && *ticks > 0 ? *ticks : 0;
+}
+
 } // namespace
 
 std::optional<oma::SampleRate> retimed_rate(const tl::Clip& clip, oma::SampleRate out) {
@@ -59,16 +67,14 @@ TimelineAudio::TimelineAudio(tl::Timeline timeline,
                              oma::SampleRate rate, int channels)
     : timeline_(std::move(timeline)), paths_(std::move(paths)), rate_(rate), channels_(channels) {
     // The sequence timebase holds whole samples (Timeline::default_timebase).
-    ticks_per_sample_ =
-        std::max<std::int64_t>(1, timeline_.to_ticks(rate_.sample_to_time(1)).value_or(1));
+    ticks_per_sample_ = ticks_per_sample(timeline_, rate_);
 }
 
 void TimelineAudio::set_timeline(tl::Timeline timeline,
                                  std::unordered_map<std::uint64_t, std::string> paths) {
     timeline_ = std::move(timeline);
     paths_ = std::move(paths);
-    ticks_per_sample_ =
-        std::max<std::int64_t>(1, timeline_.to_ticks(rate_.sample_to_time(1)).value_or(1));
+    ticks_per_sample_ = ticks_per_sample(timeline_, rate_);
     std::erase_if(streams_, [&](auto& entry) {
         Stream& s = entry.second;
         const tl::Clip* clip = timeline_.find_clip(tl::ClipId{entry.first});
@@ -85,6 +91,12 @@ void TimelineAudio::set_timeline(tl::Timeline timeline,
 oma::Result<void> TimelineAudio::render(std::span<float> out, std::int64_t first) {
     ++pass_;
     std::ranges::fill(out, 0.0F);
+    if (ticks_per_sample_ == 0) {
+        return oma::make_error(oma::ErrorCode::Unsupported, oma::Category::Audio,
+                               "the sequence timebase cannot address audio samples at this rate",
+                               std::format("timebase {}/{}, {} Hz", timeline_.timebase().num(),
+                                           timeline_.timebase().den(), rate_.hz()));
+    }
     const auto frames = static_cast<std::int64_t>(out.size() / static_cast<std::size_t>(channels_));
     oma::Result<void> result;
     for (const tl::Track& track : timeline_.tracks()) {

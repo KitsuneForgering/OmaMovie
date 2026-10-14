@@ -92,6 +92,36 @@ tl::Timeline denoised() {
     return seq.editor.timeline();
 }
 
+// A sequence timebase of whole frames (1/30, as a project without one is read) holds no 48 kHz
+// sample: rendering refuses with silence instead of playing one tick per sample (a 1 s clip
+// heard for 30 samples, reported as success before).
+bool refuses_a_timebase_without_samples() {
+    tl::Editor ed(tl::Timeline::create(oma::frame_rates::k30, q(1, 30)).value());
+    (void)ed.add_media(
+        tl::MediaInfo{.id = kTone,
+                      .start = oma::RationalTime::make(0, q(1, 44100)).value(),
+                      .duration = oma::RationalTime::make(88200, q(1, 44100)).value(),
+                      .has_video = false,
+                      .has_audio = true,
+                      .still = false});
+    const tl::TrackId track = ed.new_track_id();
+    (void)ed.execute(tl::edit::add_track(track, tl::TrackKind::Audio, "A1"));
+    const auto frame = [](std::int64_t n) {
+        return oma::RationalTime::make(n, q(1, 30)).value();
+    };
+    const tl::edit::ClipSource source{.media = kTone,
+                                      .source_in = frame(0),
+                                      .duration = frame(30),
+                                      .time_map = {},
+                                      .video = {},
+                                      .audio = {}};
+    if (!ed.execute(tl::edit::overwrite(track, ed.new_clip_id(), frame(0), source)))
+        return false;
+    oma::playback::TimelineAudio audio(ed.timeline(), paths(), rate(), kChannels);
+    std::vector<float> out(static_cast<std::size_t>(4800 * kChannels), 1.0F);
+    const auto r = audio.render(out, 0);
+    return !r && r.error().code() == oma::ErrorCode::Unsupported && peak(out, 0, 4800) == 0.0F;
+}
 } // namespace
 
 void run_block_partition_tests() {
@@ -100,6 +130,11 @@ void run_block_partition_tests() {
             if (!have_fixture("tone_44100.wav"))
                 return;
             expect(same_for_every_partition(edited(), 72000)).toBeTruthy();
+        });
+        it("refuses a sequence timebase that holds no whole samples", {
+            if (!have_fixture("tone_44100.wav"))
+                return;
+            expect(refuses_a_timebase_without_samples()).toBeTruthy();
         });
         it("reduces noise the same in any block sizes", {
             if (!have_fixture("noisy_tone.wav"))

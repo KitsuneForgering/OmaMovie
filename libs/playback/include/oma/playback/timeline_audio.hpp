@@ -37,7 +37,8 @@ public:
                   std::unordered_map<std::uint64_t, std::string> paths, oma::SampleRate rate,
                   int channels);
 
-    // Fills `out` (interleaved) with sequence samples [first, first + out.size() / channels).
+    // Fills `out` (interleaved) with sequence samples [first, first + out.size() / channels);
+    // silence and an error when the sequence timebase cannot address samples at this rate.
     // Clips at speeds other than 1 stay silent until time-stretching exists. Media that cannot
     // be decoded is silent and reported once through the result.
     [[nodiscard]] oma::Result<void> render(std::span<float> out, std::int64_t first);
@@ -92,7 +93,9 @@ private:
     std::unordered_map<std::uint64_t, std::string> paths_; // media ID -> file
     oma::SampleRate rate_;
     int channels_;
-    std::int64_t ticks_per_sample_ = 1;
+    // Sequence ticks per output sample; 0 when the timebase cannot hold whole samples at the
+    // output rate (a hand-written project, say), which render() refuses instead of guessing.
+    std::int64_t ticks_per_sample_ = 0;
     std::unordered_map<std::uint64_t, Stream> streams_; // per clip ID
     std::vector<float> scratch_; // a clip's samples while its effects run, reused
     std::uint64_t pass_ = 0;
