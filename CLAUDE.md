@@ -92,6 +92,7 @@ build/release/omamovie --m4-seek-audit FILE SEEKS # seek UI blocking and first-f
 build/release/omamovie --export-audit FILE OUT.mp4 # export one file, per-phase timing (opens a window)
 make oma-project               # build the native project inspect/validate/dump CLI
 build/debug/tools/oma-project/oma-project import FILE.otio  # OTIO import report (media not probed)
+build/debug/tools/oma-project/oma-project convert FILE.otio OUT.omamovie  # the app's OTIO import, saved
 build/debug/tools/oma-project/oma-project diff A.omamovie B.omamovie  # changed dump lines (exit 1 if any)
 make BUILD=release DESTDIR=dir PREFIX=/usr install  # the installed tree (PKGBUILD, release tarball)
 makepkg -si                    # build and install the Arch package from the PKGBUILD
