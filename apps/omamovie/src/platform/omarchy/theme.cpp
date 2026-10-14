@@ -49,7 +49,7 @@ QVariantMap merge_palette(const QVariantMap& base, const QByteArray& output, boo
 
 Theme::Theme(QString state_dir, QString fontconfig_dir, QObject* parent)
     : QObject(parent), state_dir_(std::move(state_dir)), fontconfig_dir_(std::move(fontconfig_dir)),
-      palette_(fallback_palette()), font_(QFontDatabase::systemFont(QFontDatabase::FixedFont)) {
+      palette_(readable_palette(fallback_palette())), font_(QFontDatabase::systemFont(QFontDatabase::FixedFont)) {
     debounce_.setSingleShot(true);
     debounce_.setInterval(kDebounceMs);
     connect(&debounce_, &QTimer::timeout, this, &Theme::refresh);
@@ -60,7 +60,8 @@ Theme::Theme(QString state_dir, QString fontconfig_dir, QObject* parent)
     connect(&palette_process_, &QProcess::finished, this, [this](int code, QProcess::ExitStatus status) {
         if (status != QProcess::NormalExit || code != 0) return; // keep the last good palette
         bool accepted = false;
-        QVariantMap next = merge_palette(fallback_palette(), palette_process_.readAllStandardOutput(), &accepted);
+        QVariantMap next = readable_palette(
+            merge_palette(fallback_palette(), palette_process_.readAllStandardOutput(), &accepted));
         if (!accepted || next == palette_) return;
         palette_ = std::move(next);
         emit paletteChanged();
