@@ -90,3 +90,19 @@ With 83caf29 (the stopped decoder stays open and seeks again):
   UI gap unchanged (a2160 hw p95 14.5, a1080 hw 12.8, hevc2160 hw 18.1 ms). Software HEVC 4K
   UI gap p95 23.6-25.3 in both builds, interleaved runs (load 4-5).
 Sanitizers at 83caf29: make -j BUILD=tsan test and make -j BUILD=asan test, 13/13 suites each.
+
+== Scrub during imports: a dedicated paused-viewer worker (2026-10-14)
+A temporary audit patch (not committed) imported other files into the library through
+Session::importUrl right after scrubbing began; a1080.mp4 hardware, 24 paused seeks.
+Shared worker (1edad77):
+  one 4K import:      gap p95 12.35 / 11.87, first frame p50 59-63 ms, 0 missed (the import
+                      ends after a few seeks: no measurable effect)
+  15 imports (all the FilmCraft fixtures but a1080): gap p95 25.09 / 13.59 ms, first frame p50
+                      132 / 63 ms, 10 / 6 of 24 seeks without a frame in 500 ms (none: 0)
+Own one-thread JobPool for paused frames, own software FrameSource (this commit):
+  15 imports: gap p95 14.30 / 16.09 ms, first frame p50 63.7 / 60.7 ms, 0 missed
+  no imports: gap p95 13.87 / 12.47 ms, 0 missed
+  software decode with 15 imports: gap p95 19.0 / 24.0, 3 / 3 missed (decode-bound, not queued)
+Cost: one more thread, and the viewer's software decoders no longer share their frame-history
+budget with thumbnails (two budgets of min(384 MB, 1/8 of RAM) instead of one; not measured).
+make -j BUILD=tsan test and app_tests run directly under TSan: pass, 0 reports.

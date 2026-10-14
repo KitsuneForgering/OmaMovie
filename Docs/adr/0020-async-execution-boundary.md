@@ -25,12 +25,12 @@ the UI thread describes the work (immutable timeline snapshot, paths, LUTs, fram
 executes it, and the result is published on the UI thread through `post_to_ui`, where it is
 checked against the current state before it changes anything.
 
-Three semantics, three mechanisms already in place:
+Three semantics, three mechanisms:
 
 | Work | Semantics | Mechanism |
 |---|---|---|
 | Playback | Ordered, prefetched, throughput first; late frames dropped | `VideoScheduler`: its own pipeline thread, bounded queue, decode admitted per frame |
-| Seek / scrub (paused viewer) | Latest request wins, latency first | `Session` job worker: one request in flight, one wish pending; the counter stops a superseded seek between decoded frames |
+| Seek / scrub (paused viewer) | Latest request wins, latency first | `Session::viewer_pool_` (its own worker): one request in flight, one wish pending; the counter stops a superseded seek between decoded frames |
 | Background (probe, thumbnails, waveforms, relink, autosave I/O) | FIFO, cooperative cancellation | `JobPool` (ADR-0003) |
 
 **Cancellation contract.** A request records `viewer_requests_` and `generation_` when issued.

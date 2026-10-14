@@ -49,8 +49,8 @@ decode submits to the queue and stays admitted. More queues need an ADR and vali
 - [x] Tests (`tests/app/test_paused_frames.cpp`): order of publication, final frame, project
   switch and destruction with a seek in flight, device loss; software and VA-API. Validation
   and synchronization validation, TSan and ASan/LSan clean.
-- [ ] Decide whether scrub needs its own worker instead of sharing imports' (measure an
-  import running during a scrub first).
+- [x] Scrub's own worker (2026-10-14): with 15 imports queued on the shared worker, 6–10 of
+  24 seeks showed no frame in 500 ms; on a dedicated one-thread `JobPool`, 0.
 
 **Gates (proposed before measuring):** paused scrub UI event-loop gap p95 < 16.7 ms at 1080p
 and < 33 ms at 4K; a superseded request stops within one decoded frame and its cancellation

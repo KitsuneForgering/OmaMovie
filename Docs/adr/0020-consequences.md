@@ -13,8 +13,9 @@
   Qt's frame end would wait for the seek, and the next sync would block the GUI thread again.
 - **Software decode for scrubbing** (rejected): its UI stays free, but it reached fewer
   frames (4K: 11–15 of 24 seeks without a frame in 500 ms) and later ones at 1080p.
-- **A dedicated scrub worker** (deferred): the shared job worker also runs imports and saves.
-  Not measured to matter yet; measure a scrub during an import first.
+- **Scrub on the shared job worker** (rejected after measurement): with 15 imports queued, 6–10
+  of 24 paused seeks showed no frame within 500 ms; a one-thread `JobPool` for the paused viewer
+  (with its own software decoders) brought that to 0. Cost: one thread, a second frame budget.
 
 ## Consequences
 
