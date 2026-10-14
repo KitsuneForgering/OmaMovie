@@ -85,6 +85,7 @@ make format | make format-check
 make tidy                      # clang-tidy on the libs (warnings are errors)
 make fixtures                  # regenerate test media in tests/fixtures/generated/ (ffmpeg)
 make fuzz                      # libFuzzer targets for untrusted-file parsers (clang); FUZZ_RUNS=n, FUZZ_PROBE_SECONDS=s
+make fuzz-probe                # one target alone: cube, project, subtitles, otio or probe
 make spikes                    # M1 spikes in tools/spikes (Docs/spikes/)
 make run-gui                   # Qt/Vulkan editor shell; GUI_FILE=path or RUN_GUI_SMOKE=1
 build/release/omamovie --m4-audit FILE SECONDS    # A/V sync, per-stage timing (opens a window)
@@ -115,10 +116,12 @@ git tag v0.1.0 && git push origin v0.1.0       # triggers the release workflow
   `adr`...). `!` marks a breaking change.
 - **Microcommits**: one commit per coherent change that builds and passes the tests on its
   own. Do not mix refactoring with features, nor docs with code, in one commit.
-- CI validates commit messages (`.github/workflows/commits.yml`), builds and tests with
-  g++/clang++ × debug/asan/tsan/release and runs the GUI smoke on headless sway with lavapipe
-  (`ci.yml`, `scripts/ci-run.sh smoke`). `vX.Y.Z` tags produce a release with
-  notes built from the commits (`release.yml`, `scripts/changelog.sh`).
+- CI validates commit messages (`.github/workflows/commits.yml`). `ci.yml` runs parallel jobs:
+  tests for g++/clang++ × debug/asan/tsan/release, the GUI smoke on headless sway with lavapipe,
+  clang-format, clang-tidy, the include rules and one fuzz job per parser; the `ci` job passes
+  only when all of them do. Each job is `scripts/ci-run.sh <task>` locally. `vX.Y.Z` tags run
+  `release.yml`: the full CI, the notes and source tarball (`scripts/changelog.sh`) and the
+  tested app tarball in parallel, then publish only if all three succeed.
 
 Target commands, not available yet:
 
