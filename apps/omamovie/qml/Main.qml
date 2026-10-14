@@ -35,6 +35,15 @@ ApplicationWindow {
     property string librarySource: "project" // the library's source: "project" or "recordings"
     property bool viewerOnly: false
     property string drawer: "" // the open adjustment, "" when the drawer is closed
+    // An item hidden while it has the keyboard focus (a slider in a drawer that closed) would go on
+    // taking keys, so arrows would edit a control nobody sees instead of stepping frames; the
+    // window takes the focus back and the shortcuts work again.
+    Connections {
+        target: root.activeFocusItem
+        function onVisibleChanged() {
+            if (root.activeFocusItem && !root.activeFocusItem.visible) root.contentItem.forceActiveFocus()
+        }
+    }
     property real upperRatio: 0.55
     property real libraryRatio: 0.30
     property real pixelsPerSecond: 60
