@@ -166,13 +166,16 @@ Rectangle {
     }
 
     // Dragging a lane clip moves it in time and across lanes; `away` is the vertical direction
-    // of the next lane from the storyline (-1 up for video, 1 down for sound).
+    // of the next lane from the storyline (-1 up for video, 1 down for sound). Alt+drag slips
+    // its content and Alt+Shift+drag slides it between its lane neighbours, as on the storyline.
     component LaneDrag: MouseArea {
         required property Item owner
         required property int away
         signal menu(real at)
         property point pressAt
         property bool moving: false
+        property int shift: 0 // Alt: slip, Alt+Shift: slide (Session::slipClip)
+        property int shiftFrames: 0
         anchors.fill: parent
         preventStealing: true
         cursorShape: moving ? Qt.ClosedHandCursor : Qt.ArrowCursor
@@ -186,6 +189,8 @@ Rectangle {
             }
             pressAt = mapToItem(timelineScroll.contentItem, mouse.x, mouse.y)
             moving = false
+            shift = !(mouse.modifiers & Qt.AltModifier) ? 0 : (mouse.modifiers & Qt.ShiftModifier) ? 2 : 1
+            shiftFrames = 0
             session.seek(at)
         }
         onPositionChanged: (mouse) => {
@@ -193,6 +198,13 @@ Rectangle {
             const p = mapToItem(timelineScroll.contentItem, mouse.x, mouse.y)
             if (!moving && Math.abs(p.x - pressAt.x) < 4 && Math.abs(p.y - pressAt.y) < 6) return
             moving = true
+            if (shift !== 0) {
+                const frames = Math.round((p.x - pressAt.x) / timelinePanel.scale * session.frameRate)
+                shiftFrames = shift === 1 ? -frames : frames
+                if (shift === 2) owner.moveX = frames / session.frameRate * timelinePanel.scale
+                session.previewSlip(owner.modelData.id, shift === 2, shiftFrames)
+                return
+            }
             const m = owner.modelData
             const start = timelinePanel.snap(m.start + (p.x - pressAt.x) / timelinePanel.scale, m.duration, m.id)
             owner.moveX = (start - m.start) * timelinePanel.scale
@@ -207,12 +219,16 @@ Rectangle {
         onReleased: {
             if (!moving) return
             const id = owner.modelData.id
-            const frames = Math.round(owner.moveX / timelinePanel.scale * session.frameRate)
+            const frames = shift !== 0 ? shiftFrames
+                                       : Math.round(owner.moveX / timelinePanel.scale * session.frameRate)
             const lanes = away * Math.round(owner.moveY / (timelinePanel.laneHeight + timelinePanel.laneGap))
+            const slipping = shift
             settle() // before the edit, which rebuilds this delegate
-            if (lanes !== 0 || frames !== 0) session.moveClip(id, lanes, frames)
+            if (slipping !== 0 && frames !== 0) session.slipClip(id, slipping === 2, frames)
+            else if (slipping !== 0) session.clearEditScope()
+            else if (lanes !== 0 || frames !== 0) session.moveClip(id, lanes, frames)
         }
-        onCanceled: settle()
+        onCanceled: { if (shift !== 0) session.clearEditScope(); settle() }
     }
 
     // What a pending edit does to this clip (session.editScope, simulated with the real command):

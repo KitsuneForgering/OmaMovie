@@ -1709,6 +1709,32 @@ int main(int argc, char** argv) {
                                            primary, selected_outline, hover_outline, static_cast<long long>(lane.size()));
              QTest::mouseMove(window, QPoint(2, 2));
          }},
+        // Alt+Shift+dragging a lane clip slides it (LaneDrag): one Slide entry, undone by one undo.
+        {"lane slide", after(100), [&] {
+             const auto lane_start = [&] {
+                 const QVariantList tracks = session.videoTracks();
+                 const QVariantList clips = tracks.isEmpty() ? QVariantList{} : tracks.front().toMap().value("clips").toList();
+                 return clips.isEmpty() ? -1.0 : clips.front().toMap().value("start").toDouble();
+             };
+             const auto lane = items_named("overlayClip");
+             const double before = lane_start();
+             if (!lane.isEmpty()) {
+                 const QPointF from = center_of(lane.front());
+                 const QPointF to = from + QPointF(40, 0);
+                 const auto mods = Qt::AltModifier | Qt::ShiftModifier;
+                 QTest::mousePress(window, Qt::LeftButton, mods, from.toPoint());
+                 for (int i = 1; i <= 8; ++i) QTest::mouseMove(window, (from + (to - from) * i / 8.0).toPoint(), 10);
+                 QTest::mouseRelease(window, Qt::LeftButton, mods, to.toPoint(), 10);
+             }
+             const double slid = lane_start();
+             const bool entry = session.undoText() == QStringLiteral("Slide");
+             session.undo();
+             const bool ok = !lane.isEmpty() && slid > before && entry && lane_start() == before;
+             if (!ok) std::printf("GUI smoke: lane slide failed (%lld lane clips, start %.3f -> %.3f, undo '%s')\n",
+                                  static_cast<long long>(lane.size()), before, slid, qPrintable(session.undoText()));
+             r.connected = r.connected && ok;
+             QTest::mouseMove(window, QPoint(2, 2));
+         }},
         // Titles (ADR-0015): Add title puts one at the playhead above the storyline, connected,
         // opens its drawer, and the viewer shows yellow text in the lower third once recoloured.
         {"add title", after(100), [&] {
