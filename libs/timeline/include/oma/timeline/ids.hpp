@@ -33,8 +33,10 @@ using LutId = Id<struct LutTag>;
 
 } // namespace oma::timeline
 
+// Specializing std::hash for a program-defined type is allowed ([namespace.std]); the check
+// cannot tell it from a modification of std.
 template <typename Tag>
-struct std::hash<oma::timeline::Id<Tag>> {
+struct std::hash<oma::timeline::Id<Tag>> { // NOLINT(bugprone-std-namespace-modification)
     std::size_t operator()(oma::timeline::Id<Tag> id) const noexcept {
         return std::hash<std::uint64_t>{}(id.value());
     }

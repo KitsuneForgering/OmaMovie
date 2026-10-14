@@ -27,7 +27,7 @@ Result<MediaInfo> FfmpegFormatBackend::inspect_input(const std::filesystem::path
     if (info->best_video) {
         VideoDecoderOptions options;
         options.paths = {DecodePath::Software};
-        options.stream = *info->best_video;
+        options.stream = info->best_video;
         auto decoder = VideoDecoder::open(path, options);
         if (!decoder)
             return std::unexpected(decoder.error());
@@ -43,7 +43,7 @@ Result<MediaInfo> FfmpegFormatBackend::inspect_input(const std::filesystem::path
     }
     if (info->best_audio) {
         AudioDecoderOptions options;
-        options.stream = *info->best_audio;
+        options.stream = info->best_audio;
         auto decoder = AudioDecoder::open(path, options);
         if (!decoder)
             return std::unexpected(decoder.error());

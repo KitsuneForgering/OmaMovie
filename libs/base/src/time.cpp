@@ -20,7 +20,7 @@ RationalTime::RationalTime(std::int64_t value, Rational timebase) noexcept
     : value_(value), timebase_(timebase) {}
 
 bool operator==(const RationalTime& a, const RationalTime& b) noexcept {
-    return (a <=> b) == 0;
+    return std::is_eq(a <=> b);
 }
 
 Result<RationalTime> RationalTime::make(std::int64_t value, Rational timebase) {
