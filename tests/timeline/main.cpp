@@ -13,6 +13,7 @@ void run_caption_tests();
 void run_canvas_tests();
 void run_scalar_key_tests();
 void run_detach_tests();
+void run_video_range_tests();
 void run_effect_preset_tests();
 void run_media_color_tests();
 void run_property_tests();
@@ -33,6 +34,7 @@ int main(int argc, char* argv[]) {
     run_canvas_tests();
     run_scalar_key_tests();
     run_detach_tests();
+    run_video_range_tests();
     run_effect_preset_tests();
     run_media_color_tests();
     run_property_tests();

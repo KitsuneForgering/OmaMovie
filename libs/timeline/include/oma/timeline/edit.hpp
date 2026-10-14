@@ -102,6 +102,10 @@ struct ClipSource {
 [[nodiscard]] std::unique_ptr<Command> freeze_frame(ClipId id, RationalTime at, RationalTime length,
                                                     bool ripple);
 [[nodiscard]] std::unique_ptr<Command> set_video(ClipId id, VideoProperties video);
+// Gives `video` to the part of a clip inside [from, to), splitting it where the range edges fall
+// strictly inside it; the parts outside keep their properties. The first part keeps the ID.
+[[nodiscard]] std::unique_ptr<Command> set_video_range(ClipId id, RationalTime from,
+                                                       RationalTime to, VideoProperties video);
 [[nodiscard]] std::unique_ptr<Command> set_audio(ClipId id, AudioProperties audio);
 // Replaces a title clip's text and style (ADR-0015); fails on a media clip.
 [[nodiscard]] std::unique_ptr<Command> set_title(ClipId id, Title title);

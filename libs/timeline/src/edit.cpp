@@ -5,6 +5,7 @@
 #include "mutation.hpp"
 
 #include <algorithm>
+#include <optional>
 #include <utility>
 
 namespace oma::timeline::edit {
@@ -783,6 +784,65 @@ std::unique_ptr<Command> set_video(ClipId id, VideoProperties video) {
                                     steps.push_back(detail::replace_clip(changed));
                                     return steps;
                                 });
+}
+
+std::unique_ptr<Command> set_video_range(ClipId id, RationalTime from, RationalTime to,
+                                         VideoProperties video) {
+    return detail::make_planned(
+        "Video Adjustments", [=, video = std::move(video)](Timeline& tl) -> Result<Steps> {
+            auto c = get_clip(tl, id);
+            auto a = tl.to_ticks(from);
+            auto b = tl.to_ticks(to);
+            if (!c || !a || !b) {
+                return std::unexpected(!c ? c.error() : !a ? a.error() : b.error());
+            }
+            const Clip& clip = **c;
+            const TrackId track = tl.track_of(id)->id;
+            const std::int64_t first = std::max(*a, clip.start_ticks());
+            const std::int64_t last = std::min(*b, clip.end_ticks());
+            if (first >= last) {
+                return error(ErrorCode::InvalidArgument, "the range does not cover the clip",
+                             detail::clip_context(id));
+            }
+            // Each cut is a split: the part after it gets a new ID and a plain cut.
+            const auto cut = [&](const Clip& whole,
+                                 std::int64_t at) -> Result<std::pair<Clip, Clip>> {
+                auto head = with_end(tl, whole, at);
+                auto tail = with_start(tl, whole, at);
+                if (!head || !tail) {
+                    return std::unexpected(!head ? head.error() : tail.error());
+                }
+                tail->id = ClipId(detail::Mutation(tl).allocate_id());
+                tail->transition_in.reset();
+                return std::pair{*head, *tail};
+            };
+            Steps steps;
+            Clip middle = clip;
+            if (first > clip.start_ticks()) {
+                auto parts = cut(clip, first);
+                if (!parts) {
+                    return std::unexpected(parts.error());
+                }
+                steps.push_back(detail::replace_clip(parts->first));
+                middle = parts->second;
+            }
+            std::optional<Clip> rest;
+            if (last < clip.end_ticks()) {
+                auto parts = cut(middle, last);
+                if (!parts) {
+                    return std::unexpected(parts.error());
+                }
+                middle = parts->first;
+                rest = parts->second;
+            }
+            middle.video = video;
+            steps.push_back(middle.id == id ? detail::replace_clip(middle)
+                                            : detail::insert_clip(track, middle));
+            if (rest) {
+                steps.push_back(detail::insert_clip(track, *rest));
+            }
+            return steps;
+        });
 }
 
 std::unique_ptr<Command> set_title(ClipId id, Title title) {
