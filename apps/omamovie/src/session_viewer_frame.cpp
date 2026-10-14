@@ -6,10 +6,23 @@
 #include "ui_post.hpp"
 #include "viewer_decoder.hpp"
 
+#include <chrono>
+
+namespace {
+std::int64_t now_ns() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+} // namespace
+
 void Session::requestFrame() {
     if (playing()) return; // the scheduler feeds the viewer while playing
     wanted_ = playhead_;
     viewer_requests_.fetch_add(1, std::memory_order_relaxed); // supersedes a frame in flight
+    if (busy_ && !superseded_) { // timed from the first request that replaces the one in flight
+        superseded_ = true;
+        superseded_ns_.store(now_ns(), std::memory_order_relaxed);
+    }
     if (!busy_) submitFrame();
 }
 
@@ -29,6 +42,7 @@ void Session::submitFrame() {
         tpf = shown->to_ticks(shown->frame_rate().frame_to_time(1)).value_or(1);
     }
     busy_ = true;
+    superseded_ = false;
     const unsigned generation = generation_;
     const std::uint64_t request = viewer_requests_.load(std::memory_order_relaxed);
     // Hardware decoding when the viewer uses it; the device then also tells a lost GPU apart.
@@ -43,8 +57,12 @@ void Session::submitFrame() {
         };
         auto view = decode_paused_frame(device != nullptr ? *hardware_frames_ : frames_, device, wanted, *timeline,
                                         *paths, *luts, width, height, frame, tpf);
-        post_to_ui(this, [this, generation, request, view = std::move(view)]() mutable {
+        const bool superseded = !view && view.error().code() == oma::ErrorCode::Cancelled && !ctx.is_cancelled();
+        const double stop_ms =
+            superseded ? static_cast<double>(now_ns() - superseded_ns_.load(std::memory_order_relaxed)) / 1e6 : -1.0;
+        post_to_ui(this, [this, generation, request, stop_ms, view = std::move(view)]() mutable {
             busy_ = false;
+            if (stop_ms >= 0 && cancel_latencies_.size() < 4096) cancel_latencies_.push_back(stop_ms);
             if (generation != generation_)
                 return;
             const bool current = request == viewer_requests_.load(std::memory_order_relaxed);
@@ -63,3 +81,5 @@ void Session::submitFrame() {
         return oma::Result<void>{};
     });
 }
+
+std::vector<double> Session::takeCancelLatencies() { return std::exchange(cancel_latencies_, {}); }

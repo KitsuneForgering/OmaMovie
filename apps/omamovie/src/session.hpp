@@ -179,6 +179,9 @@ public:
     [[nodiscard]] std::int64_t droppedVideoFrames() const;
     // How long the last playback (re)start held the UI thread, in milliseconds (M4 audit).
     [[nodiscard]] double lastRestartMs() const;
+    // Paused-viewer seeks stopped by a newer request: milliseconds from that request to the
+    // stopped job's return (cancellation latency, ADR-0020). Taken by the scrub audit.
+    [[nodiscard]] std::vector<double> takeCancelLatencies();
     // M4 audit: how long each playback tick held the UI thread, and the time between ticks (ms).
     [[nodiscard]] std::pair<std::vector<double>, std::vector<double>> takeTickTimings();
 
@@ -789,6 +792,9 @@ private:
     std::unique_ptr<FrameSource> hardware_frames_;
     // Paused-viewer requests made so far (UI thread writes, job worker reads to stop a superseded frame).
     std::atomic<std::uint64_t> viewer_requests_{0};
+    std::atomic<std::int64_t> superseded_ns_{0}; // steady clock: a request last replaced one in flight
+    bool superseded_ = false;                     // UI thread: the frame in flight was replaced
+    std::vector<double> cancel_latencies_;        // UI thread, bounded
     AudioPlayer audio_;
     WaveformStore waveforms_;
     bool warned_silent_ = false;

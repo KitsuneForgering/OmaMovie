@@ -550,6 +550,13 @@ int main(int argc, char** argv) {
                             session.audioOnDevice() ? "PipeWire" : "null",
                             scrub_audit ? "UI event-loop gap" : "UI blocked", b[0], b[1], b[2],
                             f[0], f[1], f[2], static_cast<long long>(missed));
+                if (scrub_audit) {
+                    // Seeks stopped by the next one (ADR-0020): time from the newer request to the stop.
+                    const std::vector<double> stops = session.takeCancelLatencies();
+                    const auto c = stops.empty() ? std::array<double, 3>{} : summary(stops);
+                    std::printf("M4 scrub audit cancellations: %zu, latency p50 %.2f p95 %.2f max %.2f ms\n",
+                                stops.size(), c[0], c[1], c[2]);
+                }
                 application.exit(0);
                 return;
             }
