@@ -58,3 +58,11 @@ Attribution narrowed (same day):
   see on an adopted device) or Qt's grab path for adopted devices is the trigger; the next step
   is bisecting DeviceOptions/extensions in that control, or a Qt bug report with it.
 
+Bisect in that control (temporary, uncommitted switches in device.cpp, reverted):
+  default device: 27 errors; without the optional interop/video/descriptor-buffer extensions: 30;
+  with every optional feature off (core, 1.1-1.4; only timelineSemaphore and synchronization2,
+  which gpu::Device requires): 31; both: 30 (counts vary with how many frames a grab overlaps).
+  Extensions and features are ruled out. Left: OmaMovie's VkInstance (Qt adopts it too), the two
+  required features, and creating every queue of every family; or Qt's grab path for adopted
+  devices. Not pursued further: normal frames are clean and only grabWindow() triggers it.
+
