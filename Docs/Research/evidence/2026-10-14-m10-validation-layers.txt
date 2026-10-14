@@ -42,3 +42,19 @@ Live window (same day), synchronization validation, errors only:
   OmaMovie's frame hooks (queue hold from afterRendering to afterFrameEnd, compositor work in
   sync), which the controls do not have. Normal use never calls grabWindow(); main.cpp already
   notes that it disturbed validation. Attribution between Qt and the hooks is not settled.
+
+Attribution narrowed (same day):
+  - The smoke with OmaMovie's frame hooks disabled (no queue hold, admission left open): the same
+    20 errors. Not the hooks.
+  - Qt-only controls under the threaded and the basic render loop: 0 errors.
+  - A minimal control with only oma::gpu::Device adopted by Qt (QVulkanInstance::setVkInstance +
+    QQuickGraphicsDevice::fromDeviceObjects, as main.cpp does), an animated QML item and
+    grabWindow() every 400 ms: 10 grabs, 10 error triples. The same program with Qt's own device:
+    0. Telling Qt the instance is Vulkan 1.1 instead of 1.4 changes nothing.
+  Conclusion: grabWindow() on a window whose Vulkan device Qt adopted from OmaMovie (ADR-0005)
+  submits Qt's swapchain frame without waiting for the acquire semaphore, per the validation
+  layer. Normal frames on that device are clean. Not yet known whether a device property
+  (OmaMovie enables every supported feature and its interop/video extensions, which Qt cannot
+  see on an adopted device) or Qt's grab path for adopted devices is the trigger; the next step
+  is bisecting DeviceOptions/extensions in that control, or a Qt bug report with it.
+
