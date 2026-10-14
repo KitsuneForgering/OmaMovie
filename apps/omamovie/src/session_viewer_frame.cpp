@@ -62,11 +62,12 @@ void Session::submitFrame() {
             superseded ? static_cast<double>(now_ns() - superseded_ns_.load(std::memory_order_relaxed)) / 1e6 : -1.0;
         post_to_ui(this, [this, generation, request, stop_ms, view = std::move(view)]() mutable {
             busy_ = false;
-            if (stop_ms >= 0 && cancel_latencies_.size() < 4096) cancel_latencies_.push_back(stop_ms);
-            if (generation != generation_)
-                return;
+            if (stop_ms >= 0 && generation == generation_ && cancel_latencies_.size() < 4096)
+                cancel_latencies_.push_back(stop_ms); // a project switch is not a scrub supersede
             const bool current = request == viewer_requests_.load(std::memory_order_relaxed);
-            if (!view && view.error().code() == oma::ErrorCode::Cancelled) {
+            if (generation != generation_) {
+                // Another project's frame: dropped, but a request the new one made meanwhile still runs.
+            } else if (!view && view.error().code() == oma::ErrorCode::Cancelled) {
                 // Superseded: the newer request is waiting in wanted_.
             } else if (!view && view.error().code() == oma::ErrorCode::DeviceLost) {
                 if (preview_ != nullptr) preview_->setFrame(nullptr); // blank; the viewer reports the loss

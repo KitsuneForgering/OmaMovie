@@ -266,6 +266,7 @@ void Session::newProject() {
     selected_media_ = -1;
     playhead_ = 0;
     wanted_.reset();
+    viewer_requests_.fetch_add(1, std::memory_order_relaxed); // stops a seek of the old project
     failed_ = false;
     status_.clear();
     notice_.clear();
