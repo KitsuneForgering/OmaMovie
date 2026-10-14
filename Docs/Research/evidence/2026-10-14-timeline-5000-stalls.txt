@@ -50,3 +50,7 @@ Fix (72cc2ca): Session::clipCount (int, same NOTIFY) for those bindings. 3 runs,
   split p95 90.4 / 92.9 / 84.4 (was 136-147), ripple 43.1 / 33.7 / 33.4 (108), undo 33.0 /
   33.3 / 33.8 (126-131), seek 25, select 25-26, trim drag 16.9-17.0; RSS 388-399 MB (581-612).
 The gate (p95 < 100 ms) passes. Split keeps one ~85-93 ms sample per run, not yet explained.
+Remaining split sample, 3 more runs at 535af7e (load 0.8): split p95 94.2 / 36.7 / 38.8 ms,
+ripple 34.5 / 33.5 / 33.5, undo 36.0 / 33.5 / 32.9. The ~90 ms split sample is intermittent (1 of
+3 runs here; with a timed notify() it did not occur in 2 runs). Not chased further: every run
+passes the gate. If it matters later, the same notify()/gdb method applies.
