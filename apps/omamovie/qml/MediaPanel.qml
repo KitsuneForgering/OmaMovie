@@ -206,8 +206,11 @@ Rectangle {
                         }
                         UiText { Layout.fillWidth: true; text: modelData.name; color: root.fg; font.pixelSize: Math.round(12 * appSettings.textScale); elide: Text.ElideMiddle }
                         // A marked range (source viewer) is what Add/Insert/Overwrite will use: say so.
+                        // Kept to the tile's width: a long range (or larger text) must not run into the next tile.
                         UiText {
                             objectName: "mediaRange"
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
                             readonly property bool ranged: modelData.markIn >= 0 || modelData.markOut >= 0
                             text: ranged ? "Range " + root.timecode(Math.max(0, modelData.markIn)) + " – "
                                            + (modelData.markOut >= 0 ? root.timecode(modelData.markOut - 1 / session.frameRate) : "end")
