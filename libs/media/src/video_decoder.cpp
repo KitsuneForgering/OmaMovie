@@ -130,7 +130,7 @@ struct VideoDecoder::Impl {
     // In a seek: the frame is at or before the target, so it may be the one on screen.
     [[nodiscard]] bool frame_before_target(const AVFrame& frame) const {
         const auto pts = ff::to_time(frame.best_effort_timestamp, info.timebase);
-        return pts && *pts <= *seek_target;
+        return pts && seek_target && *pts <= *seek_target;
     }
     [[nodiscard]] Result<VideoFrame> finish(ff::FramePtr frame);
     // VA-API surface -> DRM_PRIME (FFmpeg, VA only) -> our Vulkan images (ADR-0004).
@@ -612,7 +612,7 @@ Result<std::optional<VideoFrame>> VideoDecoder::next() {
             if (!candidate) {
                 return std::optional<VideoFrame>();
             }
-            frame = std::move(candidate);
+            frame = std::exchange(candidate, nullptr);
         } else if (d.seek_target) {
             if (d.frame_before_target(*frame)) {
                 candidate = std::move(frame);
@@ -625,7 +625,7 @@ Result<std::optional<VideoFrame>> VideoDecoder::next() {
             d.seek_target.reset();
             if (candidate) {
                 d.pending = std::move(frame);
-                frame = std::move(candidate);
+                frame = std::exchange(candidate, nullptr);
             }
         }
 
