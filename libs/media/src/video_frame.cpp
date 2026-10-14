@@ -240,17 +240,25 @@ int VideoFrame::stride(int index) const noexcept {
 
 Result<void> VideoFrame::copy_rgba(std::span<std::uint8_t> destination, int destination_stride,
                                    std::optional<ColorInfo> read_as) const {
+    return copy_rgba_scaled(destination, destination_stride, impl_->frame->width,
+                            impl_->frame->height, read_as);
+}
+
+Result<void> VideoFrame::copy_rgba_scaled(std::span<std::uint8_t> destination,
+                                          int destination_stride, int width, int height,
+                                          std::optional<ColorInfo> read_as) const {
     const AVFrame& frame = *impl_->frame;
-    if (on_gpu() || frame.width <= 0 || frame.height <= 0 || frame.width > INT_MAX / 4 ||
-        destination_stride < frame.width * 4 ||
+    if (on_gpu() || frame.width <= 0 || frame.height <= 0 || width <= 0 || height <= 0 ||
+        width > INT_MAX / 4 || destination_stride < width * 4 ||
         destination.size() <
-            static_cast<std::size_t>(destination_stride) * static_cast<std::size_t>(frame.height)) {
+            static_cast<std::size_t>(destination_stride) * static_cast<std::size_t>(height)) {
         return make_error(ErrorCode::InvalidArgument, Category::Decode,
                           "invalid software RGBA preview destination");
     }
+    const bool reduces = width < frame.width || height < frame.height;
     auto* scale = sws_getContext(
-        frame.width, frame.height, static_cast<AVPixelFormat>(frame.format), frame.width,
-        frame.height, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
+        frame.width, frame.height, static_cast<AVPixelFormat>(frame.format), width, height,
+        AV_PIX_FMT_RGBA, reduces ? SWS_AREA : SWS_BILINEAR, nullptr, nullptr, nullptr);
     if (scale == nullptr) {
         return make_error(ErrorCode::Unsupported, Category::Decode,
                           "cannot convert this video pixel format to RGBA");
@@ -276,7 +284,7 @@ Result<void> VideoFrame::copy_rgba(std::span<std::uint8_t> destination, int dest
     const int rows =
         sws_scale(scale, frame.data, frame.linesize, 0, frame.height, data.data(), linesize.data());
     sws_freeContext(scale);
-    if (rows != frame.height) {
+    if (rows != height) {
         return make_error(ErrorCode::Internal, Category::Decode, "RGBA preview conversion failed");
     }
     return {};

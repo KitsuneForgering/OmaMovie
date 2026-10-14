@@ -126,6 +126,11 @@ public:
     [[nodiscard]] Result<void> copy_rgba(std::span<std::uint8_t> destination,
                                          int destination_stride,
                                          std::optional<ColorInfo> read_as = std::nullopt) const;
+    // The same conversion scaled to `width` x `height` in one pass (an area filter when it
+    // reduces), so a thumbnail never needs a full-size RGBA copy.
+    [[nodiscard]] Result<void>
+    copy_rgba_scaled(std::span<std::uint8_t> destination, int destination_stride, int width,
+                     int height, std::optional<ColorInfo> read_as = std::nullopt) const;
 
     // GPU frames only: locks the frame and returns its images (Unsupported on software frames).
     [[nodiscard]] Result<GpuAccess> acquire_gpu();
