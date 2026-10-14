@@ -165,6 +165,56 @@ Rectangle {
         }
     }
 
+    // Dragging a lane clip moves it in time and across lanes; `away` is the vertical direction
+    // of the next lane from the storyline (-1 up for video, 1 down for sound).
+    component LaneDrag: MouseArea {
+        required property Item owner
+        required property int away
+        signal menu(real at)
+        property point pressAt
+        property bool moving: false
+        anchors.fill: parent
+        preventStealing: true
+        cursorShape: moving ? Qt.ClosedHandCursor : Qt.ArrowCursor
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onPressed: (mouse) => {
+            session.selectClip(owner.modelData.id)
+            const at = owner.modelData.start + mouse.x / timelinePanel.scale
+            if (mouse.button === Qt.RightButton) {
+                menu(at)
+                return
+            }
+            pressAt = mapToItem(timelineScroll.contentItem, mouse.x, mouse.y)
+            moving = false
+            session.seek(at)
+        }
+        onPositionChanged: (mouse) => {
+            if (!(pressedButtons & Qt.LeftButton)) return
+            const p = mapToItem(timelineScroll.contentItem, mouse.x, mouse.y)
+            if (!moving && Math.abs(p.x - pressAt.x) < 4 && Math.abs(p.y - pressAt.y) < 6) return
+            moving = true
+            const m = owner.modelData
+            const start = timelinePanel.snap(m.start + (p.x - pressAt.x) / timelinePanel.scale, m.duration, m.id)
+            owner.moveX = (start - m.start) * timelinePanel.scale
+            owner.moveY = p.y - pressAt.y
+        }
+        function settle() {
+            moving = false
+            owner.moveX = 0
+            owner.moveY = 0
+            timelinePanel.unsnap()
+        }
+        onReleased: {
+            if (!moving) return
+            const id = owner.modelData.id
+            const frames = Math.round(owner.moveX / timelinePanel.scale * session.frameRate)
+            const lanes = away * Math.round(owner.moveY / (timelinePanel.laneHeight + timelinePanel.laneGap))
+            settle() // before the edit, which rebuilds this delegate
+            if (lanes !== 0 || frames !== 0) session.moveClip(id, lanes, frames)
+        }
+        onCanceled: settle()
+    }
+
     // What a pending edit does to this clip (session.editScope, simulated with the real command):
     // an arrow when it will move, a red outline when it will go, a yellow one when part of it
     // will be replaced. Shown before trims, deletes and placements.
@@ -990,46 +1040,13 @@ Rectangle {
                             font.pixelSize: 11
                             elide: Text.ElideRight
                         }
-                        MouseArea {
-                            anchors.fill: parent
-                            property point pressAt
-                            property bool moving: false
-                            preventStealing: true
-                            cursorShape: moving ? Qt.ClosedHandCursor : Qt.ArrowCursor
-                            acceptedButtons: Qt.LeftButton | Qt.RightButton
-                            onPressed: (mouse) => {
-                                session.selectClip(overlayItem.modelData.id)
-                                const at = overlayItem.modelData.start + mouse.x / timelinePanel.scale
-                                if (mouse.button === Qt.RightButton) {
-                                    const menu = session.info.isTitle ? titleMenu : overlayMenu
-                                    menu.at = at
-                                    menu.popup()
-                                    return
-                                }
-                                pressAt = mapToItem(timelineScroll.contentItem, mouse.x, mouse.y)
-                                moving = false
-                                session.seek(at)
-                            }
-                            onPositionChanged: (mouse) => {
-                                if (!(pressedButtons & Qt.LeftButton)) return
-                                const p = mapToItem(timelineScroll.contentItem, mouse.x, mouse.y)
-                                if (!moving && Math.abs(p.x - pressAt.x) < 4 && Math.abs(p.y - pressAt.y) < 6) return
-                                moving = true
-                                const m = overlayItem.modelData
-                                const start = timelinePanel.snap(m.start + (p.x - pressAt.x) / timelinePanel.scale, m.duration, m.id)
-                                overlayItem.moveX = (start - m.start) * timelinePanel.scale
-                                overlayItem.moveY = p.y - pressAt.y
-                            }
-                            onReleased: {
-                                if (!moving) return
-                                // Up is the next lane away from the storyline.
-                                const lanes = -Math.round(overlayItem.moveY / (timelinePanel.laneHeight + timelinePanel.laneGap))
-                                const frames = Math.round(overlayItem.moveX / timelinePanel.scale * session.frameRate)
-                                overlayItem.moveX = 0
-                                overlayItem.moveY = 0
-                                timelinePanel.unsnap()
-                                if (lanes !== 0 || frames !== 0) session.moveClip(overlayItem.modelData.id, lanes, frames)
-                                moving = false
+                        LaneDrag {
+                            owner: overlayItem
+                            away: -1
+                            onMenu: (at) => {
+                                const menu = session.info.isTitle ? titleMenu : overlayMenu
+                                menu.at = at
+                                menu.popup()
                             }
                         }
                         TrimEdge { owner: overlayItem; clip: overlayItem.modelData; head: true; anchors.left: parent.left }
@@ -1124,45 +1141,12 @@ Rectangle {
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                         }
-                        MouseArea {
-                            anchors.fill: parent
-                            property point pressAt
-                            property bool moving: false
-                            preventStealing: true
-                            cursorShape: moving ? Qt.ClosedHandCursor : Qt.ArrowCursor
-                            acceptedButtons: Qt.LeftButton | Qt.RightButton
-                            onPressed: (mouse) => {
-                                session.selectClip(soundItem.modelData.id)
-                                const at = soundItem.modelData.start + mouse.x / timelinePanel.scale
-                                if (mouse.button === Qt.RightButton) {
-                                    soundMenu.at = at
-                                    soundMenu.popup()
-                                    return
-                                }
-                                pressAt = mapToItem(timelineScroll.contentItem, mouse.x, mouse.y)
-                                moving = false
-                                session.seek(at)
-                            }
-                            onPositionChanged: (mouse) => {
-                                if (!(pressedButtons & Qt.LeftButton)) return
-                                const p = mapToItem(timelineScroll.contentItem, mouse.x, mouse.y)
-                                if (!moving && Math.abs(p.x - pressAt.x) < 4 && Math.abs(p.y - pressAt.y) < 6) return
-                                moving = true
-                                const m = soundItem.modelData
-                                const start = timelinePanel.snap(m.start + (p.x - pressAt.x) / timelinePanel.scale, m.duration, m.id)
-                                soundItem.moveX = (start - m.start) * timelinePanel.scale
-                                soundItem.moveY = p.y - pressAt.y
-                            }
-                            onReleased: {
-                                if (!moving) return
-                                const lanes = Math.round(soundItem.moveY / (timelinePanel.laneHeight + timelinePanel.laneGap))
-                                const frames = Math.round(soundItem.moveX / timelinePanel.scale * session.frameRate)
-                                soundItem.moveX = 0
-                                soundItem.moveY = 0
-                                timelinePanel.unsnap()
-                                if (moving && (lanes !== 0 || frames !== 0))
-                                    session.moveClip(soundItem.modelData.id, lanes, frames)
-                                moving = false
+                        LaneDrag {
+                            owner: soundItem
+                            away: 1
+                            onMenu: (at) => {
+                                soundMenu.at = at
+                                soundMenu.popup()
                             }
                         }
                         TrimEdge { owner: soundItem; clip: soundItem.modelData; head: true; anchors.left: parent.left }
