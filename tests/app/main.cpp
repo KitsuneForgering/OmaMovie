@@ -33,6 +33,7 @@ void run_export_range_tests();
 void run_export_layout_tests();
 void run_canvas_size_tests();
 void run_thumbnail_color_tests();
+void run_session_stress_tests();
 void run_export_switch_tests();
 void run_key_tracks_tests();
 void run_layout_tests();
@@ -93,6 +94,7 @@ int main(int argc, char* argv[]) {
     run_export_layout_tests();
     run_canvas_size_tests();
     run_thumbnail_color_tests();
+    run_session_stress_tests();
     run_export_switch_tests();
     run_key_tracks_tests();
     run_layout_tests();
