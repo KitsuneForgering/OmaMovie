@@ -1,0 +1,28 @@
+M11 baseline before ownership/UI refactors (2026-10-14)
+
+Machine: Intel Iris Xe (TGL GT2), Mesa 26.2.2, Hyprland (live session), PipeWire.
+Build: release at commit dc8cadd. Media (reproducible, not committed):
+  ffmpeg -f lavfi -i testsrc2=size=1920x1080:rate=60:duration=30 \
+         -f lavfi -i sine=frequency=440:sample_rate=48000:duration=30 \
+         -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a aac -shortest baseline_1080p60.mp4
+
+Playback: omamovie --m4-audit baseline_1080p60.mp4 20 (hardware decode, two runs)
+  run 1: PASS, 1190 composites, A/V p99 12.46 ms, max 18.71 ms, underruns 0, dropped video 2
+         Qt frame whole p50 8.75 p99 17.47 ms; composite p50 5.92 p95 7.57 p99 8.29 ms;
+         UI tick p50 0.02 p99 1.57 ms, tick gap p50 8.18 p99 15.05 ms
+  run 2: PASS, 1183 composites, A/V p99 9.85 ms, max 14.77 ms, underruns 0, dropped video 8
+         Qt frame whole p50 7.45 p99 18.26 ms; composite p50 6.04 p95 7.64 p99 8.91 ms
+
+Seeking: omamovie --m4-seek-audit baseline_1080p60.mp4 30
+  UI blocked p50 3.05 p95 4.23 max 5.69 ms;
+  first composited frame p50 207 ms, p95 420 ms, max 444 ms; 0 seeks without a frame in 500 ms.
+  The first frame after a seek is the slowest interaction measured here (decode from the
+  previous keyframe of a 1080p60 H.264 GOP); a candidate for M11's measured responsiveness work.
+
+Timeline scale: omamovie --m6-timeline-audit 1000
+  1000 clips: model build 2.4 ms, open 92.3 ms (save, load, reimport, UI), RSS 370 MB.
+
+Sustained cycles (headless): Docs/Research/evidence/2026-10-14-m10-sustained-cycles.txt.
+Sizes and change coupling: Docs/analysis/m11-inventory-2026-10-14.md.
+Not recorded yet: screenshots and keyboard walkthroughs at wide, half-width and 640 px with
+a larger font (the GUI smoke checks the 640 px layout fits).
