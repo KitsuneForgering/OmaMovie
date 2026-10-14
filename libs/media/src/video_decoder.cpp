@@ -113,12 +113,24 @@ struct VideoDecoder::Impl {
     std::optional<RationalTime> seek_target;
     std::optional<RationalTime> last_seek; // where a software fallback restarts
     ff::FramePtr pending;                  // first frame past a seek target, returned next
+    // Seeking decodes forward from a keyframe; non-reference frames that end before the target
+    // can neither be shown nor be needed later, so the decoder skips them (AVDISCARD_NONREF).
+    // A packet's duration is a DTS delta that VFR media can make misleading, so the latest
+    // presentation time sent while skipping is kept: if the frame found is earlier, a skipped
+    // frame was the one on screen, and the seek is redone without skipping (exact either way).
+    std::optional<RationalTime> skipped_up_to;
+    bool skipping_allowed = true;
     std::unique_ptr<SwsContext, SwsFreer> to_planar_rgb; // reused while the format holds
 
     [[nodiscard]] Result<void> open_path(DecodePath candidate);
     [[nodiscard]] Result<void> reposition();
     [[nodiscard]] Result<void> fall_back_to_software();
     [[nodiscard]] Result<ff::FramePtr> receive();
+    // In a seek: the frame is at or before the target, so it may be the one on screen.
+    [[nodiscard]] bool frame_before_target(const AVFrame& frame) const {
+        const auto pts = ff::to_time(frame.best_effort_timestamp, info.timebase);
+        return pts && *pts <= *seek_target;
+    }
     [[nodiscard]] Result<VideoFrame> finish(ff::FramePtr frame);
     // VA-API surface -> DRM_PRIME (FFmpeg, VA only) -> our Vulkan images (ADR-0004).
     [[nodiscard]] Result<void> import_vaapi(const AVFrame& src, VideoFrame::Impl& out) const;
@@ -239,8 +251,10 @@ Result<void> VideoDecoder::Impl::reposition() {
         }
     }
     avcodec_flush_buffers(dec.get());
+    dec->skip_frame = AVDISCARD_DEFAULT;
     draining = false;
     pending.reset();
+    skipped_up_to.reset();
     return {};
 }
 
@@ -303,6 +317,19 @@ Result<ff::FramePtr> VideoDecoder::Impl::receive() {
         if (pkt->stream_index != st->index) {
             av_packet_unref(pkt.get());
             continue;
+        }
+        dec->skip_frame = AVDISCARD_DEFAULT;
+        if (seek_target && skipping_allowed && pkt->duration > 0) {
+            const auto pts = ff::to_time(pkt->pts, info.timebase);
+            const auto length = RationalTime::make(pkt->duration, info.timebase);
+            const auto end = pts && length ? pts->plus(*length)
+                                           : Result<RationalTime>(std::unexpected(length.error()));
+            if (pts && end && *end <= *seek_target) {
+                dec->skip_frame = AVDISCARD_NONREF;
+                if (!skipped_up_to || *skipped_up_to < *pts) {
+                    skipped_up_to = *pts;
+                }
+            }
         }
         const int sr = avcodec_send_packet(dec.get(), pkt.get());
         av_packet_unref(pkt.get());
@@ -563,6 +590,22 @@ Result<std::optional<VideoFrame>> VideoDecoder::next() {
             return std::unexpected(received.error());
         }
         ff::FramePtr frame = std::move(*received);
+        if (d.seek_target && (!frame || !d.frame_before_target(*frame))) {
+            // The seek resolves here. A skipped non-reference frame later than the one found
+            // would have been on screen: decode the same stretch again without skipping.
+            const auto found = candidate
+                                   ? ff::to_time(candidate->best_effort_timestamp, d.info.timebase)
+                                   : std::nullopt;
+            if (d.skipped_up_to && (!found || *found < *d.skipped_up_to)) {
+                d.skipping_allowed = false;
+                if (auto r = d.reposition(); !r) {
+                    return std::unexpected(r.error());
+                }
+                candidate.reset();
+                continue;
+            }
+            d.skipping_allowed = true;
+        }
         if (!frame) { // end of stream
             d.seek_target.reset();
             if (!candidate) {
@@ -570,8 +613,7 @@ Result<std::optional<VideoFrame>> VideoDecoder::next() {
             }
             frame = std::move(candidate);
         } else if (d.seek_target) {
-            const auto pts = ff::to_time(frame->best_effort_timestamp, d.info.timebase);
-            if (pts && *pts <= *d.seek_target) {
+            if (d.frame_before_target(*frame)) {
                 candidate = std::move(frame);
                 continue;
             }
@@ -600,6 +642,7 @@ Result<std::optional<VideoFrame>> VideoDecoder::next() {
 }
 
 Result<void> VideoDecoder::seek(const RationalTime& t) {
+    impl_->skipping_allowed = true;
     impl_->seek_target = t;
     impl_->last_seek = t;
     return impl_->reposition();

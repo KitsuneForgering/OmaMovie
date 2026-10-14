@@ -137,6 +137,33 @@ void seeks_exactly_on_vfr() {
     }
 }
 
+// Every frame of B-frame media (CFR, NTSC and VFR), sought at its own time and halfway to the next:
+// the frame on screen and then its successor, as a full decode orders them. Seeking skips
+// non-reference frames that end before the target, so this is its exactness check.
+void seeks_every_frame_exactly(const char* name) {
+    auto d = open_software(name);
+    if (!d) {
+        return;
+    }
+    const std::vector<std::int64_t> pts = all_pts(*d);
+    std::size_t wrong = 0;
+    for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
+        for (const std::int64_t target : {pts[i], pts[i] + ((pts[i + 1] - pts[i]) / 2)}) {
+            if (!d->seek(ticks(*d, target))) {
+                ++wrong;
+                continue;
+            }
+            auto f = d->next();
+            auto following = d->next();
+            const bool ok = f && *f && following && *following && (*f)->pts()->value() == pts[i] &&
+                            (*following)->pts()->value() == pts[i + 1];
+            wrong += ok ? 0 : 1;
+        }
+    }
+    expect(pts.size() > 10).toBeTruthy();
+    expect(static_cast<int>(wrong)).toEqual(0);
+}
+
 void seek_edges() {
     auto d = open_software("h264_vfr.mkv");
     if (!d) {
@@ -207,6 +234,11 @@ void run_video_decoder_tests() {
         it("keeps 10-bit samples", { ten_bit_software(); });
         it("seeks to the frame on screen on VFR media", { seeks_exactly_on_vfr(); });
         it("seeks to exact frames, before the start and past the end", { seek_edges(); });
+        it("seeks every frame of B-frame media exactly", {
+            seeks_every_frame_exactly("h264_vfr.mkv");
+            seeks_every_frame_exactly("h264_29.97fps.mp4");
+            seeks_every_frame_exactly("hevc_10bit.mp4");
+        });
         it("seeks with a time in another timebase", { seek_across_timebases(); });
         it("fails without a usable path", { no_path_without_device(); });
         it("rejects damaged files and non-video streams", { rejects_bad_input(); });
