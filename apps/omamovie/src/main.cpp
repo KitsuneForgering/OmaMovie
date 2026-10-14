@@ -78,7 +78,10 @@ int main(int argc, char** argv) {
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
     const bool smoke = argc == 2 && std::string_view(argv[1]) == "--smoke";
     const bool audit = argc == 4 && std::string_view(argv[1]) == "--m4-audit";
-    const bool seek_audit = argc == 4 && std::string_view(argv[1]) == "--m4-seek-audit";
+    // --m4-scrub-audit: the same seeks with the editor paused, timing how long the UI thread's
+    // event loop stalls per seek (the paused viewer decodes on another path than playback).
+    const bool scrub_audit = argc == 4 && std::string_view(argv[1]) == "--m4-scrub-audit";
+    const bool seek_audit = (argc == 4 && std::string_view(argv[1]) == "--m4-seek-audit") || scrub_audit;
     const bool timeline_audit = argc == 3 && std::string_view(argv[1]) == "--m6-timeline-audit";
     const bool export_audit = argc == 4 && std::string_view(argv[1]) == "--export-audit";
     bool valid_seconds = false;
@@ -92,7 +95,7 @@ int main(int argc, char** argv) {
         (seek_audit && (!valid_seconds || audit_seconds < 5 || audit_seconds > 1000))) {
         std::fprintf(stderr,
                      "usage: %s [project-or-media-file... | --smoke | --m4-audit video-file seconds |"
-                     " --m4-seek-audit video-file seeks | --m6-timeline-audit clips | --export-audit video-file out.mp4]\n",
+                     " --m4-seek-audit video-file seeks | --m4-scrub-audit video-file seeks | --m6-timeline-audit clips | --export-audit video-file out.mp4]\n",
                      argv[0]);
         return 2;
     }
@@ -490,9 +493,13 @@ int main(int argc, char** argv) {
         std::vector<double> first_frame;
         std::uint64_t seed = 0x9E3779B97F4A7C15ULL;
         std::int64_t target_frame = -1;
+        QElapsedTimer tick_clock; // scrub: the longest gap between this 2 ms timer's ticks
+        double worst_gap = 0;
         bool started = false;
         bool waiting_frame = false;
         QObject::connect(&timer, &QTimer::timeout, &application, [&] {
+            if (tick_clock.isValid()) worst_gap = std::max(worst_gap, static_cast<double>(tick_clock.nsecsElapsed()) / 1e6);
+            tick_clock.start();
             if (session.failed()) {
                 std::fprintf(stderr, "M4 seek audit: %s\n", qPrintable(session.status()));
                 application.exit(1);
@@ -508,7 +515,7 @@ int main(int argc, char** argv) {
                     application.exit(2);
                     return;
                 }
-                session.togglePlay();
+                if (!scrub_audit) session.togglePlay();
                 started = true;
                 since_seek.start();
                 return;
@@ -522,6 +529,7 @@ int main(int argc, char** argv) {
             }
             if (since_seek.elapsed() < 500) return;
             if (waiting_frame) first_frame.push_back(-1.0); // no frame within 500 ms
+            if (scrub_audit && target_frame >= 0) blocked.push_back(worst_gap); // this seek's window
             if (std::cmp_greater_equal(blocked.size(), audit_seconds)) {
                 session.pause();
                 const auto summary = [](std::vector<double> v) {
@@ -532,7 +540,8 @@ int main(int argc, char** argv) {
                 std::erase(first_frame, -1.0);
                 const auto b = summary(blocked);
                 const auto f = first_frame.empty() ? std::array<double, 3>{} : summary(first_frame);
-                std::printf("M4 seek audit: %zu seeks, %s audio, UI blocked p50 %.2f p95 %.2f max %.2f ms, "
+                std::printf(scrub_audit ? "M4 scrub audit: %zu paused seeks, %s audio, UI event-loop gap p50 %.2f p95 %.2f max %.2f ms, "
+                                        : "M4 seek audit: %zu seeks, %s audio, UI blocked p50 %.2f p95 %.2f max %.2f ms, "
                             "first composited frame p50 %.2f p95 %.2f max %.2f ms, %lld without a frame "
                             "in 500 ms\n",
                             blocked.size(), session.audioOnDevice() ? "PipeWire" : "null", b[0], b[1], b[2],
@@ -545,8 +554,9 @@ int main(int argc, char** argv) {
             const double target = span * static_cast<double>(seed >> 11) / static_cast<double>(1ULL << 53);
             target_frame = std::llround(target * session.frameRate());
             since_seek.restart();
+            worst_gap = 0;
             session.seek(target);
-            blocked.push_back(session.lastRestartMs());
+            if (!scrub_audit) blocked.push_back(session.lastRestartMs());
             waiting_frame = true;
         });
         timer.start(2);
