@@ -12,9 +12,10 @@ EdgeSide side(const tl::Timeline& t, const tl::Clip* c, std::int64_t ticks,
         return {};
     const auto path = paths.find(c->media.value());
     auto source = tl::source_time(t, *c, ticks);
-    if (path == paths.end() || !source)
+    const tl::MediaInfo* media = t.find_media(c->media);
+    if (path == paths.end() || !source || media == nullptr)
         return {};
-    return {.path = path->second, .source = *source};
+    return {.path = path->second, .source = *source, .media = *media};
 }
 } // namespace
 

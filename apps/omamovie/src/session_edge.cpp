@@ -27,7 +27,7 @@ void Session::showEdge(EdgeEdit edit, oma::timeline::ClipId clip) {
             // Two files reused for every request: the query makes QML reload them.
             const QString file = QStringLiteral("%1/edge-%2.png").arg(dir).arg(i);
             if (!sides[i].path.empty()) {
-                auto image = frames_.image_at(sides[i].path, sides[i].source);
+                auto image = frames_.image_at(sides[i].path, sides[i].source, &sides[i].media);
                 if (image && image->scaled(320, 180, Qt::KeepAspectRatio, Qt::SmoothTransformation)
                                  .save(file))
                     url = QUrl::fromLocalFile(file).toString() + QStringLiteral("?%1").arg(request);

@@ -16,6 +16,7 @@ enum class EdgeEdit { Roll, Slip, Slide };
 struct EdgeSide {
     std::string path; // empty for a side without media (a title, or no neighbour)
     oma::RationalTime source;
+    oma::timeline::MediaInfo media; // its color reading applies (ADR-0019)
 };
 
 [[nodiscard]] std::optional<std::array<EdgeSide, 2>>
