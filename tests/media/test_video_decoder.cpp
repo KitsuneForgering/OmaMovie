@@ -164,6 +164,29 @@ void seeks_every_frame_exactly(const char* name) {
     expect(static_cast<int>(wrong)).toEqual(0);
 }
 
+// A seek far from its keyframe stopped by the interrupt after a few decoded frames: next() reports
+// Cancelled, and a fresh seek without the interrupt finds the exact frame again.
+void interrupts_a_seek_and_recovers() {
+    auto d = open_software("h264_29.97fps.mp4");
+    if (!d) {
+        return;
+    }
+    const std::vector<std::int64_t> pts = all_pts(*d);
+    expect(pts.size() > 20).toBeTruthy();
+    if (pts.size() <= 20) {
+        return;
+    }
+    int checks = 0;
+    d->set_interrupt([&checks] { return ++checks > 3; });
+    expect(d->seek(ticks(*d, pts[20])).has_value()).toBeTruthy();
+    const auto stopped = d->next();
+    expect(!stopped.has_value() && stopped.error().code() == ErrorCode::Cancelled).toBeTruthy();
+    d->set_interrupt({});
+    expect(d->seek(ticks(*d, pts[20])).has_value()).toBeTruthy();
+    auto f = d->next();
+    expect(f && *f && (*f)->pts()->value() == pts[20]).toBeTruthy();
+}
+
 void seek_edges() {
     auto d = open_software("h264_vfr.mkv");
     if (!d) {
@@ -234,6 +257,8 @@ void run_video_decoder_tests() {
         it("keeps 10-bit samples", { ten_bit_software(); });
         it("seeks to the frame on screen on VFR media", { seeks_exactly_on_vfr(); });
         it("seeks to exact frames, before the start and past the end", { seek_edges(); });
+        it("stops a seek when interrupted and seeks exactly afterwards",
+           { interrupts_a_seek_and_recovers(); });
         it("seeks every frame of B-frame media exactly", {
             seeks_every_frame_exactly("h264_vfr.mkv");
             seeks_every_frame_exactly("h264_29.97fps.mp4");

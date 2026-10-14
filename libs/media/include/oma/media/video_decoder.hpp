@@ -7,6 +7,7 @@
 #include "oma/media/video_frame.hpp"
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -39,6 +40,11 @@ public:
     // Makes the next frame the one on screen at `t`: the last frame whose pts <= t, or the first
     // frame when `t` precedes it. Exact on variable frame rate media (CLAUDE.md §6).
     [[nodiscard]] Result<void> seek(const RationalTime& t);
+
+    // Checked between decoded frames while a seek decodes forward to its target (up to a GOP):
+    // when it returns true, next() stops with ErrorCode::Cancelled. The decoder is then in the
+    // middle of that seek and must be sought again (or dropped) before it is used. Empty: never.
+    void set_interrupt(std::function<bool()> interrupted);
 
 private:
     struct Impl;

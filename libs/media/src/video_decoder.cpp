@@ -120,6 +120,7 @@ struct VideoDecoder::Impl {
     // frame was the one on screen, and the seek is redone without skipping (exact either way).
     std::optional<RationalTime> skipped_up_to;
     bool skipping_allowed = true;
+    std::function<bool()> interrupted;                   // set_interrupt
     std::unique_ptr<SwsContext, SwsFreer> to_planar_rgb; // reused while the format holds
 
     [[nodiscard]] Result<void> open_path(DecodePath candidate);
@@ -615,6 +616,10 @@ Result<std::optional<VideoFrame>> VideoDecoder::next() {
         } else if (d.seek_target) {
             if (d.frame_before_target(*frame)) {
                 candidate = std::move(frame);
+                if (d.interrupted && d.interrupted()) {
+                    return make_error(ErrorCode::Cancelled, Category::Decode, "seek interrupted",
+                                      d.file.string());
+                }
                 continue;
             }
             d.seek_target.reset();
@@ -646,6 +651,10 @@ Result<void> VideoDecoder::seek(const RationalTime& t) {
     impl_->seek_target = t;
     impl_->last_seek = t;
     return impl_->reposition();
+}
+
+void VideoDecoder::set_interrupt(std::function<bool()> interrupted) {
+    impl_->interrupted = std::move(interrupted);
 }
 
 } // namespace oma::media
