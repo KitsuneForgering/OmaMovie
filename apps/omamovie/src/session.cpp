@@ -178,6 +178,7 @@ Session::Session(std::unique_ptr<oma::media::MediaImporter> importer, QObject* p
 Session::~Session() {
     export_job_.cancel(); // stops at the next frame; the temporary output is removed
     export_pool_.shutdown();
+    viewer_pool_.shutdown();
     workers_.shutdown();
 }
 

@@ -47,7 +47,7 @@ void Session::submitFrame() {
     const std::uint64_t request = viewer_requests_.load(std::memory_order_relaxed);
     // Hardware decoding when the viewer uses it; the device then also tells a lost GPU apart.
     const oma::gpu::Device* device = hardwarePreview() && hardware_frames_ ? preview_->device() : nullptr;
-    frame_job_ = workers_.submit("viewer-frame", [this, generation, request, frame, device, timeline = shown,
+    frame_job_ = viewer_pool_.submit("viewer-frame", [this, generation, request, frame, device, timeline = shown,
                                                   paths = paths_, luts = luts_, width = canvas_width_,
                                                   height = canvas_height_, tpf](oma::JobContext& ctx) {
         // Latest request wins: a newer request, or the session shutting down, stops this frame's
@@ -55,7 +55,7 @@ void Session::submitFrame() {
         const auto wanted = [&] {
             return !ctx.is_cancelled() && viewer_requests_.load(std::memory_order_relaxed) == request;
         };
-        auto view = decode_paused_frame(device != nullptr ? *hardware_frames_ : frames_, device, wanted, *timeline,
+        auto view = decode_paused_frame(device != nullptr ? *hardware_frames_ : viewer_frames_, device, wanted, *timeline,
                                         *paths, *luts, width, height, frame, tpf);
         const bool superseded = !view && view.error().code() == oma::ErrorCode::Cancelled && !ctx.is_cancelled();
         const double stop_ms =

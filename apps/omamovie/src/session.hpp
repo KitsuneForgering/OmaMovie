@@ -792,10 +792,11 @@ private:
     // Accessed only by the import job worker; its lifetime extends past worker shutdown.
     std::unique_ptr<oma::media::MediaImporter> importer_;
     FrameSource frames_;      // job worker only
-    // The paused viewer's hardware decoders (job worker only), made in setPreview with the
-    // viewer's device before any request; they decode off Qt's sync phase (ADR-0020).
+    // The paused viewer's decoders, used only by `viewer_pool_`: software ones, and hardware ones
+    // made in setPreview with the viewer's device before any request (ADR-0020).
+    FrameSource viewer_frames_;
     std::unique_ptr<FrameSource> hardware_frames_;
-    // Paused-viewer requests made so far (UI thread writes, job worker reads to stop a superseded frame).
+    // Paused-viewer requests made so far (UI thread writes, viewer worker reads to stop a superseded frame).
     std::atomic<std::uint64_t> viewer_requests_{0};
     std::atomic<std::int64_t> superseded_ns_{0}; // steady clock: a request last replaced one in flight
     bool superseded_ = false;                     // UI thread: the frame in flight was replaced
@@ -809,6 +810,9 @@ private:
     unsigned previews_ = 0; // filter preview requests, so a stale result is dropped
     oma::JobHandle previews_job_;
     oma::JobPool workers_{1}; // destroyed late: no job outlives what it touches
+    // Paused-viewer frames (latest request wins, ADR-0020) on their own worker: queued behind
+    // imports on `workers_`, 6-10 of 24 scrub seeks showed no frame within 500 ms.
+    oma::JobPool viewer_pool_{1};
     // Exports run for minutes; on the shared worker they held up saving, autosave, imports and
     // the software viewer until they ended. An export owns its decoders and device, so it needs
     // nothing from `workers_`. Declared last: destroyed (and drained) first.
