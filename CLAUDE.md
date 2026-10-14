@@ -113,7 +113,8 @@ git tag v0.1.0 && git push origin v0.1.0       # triggers the release workflow
 - **Microcommits**: one commit per coherent change that builds and passes the tests on its
   own. Do not mix refactoring with features, nor docs with code, in one commit.
 - CI validates commit messages (`.github/workflows/commits.yml`), builds and tests with
-  g++/clang++ × debug/asan/tsan/release (`ci.yml`). `vX.Y.Z` tags produce a release with
+  g++/clang++ × debug/asan/tsan/release and runs the GUI smoke on headless sway with lavapipe
+  (`ci.yml`, `scripts/ci-run.sh smoke`). `vX.Y.Z` tags produce a release with
   notes built from the commits (`release.yml`, `scripts/changelog.sh`).
 
 Target commands, not available yet:
