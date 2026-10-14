@@ -616,7 +616,6 @@ private:
     void requestFrame();
     void submitFrame();
     [[nodiscard]] bool hardwarePreview() const;
-    void requestHardwareFrame(std::int64_t frame);
 
     void rememberProject(const QString& path);
     [[nodiscard]] oma::project::Document document() const;
@@ -785,6 +784,9 @@ private:
     // Accessed only by the import job worker; its lifetime extends past worker shutdown.
     std::unique_ptr<oma::media::MediaImporter> importer_;
     FrameSource frames_;      // job worker only
+    // The paused viewer's hardware decoders (job worker only), made in setPreview with the
+    // viewer's device before any request; they decode off Qt's sync phase (ADR-0020).
+    std::unique_ptr<FrameSource> hardware_frames_;
     // Paused-viewer requests made so far (UI thread writes, job worker reads to stop a superseded frame).
     std::atomic<std::uint64_t> viewer_requests_{0};
     AudioPlayer audio_;

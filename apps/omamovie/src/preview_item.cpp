@@ -252,6 +252,7 @@ const oma::gpu::Device* PreviewItem::device() const { return device_; }
 void PreviewItem::setDecodePreference(DecodePreference preference) { decode_preference_ = preference; }
 unsigned PreviewItem::presentedFrames() const { return presented_; }
 double PreviewItem::scale() const { return scale_.load(std::memory_order_relaxed); }
+std::int64_t PreviewItem::pendingFrame() const { return frame_ ? frame_->frame : -1; }
 
 std::int64_t PreviewItem::lastCompositedFrame() const {
     return last_composited_frame_.load(std::memory_order_acquire);

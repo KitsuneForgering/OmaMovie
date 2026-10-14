@@ -52,6 +52,8 @@ public:
     [[nodiscard]] QString decodeStatus() const;
     // GUI thread. nullptr shows the neutral viewer background.
     void setFrame(std::shared_ptr<const ViewerFrame> frame);
+    // GUI thread: the sequence frame setFrame gave last, -1 for none (tests, diagnostics).
+    [[nodiscard]] std::int64_t pendingFrame() const;
     // GUI thread: request decode and composition on Qt's render thread, so FFmpeg's Vulkan
     // work cannot overlap Qt's swapchain teardown or device-idle waits. ponytail: this blocks
     // presentation during decode; use admitted background decode if full-scene timing requires it.

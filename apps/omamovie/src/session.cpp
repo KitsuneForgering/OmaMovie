@@ -3268,6 +3268,9 @@ void Session::refreshPaths() {
 void Session::setPreview(PreviewItem* preview) {
     preview_ = preview;
     if (preview_ == nullptr) return;
+    // Before any request, so the job worker never sees it change.
+    if (!hardware_frames_ && preview_->device() != nullptr)
+        hardware_frames_ = std::make_unique<FrameSource>(preview_->device());
     // CLAUDE.md §19: degrade visibly. The project, history and saving live on the CPU and keep
     // working; only the viewer and hardware decode stop.
     connect(preview_, &PreviewItem::deviceLost, this, [this] {
