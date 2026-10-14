@@ -37,6 +37,14 @@ jobs:
           path: build/junit/
           if-no-files-found: ignore
 
+  smoke:
+    name: GUI smoke (headless sway, lavapipe)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run the GUI smoke on a headless compositor
+        run: bash scripts/ci-run.sh smoke
+
   lint:
     name: format and clang-tidy
     runs-on: ubuntu-latest
