@@ -1994,6 +1994,8 @@ void Session::loadLut(const QString& path, tl::LutId id) {
     }));
 }
 
+// ------------------------------------------------------------------- clip video adjustments (look, grade, effects, framing, keys)
+
 void Session::setClipLut(double id, double amount) {
     const tl::Clip* c = editor_ ? editor_->timeline().find_clip(selected_clip_) : nullptr;
     if (c == nullptr || !std::isfinite(id) || !std::isfinite(amount)) return;
@@ -2485,6 +2487,8 @@ void Session::requestFilterPreviews() {
         return oma::Result<void>{};
     });
 }
+
+// ------------------------------------------------------------------- history
 
 void Session::undo() {
     if (!editor_ || !editor_->can_undo()) return;
@@ -3057,6 +3061,8 @@ void Session::exportCaptions(const QUrl& url) {
     setNotice(QStringLiteral("%1 captions saved to %2").arg(cues.size()).arg(QFileInfo(path).fileName()));
 }
 
+// ------------------------------------------------------------------- source viewer
+
 void Session::openSource(int index) {
     if (index < 0 || index >= static_cast<int>(library_.size())) return;
     LibraryItem& item = library_[static_cast<std::size_t>(index)];
@@ -3152,6 +3158,8 @@ QVariantMap Session::source() const {
             {"out", item.mark_out ? static_cast<double>(*item.mark_out) / fps : -1.0}};
 }
 
+// ------------------------------------------------------------------- transport (playback clock, audio and scheduler)
+
 void Session::toEnd() {
     pause();
     setFrame(lastFrame());
@@ -3236,6 +3244,8 @@ void Session::pause() {
     requestFrame(); // the exact frame at the playhead, whatever playback last showed
 }
 
+// ------------------------------------------------------------------- playback inputs (snapshot, media paths, preview item)
+
 std::int64_t Session::ticksPerSample() const {
     const tl::Timeline& t = editor_->timeline();
     return std::max<std::int64_t>(1, t.to_ticks(kSequenceAudioRate.sample_to_time(1)).value_or(1));
@@ -3301,6 +3311,8 @@ void Session::setRecordingsFolderOverride(const QString& folder) {
 // M4 adaptive preview (default; OMA_PREVIEW_SCALE=1 keeps full resolution, 0.5 fixes half): when
 // more than 2% of the frames due over two seconds were dropped, composite at half resolution for
 // the rest of this playback. The picture's framing, the timeline and export never change.
+// ------------------------------------------------------------------- playback loop (adaptive preview quality, tick)
+
 void Session::adaptPreview() {
     if (preview_ == nullptr || preview_quality_ != PreviewQuality::Auto || preview_->scale() < 1.0) {
         return;
