@@ -4,6 +4,7 @@
 #include "scope_frame.hpp"
 #include "scopes.hpp"
 #include "session.hpp"
+#include "ui_post.hpp"
 
 #include <QUrl>
 
@@ -44,17 +45,14 @@ void Session::requestScopes() {
             vector = save(vectorscope(display), "vectorscope");
             parade = save(rgb_parade(display), "parade");
         }
-        QMetaObject::invokeMethod(
-            this,
-            [this, request, wave, vector, parade] {
-                if (request != scope_request_)
-                    return;
-                scope_image_ = wave;
-                vectorscope_image_ = vector;
-                parade_image_ = parade;
-                emit scopeImageChanged();
-            },
-            Qt::QueuedConnection);
+        post_to_ui(this, [this, request, wave, vector, parade] {
+            if (request != scope_request_)
+                return;
+            scope_image_ = wave;
+            vectorscope_image_ = vector;
+            parade_image_ = parade;
+            emit scopeImageChanged();
+        });
         return oma::Result<void>{};
     });
 }

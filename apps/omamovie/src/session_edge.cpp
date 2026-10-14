@@ -2,6 +2,7 @@
 // decoded on the job worker and published as images for the viewer overlay.
 #include "edge_frames.hpp"
 #include "session.hpp"
+#include "ui_post.hpp"
 
 #include <QUrl>
 
@@ -33,15 +34,12 @@ void Session::showEdge(EdgeEdit edit, oma::timeline::ClipId clip) {
             }
             urls.push_back(url);
         }
-        QMetaObject::invokeMethod(
-            this,
-            [this, request, urls] {
-                if (request != edge_request_ || urls.size() != 2)
-                    return;
-                edge_frames_ = {{"serial", request}, {"left", urls[0]}, {"right", urls[1]}};
-                emit edgeFramesChanged();
-            },
-            Qt::QueuedConnection);
+        post_to_ui(this, [this, request, urls] {
+            if (request != edge_request_ || urls.size() != 2)
+                return;
+            edge_frames_ = {{"serial", request}, {"left", urls[0]}, {"right", urls[1]}};
+            emit edgeFramesChanged();
+        });
         return oma::Result<void>{};
     });
 }

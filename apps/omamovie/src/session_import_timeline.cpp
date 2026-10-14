@@ -3,6 +3,7 @@
 // project and keep the import report for the UI (CLAUDE.md §16.4).
 #include "session.hpp"
 #include "timeline_import.hpp"
+#include "ui_post.hpp"
 
 #include <QFileInfo>
 
@@ -22,9 +23,8 @@ void Session::importTimeline(const QUrl& url) {
             QString why;
             auto shared = std::make_shared<std::optional<oma::project::Document>>(
                 import_timeline(path.toStdString(), *importer_, issues, why));
-            QMetaObject::invokeMethod(
-                this,
-                [this, generation, path, issues, why, shared] {
+            post_to_ui(
+                this, [this, generation, path, issues, why, shared] {
                     if (generation != generation_)
                         return;
                     if (!*shared)
@@ -40,8 +40,7 @@ void Session::importTimeline(const QUrl& url) {
                                   : QStringLiteral("Imported %1 with %2 notes in the import report")
                                         .arg(QFileInfo(path).fileName())
                                         .arg(issues.size()));
-                },
-                Qt::QueuedConnection);
+                });
             return oma::Result<void>{};
         }));
 }

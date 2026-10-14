@@ -24,6 +24,7 @@
 #include "oma/timeline/edit.hpp"
 #include "oma/timeline/effects.hpp"
 #include "oma/timeline/evaluate.hpp"
+#include "ui_post.hpp"
 
 #include <QColor>
 #include <QGuiApplication>
@@ -337,10 +338,10 @@ void Session::refreshRecordings() {
             (void)workers_.submit("probe-recording", [this, key, file = r.path](oma::JobContext&) {
                 auto probed = importer_->inspect_input(file);
                 const bool has_audio = probed && probed->best_audio.has_value();
-                QMetaObject::invokeMethod(this, [this, key, has_audio] {
+                post_to_ui(this, [this, key, has_audio] {
                     recording_audio_.insert(key, has_audio);
                     refreshRecordings();
-                }, Qt::QueuedConnection);
+                });
                 return oma::Result<void>{};
             });
         }
@@ -390,7 +391,7 @@ void Session::autosave() {
             sidecar.write(origin);
         }
         const QString why = saved ? QString() : message(saved.error());
-        QMetaObject::invokeMethod(this, [this, generation, marker, file, why] {
+        post_to_ui(this, [this, generation, marker, file, why] {
             if (generation != generation_ || file != autosave_file_) {
                 // Save or discard may have removed it while this worker was still writing.
                 autosave::remove(file.toStdString());
@@ -401,7 +402,7 @@ void Session::autosave() {
                 return;
             }
             autosaved_ = marker;
-        }, Qt::QueuedConnection);
+        });
         return oma::Result<void>{};
     });
 }
@@ -451,12 +452,12 @@ void Session::resolveInterruptedExport(const QString& id, bool keep_current) {
             const auto result = keep_current ? export_recovery::keep_current(record)
                                              : export_recovery::restore_previous(record);
             const QString why = result ? QString() : message(result.error());
-            QMetaObject::invokeMethod(this, [this, why] {
+            post_to_ui(this, [this, why] {
                 recovery_busy_ = false;
                 setNotice(why.isEmpty() ? QStringLiteral("Export recovery finished")
                                         : QStringLiteral("Export recovery failed: %1").arg(why));
                 emit exportRecoveryChanged();
-            }, Qt::QueuedConnection);
+            });
             return oma::Result<void>{};
         });
         return;
@@ -517,7 +518,7 @@ void Session::clearCache() {
             if (auto r = cache->clear()) removed += *r;
         }
         oma::log_info(oma::Category::Cache, "cache cleared: {} bytes", removed);
-        QMetaObject::invokeMethod(this, [this] { emit cacheCleared(); }, Qt::QueuedConnection);
+        post_to_ui(this, [this] { emit cacheCleared(); });
         return oma::Result<void>{};
     });
 }
@@ -626,8 +627,10 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
                 missing->details.insert("decodePath", QStringLiteral("missing file"));
                 missing->missing = true;
             }
-            QMetaObject::invokeMethod(this, [this, generation, source, why, missing = std::move(missing)]() mutable {
-                if (generation != generation_) return;
+            post_to_ui(this, [this, generation, source, why,
+                              missing = std::move(missing)]() mutable {
+                if (generation != generation_)
+                    return;
                 --pending_import_callbacks_;
                 if (missing) {
                     addToLibrary(std::move(*missing), false);
@@ -636,7 +639,7 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
                     fail(QStringLiteral("Cannot import %1: %2").arg(QFileInfo(source).fileName(), why));
                 }
                 importNextQueued(generation);
-            }, Qt::QueuedConnection);
+            });
             return oma::Result<void>{};
         }
         // Music, voiceover and sound effects are audio-only media; they go on the audio lanes.
@@ -684,11 +687,12 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
                 const QString why = audio_only != known->audio_only
                                         ? QStringLiteral("it is not the same kind of media")
                                         : QStringLiteral("it is shorter than the part the project uses");
-                QMetaObject::invokeMethod(this, [this, generation, source, why] {
-                    if (generation != generation_) return;
+                post_to_ui(this, [this, generation, source, why] {
+                    if (generation != generation_)
+                        return;
                     --pending_import_callbacks_;
                     setNotice(QStringLiteral("%1 cannot stand in for the missing file: %2").arg(QFileInfo(source).fileName(), why));
-                }, Qt::QueuedConnection);
+                });
                 return oma::Result<void>{};
             }
             item.media = known->info;
@@ -720,8 +724,9 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
                 }
             }
         }
-        QMetaObject::invokeMethod(this, [this, generation, item = std::move(item), append, relinked]() mutable {
-            if (generation != generation_) return;
+        post_to_ui(this, [this, generation, item = std::move(item), append, relinked]() mutable {
+            if (generation != generation_)
+                return;
             --pending_import_callbacks_;
             if (relinked) {
                 oma::log_info(oma::Category::Project, "relinked {} to {}", item.name.toStdString(), item.path.toStdString());
@@ -729,7 +734,7 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
             }
             addToLibrary(std::move(item), append);
             importNextQueued(generation);
-        }, Qt::QueuedConnection);
+        });
         return oma::Result<void>{};
     }));
 }
@@ -1683,8 +1688,9 @@ void Session::importLut(const QUrl& url) {
         }
         auto table = parsed && *parsed ? std::make_shared<const oma::compositor::Lut3d>(std::move(**parsed)) : nullptr;
         const QString why = !parsed ? QStringLiteral("cannot read the file") : !*parsed ? message(parsed->error()) : QString();
-        QMetaObject::invokeMethod(this, [this, generation, path, clip, table = std::move(table), why] {
-            if (generation != generation_ || !editor_) return;
+        post_to_ui(this, [this, generation, path, clip, table = std::move(table), why] {
+            if (generation != generation_ || !editor_)
+                return;
             const QString name = QFileInfo(path).completeBaseName();
             if (!table) {
                 setNotice(QStringLiteral("Cannot use %1: %2").arg(name, why));
@@ -1700,8 +1706,9 @@ void Session::importLut(const QUrl& url) {
             tables->emplace(id.value(), table);
             luts_ = std::move(tables);
             emit lutsChanged();
-            if (clip == selected_clip_) setClipLut(static_cast<double>(id.value()), 1.0);
-        }, Qt::QueuedConnection);
+            if (clip == selected_clip_)
+                setClipLut(static_cast<double>(id.value()), 1.0);
+        });
         return oma::Result<void>{};
     }));
 }
@@ -1761,8 +1768,9 @@ void Session::saveProject(const QUrl& url) {
         }
         auto saved = oma::project::save(doc, std::filesystem::path(path.toStdString()));
         const QString why = saved ? QString() : message(saved.error());
-        QMetaObject::invokeMethod(this, [this, generation, path, marker, why] {
-            if (generation != generation_) return;
+        post_to_ui(this, [this, generation, path, marker, why] {
+            if (generation != generation_)
+                return;
             if (!why.isEmpty()) {
                 fail(QStringLiteral("Cannot save %1: %2").arg(QFileInfo(path).fileName(), why));
                 return;
@@ -1770,10 +1778,11 @@ void Session::saveProject(const QUrl& url) {
             project_path_ = path;
             saved_ = marker; // edits made while saving keep the project dirty
             rememberProject(path);
-            if (!dirty()) discardAutosave(); // the file now holds everything the autosave did
+            if (!dirty())
+                discardAutosave(); // the file now holds everything the autosave did
             setNotice(QStringLiteral("Saved %1").arg(QFileInfo(path).fileName()));
             emit projectChanged();
-        }, Qt::QueuedConnection);
+        });
         return oma::Result<void>{};
     });
 }
@@ -1880,7 +1889,7 @@ void Session::exportMovie(const QUrl& url, const QString& profile) {
         }, &stats);
         const bool cancelled = !done && done.error().code() == oma::ErrorCode::Cancelled;
         const QString why = done || cancelled ? QString() : message(done.error());
-        QMetaObject::invokeMethod(this, [this, path, why, cancelled, stats] {
+        post_to_ui(this, [this, path, why, cancelled, stats] {
             export_stats_ = stats;
             export_timer_.stop();
             export_progress_ = -1;
@@ -1899,7 +1908,7 @@ void Session::exportMovie(const QUrl& url, const QString& profile) {
             }
             emit exportChanged();
             emit exportRecoveryChanged();
-        }, Qt::QueuedConnection);
+        });
         return oma::Result<void>{};
     });
 }
@@ -1922,14 +1931,15 @@ void Session::openProject(const QUrl& url) {
         }
         // The Timeline inside is copyable; a shared_ptr keeps the functor copyable for Qt.
         auto shared = std::make_shared<std::optional<oma::project::Document>>(std::move(loaded));
-        QMetaObject::invokeMethod(this, [this, generation, path, why, shared] {
-            if (generation != generation_) return;
+        post_to_ui(this, [this, generation, path, why, shared] {
+            if (generation != generation_)
+                return;
             if (!*shared) {
                 fail(QStringLiteral("Cannot open %1: %2").arg(QFileInfo(path).fileName(), why));
                 return;
             }
             applyProject(std::move(**shared), path);
-        }, Qt::QueuedConnection);
+        });
         return oma::Result<void>{};
     }));
 }
@@ -1989,8 +1999,9 @@ void Session::loadLut(const QString& path, tl::LutId id) {
             parsed = oma::compositor::parse_cube(std::string_view(bytes.constData(), static_cast<std::size_t>(bytes.size())));
         }
         auto table = parsed && *parsed ? std::make_shared<const oma::compositor::Lut3d>(std::move(**parsed)) : nullptr;
-        QMetaObject::invokeMethod(this, [this, generation, path, id, table = std::move(table)] {
-            if (generation != generation_) return;
+        post_to_ui(this, [this, generation, path, id, table = std::move(table)] {
+            if (generation != generation_)
+                return;
             if (!table) {
                 // Clips keep referring to it; they show ungraded until the file is back.
                 setNotice(QStringLiteral("Cannot load the LUT %1").arg(QFileInfo(path).fileName()));
@@ -2001,7 +2012,7 @@ void Session::loadLut(const QString& path, tl::LutId id) {
             luts_ = std::move(tables);
             emit lutsChanged();
             requestFrame();
-        }, Qt::QueuedConnection);
+        });
         return oma::Result<void>{};
     }));
 }
@@ -2488,11 +2499,12 @@ void Session::requestFilterPreviews() {
                 }
             }
         }
-        QMetaObject::invokeMethod(this, [this, request, generation, urls = std::move(urls)] {
-            if (generation != generation_ || request != previews_) return;
+        post_to_ui(this, [this, request, generation, urls = std::move(urls)] {
+            if (generation != generation_ || request != previews_)
+                return;
             filter_previews_ = urls;
             emit filterPreviewsChanged();
-        }, Qt::QueuedConnection);
+        });
         return oma::Result<void>{};
     });
 }
@@ -3444,16 +3456,18 @@ void Session::submitFrame() {
                                                   width = canvas_width_, height = canvas_height_,
                                                   tpf](oma::JobContext&) {
         auto view = build_viewer_frame(*timeline, *paths, *luts, width, height, frame, tpf, frames_);
-        QMetaObject::invokeMethod(this, [this, generation, view = std::move(view)]() mutable {
+        post_to_ui(this, [this, generation, view = std::move(view)]() mutable {
             busy_ = false;
-            if (generation != generation_) return;
+            if (generation != generation_)
+                return;
             if (!view) {
                 fail(message(view.error()));
             } else if (preview_ != nullptr && !playing()) {
                 preview_->setFrame(std::move(*view));
             }
-            if (wanted_) submitFrame();
-        }, Qt::QueuedConnection);
+            if (wanted_)
+                submitFrame();
+        });
         return oma::Result<void>{};
     });
 }

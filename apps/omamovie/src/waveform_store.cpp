@@ -1,6 +1,7 @@
 #include "waveform_store.hpp"
 
 #include "oma/base/log.hpp"
+#include "ui_post.hpp"
 
 #include <QMetaObject>
 
@@ -43,12 +44,13 @@ void WaveformStore::request(std::uint64_t media, const std::string& path, const 
             return oma::Result<void>{};
         }
         auto shared = std::make_shared<const oma::playback::Waveform>(std::move(*computed));
-        QMetaObject::invokeMethod(this, [this, media, generation, shared = std::move(shared)]() mutable {
-            if (generation != generation_) return;
+        post_to_ui(this, [this, media, generation, shared = std::move(shared)]() mutable {
+            if (generation != generation_)
+                return;
             pending_.erase(media);
             waveforms_[media] = std::move(shared);
             emit ready(static_cast<double>(media));
-        }, Qt::QueuedConnection);
+        });
         return oma::Result<void>{};
     }));
 }
