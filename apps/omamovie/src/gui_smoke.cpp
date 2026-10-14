@@ -202,6 +202,7 @@ int run_gui_smoke(const SmokeContext& context) {
         qsizetype clips_after_edit = 0;
         QString crashed;
         double key_position = 0;
+        bool text_ok = true;
         bool lost_playing = false;
         double lost_position = 0;
     } saved;
@@ -267,6 +268,24 @@ int run_gui_smoke(const SmokeContext& context) {
         return items;
     };
     const auto center_of = [](QQuickItem* i) { return i->mapToScene(QPointF(i->width() / 2, i->height() / 2)); };
+    // At the current size and text scale: the timeline keeps 120 px and the transport's last
+    // button ends inside the window.
+    const auto large_text_fits = [&](const char* width) {
+        screenshot(window, (std::string("OMA_GUI_SMOKE_TEXT_") + width + "_SCREENSHOT").c_str());
+        auto* timeline = window->findChild<QQuickItem*>(QStringLiteral("timelinePanel"));
+        const auto end = items_named("transportEnd");
+        // Library labels stay inside their tile (a range label once ran into the next tile).
+        bool labels = true;
+        for (QQuickItem* label : items_named("mediaRange"))
+            labels = labels && label->width() <= label->parentItem()->width() + 0.5 &&
+                     label->property("contentWidth").toDouble() <= label->width() + 0.5;
+        const bool ok = timeline && timeline->height() >= 120 && !end.isEmpty() && labels &&
+                        end.front()->mapToScene(QPointF(end.front()->width(), 0)).x() <= window->width();
+        if (!ok) std::printf("GUI smoke: 130 %% text does not fit at %s px (timeline %.0f px, transport end %.0f of %d)\n", width,
+                             timeline ? timeline->height() : -1.0,
+                             end.isEmpty() ? -1.0 : end.front()->mapToScene(QPointF(end.front()->width(), 0)).x(), window->width());
+        return ok;
+    };
     // Yellow samples in the lower part of the viewer (titles in the smoke run are yellow).
     const auto yellow_in_lower_viewer = [&] {
         const QImage grab = window->grabWindow();
@@ -1878,6 +1897,21 @@ int run_gui_smoke(const SmokeContext& context) {
              if (!opened) std::printf("GUI smoke: a sound file did not open in the source viewer (%s)\n", qPrintable(session.notice()));
              r.project = r.project && opened;
              session.closeSource();
+         }},
+        // Larger text (130 %, ui-ux-evaluation gates) at 1600, 820 and 640 px: the timeline keeps
+        // its room and the transport stays inside the window; OMA_GUI_SMOKE_TEXT_<width>_SCREENSHOT
+        // name files for a visual check.
+        {"large text", after(100), [&] {
+             app_settings.setTextSize(QStringLiteral("130"));
+             window->resize(1600, 900);
+         }},
+        {"large text 1600", after(400), [&] { saved.text_ok = large_text_fits("1600"); window->resize(820, 700); }},
+        {"large text 820", after(400), [&] { saved.text_ok = large_text_fits("820") && saved.text_ok; window->resize(640, 620); }},
+        {"large text 640", after(400), [&] {
+             const bool ok = large_text_fits("640") && saved.text_ok;
+             app_settings.setTextSize(QStringLiteral("100"));
+             window->resize(1600, 900);
+             r.layout = r.layout && ok;
          }},
         // The edit workflow by keyboard only (M10): mark a source range (Shift+O, I, Shift+Right, O,
         // Escape), append it (E), split it (Ctrl+B), delete the part under the playhead (Delete),
