@@ -15,6 +15,14 @@ void Session::setCanvasAspect(int w, int h) {
     const auto even = [](double v) { return static_cast<std::uint32_t>(std::lround(v / 2.0)) * 2U; };
     const std::uint32_t width = w >= h ? even(static_cast<double>(short_side) * w / h) : short_side;
     const std::uint32_t height = w >= h ? short_side : even(static_cast<double>(short_side) * h / w);
+    setCanvasSize(static_cast<int>(width), static_cast<int>(height));
+}
+
+void Session::setCanvasSize(int w, int h) {
+    if (!editor_ || w <= 0 || h <= 0) return;
+    // Encoders take even sizes (4:2:0): an odd one goes up to the next even size.
+    const auto width = static_cast<std::uint32_t>(w) + static_cast<std::uint32_t>(w & 1);
+    const auto height = static_cast<std::uint32_t>(h) + static_cast<std::uint32_t>(h & 1);
     if (width == canvas_width_ && height == canvas_height_) return;
     if (run(tl::edit::set_canvas(width, height))) {
         setNotice(QStringLiteral("Canvas %1 × %2").arg(width).arg(height));

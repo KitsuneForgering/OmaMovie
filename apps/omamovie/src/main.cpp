@@ -2009,6 +2009,27 @@ int main(int argc, char** argv) {
              if (!(vertical && restored)) std::printf("GUI smoke: canvas proportion failed\n");
              r.lanes = r.lanes && vertical && restored;
          }},
+        // Custom size: the dialog opens with the current size, and OK applies the typed one.
+        {"canvas dialog", after(100), [&] {
+             actions.trigger(QStringLiteral("canvasCustom"));
+         }},
+        {"canvas dialog shown", after(300), [&] {
+             auto* dialog = window->findChild<QObject*>(QStringLiteral("canvasDialog"));
+             auto* w = window->findChild<QObject*>(QStringLiteral("canvasWidthBox"));
+             auto* h = window->findChild<QObject*>(QStringLiteral("canvasHeightBox"));
+             bool ok = dialog && w && h && dialog->property("opened").toBool() &&
+                       w->property("value").toInt() == session.canvasWidth();
+             if (ok) {
+                 w->setProperty("value", 400);
+                 h->setProperty("value", 400);
+                 QMetaObject::invokeMethod(dialog, "accept");
+                 ok = session.canvasWidth() == 400 && session.canvasHeight() == 400;
+                 session.undo();
+                 ok = ok && session.canvasWidth() == saved.canvas_before;
+             }
+             if (!ok) std::printf("GUI smoke: canvas size dialog failed (%dx%d)\n", session.canvasWidth(), session.canvasHeight());
+             r.lanes = r.lanes && ok;
+         }},
         {"framing gesture", after(200), [&] {
              // UX-07: with Crop & framing open, dragging the box in the viewer moves the picture;
              // the gesture is one undo entry.

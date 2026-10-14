@@ -483,6 +483,7 @@ Rectangle {
                 MenuItem { action: actions.canvasVertical }
                 MenuItem { action: actions.canvasSquare }
                 MenuItem { action: actions.canvasPortrait }
+                MenuItem { action: actions.canvasCustom }
             }
             MenuItem { action: actions.importCaptions }
             MenuSeparator {}

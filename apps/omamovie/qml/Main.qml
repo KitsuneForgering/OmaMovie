@@ -398,6 +398,10 @@ ApplicationWindow {
             text: "Canvas 4:5 (portrait)"; enabled: actions.editing && session.clips.length > 0
             onTriggered: session.setCanvasAspect(4, 5)
         }
+        property OmaAction canvasCustom: OmaAction {
+            text: "Custom size…"; enabled: actions.editing && session.clips.length > 0
+            onTriggered: canvasDialog.open()
+        }
         // Captions (ADR-0017).
         property OmaAction addCaption: OmaAction {
             text: "Add caption"; keys: "Ctrl+Alt+C"; enabled: actions.editing && session.clips.length > 0
@@ -573,6 +577,27 @@ ApplicationWindow {
         captionEditor.open()
         captionText.forceActiveFocus()
         captionText.selectAll()
+    }
+    // An exact canvas size (ADR-0010); the session rounds odd sizes up to even.
+    Dialog {
+        id: canvasDialog
+        objectName: "canvasDialog"
+        anchors.centerIn: parent
+        modal: true
+        title: "Canvas size"
+        onAboutToShow: {
+            canvasWidthBox.value = session.canvasWidth
+            canvasHeightBox.value = session.canvasHeight
+            canvasWidthBox.forceActiveFocus()
+        }
+        RowLayout {
+            spacing: 8
+            SpinBox { id: canvasWidthBox; objectName: "canvasWidthBox"; from: 16; to: 16384; editable: true }
+            UiText { text: "×"; color: colors.foreground }
+            SpinBox { id: canvasHeightBox; objectName: "canvasHeightBox"; from: 16; to: 16384; editable: true }
+        }
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: session.setCanvasSize(canvasWidthBox.value, canvasHeightBox.value)
     }
     Dialog {
         id: captionEditor
