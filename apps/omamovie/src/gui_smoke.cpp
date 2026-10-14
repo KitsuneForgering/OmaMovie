@@ -30,6 +30,7 @@
 #include "oma/timeline/edit.hpp"
 #include "oma/project/document.hpp"
 
+#include <QAccessible>
 #include <QColor>
 #include <QElapsedTimer>
 #include <QEventLoop>
@@ -1924,6 +1925,29 @@ int run_gui_smoke(const SmokeContext& context) {
              walk(window->contentItem());
              if (!small.isEmpty()) std::printf("GUI smoke: targets under 24 px: %s\n", qPrintable(small.join(QStringLiteral("; "))));
              r.layout = r.layout && small.isEmpty();
+         }},
+        // Screen-reader names: every visible control reachable by Tab, and every button, exposes a
+        // name through Qt's accessibility interface (what Orca reads); icon-only ones included.
+        {"accessible names", after(100), [&] {
+             QStringList unnamed;
+             int checked_count = 0;
+             std::function<void(QQuickItem*)> walk = [&](QQuickItem* item) {
+                 if (!item->isVisible() || item->opacity() <= 0) return;
+                 const QString cls = QString::fromLatin1(item->metaObject()->className());
+                 const bool control = item->activeFocusOnTab() || cls.contains(QLatin1String("Button"));
+                 if (control && item->isEnabled()) {
+                     ++checked_count;
+                     QAccessibleInterface* a = QAccessible::queryAccessibleInterface(item);
+                     if (a == nullptr || a->text(QAccessible::Name).trimmed().isEmpty())
+                         unnamed << QStringLiteral("%1 '%2'").arg(cls, item->objectName());
+                 }
+                 for (QQuickItem* c : item->childItems()) walk(c);
+             };
+             walk(window->contentItem());
+             if (!unnamed.isEmpty()) std::printf("GUI smoke: controls without an accessible name: %s\n", qPrintable(unnamed.join(QStringLiteral("; "))));
+             // A walk that finds almost nothing means the check stopped looking (25 controls on 2026-10-14).
+             if (checked_count <= 10) std::printf("GUI smoke: only %d controls checked for accessible names\n", checked_count);
+             r.layout = r.layout && unnamed.isEmpty() && checked_count > 10;
          }},
         {"large text 1600", after(400), [&] { saved.text_ok = large_text_fits("1600"); window->resize(820, 700); }},
         {"large text 820", after(400), [&] { saved.text_ok = large_text_fits("820") && saved.text_ok; window->resize(640, 620); }},
