@@ -31,6 +31,18 @@ if "$cli" import tests/importers/fixtures/relative.otio | grep -q '^issue:'; the
     exit 1
 fi
 
+# convert: the same import with media probed, saved as a project that loads and validates; an
+# existing output is refused.
+converted="$file.converted.omamovie"
+rm -f "$converted"
+"$cli" convert tests/importers/fixtures/relative.otio "$converted" | grep -qx 'media: 1'
+"$cli" validate "$converted" >/dev/null
+"$cli" dump "$converted" | grep -q 'h264_30fps_aac.mp4'
+status=0
+"$cli" convert tests/importers/fixtures/relative.otio "$converted" >/dev/null 2>&1 || status=$?
+test "$status" -eq 2
+rm -f "$converted"
+
 # diff (CLAUDE.md §16.7): equal projects exit 0; different ones list their lines and exit 1.
 other=tests/fuzz/corpus/project/effects.json
 "$cli" diff "$other" "$other" >/dev/null

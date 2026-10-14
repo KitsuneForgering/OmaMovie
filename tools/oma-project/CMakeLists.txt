@@ -5,4 +5,4 @@ add_executable(oma-project ${SOURCES})
 set_target_properties(oma-project PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tools/oma-project)
 target_compile_options(oma-project PRIVATE ${OMA_LIB_WARNINGS})
-target_link_libraries(oma-project PRIVATE oma_project oma_importers oma_project-ir oma_timeline oma_base)
+target_link_libraries(oma-project PRIVATE oma_ingest oma_project oma_importers oma_project-ir oma_timeline oma_base)

@@ -9,6 +9,7 @@ namespace {
 int usage() {
     std::fputs("usage: oma-project inspect|validate|dump <file.omamovie>\n"
                "       oma-project import <file.otio>\n"
+               "       oma-project convert <file.otio> <out.omamovie>\n"
                "       oma-project diff <a.omamovie> <b.omamovie>\n",
                stderr);
     return 2;
@@ -19,6 +20,8 @@ int usage() {
 int main(int argc, char** argv) {
     if (argc == 4 && std::string_view(argv[1]) == "diff")
         return run_diff(argv[2], argv[3]);
+    if (argc == 4 && std::string_view(argv[1]) == "convert")
+        return run_convert(argv[2], argv[3]);
     if (argc != 3)
         return usage();
     const std::string_view command(argv[1]);

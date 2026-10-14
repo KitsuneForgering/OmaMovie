@@ -14,6 +14,9 @@ int run_command(std::string_view command, const oma::project::Document& doc,
 // `import FILE.otio`: prints the import report (import_command.cpp).
 int run_import(const std::filesystem::path& file);
 
+// `convert FILE.otio OUT.omamovie`: the import with media probed, saved (convert_command.cpp).
+int run_convert(const std::filesystem::path& file, const std::filesystem::path& out);
+
 // `diff A B`: the line edits between two projects' canonical dumps (diff_command.cpp).
 int run_diff(const std::filesystem::path& a, const std::filesystem::path& b);
 
