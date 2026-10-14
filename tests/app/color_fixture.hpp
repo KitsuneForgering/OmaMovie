@@ -1,6 +1,6 @@
 #pragma once
 
-#include "media_entry.hpp"
+#include "oma/ingest/media_entry.hpp"
 #include "viewer_frame.hpp"
 
 #include "oma/media/format.hpp"
@@ -17,7 +17,7 @@ inline std::optional<oma::media::ColorInfo> composited_color(tl::MediaColorMatri
                                                              tl::MediaColorRange range) {
     const std::string file = "tests/fixtures/generated/h264_30fps_aac.mp4";
     auto probed = oma::media::FfmpegFormatBackend{}.inspect_input(file);
-    auto entry = probed ? media_entry(*probed, tl::MediaId{1}) : std::nullopt;
+    auto entry = probed ? oma::ingest::media_entry(*probed, tl::MediaId{1}) : std::nullopt;
     auto created =
         tl::Timeline::create(oma::frame_rates::k30, oma::SampleRate::make(48000).value());
     if (!entry || !created)

@@ -8,6 +8,8 @@
 
 #include <optional>
 
+namespace oma::ingest {
+
 struct MediaEntry {
     oma::timeline::MediaInfo info;
     bool audio_only = false;                 // no video stream: placed on the audio lanes
@@ -17,3 +19,5 @@ struct MediaEntry {
 // None when the file has neither a video nor an audio stream.
 [[nodiscard]] std::optional<MediaEntry> media_entry(const oma::media::MediaInfo& probed,
                                                     oma::timeline::MediaId id);
+
+} // namespace oma::ingest

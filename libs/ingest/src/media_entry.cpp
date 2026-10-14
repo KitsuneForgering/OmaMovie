@@ -1,4 +1,6 @@
-#include "media_entry.hpp"
+#include "oma/ingest/media_entry.hpp"
+
+namespace oma::ingest {
 
 std::optional<MediaEntry> media_entry(const oma::media::MediaInfo& probed,
                                       oma::timeline::MediaId id) {
@@ -22,3 +24,5 @@ std::optional<MediaEntry> media_entry(const oma::media::MediaInfo& probed,
     entry.info.still = stream.video && stream.video->still_image;
     return entry;
 }
+
+} // namespace oma::ingest

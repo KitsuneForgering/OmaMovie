@@ -2,7 +2,7 @@
 
 #include "autosave.hpp"
 #include "color_interpretation.hpp"
-#include "media_entry.hpp"
+#include "oma/ingest/media_entry.hpp"
 #include "scopes.hpp"
 #include "export_recovery.hpp"
 #include "caption_io.hpp"
@@ -650,7 +650,7 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
         item.path = source;
         item.name = QFileInfo(source).fileName();
         item.audio_only = audio_only;
-        const auto entry = media_entry(*probed, id); // the stream chosen above exists
+        const auto entry = oma::ingest::media_entry(*probed, id); // the stream chosen above exists
         item.media = entry->info;
         if (entry->length) item.seconds = entry->length->seconds_approx();
         if (item.media.still) item.seconds = static_cast<double>(kStillSeconds);

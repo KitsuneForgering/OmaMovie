@@ -179,6 +179,7 @@ oma-movie/
     project/             # Native format, serialization, migration.
     project-ir/          # ProjectIR: neutral intermediate representation.
     importers/           # One subdirectory per external format -> ProjectIR.
+    ingest/              # How files enter a project: probe -> media entry, external timeline -> document.
   tools/
     oma-project/         # CLI: inspect, dump, diff, validate, convert.
     bench/               # Pipeline benchmarks.
@@ -196,7 +197,9 @@ oma-movie/
     Research/            # Product/UX and technology research (non-normative).
 ```
 
-`libs/base` and `libs/gpu` were not in the original sketch: `base` keeps time, errors and
+`libs/ingest` joins media probing to the timeline and project model, which neither `media` nor
+`project` may depend on together; the app and `oma-project` share it so both build the same
+document from the same file. `libs/base` and `libs/gpu` were not in the original sketch: `base` keeps time, errors and
 logging from being duplicated or coupled to Qt; `gpu` lets the compositor, compute and decode
 interop share one `VkDevice` without `media` depending on `compositor`. The structure may
 change with a recorded technical justification.
@@ -211,6 +214,7 @@ base  <-  project-ir         (project-ir does NOT depend on timeline, project or
 project-ir <- importers      (importers do NOT depend on OmaMovie's internal model)
 timeline, project-ir <- project
 timeline, media, audio <- playback (no Qt: the app drives it)
+media, project, importers <- ingest (no Qt: shared by the app and tools)
 everything  <-  apps/omamovie, tools/*
 ```
 

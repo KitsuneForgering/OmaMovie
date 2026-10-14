@@ -10,6 +10,7 @@ set(ALLOWED_DEPS_playback base gpu media audio timeline)
 set(ALLOWED_DEPS_project-ir base)
 set(ALLOWED_DEPS_importers base project-ir)
 set(ALLOWED_DEPS_project base timeline project-ir)
+set(ALLOWED_DEPS_ingest base media timeline project-ir importers project)
 
 function(oma_enforce_deps name)
     if(NOT DEFINED ALLOWED_DEPS_${name})

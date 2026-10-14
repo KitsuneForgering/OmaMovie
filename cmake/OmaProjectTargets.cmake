@@ -9,6 +9,7 @@ add_subdirectory(libs/playback)
 add_subdirectory(libs/project-ir)
 add_subdirectory(libs/importers)
 add_subdirectory(libs/project)
+add_subdirectory(libs/ingest)
 
 # A fuzz build instruments libraries for libFuzzer (tests/fuzz), which only fuzzer executables link.
 if(NOT OMA_BUILD_FUZZ)

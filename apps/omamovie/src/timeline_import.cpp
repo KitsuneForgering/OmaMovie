@@ -1,6 +1,6 @@
 #include "timeline_import.hpp"
 
-#include "media_entry.hpp"
+#include "oma/ingest/media_entry.hpp"
 
 #include "oma/importers/otio.hpp"
 #include "oma/project/from_ir.hpp"
@@ -22,7 +22,7 @@ std::optional<oma::project::Document> import_timeline(const std::filesystem::pat
     const auto resolve = [&](const oma::ir::MediaRef& m) -> std::optional<oma::project::MediaRef> {
         const auto file = oma::importers::otio_local_path(m.target, dir);
         auto probed = importer.inspect_input(file);
-        auto entry = probed ? media_entry(*probed, {}) : std::nullopt;
+        auto entry = probed ? oma::ingest::media_entry(*probed, {}) : std::nullopt;
         if (!entry)
             return std::nullopt;
         return oma::project::MediaRef{.info = entry->info,
