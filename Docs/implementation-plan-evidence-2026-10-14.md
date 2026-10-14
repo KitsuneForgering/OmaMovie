@@ -34,12 +34,13 @@ FilmCraft's fixture recipes ([evidence](Research/evidence/2026-10-14-filmcraft-e
 ### Permanent FilmCraft-equivalent workload
 
 A fixed external workload limits benchmark gaming; it is not a race with FilmCraft or
-Premiere. Planned as `tools/bench/filmcraft-equivalent/` (the `tools/bench` slot of
-CLAUDE.md §23), one script per section driving existing audits: `fixtures` (FilmCraft's
+Premiere. *Implemented 2026-10-14* as `tools/bench/filmcraft-equivalent/run.sh` (the `tools/bench`
+slot of CLAUDE.md §23), sections driving existing audits: `fixtures` (FilmCraft's
 recipes, generated, never committed), `decode` (FFmpeg software/VA-API), `playback`
 (`--m4-audit`, hardware/software), `seek` (`--m4-seek-audit`), `scrub`
 (`--m4-scrub-audit`), `export` (`--export-audit`) and `timeline` (`--m6-timeline-audit`).
-It records machine, driver, FFmpeg version, decode path and load average with every result.
+It also reruns the M1 spikes (S1–S6) and the headless tests, records machine, driver, FFmpeg and
+load, and diffs key lines against the previous report.
 Missing: a multitrack scene (FilmCraft's `stack3`), which needs an audit that builds one.
 
 [← Implementation plan](implementation-plan.md)
