@@ -8,8 +8,9 @@ regressions in interaction come before new breadth.
 
 0. **Paused hardware scrub (M11):** move paused hardware decode off Qt's sync phase with
    latest-request-wins ([async milestone](implementation-plan-async-interactive.md)).
-0. **5,000-clip structural edits (M6):** split/ripple/undo p95 108–147 ms against a
-   < 100 ms gate (25 ms on 2026-10-06). Bisect and profile before changing any design.
+0. **5,000-clip edits (M6):** p95 108–147 ms against a < 100 ms gate, from one deterministic
+   ~110–140 ms stall per operation (typical edits 17–45 ms; not a code regression). Profile the
+   stalled rounds' phases before changing any design.
 
 1. **Enforce the existing CI (M10):** the PR workflow runs, but `master` has no
    protection/ruleset requiring its checks. Require test/lint/fuzz success before

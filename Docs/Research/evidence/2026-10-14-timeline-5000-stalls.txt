@@ -1,0 +1,34 @@
+5,000-clip edit p95: code regression ruled out, isolated stalls found (2026-10-14)
+
+Machine: i5-1135G7, Iris Xe, Mesa 26.2.2, Qt 6.11.2, eDP-1 1920x1080 (Hyprland tiles the window
+to the screen), AC power, governor powersave, profile balanced. BUILD=release.
+Command: omamovie --m6-timeline-audit 5000 (whole sequence fitted; 20 rounds of seek, select,
+split, ripple delete, undo; each timed to the end of the first Qt frame after the call).
+
+1. Current code (1865c38), 3 runs: split p95 135.6 / 138.3 / 146.9, ripple 107.6 / 108.2 /
+   108.6, undo 128.1 / 130.6 / 125.5 ms; p50 split 36-37, ripple 21, undo 29 ms.
+2. The first commit with the audit (1d7a618, 2026-10-07), built today with WERROR=0 (newer GCC
+   warns in libs/project), 2 runs: split p95 135.0 / 131.9, ripple 110.5 / 109.9, undo
+   99.6 / 99.1 (max 130.8 / 128.7), select p95 108.2 / 108.4, model build 1086 / 1055 ms.
+   The 2026-10-06 evidence (split p95 25.3, ripple 20.2, undo 17.9) used a 1600x900 window and
+   predates the committed audit. Same code, today's conditions, same p95: the gap is not a
+   code regression between 2026-10-07 and now. Which condition changed (window size, power
+   state, a temporary audit variant) is not established; pacman's log shows no Qt or Mesa
+   upgrade after 2026-10-05.
+3. Raw samples (temporary print, not committed), two runs of the current code:
+   split  62 34 43 43 38 39 18 39 39 17 38 140 40 40 38 17 37 42 17 41
+          53 33 44 44 39 40 18 39 39 17 38 137 41 40 40 18 38 45 18 38
+   ripple 33 24 24 108 25 25 22 21 25 22 25 25 26 25 21 22 25 25 21 25
+          26 29 26 107 25 25 21 22 25 22 25 25 26 26 22 22 26 24 22 25
+   undo   (40 per run) one to three samples of 114-137 ms, the rest 16-40 ms
+   select run 1: 114 and 110 in rounds 15 and 19, run 2: none above 20 ms
+   Each operation's p95 over 20 samples is one isolated sample. The split and ripple stalls
+   fall in the same round in both runs (deterministic, data-dependent); select, which changes
+   no structure, also stalled once. Typical structural edits cost 17-45 ms end to end.
+   QV4_MM_STATS=1 printed nothing in this build, so the QML garbage collector is neither
+   confirmed nor excluded.
+
+Conclusion: the 5,000-clip gate (p95 < 100 ms) still fails, but the hypothesis "structural
+operations plus model/UI update exceed the budget" is rejected for the typical edit; the
+failure is a ~110-140 ms stall in specific rounds. Next: time the phases (command, model
+mutation, notifications, QML delegates, first frame) of the stalled rounds only.

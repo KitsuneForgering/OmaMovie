@@ -12,7 +12,7 @@ FilmCraft's fixture recipes ([evidence](Research/evidence/2026-10-14-filmcraft-e
 | 4K playback, whole app (hardware) | Measured, one machine | H.264, HEVC, VP9 and AV1 2160p at 23.976 fps: 189–192 of 192 frames composited in 8 s, A/V audit PASS; composite p50 11.2 / 10.7 / 10.6 / 11.2 ms against a 41.71 ms frame; 5–7 ms process CPU per frame |
 | GPU-first pipeline | Partially validated | No longer limited to decode/compositor microbenchmarks or 1080p60: the full app plays 4K24 for four codecs on modest hardware. Not validated: 4K60, multicam, heavy effects, complex HDR, AMD, NVIDIA |
 | Paused hardware scrub | **UI freeze fixed; first-frame latency on long GOPs is open debt** | UI event-loop gap p50 / p95: H.264 1080p 66 / 270 ms; H.264 4K 331 / 1323 ms (max 1481); HEVC 4K 132 / 253 ms. Software scrub: 4–9 ms p50. Cause located (decode in Qt's sync phase). *UI gap fixed 2026-10-14* (p95 12–19 ms, [ADR-0020](adr/0020-async-execution-boundary.md)); first-frame latency on long GOPs unchanged |
-| 5,000-clip structural edits | **Gate reopened (regression)** | Split p95 136–147 ms, ripple delete 108 ms, undo 126–131 ms, RSS 581–612 MB (3 runs). The same audit gave split p95 25, ripple 20, undo 18 ms on 2026-10-06. Trim drag healthy: p50 16.7, p95 17.0 ms |
+| 5,000-clip structural edits | **Gate reopened (not a code regression)** | Split p95 136–147 ms, ripple delete 108 ms, undo 126–131 ms, RSS 581–612 MB (3 runs); 2026-10-07 code built today gives the same p95, so 2026-10-06's 25 ms was a different condition. Each p95 is one deterministic 108–140 ms stall; typical edits 17–45 ms ([evidence](Research/evidence/2026-10-14-timeline-5000-stalls.txt)). Trim drag p95 17.0 ms |
 | Export 1080p H.264 + AAC | Measured, functionally strong | 62–65 fps; per frame 7.3 ms render + readback, 6.7 ms VA-API encode, 1.1 ms audio; 355–359 MB peak. Render → readback → encoder is a profiling candidate, not a change: no gate is blocked by it |
 
 ### Corrected statements
@@ -22,7 +22,9 @@ FilmCraft's fixture recipes ([evidence](Research/evidence/2026-10-14-filmcraft-e
   while structural operations plus model/UI update exceed the budget again. Do not assume a
   core algorithmic regression; measure first, per edit: command/domain cost, model mutation,
   reattachment, validation, `QAbstractItemModel` notifications, QML delegate work and the
-  first rendered Qt frame. Bisecting between 2026-10-06 and 3368830 is the cheapest first step.
+  first rendered Qt frame. *Measured 2026-10-14*: not a regression (the 2026-10-07 code gives the
+  same p95 today) and typical edits fit; the p95 is an isolated stall in fixed rounds, which is
+  what to profile phase by phase.
 - "Hardware decode is the better path" holds for throughput (playback) only. Throughput and
   interactive random access have different goals and need not share a scheduling policy. The
   scrub numbers do not argue for software decode; the hypothesis is that the hardware path's
