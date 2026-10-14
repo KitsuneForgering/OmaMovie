@@ -9,7 +9,8 @@
 #include <QFileInfo>
 #include <QTemporaryDir>
 
-inline QString export_recording_edit(const QTemporaryDir& dir, const QString& recording) {
+inline QString export_recording_edit(const QTemporaryDir& dir, const QString& recording,
+                                     int export_ms = 60000) {
     Session session;
     session.setSilent(true);
     session.open(QFileInfo(recording).absoluteFilePath());
@@ -32,6 +33,6 @@ inline QString export_recording_edit(const QTemporaryDir& dir, const QString& re
     const QString movie = dir.filePath("recording.mp4");
     reopened.setExportEncoder("software");
     reopened.exportMovie(QUrl::fromLocalFile(movie), "mp4-h264");
-    const bool done = wait_for([&] { return reopened.exportProgress() < 0; }, 60000);
+    const bool done = wait_for([&] { return reopened.exportProgress() < 0; }, export_ms);
     return done && reopened.exportedFile() == movie ? movie : QString();
 }
