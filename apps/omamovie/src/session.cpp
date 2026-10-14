@@ -654,9 +654,8 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
         }
         if (stream.video) {
             item.rate = stream.video->frame_rate;
-            const bool sideways = stream.video->rotation % 180 != 0;
-            item.width = static_cast<std::uint32_t>(sideways ? stream.video->height : stream.video->width);
-            item.height = static_cast<std::uint32_t>(sideways ? stream.video->width : stream.video->height);
+            item.width = entry->width;
+            item.height = entry->height;
             item.details.insert("resolution",
                                 QStringLiteral("%1 × %2").arg(stream.video->width).arg(stream.video->height));
             if (item.rate) {

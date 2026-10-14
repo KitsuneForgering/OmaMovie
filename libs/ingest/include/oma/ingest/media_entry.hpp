@@ -6,6 +6,7 @@
 #include "oma/media/format.hpp"
 #include "oma/timeline/model.hpp"
 
+#include <cstdint>
 #include <optional>
 
 namespace oma::ingest {
@@ -14,6 +15,8 @@ struct MediaEntry {
     oma::timeline::MediaInfo info;
     bool audio_only = false;                 // no video stream: placed on the audio lanes
     std::optional<oma::RationalTime> length; // what the container or stream declares
+    std::uint32_t width = 0;                 // display size, rotation applied; 0 for sound
+    std::uint32_t height = 0;
 };
 
 // None when the file has neither a video nor an audio stream.

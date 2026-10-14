@@ -22,6 +22,13 @@ std::optional<MediaEntry> media_entry(const oma::media::MediaInfo& probed,
     entry.info.has_video = !audio_only;
     entry.info.has_audio = probed.best_audio.has_value();
     entry.info.still = stream.video && stream.video->still_image;
+    if (stream.video) {
+        const bool sideways = stream.video->rotation % 180 != 0;
+        entry.width =
+            static_cast<std::uint32_t>(sideways ? stream.video->height : stream.video->width);
+        entry.height =
+            static_cast<std::uint32_t>(sideways ? stream.video->width : stream.video->height);
+    }
     return entry;
 }
 
