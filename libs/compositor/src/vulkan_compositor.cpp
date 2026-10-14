@@ -1089,13 +1089,22 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
                     const BlurImages& images = d.blur_images[*draw.blur];
                     bind(none, images.across.view());
                     run_pass(Pass::ReduceAcross, draw.blur_width, draw.source_height);
-                    bind(images.across.view(), images.down.view());
-                    run_pass(Pass::ReduceDown, draw.blur_width, draw.blur_height);
-                    bind(images.down.view(), images.across.view());
+                    // Without a reduction (factor 1: every sharpen at 1080p, light blurs) reducing
+                    // down would copy the whole linearized image unchanged; the blur reads it
+                    // where it is, one full-size pass fewer.
+                    const bool reduces = draw.blur_height != draw.source_height;
+                    VkImageView reduced = images.across.view();
+                    VkImageView spare = images.down.view();
+                    if (reduces) {
+                        bind(reduced, spare);
+                        run_pass(Pass::ReduceDown, draw.blur_width, draw.blur_height);
+                        std::swap(reduced, spare);
+                    }
+                    bind(reduced, spare);
                     run_pass(Pass::BlurAcross, draw.blur_width, draw.blur_height);
-                    bind(images.across.view(), images.down.view());
+                    bind(spare, reduced);
                     run_pass(Pass::BlurDown, draw.blur_width, draw.blur_height);
-                    bind(images.down.view(), none);
+                    bind(reduced, none);
                 } else {
                     bind(none, none);
                 }
