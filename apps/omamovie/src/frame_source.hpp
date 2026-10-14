@@ -8,6 +8,7 @@
 #include "oma/timeline/model.hpp"
 
 #include <QImage>
+#include <QSize>
 
 #include <cstddef>
 #include <deque>
@@ -50,9 +51,12 @@ public:
     [[nodiscard]] oma::Result<Picture> title_picture(const oma::timeline::Title& title, std::uint32_t width,
                                                      std::uint32_t height);
 
-    // The same frame converted to RGBA8 on the CPU (thumbnails, not the viewer), read as
-    // `media`'s color interpretation says when one is given (ADR-0019).
+    // The same frame converted to RGBA8 on the CPU (thumbnails, not the viewer), fitted inside
+    // `box` keeping its pixel proportions, in one swscale pass (no full-size copy and no Qt
+    // scaling, whose thread pool would run beside the job worker). Read as `media`'s color
+    // interpretation says when one is given (ADR-0019).
     [[nodiscard]] oma::Result<QImage> image_at(const std::string& path, const oma::RationalTime& t,
+                                               QSize box,
                                                const oma::timeline::MediaInfo* media = nullptr);
 
 private:

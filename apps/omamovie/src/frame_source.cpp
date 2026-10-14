@@ -218,14 +218,15 @@ oma::Result<Picture> FrameSource::title_picture(const oma::timeline::Title& titl
                    .sample_aspect = oma::Rational::literal(1, 1)};
 }
 
-oma::Result<QImage> FrameSource::image_at(const std::string& path, const oma::RationalTime& t,
+oma::Result<QImage> FrameSource::image_at(const std::string& path, const oma::RationalTime& t, QSize box,
                                           const oma::timeline::MediaInfo* media) {
     auto picture = picture_at(path, t);
     if (!picture) {
         return std::unexpected(picture.error());
     }
     const oma::media::VideoFrame& frame = *picture->frame;
-    QImage image(frame.width(), frame.height(), QImage::Format_RGBA8888);
+    const QSize size = QSize(frame.width(), frame.height()).scaled(box, Qt::KeepAspectRatio).expandedTo({1, 1});
+    QImage image(size, QImage::Format_RGBA8888);
     if (image.isNull()) {
         return oma::make_error(oma::ErrorCode::Internal, oma::Category::Ui, "cannot allocate the thumbnail");
     }
@@ -235,8 +236,8 @@ oma::Result<QImage> FrameSource::image_at(const std::string& path, const oma::Ra
         read_as = picture->color;
         interpret(*read_as, *media);
     }
-    auto copied = frame.copy_rgba({image.bits(), static_cast<std::size_t>(image.sizeInBytes())},
-                                  image.bytesPerLine(), read_as);
+    auto copied = frame.copy_rgba_scaled({image.bits(), static_cast<std::size_t>(image.sizeInBytes())},
+                                         image.bytesPerLine(), size.width(), size.height(), read_as);
     if (!copied) {
         return std::unexpected(copied.error());
     }
