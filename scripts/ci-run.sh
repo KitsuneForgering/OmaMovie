@@ -32,7 +32,7 @@ docker run --rm --cap-add SYS_PTRACE \
                 export WAYLAND_DISPLAY=\$(basename /tmp/xdg/wayland-?)
                 QT_QPA_PLATFORM=wayland timeout 600 build/release/omamovie --smoke"
             ;;
-        lint) make format-check compdb tidy ;;
+        lint) make format-check compdb tidy && scripts/check-includes.sh ;;
         fuzz) make fuzz FUZZ_RUNS=500000 ;;
         *) echo "unknown CI task: $OMA_CI_TASK" >&2; exit 2 ;;
     esac
