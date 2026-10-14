@@ -14,7 +14,7 @@ double motion(Session& s, const char* key) {
 
 // The fixture connected above itself on a 320x180 canvas: picture-in-picture is a third of the
 // frame toward the lower right and undoes in one step; split screen moves it a quarter frame
-// right; a storyline clip is refused.
+// right and the storyline under it a quarter frame left, in one step; a storyline clip is refused.
 bool lays_out_connected_clips() {
     Session s;
     s.setSilent(true);
@@ -35,10 +35,21 @@ bool lays_out_connected_clips() {
     const bool undone = std::abs(motion(s, "scale") - 1.0) < 1e-9 && motion(s, "posX") == 0.0;
     s.applyLayout(1);
     const bool split = std::abs(motion(s, "posX") - 80.0) < 1e-9 && motion(s, "scale") == 1.0;
+    // The storyline under it, cut where the overlay starts: the left half from there on only.
+    const QVariantList cut = s.clips();
+    const bool framed = cut.size() == 2 && s.undoText() == QStringLiteral("Split Screen") &&
+                        std::abs(cut.at(1).toMap().value("start").toDouble() - 0.2) < 1e-9;
+    s.selectClip(cut.value(1).toMap().value("id").toDouble());
+    const bool left = std::abs(motion(s, "posX") + 80.0) < 1e-9;
+    s.selectClip(storyline);
+    const bool before = motion(s, "posX") == 0.0;
+    s.undo();
+    const bool whole = s.clips().size() == 1 && motion(s, "posX") == 0.0;
+    s.redo();
     s.selectClip(storyline);
     s.applyLayout(0);
     const bool refused = motion(s, "scale") == 1.0 && motion(s, "posX") == 0.0;
-    return pip && undone && split && refused;
+    return pip && undone && split && framed && left && before && whole && refused;
 }
 } // namespace
 
