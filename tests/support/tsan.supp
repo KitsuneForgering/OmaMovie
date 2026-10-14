@@ -8,6 +8,10 @@ race:libavcodec.so
 race:libavutil.so
 race:libavformat.so
 race:libswresample.so
+# libavfilter's slice threads (afftdn, the noise reduction AudioDecoder builds) end the same
+# way: the filter graph freed by the caller after its threads wrote it (seen 2026-10-14 in
+# tests/playback/test_block_partition.cpp, the racing frames inside libavfilter).
+race:libavfilter.so
 
 # Codec libraries FFmpeg drives with their own worker threads (dav1d decodes AV1 in software).
 race:libdav1d.so
