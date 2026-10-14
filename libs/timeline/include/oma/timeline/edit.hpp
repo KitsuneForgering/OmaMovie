@@ -106,7 +106,7 @@ struct ClipSource {
 // strictly inside it; the parts outside keep their properties. The first part keeps the ID.
 [[nodiscard]] std::unique_ptr<Command> set_video_range(ClipId id, RationalTime from,
                                                        RationalTime to, VideoProperties video);
-[[nodiscard]] std::unique_ptr<Command> set_audio(ClipId id, AudioProperties audio);
+[[nodiscard]] std::unique_ptr<Command> set_audio(ClipId id, const AudioProperties& audio);
 // Replaces a title clip's text and style (ADR-0015); fails on a media clip.
 [[nodiscard]] std::unique_ptr<Command> set_title(ClipId id, Title title);
 // Sets or removes (std::nullopt) the transition into a clip from the clip before it.

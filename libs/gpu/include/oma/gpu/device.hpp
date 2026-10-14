@@ -54,8 +54,9 @@ struct DeviceOptions {
     bool internally_synchronized_queues = true;
     // Instance requirements of the presentation bridge or validation tools. Missing requested
     // extensions/layers fail creation; libs/gpu does not depend on a window system or Qt.
-    std::vector<std::string> instance_extensions = {};
-    std::vector<std::string> instance_layers = {};
+    // The `= {}` let callers designate only some fields without GCC's -Wmissing-field-initializers.
+    std::vector<std::string> instance_extensions = {}; // NOLINT(readability-redundant-member-init)
+    std::vector<std::string> instance_layers = {};     // NOLINT(readability-redundant-member-init)
 };
 
 // Lists the devices the loader exposes, without creating any logical device.

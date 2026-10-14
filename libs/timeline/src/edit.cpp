@@ -864,7 +864,7 @@ std::unique_ptr<Command> set_title(ClipId id, Title title) {
         });
 }
 
-std::unique_ptr<Command> set_audio(ClipId id, AudioProperties audio) {
+std::unique_ptr<Command> set_audio(ClipId id, const AudioProperties& audio) {
     return detail::make_planned("Audio Adjustments", [=](Timeline& tl) -> Result<Steps> {
         auto c = get_clip(tl, id);
         if (!c) {

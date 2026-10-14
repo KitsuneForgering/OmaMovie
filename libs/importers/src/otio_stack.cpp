@@ -14,7 +14,7 @@ Result<ir::Track> track_of(Object t, ir::Timeline& tl, Context& c) {
     simdjson::dom::array children;
     if (t["children"].get(children) != simdjson::SUCCESS)
         return track;
-    for (Element e : children) {
+    for (Element const e : children) {
         Object o;
         if (e.get(o) != simdjson::SUCCESS)
             return make_error(ErrorCode::InvalidData, Category::Importer,
@@ -38,7 +38,7 @@ Result<void> read_stack(Object top, Imported& out, Context& c) {
         stack["children"].get(children) != simdjson::SUCCESS)
         return make_error(ErrorCode::InvalidData, Category::Importer, "timeline has no track stack",
                           out.timeline.name);
-    for (Element e : children) {
+    for (Element const e : children) {
         Object o;
         if (e.get(o) == simdjson::SUCCESS && schema_of(o).starts_with("Track.")) {
             auto track = track_of(o, out.timeline, c);

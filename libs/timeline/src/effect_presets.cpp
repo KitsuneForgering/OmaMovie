@@ -8,15 +8,16 @@
 namespace oma::timeline {
 
 namespace {
-constexpr std::array kOldFilm{PresetEffect{"oma.look.vintage", 0.7},
-                              PresetEffect{"oma.look.vignette", 0.5},
-                              PresetEffect{"oma.detail", -0.15}};
-constexpr std::array kNoir{PresetEffect{"oma.look.black-and-white", 1.0},
-                           PresetEffect{"oma.look.vignette", 0.6}, PresetEffect{"oma.detail", 0.2}};
-constexpr std::array kWarmGlow{PresetEffect{"oma.look.warm", 0.6},
-                               PresetEffect{"oma.detail", -0.2}};
-constexpr std::array kCoolClean{PresetEffect{"oma.look.cool", 0.4},
-                                PresetEffect{"oma.detail", 0.15}};
+constexpr std::array kOldFilm{PresetEffect{.definition = "oma.look.vintage", .amount = 0.7},
+                              PresetEffect{.definition = "oma.look.vignette", .amount = 0.5},
+                              PresetEffect{.definition = "oma.detail", .amount = -0.15}};
+constexpr std::array kNoir{PresetEffect{.definition = "oma.look.black-and-white", .amount = 1.0},
+                           PresetEffect{.definition = "oma.look.vignette", .amount = 0.6},
+                           PresetEffect{.definition = "oma.detail", .amount = 0.2}};
+constexpr std::array kWarmGlow{PresetEffect{.definition = "oma.look.warm", .amount = 0.6},
+                               PresetEffect{.definition = "oma.detail", .amount = -0.2}};
+constexpr std::array kCoolClean{PresetEffect{.definition = "oma.look.cool", .amount = 0.4},
+                                PresetEffect{.definition = "oma.detail", .amount = 0.15}};
 
 constexpr std::array kPresets{
     EffectPreset{.id = "old-film", .name = "Old film", .effects = kOldFilm},

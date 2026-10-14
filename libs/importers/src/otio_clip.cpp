@@ -21,7 +21,7 @@ Result<ir::Item> clip_of(Object o, const std::string& name, ir::Timeline& tl, Co
         simdjson::dom::array list;
         if (o[key].get(list) != simdjson::SUCCESS)
             continue;
-        for (Element e : list) {
+        for (Element const e : list) {
             clip.unsupported.push_back(opaque(e, name));
             c.issue(name, std::format("{} {} not imported", key, clip.unsupported.back().schema),
                     "kept in the import, not applied", ir::SupportLevel::Edits);

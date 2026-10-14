@@ -172,8 +172,9 @@ Result<std::unique_ptr<VideoWriter>> VideoWriter::create(const std::filesystem::
                                 : "video encoder is unavailable");
     }
     if (auto checked = FfmpegFormatBackend{}.check_output(
-            {format.container, vaapi ? "h264_vaapi" : format.video_encoder,
-             audio ? format.audio_encoder : std::nullopt});
+            {.container = format.container,
+             .video_encoder = vaapi ? "h264_vaapi" : format.video_encoder,
+             .audio_encoder = audio ? format.audio_encoder : std::nullopt});
         !checked)
         return std::unexpected(checked.error());
     auto impl = std::make_unique<Impl>();

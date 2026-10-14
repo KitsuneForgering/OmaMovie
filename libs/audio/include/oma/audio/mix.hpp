@@ -29,7 +29,8 @@ struct ClipGain {
     std::int64_t tail = 0;
 
     // Keyed volume (M8): replaces `gain` when not empty; borrowed, outlives the mix call.
-    std::span<const GainPoint> automation{};
+    // `{}` lets callers designate only some fields without GCC's -Wmissing-field-initializers.
+    std::span<const GainPoint> automation{}; // NOLINT(readability-redundant-member-init)
 
     // The gain at `sample` (0 = the clip's first sample). Zero outside [-lead, length + tail).
     [[nodiscard]] float at(std::int64_t sample) const noexcept;

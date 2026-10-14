@@ -68,7 +68,8 @@ public:
     }
 
     [[nodiscard]] bool changed_nothing() const noexcept override {
-        return std::ranges::all_of(steps_, [](const auto& step) { return step->changed_nothing(); });
+        return std::ranges::all_of(steps_,
+                                   [](const auto& step) { return step->changed_nothing(); });
     }
 
 private:
@@ -537,7 +538,7 @@ public:
 private:
     std::uint32_t width_;
     std::uint32_t height_;
-    std::pair<std::uint32_t, std::uint32_t> previous_{};
+    std::pair<std::uint32_t, std::uint32_t> previous_;
 };
 
 } // namespace

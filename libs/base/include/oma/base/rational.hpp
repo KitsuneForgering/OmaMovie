@@ -35,7 +35,7 @@ public:
             den = -den;
         }
         const std::int64_t g = std::gcd(num, den);
-        return Rational(num / g, den / g);
+        return {num / g, den / g};
     }
 
     [[nodiscard]] constexpr std::int64_t num() const noexcept { return num_; }

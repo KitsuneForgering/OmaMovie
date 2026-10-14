@@ -9,13 +9,13 @@ namespace oma::media {
 ExportFormat export_format(OutputProfile profile) {
     switch (profile) {
     case OutputProfile::Mp4H264Aac:
-        return {"mp4", "libx264", "aac"};
+        return {.container = "mp4", .video_encoder = "libx264", .audio_encoder = "aac"};
     case OutputProfile::MatroskaH264Aac:
-        return {"matroska", "libx264", "aac"};
+        return {.container = "matroska", .video_encoder = "libx264", .audio_encoder = "aac"};
     case OutputProfile::MatroskaHevcAac:
-        return {"matroska", "libx265", "aac"};
+        return {.container = "matroska", .video_encoder = "libx265", .audio_encoder = "aac"};
     case OutputProfile::WebmVp9Vorbis:
-        return {"webm", "libvpx-vp9", "libvorbis"};
+        return {.container = "webm", .video_encoder = "libvpx-vp9", .audio_encoder = "libvorbis"};
     }
     return {};
 }
