@@ -35,5 +35,3 @@ protected:
 };
 
 } // namespace oma::audio
-
-#include "oma/audio/effect_chain.hpp"

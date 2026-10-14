@@ -1,4 +1,4 @@
-#include "oma/audio/effect.hpp"
+#include "oma/audio/effect_chain.hpp"
 #include "oma/audio/equalizer.hpp"
 
 #include <vector>

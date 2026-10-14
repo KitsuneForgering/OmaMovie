@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oma/audio/effect.hpp"
+#include "oma/audio/effect_chain.hpp"
 #include "oma/timeline/model.hpp"
 
 #include <cstdint>

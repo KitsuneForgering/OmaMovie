@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oma/audio/effect.hpp"
+#include "oma/audio/effect_chain.hpp"
 #include "oma/audio/mix.hpp"
 #include "oma/base/error.hpp"
 #include "oma/base/time.hpp"
