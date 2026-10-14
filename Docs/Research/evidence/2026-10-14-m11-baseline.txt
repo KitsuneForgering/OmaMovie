@@ -53,3 +53,14 @@ looking at cancellation, so stop() waited for it; the decoder now checks an inte
 decoded frames, the scheduler ties it to its job's cancellation, and FrameSource drops a stream
 stopped mid-seek. Software decode stays too slow for 4K HEVC seeks (decode throughput), so the
 paused/scrub policy is not switched to software despite its faster 1080p H.264 seeks.
+
+Third change: scrubbing the paused viewer (software decode, the default on GPUs not yet
+validated for hardware decode). A temporary variant of --m4-seek-audit (not committed) paused
+the editor and issued bursts of five seeks ~15 ms apart, timing the last one's frame;
+baseline_1080p60.mp4, 15 bursts, two runs each:
+  before: final frame p50 190.8 / 189.2 ms, p95 285.8 / 295.9 ms
+  after:  final frame p50 114.9 / 122.0 ms, p95 206.8 / 208.2 ms
+A newer paused-viewer request now stops the frame in flight between decoded frames (the same
+decoder interrupt), instead of letting a superseded seek finish its GOP of catch-up.
+tests/app/test_frame_source_interrupt.cpp scrubs a 10 s one-keyframe clip; treating the
+superseded frame as an error makes it fail.
