@@ -1,6 +1,7 @@
 // M10 audio boundaries: the mix must not depend on how the device or the exporter cuts it into
 // blocks. Every case is rendered in fixed 1024-sample blocks and again in seeded irregular blocks
-// (1 sample to 4096, and frame-sized 1600) in one TimelineAudio, and must match sample for sample.
+// (1 to 4096 samples) and in the exporter's per-frame blocks at 23.976/29.97/30/59.94 fps, in one
+// TimelineAudio each, and must match sample for sample.
 #include "speed_test.hpp"
 
 #include "oma_test.hpp"
@@ -9,16 +10,17 @@ using namespace playback_test;
 
 namespace {
 
-// `frames` from `first` in blocks drawn from a small LCG (seed 0: frame-sized 1600 blocks).
-std::vector<float> render_irregular(const tl::Timeline& timeline, std::int64_t first,
-                                    std::int64_t frames, std::uint32_t seed) {
+// `frames` from `first`, each block as long as `next(block index)` says.
+template <typename Next>
+std::vector<float> render_in(const tl::Timeline& timeline, std::int64_t first, std::int64_t frames,
+                             Next next) {
     oma::playback::TimelineAudio audio(timeline, paths(), rate(), kChannels);
     std::vector<float> out(static_cast<std::size_t>(frames * kChannels));
-    std::uint32_t state = seed;
-    for (std::int64_t at = 0; at < frames;) {
-        state = (state * 1664525U) + 1013904223U;
-        const std::int64_t size = seed == 0 ? 1600 : 1 + static_cast<std::int64_t>(state >> 20);
-        const std::int64_t n = std::min(size, frames - at);
+    std::int64_t block = 0;
+    for (std::int64_t at = 0; at < frames; ++block) {
+        const std::int64_t n = std::min(next(block), frames - at);
+        if (n <= 0)
+            return {};
         const auto span = std::span<float>(out).subspan(static_cast<std::size_t>(at * kChannels),
                                                         static_cast<std::size_t>(n * kChannels));
         if (!audio.render(span, first + at))
@@ -28,12 +30,37 @@ std::vector<float> render_irregular(const tl::Timeline& timeline, std::int64_t f
     return out;
 }
 
+// Seeded irregular blocks of 1 to 4096 samples, from a small LCG.
+auto irregular(std::uint32_t seed) {
+    return [state = seed](std::int64_t) mutable {
+        state = (state * 1664525U) + 1013904223U;
+        return 1 + static_cast<std::int64_t>(state >> 20);
+    };
+}
+
+// The exporter's blocks: the samples from frame k's start to frame k + 1's, floored at 48 kHz,
+// so NTSC rates alternate (1601/1602 at 29.97).
+auto per_frame(oma::FrameRate fps) {
+    const auto tb = q(1, 48000);
+    return [fps, tb](std::int64_t k) {
+        const auto at = [&](std::int64_t f) {
+            return fps.frame_to_time(f).rescaled(tb, oma::Rounding::Floor).value().value();
+        };
+        return at(k + 1) - at(k);
+    };
+}
+
 bool same_for_every_partition(const tl::Timeline& timeline, std::int64_t frames) {
     const auto fixed = render(timeline, 0, frames);
     if (fixed.empty() || peak(fixed, 0, frames) == 0.0F)
         return false;
-    for (const std::uint32_t seed : {0U, 1U, 7U, 2026U}) {
-        if (render_irregular(timeline, 0, frames, seed) != fixed)
+    for (const std::uint32_t seed : {1U, 7U, 2026U}) {
+        if (render_in(timeline, 0, frames, irregular(seed)) != fixed)
+            return false;
+    }
+    namespace fr = oma::frame_rates;
+    for (const oma::FrameRate fps : {fr::k23_976, fr::k29_97, fr::k30, fr::k59_94}) {
+        if (render_in(timeline, 0, frames, per_frame(fps)) != fixed)
             return false;
     }
     return true;
