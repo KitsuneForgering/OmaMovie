@@ -89,6 +89,7 @@ make spikes                    # M1 spikes in tools/spikes (Docs/spikes/)
 make run-gui                   # Qt/Vulkan editor shell; GUI_FILE=path or RUN_GUI_SMOKE=1
 build/release/omamovie --m4-audit FILE SECONDS    # A/V sync, per-stage timing (opens a window)
 build/release/omamovie --m4-seek-audit FILE SEEKS # seek UI blocking and first-frame latency
+build/release/omamovie --m4-scrub-audit FILE SEEKS # the same seeks paused: UI event-loop stall per seek
 build/release/omamovie --export-audit FILE OUT.mp4 # export one file, per-phase timing (opens a window)
 make oma-project               # build the native project inspect/validate/dump CLI
 build/debug/tools/oma-project/oma-project import FILE.otio  # OTIO import report (media not probed)

@@ -2,9 +2,10 @@
 
 ## Measurement
 
-Intel Iris Xe, release build, `baseline_1080p60.mp4` (GOP 250). A temporary variant of
-`--m4-seek-audit` (not committed) seeks with the editor paused and records, per seek, the largest
-gap between ticks of a 2 ms timer on the UI thread:
+Intel Iris Xe, release build, `baseline_1080p60.mp4` (GOP 250). `omamovie --m4-scrub-audit FILE 20`
+seeks with the editor paused and records, per seek, the largest gap between ticks of a 2 ms
+timer on the UI thread (first measured with a temporary variant; the committed audit repeats it:
+hardware 117 / 314 ms, software 9.6 / 14 ms):
 
 | Paused viewer | UI event-loop gap per seek, p50 / p95 / max | first frame p50 / p95 |
 |---|---|---|
