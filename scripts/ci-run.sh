@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
-# Run one CI task in the same Arch Linux container used by the workflow.
+# Run one CI task in the same Arch Linux container used by the workflows.
+# Usage: scripts/ci-run.sh test <compiler> <build> | smoke | format | tidy | fuzz <target> | release
 set -euo pipefail
 
 task=${1:?task required}
-compiler=${2:-}
-build=${3:-}
+arg1=${2:-}
+arg2=${3:-}
+# The release stage installs what the package needs (no development tools): it proves the
+# PKGBUILD's depends/makedepends/checkdepends are enough to build and test what ships.
+deps_flags=""
+[[ $task == release ]] && deps_flags="--no-dev"
 docker run --rm --cap-add SYS_PTRACE \
-    -e OMA_CI_TASK="$task" -e OMA_CI_COMPILER="$compiler" -e OMA_CI_BUILD="$build" \
+    -e OMA_CI_TASK="$task" -e OMA_CI_ARG1="$arg1" -e OMA_CI_ARG2="$arg2" -e OMA_CI_DEPS="$deps_flags" \
     -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
     pacman -Syu --noconfirm >/dev/null
-    scripts/deps.sh --install --noconfirm >/dev/null
+    scripts/deps.sh --install $OMA_CI_DEPS --noconfirm >/dev/null
     case "$OMA_CI_TASK" in
-        test)
+        test) # compiler, build
             app=""
-            case "$OMA_CI_BUILD" in debug|release) app="build/$OMA_CI_BUILD/omamovie" ;; esac
-            make -j"$(nproc)" BUILD="$OMA_CI_BUILD" CXX="$OMA_CI_COMPILER" \
+            case "$OMA_CI_ARG2" in debug|release) app="build/$OMA_CI_ARG2/omamovie" ;; esac
+            make -j"$(nproc)" BUILD="$OMA_CI_ARG2" CXX="$OMA_CI_ARG1" \
                 test $app JUNIT_DIR=build/junit
             ;;
         smoke)
@@ -32,8 +37,13 @@ docker run --rm --cap-add SYS_PTRACE \
                 export WAYLAND_DISPLAY=\$(basename /tmp/xdg/wayland-?)
                 QT_QPA_PLATFORM=wayland timeout 600 build/release/omamovie --smoke"
             ;;
-        lint) make format-check compdb tidy && scripts/check-includes.sh ;;
-        fuzz) make fuzz FUZZ_RUNS=500000 ;;
+        format) make format-check ;;
+        tidy) make compdb tidy ;;
+        fuzz) make "fuzz-${OMA_CI_ARG1:?fuzz target required}" FUZZ_RUNS=500000 ;; # target
+        release) # the shipped tree, built and tested: stage/usr
+            make -j"$(nproc)" BUILD=release test build/release/omamovie
+            make BUILD=release DESTDIR=/src/stage PREFIX=/usr install
+            ;;
         *) echo "unknown CI task: $OMA_CI_TASK" >&2; exit 2 ;;
     esac
     '

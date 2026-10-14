@@ -1,19 +1,27 @@
 name: CI
 
+# Independent jobs run in parallel; `ci` gates on all of them (one required check for branch
+# protection). The release workflow calls this workflow before it publishes anything.
 on:
   push:
     branches: [master]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
+
+concurrency:
+  # A newer push to the same pull request replaces the run in progress; master and tags never do.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Arch Linux container: same toolchain as Omarchy (current GCC/Clang).
   # The container runs through `docker run` so the host kernel can be tuned first:
   # ThreadSanitizer fails with the default mmap entropy of recent runners.
   test:
-    name: ${{ matrix.compiler }} / ${{ matrix.build }}
+    name: test ${{ matrix.compiler }} / ${{ matrix.build }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -22,13 +30,10 @@ jobs:
         build: [debug, asan, tsan, release]
     steps:
       - uses: actions/checkout@v7
-
       - name: Lower mmap_rnd_bits for TSan
         run: sudo sysctl -w vm.mmap_rnd_bits=28
-
       - name: Build and test
         run: bash scripts/ci-run.sh test '${{ matrix.compiler }}' '${{ matrix.build }}'
-
       - name: JUnit reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -45,18 +50,53 @@ jobs:
       - name: Run the GUI smoke on a headless compositor
         run: bash scripts/ci-run.sh smoke
 
-  lint:
-    name: format and clang-tidy
+  format:
+    name: clang-format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: clang-format and clang-tidy
-        run: bash scripts/ci-run.sh lint
+      - name: Check formatting
+        run: bash scripts/ci-run.sh format
+
+  tidy:
+    name: clang-tidy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: clang-tidy on the libs
+        run: bash scripts/ci-run.sh tidy
+
+  includes:
+    # Plain grep over the sources: no container or dependencies needed.
+    name: include rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check include placement
+        run: scripts/check-includes.sh
 
   fuzz:
-    name: parser fuzzing (libFuzzer, ASan/UBSan)
+    name: fuzz ${{ matrix.target }} (libFuzzer, ASan/UBSan)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [cube, project, subtitles, otio, probe]
     steps:
       - uses: actions/checkout@v7
-      - name: Fuzz the parsers of untrusted files
-        run: bash scripts/ci-run.sh fuzz
+      - name: Fuzz one parser of untrusted files
+        run: bash scripts/ci-run.sh fuzz '${{ matrix.target }}'
+
+  ci:
+    # Fails unless every job above succeeded (a skipped or cancelled job fails it too).
+    name: ci
+    if: always()
+    needs: [test, smoke, format, tidy, includes, fuzz]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All jobs passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for r in $RESULTS; do [[ $r == success ]] || exit 1; done
