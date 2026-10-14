@@ -2,8 +2,11 @@
 #include "oma/timeline/edit.hpp"
 #include "oma/timeline/editor.hpp"
 
+#include <sys/resource.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
+#include <csignal>
 #include <cstdio>
 #include <filesystem>
 #include <format>
@@ -289,6 +292,38 @@ void saves_atomically() {
     fs::remove_all(dir.parent_path());
 }
 
+// Failures injected past the temporary file's creation: a write refused by the file size limit
+// (EFBIG, in a child process so the limit stays there) and a rename onto a folder. Each save
+// fails, the previous file is untouched and no temporary is left beside it.
+void save_failures_keep_the_previous_file() {
+    const fs::path dir = scratch("save-fail");
+    const fs::path file = dir / "vlog.omamovie";
+    const Document doc = sample(dir);
+    expect(oma::project::save(doc, file).has_value()).toBeTruthy();
+    const std::string first = read_file(file);
+    Document bigger = doc;
+    bigger.canvas_width = 1280;
+    const pid_t child = ::fork();
+    if (child == 0) {
+        std::signal(SIGXFSZ, SIG_IGN); // a write past the limit fails instead of killing
+        const rlimit small{.rlim_cur = 64, .rlim_max = RLIM_INFINITY};
+        ::setrlimit(RLIMIT_FSIZE, &small);
+        ::_exit(oma::project::save(bigger, file).has_value() ? 1 : 0);
+    }
+    int status = -1;
+    ::waitpid(child, &status, 0);
+    expect(WIFEXITED(status) && WEXITSTATUS(status) == 0).toBeTruthy();
+    expect(read_file(file) == first).toBeTruthy();
+    expect(std::distance(fs::directory_iterator(dir), fs::directory_iterator())).toBe(1L);
+    // A folder where the project would go: the rename fails and the temporary goes.
+    const fs::path taken = dir / "taken.omamovie";
+    fs::create_directories(taken / "inside");
+    expect(oma::project::save(doc, taken).has_value()).toBeFalsy();
+    expect(fs::is_directory(taken / "inside")).toBeTruthy();
+    expect(std::distance(fs::directory_iterator(dir), fs::directory_iterator())).toBe(2L);
+    fs::remove_all(dir.parent_path());
+}
+
 void finds_media_next_to_a_moved_project() {
     const fs::path root = scratch("moved");
     fs::create_directories(root / "before" / "media");
@@ -486,6 +521,8 @@ void run_document_tests() {
            { refuses_newer_and_keeps_unknown_fields(); });
         it("rejects truncated, mistyped and inconsistent files", { rejects_broken_files(); });
         it("saves atomically and leaves the old file on failure", { saves_atomically(); });
+        it("keeps the old file when a write or the rename fails",
+           { save_failures_keep_the_previous_file(); });
         it("finds media next to a moved project", { finds_media_next_to_a_moved_project(); });
         it("fingerprints files", { fingerprints_tell_files_apart(); });
         it("reads format 1 projects", { reads_format_1(); });
