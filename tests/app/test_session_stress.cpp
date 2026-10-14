@@ -108,6 +108,55 @@ bool cancels_an_export_cleanly() {
            QDir(dir.path()).entryList(QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot).isEmpty();
 }
 
+// Seeded switches between a saved project, a new one and a fresh import, interleaved with
+// playback and a started export, a few ms apart: results of replaced work are dropped
+// (generation), and once everything settles the last request wins with its one clip.
+bool survives_project_switches() {
+    QTemporaryDir dir;
+    const QString project = dir.filePath("saved.omamovie");
+    {
+        Session first;
+        if (!dir.isValid() || !open_camera(first))
+            return false;
+        first.saveProject(QUrl::fromLocalFile(project));
+        if (!wait_for([&] { return first.projectPath() == project && !first.dirty(); }))
+            return false;
+    }
+    Session s;
+    s.setSilent(true);
+    s.setExportEncoder("software");
+    std::uint32_t state = 7;
+    for (int i = 0; i < 40; ++i) {
+        state = (state * 1664525U) + 1013904223U;
+        switch ((state >> 24) % 5) {
+        case 0:
+            s.openProject(QUrl::fromLocalFile(project));
+            break;
+        case 1:
+            s.newProject();
+            break;
+        case 2:
+            s.open(QFileInfo(kCamera).absoluteFilePath());
+            break;
+        case 3:
+            s.togglePlay();
+            break;
+        default:
+            s.exportMovie(QUrl::fromLocalFile(dir.filePath(QStringLiteral("switch-%1.mp4").arg(i))),
+                          "mp4-h264");
+            break;
+        }
+        pump(static_cast<int>((state >> 4) % 12));
+    }
+    s.newProject();
+    s.open(QFileInfo(kCamera).absoluteFilePath());
+    const bool settled = wait_for(
+        [&] { return s.clips().size() == 1 && !s.importsPending() && s.exportProgress() < 0; },
+        60000 * kSlow);
+    s.pause();
+    return settled && s.media().size() == 1;
+}
+
 // Destroying a Session while it plays and exports stops its workers without hanging and leaves
 // no temporary or stage behind (a movie finished before the end may stay).
 bool shuts_down_while_busy() {
@@ -134,6 +183,8 @@ void run_session_stress_tests() {
         it("survives seeded transport and edit bursts",
            { expect(survives_transport_bursts()).toBeTruthy(); });
         it("cancels an export cleanly", { expect(cancels_an_export_cleanly()).toBeTruthy(); });
+        it("survives seeded project switches during playback and export",
+           { expect(survives_project_switches()).toBeTruthy(); });
         it("shuts down while playing and exporting",
            { expect(shuts_down_while_busy()).toBeTruthy(); });
     });
