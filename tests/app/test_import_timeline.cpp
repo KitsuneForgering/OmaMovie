@@ -21,8 +21,9 @@ bool imports_an_otio_file_as_an_unsaved_project() {
     if (!wait_for([&] { return s.clips().size() == 1 && !s.importsPending(); }))
         return false;
     const double length = s.clips().front().toMap().value("duration").toDouble();
+    // The canvas is the clip's own 320x180, not the 1920x1080 default.
     return std::abs(length - 0.5) < 1e-9 && s.projectPath().isEmpty() && s.dirty() &&
-           s.importReport().isEmpty();
+           s.canvasWidth() == 320 && s.canvasHeight() == 180 && s.importReport().isEmpty();
 }
 
 // basic.otio refers to a file that does not exist: it opens with notes instead of clips.
