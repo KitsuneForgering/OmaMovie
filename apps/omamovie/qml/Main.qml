@@ -871,7 +871,7 @@ ApplicationWindow {
                     MouseArea {
                         id: libraryResize
                         anchors.fill: parent
-                        anchors.margins: -4
+                        anchors.margins: -9 // a 24 px grip around the 6 px divider (WCAG 2.5.8)
                         activeFocusOnTab: true
                         Accessible.name: "Resize media library"
                         cursorShape: Qt.SplitHCursor
@@ -896,8 +896,14 @@ ApplicationWindow {
                 height: 6
                 color: colors.background
                 Rectangle { width: 36; height: 2; radius: 1; color: root.muted; anchors.centerIn: parent; opacity: 0.6 }
+                // A 24 px grip (WCAG 2.5.8): mostly over the timeline's empty top margin, a little
+                // over the transport bar's bottom edge.
                 MouseArea {
+                    objectName: "splitterGrip"
                     anchors.fill: parent
+                    anchors.topMargin: -6
+                    anchors.bottomMargin: -12
+                    z: 1
                     cursorShape: Qt.SplitVCursor
                     onPositionChanged: (mouse) => {
                         if (pressed)

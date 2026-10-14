@@ -419,8 +419,11 @@ Rectangle {
             border.color: root.fg
             opacity: 0.35
         }
+        // 24 px to aim at (WCAG 2.5.8) while the strip itself stays 14 px.
         MouseArea {
             anchors.fill: parent
+            anchors.topMargin: -5
+            anchors.bottomMargin: -5
             onPressed: (mouse) => navigate(mouse.x)
             onPositionChanged: (mouse) => { if (pressed) navigate(mouse.x) }
             function navigate(x) {
@@ -1218,7 +1221,9 @@ Rectangle {
         OmaButton { action: actions.snapping; iconName: "snap"; showLabel: false; selected: root.snapping }
         OmaButton { action: actions.zoomOut; iconName: "zoomOut"; showLabel: false }
         Slider {
+            objectName: "zoomSlider"
             Layout.preferredWidth: 110
+            implicitHeight: 24 // the target to aim at; the groove stays thin (WCAG 2.5.8)
             from: Math.log(4)
             to: Math.log(2400)
             value: Math.log(timelinePanel.scale)
