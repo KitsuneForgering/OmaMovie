@@ -333,7 +333,7 @@ ApplicationWindow {
         // The menu of what is selected; with nothing selected, the cut under the playhead's
         // (transitions) or the timeline's.
         property OmaAction clipMenu: OmaAction {
-            text: "Context menu"; keys: "Shift+F10"; enabled: actions.editing && session.clips.length > 0
+            text: "Context menu"; keys: "Shift+F10"; enabled: actions.editing && session.clipCount > 0
             onTriggered: root.openClipMenu()
         }
         property OmaAction clipMenuKey: OmaAction {
@@ -380,7 +380,7 @@ ApplicationWindow {
             onTriggered: root.confirmDiscard("Import a timeline", () => timelineImport.choose())
         }
         property OmaAction exportMovie: OmaAction {
-            text: "Export…"; keys: "Ctrl+E"; enabled: actions.editing && session.clips.length > 0 && session.exportProgress < 0
+            text: "Export…"; keys: "Ctrl+E"; enabled: actions.editing && session.clipCount > 0 && session.exportProgress < 0
             onTriggered: exportDialog.open()
         }
         // Shows or hides the library: an overlay in narrow windows, the sidebar in wide ones (the
@@ -392,28 +392,28 @@ ApplicationWindow {
         // Source viewer (M6 pilot): mark a range of a library item before placing it.
         // Canvas proportion (ADR-0010): keeps the short side; positions follow.
         property OmaAction canvasWide: OmaAction {
-            text: "Canvas 16:9 (landscape)"; enabled: actions.editing && session.clips.length > 0
+            text: "Canvas 16:9 (landscape)"; enabled: actions.editing && session.clipCount > 0
             onTriggered: session.setCanvasAspect(16, 9)
         }
         property OmaAction canvasVertical: OmaAction {
-            text: "Canvas 9:16 (vertical)"; enabled: actions.editing && session.clips.length > 0
+            text: "Canvas 9:16 (vertical)"; enabled: actions.editing && session.clipCount > 0
             onTriggered: session.setCanvasAspect(9, 16)
         }
         property OmaAction canvasSquare: OmaAction {
-            text: "Canvas 1:1 (square)"; enabled: actions.editing && session.clips.length > 0
+            text: "Canvas 1:1 (square)"; enabled: actions.editing && session.clipCount > 0
             onTriggered: session.setCanvasAspect(1, 1)
         }
         property OmaAction canvasPortrait: OmaAction {
-            text: "Canvas 4:5 (portrait)"; enabled: actions.editing && session.clips.length > 0
+            text: "Canvas 4:5 (portrait)"; enabled: actions.editing && session.clipCount > 0
             onTriggered: session.setCanvasAspect(4, 5)
         }
         property OmaAction canvasCustom: OmaAction {
-            text: "Custom size…"; enabled: actions.editing && session.clips.length > 0
+            text: "Custom size…"; enabled: actions.editing && session.clipCount > 0
             onTriggered: canvasDialog.open()
         }
         // Captions (ADR-0017).
         property OmaAction addCaption: OmaAction {
-            text: "Add caption"; keys: "Ctrl+Alt+C"; enabled: actions.editing && session.clips.length > 0
+            text: "Add caption"; keys: "Ctrl+Alt+C"; enabled: actions.editing && session.clipCount > 0
             onTriggered: { const id = session.addCaption(); if (id > 0) root.editCaption(id) }
         }
         property OmaAction editCaption: OmaAction {
@@ -422,7 +422,7 @@ ApplicationWindow {
             onTriggered: root.editCaption(session.captionIdAt(session.position))
         }
         property OmaAction importCaptions: OmaAction {
-            text: "Import captions…"; enabled: actions.editing && session.clips.length > 0
+            text: "Import captions…"; enabled: actions.editing && session.clipCount > 0
             onTriggered: captionsOpenDialog.open()
         }
         property OmaAction exportCaptions: OmaAction {

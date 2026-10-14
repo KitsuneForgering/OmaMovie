@@ -39,6 +39,7 @@ void run_palette_tests();
 void run_playback_clock_tests();
 void run_frame_source_interrupt_tests();
 void run_paused_frames_tests();
+void run_clip_count_tests();
 void run_export_switch_tests();
 void run_key_tracks_tests();
 void run_layout_tests();
@@ -105,6 +106,7 @@ int main(int argc, char* argv[]) {
     run_playback_clock_tests();
     run_frame_source_interrupt_tests();
     run_paused_frames_tests();
+    run_clip_count_tests();
     run_export_switch_tests();
     run_key_tracks_tests();
     run_layout_tests();

@@ -73,6 +73,10 @@ class Session final : public QObject {
     Q_PROPERTY(QString recordingsFolder READ recordingsFolder NOTIFY recordingsChanged)
     Q_PROPERTY(int selectedMedia READ selectedMedia NOTIFY selectionChanged)
     Q_PROPERTY(QVariantList clips READ clips NOTIFY sequenceChanged)
+    // How many storyline clips there are. QML bindings that only need the count read this: each
+    // read of `clips` hands JS its own reference to the whole list, which the QML garbage
+    // collector later frees in one uninterruptible sweep (~90 ms at 5,000 clips).
+    Q_PROPERTY(int clipCount READ clipCount NOTIFY sequenceChanged)
     // The same storyline clips as a model that keeps delegates across edits (long timelines).
     Q_PROPERTY(QObject* storylineClips READ storylineClips CONSTANT)
     // More storyline clips in view than delegates make sense for: the timeline draws them as one
@@ -193,6 +197,7 @@ public:
     [[nodiscard]] QVariantList media() const;
     [[nodiscard]] int selectedMedia() const;
     [[nodiscard]] QVariantList clips() const;
+    [[nodiscard]] int clipCount() const;
     [[nodiscard]] QVariantList audioTracks() const;
     [[nodiscard]] QVariantList videoTracks() const;
     [[nodiscard]] QObject* storylineClips();

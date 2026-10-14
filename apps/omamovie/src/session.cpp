@@ -2597,6 +2597,11 @@ QVariantList Session::clips() const {
     return list;
 }
 
+int Session::clipCount() const {
+    const tl::Track* track = editor_ ? editor_->timeline().find_track(primary_) : nullptr;
+    return track != nullptr ? static_cast<int>(track->clips.size()) : 0;
+}
+
 void Session::setStorylineView(double from, double to) {
     if (!std::isfinite(from) || std::isnan(to) || (from == view_from_ && to == view_to_)) return;
     view_from_ = from;
