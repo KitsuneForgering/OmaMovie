@@ -878,6 +878,53 @@ void measures_1080p_three_layers() {
                 a.frame->on_gpu() ? "GPU" : "uploaded", ms);
 }
 
+// M10 effects contract: the cost of each shipped effect pass at 1080p and 4K output, on one
+// decoded 1080p layer filling the frame (20 warmed renders each, submit to completion). Printed for the
+// record (Research/evidence), not asserted: timings depend on the device and its load.
+void measures_effect_passes() {
+    const oma::gpu::Device* device = compositor_test_device();
+    if (device == nullptr) {
+        return;
+    }
+    auto a = decode_first("screenrecording_like.mp4", device); // a 1080p source, as recorded
+    auto vk =
+        a.frame ? VulkanCompositor::create(*device) : decltype(VulkanCompositor::create(*device)){};
+    if (!a.frame || !vk) {
+        return;
+    }
+    const std::array<LayerInput, 1> inputs{a.input()};
+    const auto time = [&](const RenderGraph& g) {
+        static_cast<void>((*vk)->render(g, inputs)); // warm-up (pipelines, intermediates)
+        constexpr int kRuns = 20;
+        const auto t0 = std::chrono::steady_clock::now();
+        for (int i = 0; i < kRuns; ++i) {
+            static_cast<void>((*vk)->render(g, inputs));
+        }
+        return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0)
+                   .count() /
+               kRuns;
+    };
+    const char* names[] = {"none", "black-and-white", "sepia", "vintage", "cool",
+                           "warm", "vignette"};
+    for (const auto& [w, h] : {std::pair{1920U, 1080U}, std::pair{3840U, 2160U}}) {
+        RenderGraph g = native_graph(w, h);
+        g.layers[0].fit = Fit::Fill;
+        const double base = time(g);
+        std::printf("    %ux%u: no effect %.2f ms;", w, h, base);
+        for (int kind = 1; kind <= static_cast<int>(oma::compositor::FilterKind::Vignette);
+             ++kind) {
+            g.layers[0].looks = {
+                {.kind = static_cast<oma::compositor::FilterKind>(kind), .amount = 1.0}};
+            std::printf(" %s %+.2f", names[kind], time(g) - base);
+        }
+        g.layers[0].looks.clear();
+        for (const double detail : {-0.6, -1.0, 0.6}) {
+            g.layers[0].sharpness = detail;
+            std::printf(" detail %+.1f %+.2f", detail, time(g) - base);
+        }
+        std::printf(" ms\n");
+    }
+}
 } // namespace
 
 void run_cpu_compositor_tests() {
@@ -919,5 +966,6 @@ void run_vulkan_compositor_tests() {
             draws_yuv_against_swscale("color_patches_bt709_pc.mkv");
         });
         it("measures three 1080p layers", { measures_1080p_three_layers(); });
+        it("measures each effect pass at 1080p and 4K", { measures_effect_passes(); });
     });
 }
