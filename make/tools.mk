@@ -1,22 +1,24 @@
 # Parser fuzzing (libFuzzer, Clang): build with the fuzz preset, then run each target from its
 # seed corpus in tests/fuzz/corpus. New inputs land in build/fuzz/, never in the repository.
-fuzz:
+# `make fuzz-<target>` builds and runs one alone (CI runs them as parallel jobs).
+FUZZ_TARGETS := cube project subtitles otio probe
+# simdjson's inline padded_string pairs new(std::nothrow)[] with delete[]; under clang's
+# sanitizers with libstdc++ the delete reaches free(), a toolchain mismatch outside our code.
+# libstdc++'s stable_sort buffer meets the same mismatch in the subtitle and OTIO parsers.
+FUZZ_ENV_project   := ASAN_OPTIONS=alloc_dealloc_mismatch=0
+FUZZ_ENV_subtitles := ASAN_OPTIONS=alloc_dealloc_mismatch=0
+FUZZ_ENV_otio      := ASAN_OPTIONS=alloc_dealloc_mismatch=0
+FUZZ_ENV_probe     := ASAN_OPTIONS=alloc_dealloc_mismatch=0
+# Each probe input runs FFmpeg's demuxers (~125 runs/s): bounded by time as well as runs.
+FUZZ_ARGS_probe    := -timeout=10 -max_total_time=$(FUZZ_PROBE_SECONDS)
+
+fuzz: $(addprefix fuzz-,$(FUZZ_TARGETS))
+
+fuzz-%:
 	$(Q)cmake --preset fuzz
-	$(Q)cmake --build --preset fuzz
-	$(Q)build/fuzz/fuzz_cube -runs=$(FUZZ_RUNS) -max_len=65536 \
-		build/fuzz/cube-corpus tests/fuzz/corpus/cube
-	@# simdjson's inline padded_string pairs new(std::nothrow)[] with delete[]; under clang's
-	@# sanitizers with libstdc++ the delete reaches free(), a toolchain mismatch outside our code.
-	$(Q)ASAN_OPTIONS=alloc_dealloc_mismatch=0 build/fuzz/fuzz_project -runs=$(FUZZ_RUNS) -max_len=65536 \
-		build/fuzz/project-corpus tests/fuzz/corpus/project
-	@# libstdc++'s stable_sort buffer meets the same new/free mismatch under clang's sanitizers.
-	$(Q)ASAN_OPTIONS=alloc_dealloc_mismatch=0 build/fuzz/fuzz_subtitles -runs=$(FUZZ_RUNS) -max_len=65536 \
-		build/fuzz/subtitles-corpus tests/fuzz/corpus/subtitles
-	$(Q)ASAN_OPTIONS=alloc_dealloc_mismatch=0 build/fuzz/fuzz_otio -runs=$(FUZZ_RUNS) -max_len=65536 \
-		build/fuzz/otio-corpus tests/fuzz/corpus/otio
-	@# Each probe input runs FFmpeg's demuxers (~125 runs/s): bounded by time as well as runs.
-	$(Q)ASAN_OPTIONS=alloc_dealloc_mismatch=0 build/fuzz/fuzz_probe -runs=$(FUZZ_RUNS) -max_len=65536 \
-		-timeout=10 -max_total_time=$(FUZZ_PROBE_SECONDS) build/fuzz/probe-corpus tests/fuzz/corpus/probe
+	$(Q)cmake --build --preset fuzz --target fuzz_$*
+	$(Q)$(FUZZ_ENV_$*) build/fuzz/fuzz_$* -runs=$(FUZZ_RUNS) -max_len=65536 $(FUZZ_ARGS_$*) \
+		build/fuzz/$*-corpus tests/fuzz/corpus/$*
 
 spikes:
 	$(Q)cmake --preset spikes
@@ -42,6 +44,7 @@ help:
 	@echo '  tidy          run clang-tidy on the libs'
 	@echo '  fixtures      generate test media in tests/fixtures/generated (needs ffmpeg)'
 	@echo '  fuzz          run the parser fuzz targets with clang (libFuzzer) [FUZZ_RUNS=n FUZZ_PROBE_SECONDS=s]'
+	@echo '  fuzz-<name>   one of them: cube project subtitles otio probe'
 	@echo '  spikes        build the M1 spikes in tools/spikes (Vulkan + FFmpeg + Qt Quick/RHI)'
 	@echo '  install       install the app tree [DESTDIR=dir PREFIX=/usr/local] (BUILD=release)'
 	@echo '  run-gui       open the Qt editor shell [GUI_FILE=path; RUN_GUI_SMOKE=1]'
