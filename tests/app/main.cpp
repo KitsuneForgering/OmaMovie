@@ -41,6 +41,7 @@ void run_color_interpretation_tests();
 void run_color_session_tests();
 void run_recording_workflow_tests();
 void run_export_transfer_tests();
+void run_export_levels_tests();
 
 int main(int argc, char* argv[]) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
@@ -94,5 +95,6 @@ int main(int argc, char* argv[]) {
     run_color_session_tests();
     run_recording_workflow_tests();
     run_export_transfer_tests();
+    run_export_levels_tests();
     return cest_result();
 }

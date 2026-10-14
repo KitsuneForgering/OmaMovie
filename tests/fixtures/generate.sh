@@ -62,6 +62,14 @@ if has_encoder libx264; then
         "$out/screenrecording_silent.mp4"
     note screenrecording_silent.mp4
 
+    # A gray ramp over every limited-range code (16..235 left to right), losslessly coded: an
+    # ungraded export must bring each code back (ADR-0006 export transfer).
+    ff -f lavfi -i "nullsrc=size=320x180:rate=30:duration=1,format=yuv420p,geq=lum='16+floor(X*220/320)':cb=128:cr=128" \
+        -c:v libx264 -preset veryfast -qp 0 \
+        -color_range tv -colorspace bt709 -color_primaries bt709 -color_trc bt709 \
+        "$out/gray_ramp_bt709.mp4"
+    note gray_ramp_bt709.mp4
+
     # NTSC rates (exact fractions).
     ff -f lavfi -i "$(video_src 30000/1001)" -c:v libx264 -preset veryfast -pix_fmt yuv420p \
         "$out/h264_29.97fps.mp4"
