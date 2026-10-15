@@ -16,6 +16,7 @@ void run_export_step_tests();
 void run_source_playback_tests();
 void run_edit_workflow_tests();
 void run_export_success_tests();
+void run_waveform_span_tests();
 void run_export_crash_tests();
 void run_export_snapshot_tests();
 void run_trim_preview_tests();
@@ -84,6 +85,7 @@ int main(int argc, char* argv[]) {
     run_source_playback_tests();
     run_edit_workflow_tests();
     run_export_success_tests();
+    run_waveform_span_tests();
     run_export_crash_tests();
     run_export_snapshot_tests();
     run_trim_preview_tests();

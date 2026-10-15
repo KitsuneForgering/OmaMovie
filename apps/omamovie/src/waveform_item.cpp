@@ -1,5 +1,6 @@
 #include "waveform_item.hpp"
 
+#include "waveform_span.hpp"
 #include "waveform_store.hpp"
 
 #include <QSGFlatColorMaterial>
@@ -17,7 +18,8 @@ constexpr double kBarStep = 2.0; // pixels per bar
 
 double bar_height(float peak, double gain) {
     const double v = static_cast<double>(peak) * gain;
-    if (v <= 0.0) return 0.0;
+    if (v <= 0.0)
+        return 0.0;
     const double db = 20.0 * std::log10(v);
     return std::clamp((db - kFloorDb) / -kFloorDb, 0.0, 1.0);
 }
@@ -34,46 +36,61 @@ QObject* WaveformItem::store() const {
 
 void WaveformItem::setStore(QObject* store) {
     auto* typed = qobject_cast<WaveformStore*>(store);
-    if (typed == store_) return;
-    if (store_) disconnect(store_, nullptr, this, nullptr);
+    if (typed == store_)
+        return;
+    if (store_)
+        disconnect(store_, nullptr, this, nullptr);
     store_ = typed;
     if (store_) {
         connect(store_, &WaveformStore::ready, this, [this](double media) {
-            if (media == media_) refresh();
+            if (media == media_)
+                refresh();
         });
     }
     refresh();
 }
 
 void WaveformItem::setMedia(double media) {
-    if (media == media_) return;
+    if (media == media_)
+        return;
     media_ = media;
     refresh();
 }
 
 void WaveformItem::setFrom(double from) {
-    if (from == from_) return;
+    if (from == from_)
+        return;
     from_ = from;
     emit changed();
     update();
 }
 
 void WaveformItem::setLength(double length) {
-    if (length == length_) return;
+    if (length == length_)
+        return;
     length_ = length;
     emit changed();
     update();
 }
 
 void WaveformItem::setGain(double gain) {
-    if (gain == gain_) return;
+    if (gain == gain_)
+        return;
     gain_ = gain;
     emit changed();
     update();
 }
 
+void WaveformItem::setScroll(double scroll) {
+    if (scroll == scroll_)
+        return;
+    scroll_ = scroll;
+    update(); // only wide items bind it (QML), and they build the bars on screen
+}
+
 void WaveformItem::setColor(const QColor& color) {
-    if (color == color_) return;
+    if (color == color_)
+        return;
     color_ = color;
     emit changed();
     update();
@@ -87,7 +104,8 @@ void WaveformItem::refresh() {
 
 void WaveformItem::geometryChange(const QRectF& now, const QRectF& before) {
     QQuickItem::geometryChange(now, before);
-    if (now.size() != before.size()) update();
+    if (now.size() != before.size())
+        update();
 }
 
 QSGNode* WaveformItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData* /*data*/) {
@@ -114,31 +132,49 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData* /*data
     }
     const int bars = static_cast<int>(std::ceil(w / kBarStep));
     QSGGeometry* geometry = node->geometry();
-    geometry->allocate(bars * 6);
+    const BarSpan span = visible_bars(*this, bars, kBarStep);
+    geometry->allocate((span.end - span.first) * 6);
     QSGGeometry::Point2D* v = geometry->vertexDataAsPoint2D();
     const double seconds_per_bar = length_ / static_cast<double>(bars);
     const double origin = from_ - waveform_->start.seconds_approx(); // the waveform's own clock
     const double middle = h / 2.0;
-    for (int i = 0; i < bars; ++i) {
+    for (int i = span.first; i < span.end; ++i) {
         const double t = origin + (static_cast<double>(i) * seconds_per_bar);
-        const double half = std::max(0.5, bar_height(waveform_->peak_between(t, t + seconds_per_bar), gain_) * middle);
+        const double half = std::max(
+            0.5, bar_height(waveform_->peak_between(t, t + seconds_per_bar), gain_) * middle);
         const auto x0 = static_cast<float>(static_cast<double>(i) * kBarStep);
         const auto x1 = static_cast<float>(std::min(w, x0 + kBarStep - 0.5));
         const auto y0 = static_cast<float>(middle - half);
         const auto y1 = static_cast<float>(middle + half);
-        v[(i * 6) + 0].set(x0, y0);
-        v[(i * 6) + 1].set(x1, y0);
-        v[(i * 6) + 2].set(x0, y1);
-        v[(i * 6) + 3].set(x1, y0);
-        v[(i * 6) + 4].set(x1, y1);
-        v[(i * 6) + 5].set(x0, y1);
+        v[((i - span.first) * 6) + 0].set(x0, y0);
+        v[((i - span.first) * 6) + 1].set(x1, y0);
+        v[((i - span.first) * 6) + 2].set(x0, y1);
+        v[((i - span.first) * 6) + 3].set(x1, y0);
+        v[((i - span.first) * 6) + 4].set(x1, y1);
+        v[((i - span.first) * 6) + 5].set(x0, y1);
     }
     node->markDirty(QSGNode::DirtyGeometry);
     return node;
 }
 
-double WaveformItem::media() const { return media_; }
-double WaveformItem::from() const { return from_; }
-double WaveformItem::length() const { return length_; }
-double WaveformItem::gain() const { return gain_; }
-QColor WaveformItem::color() const { return color_; }
+double WaveformItem::media() const {
+    return media_;
+}
+double WaveformItem::from() const {
+    return from_;
+}
+double WaveformItem::length() const {
+    return length_;
+}
+double WaveformItem::gain() const {
+    return gain_;
+}
+QColor WaveformItem::color() const {
+    return color_;
+}
+double WaveformItem::scroll() const {
+    return scroll_;
+}
+double WaveformItem::wideWidth() const {
+    return kWideWaveform;
+}

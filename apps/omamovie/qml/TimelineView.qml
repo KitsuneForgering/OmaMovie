@@ -272,6 +272,8 @@ Rectangle {
         from: clip.sourceIn
         length: clip.duration * clip.speed
         gain: clip.gain
+        // Read only by wide items: narrow ones do not repaint when the timeline scrolls.
+        scroll: width > wideWidth ? timelineScroll.contentX : 0
     }
 
     // A lane clip's connection to the storyline (ADR-0014): end it, or make one at its start.

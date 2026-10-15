@@ -20,10 +20,16 @@ class WaveformItem : public QQuickItem {
     Q_OBJECT
     Q_PROPERTY(QObject* store READ store WRITE setStore NOTIFY changed)
     Q_PROPERTY(double media READ media WRITE setMedia NOTIFY changed)
-    Q_PROPERTY(double from READ from WRITE setFrom NOTIFY changed)     // media time (s) at the left edge
-    Q_PROPERTY(double length READ length WRITE setLength NOTIFY changed) // media seconds across the width
+    Q_PROPERTY(
+        double from READ from WRITE setFrom NOTIFY changed) // media time (s) at the left edge
+    Q_PROPERTY(
+        double length READ length WRITE setLength NOTIFY changed) // media seconds across the width
     Q_PROPERTY(double gain READ gain WRITE setGain NOTIFY changed)
     Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY changed)
+    // The timeline's scroll: items wider than wideWidth bind it and build only the bars near
+    // the screen (waveform_span.hpp); narrower ones leave it alone and build every bar.
+    Q_PROPERTY(double scroll READ scroll WRITE setScroll NOTIFY changed)
+    Q_PROPERTY(double wideWidth READ wideWidth CONSTANT)
 
 public:
     explicit WaveformItem(QQuickItem* parent = nullptr);
@@ -40,6 +46,9 @@ public:
     void setGain(double gain);
     [[nodiscard]] QColor color() const;
     void setColor(const QColor& color);
+    [[nodiscard]] double scroll() const;
+    void setScroll(double scroll);
+    [[nodiscard]] double wideWidth() const;
 
 signals:
     void changed();
@@ -57,5 +66,6 @@ private:
     double length_ = 0;
     double gain_ = 1;
     QColor color_ = Qt::white;
+    double scroll_ = 0;
     std::shared_ptr<const oma::playback::Waveform> waveform_;
 };
