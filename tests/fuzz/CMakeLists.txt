@@ -73,6 +73,16 @@ target_compile_options(fuzz_mlt PRIVATE ${FUZZ_FLAGS})
 target_link_options(fuzz_mlt PRIVATE ${FUZZ_LINK})
 target_link_libraries(fuzz_mlt PRIVATE ${SIMDJSON_LIBRARIES})
 
+add_executable(fuzz_fcpxml fuzz_fcpxml.cpp
+    ${IMPORTERS_LIB_SOURCES} ${PROJECT_IR_LIB_SOURCES} ${BASE_LIB_SOURCES})
+target_include_directories(fuzz_fcpxml PRIVATE
+    ${CMAKE_SOURCE_DIR}/libs/importers/include ${CMAKE_SOURCE_DIR}/libs/importers/src
+    ${CMAKE_SOURCE_DIR}/libs/project-ir/include ${CMAKE_SOURCE_DIR}/libs/base/include)
+target_include_directories(fuzz_fcpxml SYSTEM PRIVATE ${SIMDJSON_INCLUDE_DIRS})
+target_compile_options(fuzz_fcpxml PRIVATE ${FUZZ_FLAGS})
+target_link_options(fuzz_fcpxml PRIVATE ${FUZZ_LINK})
+target_link_libraries(fuzz_fcpxml PRIVATE ${SIMDJSON_LIBRARIES})
+
 # The probe goes through the media library (FFmpeg is the uninstrumented system library), so this
 # target checks OmaMovie's handling of what FFmpeg reports rather than FFmpeg's own parsers. The
 # media and base libraries are instrumented so coverage and ASan reach OmaMovie's probe code.
@@ -84,7 +94,7 @@ target_compile_options(fuzz_probe PRIVATE ${FUZZ_FLAGS})
 target_link_options(fuzz_probe PRIVATE ${FUZZ_LINK})
 target_link_libraries(fuzz_probe PRIVATE oma_media)
 
-set_target_properties(fuzz_cube fuzz_project fuzz_subtitles fuzz_otio fuzz_edl fuzz_mlt fuzz_probe PROPERTIES
+set_target_properties(fuzz_cube fuzz_project fuzz_subtitles fuzz_otio fuzz_edl fuzz_mlt fuzz_fcpxml fuzz_probe PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 file(MAKE_DIRECTORY
     ${CMAKE_BINARY_DIR}/cube-corpus
@@ -93,4 +103,5 @@ file(MAKE_DIRECTORY
     ${CMAKE_BINARY_DIR}/otio-corpus
     ${CMAKE_BINARY_DIR}/edl-corpus
     ${CMAKE_BINARY_DIR}/mlt-corpus
+    ${CMAKE_BINARY_DIR}/fcpxml-corpus
     ${CMAKE_BINARY_DIR}/probe-corpus)

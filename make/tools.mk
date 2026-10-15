@@ -1,7 +1,7 @@
 # Parser fuzzing (libFuzzer, Clang): build with the fuzz preset, then run each target from its
 # seed corpus in tests/fuzz/corpus. New inputs land in build/fuzz/, never in the repository.
 # `make fuzz-<target>` builds and runs one alone (CI runs them as parallel jobs).
-FUZZ_TARGETS := cube project subtitles otio edl mlt probe
+FUZZ_TARGETS := cube project subtitles otio edl mlt fcpxml probe
 # simdjson's inline padded_string pairs new(std::nothrow)[] with delete[]; under clang's
 # sanitizers with libstdc++ the delete reaches free(), a toolchain mismatch outside our code.
 # libstdc++'s stable_sort buffer meets the same mismatch in the subtitle and OTIO parsers.
@@ -10,6 +10,7 @@ FUZZ_ENV_subtitles := ASAN_OPTIONS=alloc_dealloc_mismatch=0
 FUZZ_ENV_otio      := ASAN_OPTIONS=alloc_dealloc_mismatch=0
 FUZZ_ENV_edl       := ASAN_OPTIONS=alloc_dealloc_mismatch=0
 FUZZ_ENV_mlt       := ASAN_OPTIONS=alloc_dealloc_mismatch=0
+FUZZ_ENV_fcpxml    := ASAN_OPTIONS=alloc_dealloc_mismatch=0
 FUZZ_ENV_probe     := ASAN_OPTIONS=alloc_dealloc_mismatch=0
 # Each probe input runs FFmpeg's demuxers (~125 runs/s): bounded by time as well as runs.
 FUZZ_ARGS_probe    := -timeout=10 -max_total_time=$(FUZZ_PROBE_SECONDS)
@@ -46,7 +47,7 @@ help:
 	@echo '  tidy          run clang-tidy on the libs'
 	@echo '  fixtures      generate test media in tests/fixtures/generated (needs ffmpeg)'
 	@echo '  fuzz          run the parser fuzz targets with clang (libFuzzer) [FUZZ_RUNS=n FUZZ_PROBE_SECONDS=s]'
-	@echo '  fuzz-<name>   one of them: cube project subtitles otio edl mlt probe'
+	@echo '  fuzz-<name>   one of them: cube project subtitles otio edl mlt fcpxml probe'
 	@echo '  spikes        build the M1 spikes in tools/spikes (Vulkan + FFmpeg + Qt Quick/RHI)'
 	@echo '  install       install the app tree [DESTDIR=dir PREFIX=/usr/local] (BUILD=release)'
 	@echo '  run-gui       open the Qt editor shell [GUI_FILE=path; RUN_GUI_SMOKE=1]'
