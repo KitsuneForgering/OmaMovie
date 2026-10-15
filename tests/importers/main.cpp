@@ -6,6 +6,7 @@ void run_otio_path_tests();
 void run_otio_scale_tests();
 void run_edl_tests();
 void run_edl_refusal_tests();
+void run_xml_tests();
 
 int main(int argc, char* argv[]) {
     cest_init(argc, argv);
@@ -15,5 +16,6 @@ int main(int argc, char* argv[]) {
     run_otio_scale_tests();
     run_edl_tests();
     run_edl_refusal_tests();
+    run_xml_tests();
     return cest_result();
 }
