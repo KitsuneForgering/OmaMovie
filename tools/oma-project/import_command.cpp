@@ -3,7 +3,7 @@
 // not probed.
 #include "commands.hpp"
 
-#include "oma/importers/edl.hpp"
+#include "oma/importers/timeline.hpp"
 #include "oma/project/from_ir.hpp"
 
 #include <cstdio>
@@ -13,8 +13,8 @@
 int run_import(const std::filesystem::path& file, oma::Rational edl_rate) {
     std::stringstream text;
     text << std::ifstream(file).rdbuf();
-    auto imported = file.extension() == ".edl" ? oma::importers::import_edl(text.str(), edl_rate)
-                                               : oma::importers::import_otio(text.str());
+    auto imported =
+        oma::importers::import_timeline(text.str(), file.extension().string(), edl_rate);
     if (!imported) {
         std::fprintf(stderr, "%s\n", imported.error().summary().c_str());
         return 1;

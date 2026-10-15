@@ -1,6 +1,6 @@
 #include "oma/ingest/timeline_import.hpp"
 
-#include "oma/importers/edl.hpp"
+#include "oma/importers/timeline.hpp"
 #include "oma/ingest/media_entry.hpp"
 #include "oma/project/from_ir.hpp"
 
@@ -18,8 +18,7 @@ Result<project::Document> import_timeline_file(const std::filesystem::path& path
     if (!text) {
         return std::unexpected(text.error());
     }
-    auto imported = path.extension() == ".edl" ? importers::import_edl(*text, edl_rate)
-                                               : importers::import_otio(*text);
+    auto imported = importers::import_timeline(*text, path.extension().string(), edl_rate);
     if (!imported) {
         return std::unexpected(imported.error());
     }
