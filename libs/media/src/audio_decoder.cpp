@@ -1,5 +1,6 @@
 #include "oma/media/audio_decoder.hpp"
 
+#include "audio_gaps.hpp"
 #include "ffmpeg.hpp"
 #include "stream_info.hpp"
 
@@ -144,18 +145,20 @@ Result<void> AudioDecoder::Impl::configure_resampler(const AVFrame& f) {
 
 // Converts one decoded frame (or drains the resampler when f is null) into a buffer.
 Result<std::optional<AudioBuffer>> AudioDecoder::Impl::convert(const AVFrame* f) {
+    std::optional<std::int64_t> stamped; // this frame's first sample by its timestamp
     if (f != nullptr) {
         if (auto r = configure_resampler(*f); !r) {
             return std::unexpected(r.error());
         }
-        if (!next_sample) {
-            const auto pts = ff::to_time(f->best_effort_timestamp, info.timebase);
-            const auto start =
-                pts ? out_rate.time_to_sample(*pts, Rounding::Nearest) : Result<std::int64_t>(0);
-            if (!start) {
-                return std::unexpected(start.error());
+        if (const auto pts = ff::to_time(f->best_effort_timestamp, info.timebase)) {
+            auto at = out_rate.time_to_sample(*pts, Rounding::Nearest);
+            if (!at) {
+                return std::unexpected(at.error());
             }
-            next_sample = *start;
+            stamped = *at;
+        }
+        if (!next_sample) {
+            next_sample = stamped.value_or(0);
         }
     }
     if (!swr) {
@@ -185,20 +188,35 @@ Result<std::optional<AudioBuffer>> AudioDecoder::Impl::convert(const AVFrame* f)
     }
 
     std::int64_t start = next_sample.value_or(0);
-    const std::int64_t end = start + n;
+    // Consumers count samples (TimelineAudio), so a frame stamped away from where the count has
+    // reached keeps its place: a gap is filled with silence, an overlap dropped (code review,
+    // 2026-10-14). The tolerance covers resampler delay; a jump too large to fill re-anchors.
+    const auto gaps = detail::place_frame(stamped, start, n, out_rate.hz());
+    if (gaps.anchor) {
+        log_warn(Category::Audio, "{}: audio timestamps jump {} samples; following them",
+                 file.filename().string(), *gaps.anchor - start);
+        start = *gaps.anchor;
+    }
+    const std::int64_t gap = gaps.silence;
+    const std::int64_t origin = start + gap - gaps.drop; // where converted sample 0 plays
+    const std::int64_t end = origin + n;
     next_sample = end;
-    int first = 0;
+    int first = static_cast<int>(gaps.drop);
     if (const std::optional<std::int64_t> trim = trim_before) {
         if (end <= *trim) {
             return std::optional<AudioBuffer>(); // entirely before the seek target
         }
-        first = static_cast<int>(std::max<std::int64_t>(0, *trim - start));
-        start += first;
+        first = static_cast<int>(std::max<std::int64_t>(first, *trim - origin));
         trim_before.reset();
     }
+    start = gap > 0 ? start : origin + first;
     const int kept = n - first;
     if (kept <= 0) {
         return std::optional<AudioBuffer>();
+    }
+    if (gap > 0) {
+        return std::optional<AudioBuffer>(
+            detail::with_silence(samples, capacity, channels, gap, first, kept, out_rate, start));
     }
     // Compact the planes: each was laid out with `capacity` samples.
     for (int c = 0; c < channels; ++c) {

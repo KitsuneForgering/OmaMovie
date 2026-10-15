@@ -14,6 +14,7 @@ void run_format_tests();
 void run_video_decoder_tests();
 void run_gpu_decode_tests();
 void run_audio_decoder_tests();
+void run_audio_gap_tests();
 void run_video_writer_tests();
 void run_probe_regression_tests();
 void run_copy_rgba_tests();
@@ -70,6 +71,7 @@ int main(int argc, char* argv[]) {
     run_video_decoder_tests();
     run_gpu_decode_tests();
     run_audio_decoder_tests();
+    run_audio_gap_tests();
     run_video_writer_tests();
     run_probe_regression_tests();
     run_copy_rgba_tests();

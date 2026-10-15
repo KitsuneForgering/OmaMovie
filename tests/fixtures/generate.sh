@@ -162,6 +162,12 @@ for range in tv pc; do
     note "color_patches_bt709_$range.mkv"
 done
 
+# 2 s of tone whose packets from 1.0 to 1.5 s are missing but keep their timestamps (a capture
+# that dropped audio): decoding must hold the later sound at 1.5 s, with silence in the gap.
+ff -f lavfi -i "$(audio_src 48000 2)" -af "asetnsamples=n=480,aselect='not(between(t\,1\,1.499))'" \
+    -c:a pcm_s16le "$out/tone_gap.mkv"
+note tone_gap.mkv
+
 echo "Fixtures in $out:"
 printf '  %s\n' "${made[@]}"
 if ((${#skipped[@]})); then
