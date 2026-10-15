@@ -46,4 +46,12 @@ discard deletes its own file instead of resurrecting it.
 No JavaScript function in the QML is longer than 28 lines (`TimelineView.qml`'s menu
 opening and follow-the-playhead handlers); models, edits and rendering stay in C++.
 
+#### 12. `tools/oma-project`
+
+No new items. `diff` dumps both projects through `load` and `to_json`, so formatting cannot
+show up as a change, and compares lines with Myers' algorithm, O((N + M)·D) time and O(D²)
+memory, refusing past 2,000 edits: right for minimal pairs (§16.6). The commands reuse
+`libs/project`, `libs/importers` and `libs/ingest`; no parsing lives only in the CLI (§16.7).
+`tools/spikes` is being changed by another session and was not reviewed.
+
 [← Implementation plan](implementation-plan.md)
