@@ -50,3 +50,12 @@ skipped object named ([evidence](../Research/evidence/2026-10-15-kdenlive-datase
 Kdenlive keeps same-track mixes inside per-track tractors and track audio filters there too, both
 reported; its black background track is a colour generator. Not imported yet: same-track mixes
 as dissolves, nested sequences.
+
+**Kdenlive's same-track mix, as found in `test-mix.kdenlive` (MLT 7.9):** each timeline track is
+a tractor of two playlists (A, B). Clips alternate between them and overlap on the record where
+they mix; each mix is a `luma` transition on that tractor with its own in/out (clock values) and
+`kdenlive:mixcut` (where the cut sits inside the mix), sometimes `reverse=1`. A clip on B may span
+several clips on A. Turning that into one IR track needs the visible clip at every instant, then
+a dissolve per transition; without Kdenlive here to author reference projects that cannot be
+checked against what Kdenlive shows, so the importer keeps both playlists as separate IR tracks
+and reports each mix rather than guess.
