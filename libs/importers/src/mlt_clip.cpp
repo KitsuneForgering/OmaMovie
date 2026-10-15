@@ -26,4 +26,13 @@ std::optional<ir::Clip> clip_of(Builder& b, const Producer& p, std::int64_t in, 
                     .unsupported = p.filters};
 }
 
+std::string why_not(const Builder& b, const std::string& id) {
+    if (const auto p = b.doc.producers.find(id); p != b.doc.producers.end())
+        return p->second.resource.empty() ? "producer without a file"
+                                          : p->second.service + " generator not imported";
+    if (b.doc.tractors.contains(id))
+        return "nested sequence (a tractor used as a clip) not imported";
+    return "unknown producer";
+}
+
 } // namespace oma::importers::mlt

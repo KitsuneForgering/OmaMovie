@@ -41,7 +41,11 @@ void items_of(Builder& b, const Playlist& playlist, ir::Track& track);
 [[nodiscard]] std::optional<ir::Clip> clip_of(Builder& b, const Producer& p, std::int64_t in,
                                               std::int64_t out);
 [[nodiscard]] RationalTime at(const Builder& b, std::int64_t frames);
+// Why `id` cannot be a clip or track: a colour/black generator, a nested sequence, or unknown.
+[[nodiscard]] std::string why_not(const Builder& b, const std::string& id);
 [[nodiscard]] ir::Opaque opaque(const xml::Element& e);
+// Whether `o` was kept from a `<transition>` or a `<filter>` (opaque records the element).
+[[nodiscard]] bool is_a(const ir::Opaque& o, std::string_view element);
 void issue(ir::ImportReport& r, std::string object, std::string reason, std::string impact);
 
 } // namespace oma::importers::mlt

@@ -19,11 +19,17 @@ void track_of(Builder& b, const TrackRef& ref, std::size_t depth) {
     }
     const auto t = b.doc.tractors.find(ref.producer);
     if (t == b.doc.tractors.end() || depth > 4) {
-        issue(b.out.report, ref.producer, "track is not a playlist", "left out");
+        issue(b.out.report, ref.producer, why_not(b, ref.producer) + " as a track", "left out");
         return;
     }
-    for (const ir::Opaque& kept : t->second.transitions)
+    for (const ir::Opaque& kept : t->second.transitions) {
         b.out.timeline.unsupported.push_back(kept);
+        const bool mix = is_a(kept, "transition");
+        issue(b.out.report, kept.original_id,
+              kept.schema + (mix ? " within a track (a same-track mix) not imported"
+                                 : " track filter not imported"),
+              mix ? "kept in the import; the clips meet at a cut" : "kept in the import");
+    }
     for (const TrackRef& sub : t->second.tracks)
         track_of(b, {.producer = sub.producer, .audio = ref.audio || sub.audio, .in = 0, .out = -1},
                  depth + 1);
@@ -40,8 +46,11 @@ Result<void> build(const Document& doc, Imported& out) {
         track_of(b, ref, 0);
     for (const ir::Opaque& kept : main.transitions) {
         out.timeline.unsupported.push_back(kept);
+        const bool filter = is_a(kept, "filter");
         issue(out.report, kept.original_id.empty() ? kept.schema : kept.original_id,
-              kept.schema + " between tracks not imported", "kept in the import");
+              kept.schema +
+                  (filter ? " master filter not imported" : " between tracks not imported"),
+              "kept in the import");
     }
     return {};
 }

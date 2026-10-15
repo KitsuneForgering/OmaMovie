@@ -35,7 +35,7 @@ void items_of(Builder& b, const Playlist& playlist, ir::Track& track) {
             track.items.emplace_back(std::move(*clip));
         else if (t == b.doc.tractors.end() || !mix(b, t->second, track)) {
             if (!e.producer.empty())
-                issue(b.out.report, e.producer, "not a media clip or a mix", "left as a gap");
+                issue(b.out.report, e.producer, why_not(b, e.producer), "left as a gap");
             track.items.emplace_back(ir::Gap{.duration = at(b, length)});
         }
     }

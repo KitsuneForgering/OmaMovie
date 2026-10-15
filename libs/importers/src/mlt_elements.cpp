@@ -1,5 +1,7 @@
 #include "mlt_detail.hpp"
 
+#include <algorithm>
+
 namespace oma::importers::mlt {
 
 std::string property(const xml::Element& e, std::string_view name) {
@@ -35,10 +37,16 @@ ir::Opaque opaque(const xml::Element& e) {
                  .fields = e.attributes};
     if (o.schema.empty())
         o.schema = e.name;
+    o.fields.emplace_back("element", e.name); // transition or filter: they are reported apart
     for (const xml::Element& c : e.children)
         if (c.name == "property")
             o.fields.emplace_back(std::string(c.attribute("name")), c.text);
     return o;
+}
+
+bool is_a(const ir::Opaque& o, std::string_view element) {
+    return std::ranges::any_of(
+        o.fields, [&](const auto& f) { return f.first == "element" && f.second == element; });
 }
 
 void issue(ir::ImportReport& r, std::string object, std::string reason, std::string impact) {
