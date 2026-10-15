@@ -71,11 +71,13 @@ bool damage_is_a_miss() {
 }
 
 bool evicts_least_recently_used() {
-    const DiskCache cache(scratch("evict"), 3000);
+    // Written under a roomy budget so put's own trim stays out of it, then lowered to 3000.
+    DiskCache cache(scratch("evict"), 1 << 20);
     using namespace std::chrono_literals;
     const auto old = fs::file_time_type::clock::now() - 1h;
     for (int i = 0; i < 4; ++i)
         (void)cache.put("entry " + std::to_string(i), bytes(900, 0));
+    cache.set_budget(3000);
     // Age every entry, then use entry 0 again: it becomes the newest.
     for (const auto& e : fs::directory_iterator(cache.dir()))
         fs::last_write_time(e.path(), old);
