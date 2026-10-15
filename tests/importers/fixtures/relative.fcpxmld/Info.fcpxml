@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Half a second (frames 0-14 at 30 fps) of the generated camera clip as an FCPXML 1.11 bundle;
+     the relative src resolves against this document, inside the bundle. -->
+<fcpxml version="1.11">
+    <resources>
+        <format id="r1" frameDuration="1/30s" width="320" height="180"/>
+        <asset id="r2" name="camera" start="0s" duration="1s" hasVideo="1">
+            <media-rep kind="original-media" src="../../../fixtures/generated/h264_30fps_aac.mp4"/>
+        </asset>
+    </resources>
+    <library>
+        <event name="Event">
+            <project name="relative">
+                <sequence format="r1" duration="15/30s">
+                    <spine>
+                        <asset-clip ref="r2" offset="0s" name="camera" duration="15/30s"/>
+                    </spine>
+                </sequence>
+            </project>
+        </event>
+    </library>
+</fcpxml>

@@ -1,7 +1,7 @@
 #pragma once
 
-// An interchange timeline as a native project document (ADR-0008): OTIO, CMX 3600 EDL or
-// MLT/Kdenlive, by extension (importers::import_timeline); the importer, then the converter with
+// An interchange timeline as a native project document (ADR-0008): OTIO, CMX 3600 EDL,
+// MLT/Kdenlive or FCPXML, read by read_timeline; the importer, then the converter with
 // each media file probed by the library import's rule (media_entry). Probes and reads files: run it
 // off the UI thread.
 

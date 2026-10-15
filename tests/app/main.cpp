@@ -52,6 +52,7 @@ void run_marker_tests();
 void run_effect_preset_app_tests();
 void run_import_timeline_tests();
 void run_import_edl_tests();
+void run_import_fcpxml_tests();
 void run_scope_tests();
 void run_scope_session_tests();
 void run_parade_tests();
@@ -125,6 +126,7 @@ int main(int argc, char* argv[]) {
     run_effect_preset_app_tests();
     run_import_timeline_tests();
     run_import_edl_tests();
+    run_import_fcpxml_tests();
     run_scope_tests();
     run_scope_session_tests();
     run_parade_tests();

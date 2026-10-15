@@ -4,16 +4,18 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import OmaMovie
 
-// Importing a timeline (M9: OpenTimelineIO, MLT, Kdenlive): choose the file, then, when the import has notes
-// (CLAUDE.md §16.4: what was approximated, replaced or not carried over), list them.
+// Importing a timeline (M9: OpenTimelineIO, MLT, Kdenlive, FCPXML, EDL): choose the file, then,
+// when the import has notes (CLAUDE.md §16.4: what was approximated, replaced or not carried
+// over), list them.
 Item {
     id: importer
     function choose() { fileDialog.open() }
     FileDialog {
         id: fileDialog
         title: "Import a timeline"
-        nameFilters: ["Timelines (*.otio *.mlt *.kdenlive *.edl)", "OpenTimelineIO (*.otio)",
-                      "MLT and Kdenlive projects (*.mlt *.kdenlive)", "CMX 3600 EDL (*.edl)"]
+        nameFilters: ["Timelines (*.otio *.mlt *.kdenlive *.fcpxml *.edl)", "OpenTimelineIO (*.otio)",
+                      "MLT and Kdenlive projects (*.mlt *.kdenlive)", "Final Cut Pro XML (*.fcpxml)",
+                      "CMX 3600 EDL (*.edl)"]
         // An EDL names no frame rate: ask for the one its timecodes count in.
         onAccepted: selectedFile.toString().toLowerCase().endsWith(".edl")
                     ? edlRate.open() : session.importTimeline(selectedFile)

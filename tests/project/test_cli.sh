@@ -54,6 +54,11 @@ printf '002 AX V C 00:00:00:00 00:00:00:10 01:00:00:20 01:00:01:00\n* SOURCE FIL
 "$cli" inspect "$converted" | grep -qx 'clips: 2'
 if "$cli" import "$file.edl" not-a-rate >/dev/null 2>&1; then exit 1; fi
 rm -f "$converted" "$file.edl"
+# An FCPXML bundle reads its Info.fcpxml, media found inside the bundle, in import and convert alike.
+"$cli" import tests/importers/fixtures/relative.fcpxmld | grep -qx 'media found: 1 of 1 (not probed)'
+"$cli" convert tests/importers/fixtures/relative.fcpxmld "$converted" >/dev/null 2>&1
+"$cli" inspect "$converted" | grep -qx 'clips: 1'
+rm -f "$converted"
 
 # diff (CLAUDE.md §16.7): equal projects exit 0; different ones list their lines and exit 1.
 other=tests/fuzz/corpus/project/effects.json

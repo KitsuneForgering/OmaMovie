@@ -7,7 +7,10 @@
 
 namespace oma::ingest::detail {
 
-Result<std::string> read_timeline_text(const std::filesystem::path& path) {
+Result<std::string> read_timeline_text(const std::filesystem::path& bundle_or_file) {
+    // An `.fcpxmld` is a folder whose document is `Info.fcpxml`.
+    const auto path =
+        bundle_or_file.extension() == ".fcpxmld" ? bundle_or_file / "Info.fcpxml" : bundle_or_file;
     std::error_code ec;
     const auto size = std::filesystem::file_size(path, ec);
     if (!ec && size > importers::kMaxOtioBytes) {

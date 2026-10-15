@@ -1,25 +1,21 @@
-// `oma-project import FILE.otio|FILE.edl [RATE]`: the import report (CLAUDE.md §16.4, §16.7) from
-// the importer and converter the app uses. Media durations come from the file; files are checked,
-// not probed.
+// `oma-project import FILE [RATE]` (OTIO, EDL, MLT/Kdenlive, FCPXML): the import report (CLAUDE.md
+// §16.4, §16.7) from the importer and converter the app uses. Media durations come from the file;
+// files are checked, not probed.
 #include "commands.hpp"
 
-#include "oma/importers/timeline.hpp"
+#include "oma/ingest/timeline_read.hpp"
 #include "oma/project/from_ir.hpp"
 
 #include <cstdio>
-#include <fstream>
-#include <sstream>
 
 int run_import(const std::filesystem::path& file, oma::Rational edl_rate) {
-    std::stringstream text;
-    text << std::ifstream(file).rdbuf();
-    auto imported =
-        oma::importers::import_timeline(text.str(), file.extension().string(), edl_rate);
-    if (!imported) {
-        std::fprintf(stderr, "%s\n", imported.error().summary().c_str());
+    auto read = oma::ingest::read_timeline(file, edl_rate);
+    if (!read) {
+        std::fprintf(stderr, "%s\n", read.error().summary().c_str());
         return 1;
     }
-    const auto dir = std::filesystem::absolute(file).parent_path();
+    auto* imported = &read->imported;
+    const auto& dir = read->dir;
     const auto resolve = [&](const oma::ir::MediaRef& m) -> std::optional<oma::project::MediaRef> {
         const auto path = oma::importers::otio_local_path(m.target, dir);
         std::error_code ec;

@@ -1,7 +1,8 @@
 #pragma once
 
 // The importer for an interchange file, chosen by its extension: `.edl` (CMX 3600, at
-// `edl_rate`), `.mlt` and `.kdenlive` (MLT XML), anything else OpenTimelineIO JSON.
+// `edl_rate`), `.mlt` and `.kdenlive` (MLT XML), `.fcpxml` and `.fcpxmld` (the bundle's
+// `Info.fcpxml`), anything else OpenTimelineIO JSON.
 
 #include "oma/importers/otio.hpp"
 

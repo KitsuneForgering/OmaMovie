@@ -1,6 +1,7 @@
 #include "oma/importers/timeline.hpp"
 
 #include "oma/importers/edl.hpp"
+#include "oma/importers/fcpxml.hpp"
 #include "oma/importers/mlt.hpp"
 
 namespace oma::importers {
@@ -11,6 +12,8 @@ Result<Imported> import_timeline(std::string_view text, std::string_view extensi
         return import_edl(text, edl_rate);
     if (extension == ".mlt" || extension == ".kdenlive")
         return import_mlt(text);
+    if (extension == ".fcpxml" || extension == ".fcpxmld")
+        return import_fcpxml(text);
     return import_otio(text);
 }
 
