@@ -313,7 +313,8 @@ public:
     // details) under the saved IDs, the timeline is restored as saved.
     Q_INVOKABLE void openProject(const QUrl& url);
     // Opens an OpenTimelineIO file as a new, unsaved project; its notes go to importReport.
-    Q_INVOKABLE void importTimeline(const QUrl& url);
+    // `edlRate` ("25", "30000/1001"): the frame rate an EDL's timecodes count in (EDLs name none).
+    Q_INVOKABLE void importTimeline(const QUrl& url, const QString& edlRate = QStringLiteral("30"));
     Q_PROPERTY(QStringList importReport READ importReport NOTIFY importReportChanged)
     [[nodiscard]] QStringList importReport() const;
     Q_INVOKABLE void importUrl(const QUrl& url);

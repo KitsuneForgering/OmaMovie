@@ -376,7 +376,7 @@ ApplicationWindow {
             onTriggered: root.scopeParade = !root.scopeParade
         }
         property OmaAction importTimeline: OmaAction {
-            text: "Import Timeline (OTIO, Kdenlive)…"
+            text: "Import Timeline (OTIO, Kdenlive, EDL)…"
             onTriggered: root.confirmDiscard("Import a timeline", () => timelineImport.choose())
         }
         property OmaAction exportMovie: OmaAction {

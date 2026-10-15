@@ -12,10 +12,30 @@ Item {
     FileDialog {
         id: fileDialog
         title: "Import a timeline"
-        // EDL is left out here: it names no frame rate, which this dialog does not ask for yet.
-        nameFilters: ["Timelines (*.otio *.mlt *.kdenlive)", "OpenTimelineIO (*.otio)",
-                      "MLT and Kdenlive projects (*.mlt *.kdenlive)"]
-        onAccepted: session.importTimeline(selectedFile)
+        nameFilters: ["Timelines (*.otio *.mlt *.kdenlive *.edl)", "OpenTimelineIO (*.otio)",
+                      "MLT and Kdenlive projects (*.mlt *.kdenlive)", "CMX 3600 EDL (*.edl)"]
+        // An EDL names no frame rate: ask for the one its timecodes count in.
+        onAccepted: selectedFile.toString().toLowerCase().endsWith(".edl")
+                    ? edlRate.open() : session.importTimeline(selectedFile)
+    }
+    Dialog {
+        id: edlRate
+        objectName: "edlRate"
+        title: "EDL frame rate"
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: session.importTimeline(fileDialog.selectedFile, rates.currentValue)
+        ComboBox {
+            id: rates
+            textRole: "text"
+            valueRole: "value"
+            currentIndex: 4
+            model: [{ text: "23.976", value: "24000/1001" }, { text: "24", value: "24" },
+                    { text: "25", value: "25" }, { text: "29.97", value: "30000/1001" },
+                    { text: "30", value: "30" }, { text: "50", value: "50" },
+                    { text: "59.94", value: "60000/1001" }, { text: "60", value: "60" }]
+        }
     }
     Connections {
         target: session
