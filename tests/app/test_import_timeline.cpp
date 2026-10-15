@@ -26,6 +26,17 @@ bool imports_an_otio_file_as_an_unsaved_project() {
            s.canvasWidth() == 320 && s.canvasHeight() == 180 && s.importReport().isEmpty();
 }
 
+// relative.mlt is the same half second as an MLT (melt/Kdenlive) project.
+bool imports_an_mlt_file() {
+    Session s;
+    s.setSilent(true);
+    s.importTimeline(fixture("relative.mlt"));
+    if (!wait_for([&] { return s.clips().size() == 1 && !s.importsPending(); }))
+        return false;
+    return std::abs(s.clips().front().toMap().value("duration").toDouble() - 0.5) < 1e-9 &&
+           s.canvasWidth() == 320;
+}
+
 // basic.otio refers to a file that does not exist: it opens with notes instead of clips.
 bool reports_what_an_import_could_not_place() {
     Session s;
@@ -41,6 +52,7 @@ void run_import_timeline_tests() {
     describe("Timeline import", {
         it("imports an OTIO file as an unsaved project",
            { expect(imports_an_otio_file_as_an_unsaved_project()).toBeTruthy(); });
+        it("imports an MLT file the same way", { expect(imports_an_mlt_file()).toBeTruthy(); });
         it("reports what an import could not place",
            { expect(reports_what_an_import_could_not_place()).toBeTruthy(); });
     });

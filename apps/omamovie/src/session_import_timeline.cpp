@@ -1,4 +1,4 @@
-// Importing an OpenTimelineIO file (M9, ADR-0008): read and convert on the job worker, probing
+// Importing a timeline file (M9, ADR-0008: OTIO, MLT/Kdenlive by extension): read and convert on the job worker, probing
 // each media file as the library import does, then open the result as an unsaved, untitled
 // project and keep the import report for the UI (CLAUDE.md §16.4).
 #include "session.hpp"

@@ -4,15 +4,17 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import OmaMovie
 
-// Importing an OpenTimelineIO file (M9): choose the file, then, when the import has notes
+// Importing a timeline (M9: OpenTimelineIO, MLT, Kdenlive): choose the file, then, when the import has notes
 // (CLAUDE.md §16.4: what was approximated, replaced or not carried over), list them.
 Item {
     id: importer
     function choose() { fileDialog.open() }
     FileDialog {
         id: fileDialog
-        title: "Import OpenTimelineIO"
-        nameFilters: ["OpenTimelineIO (*.otio)"]
+        title: "Import a timeline"
+        // EDL is left out here: it names no frame rate, which this dialog does not ask for yet.
+        nameFilters: ["Timelines (*.otio *.mlt *.kdenlive)", "OpenTimelineIO (*.otio)",
+                      "MLT and Kdenlive projects (*.mlt *.kdenlive)"]
         onAccepted: session.importTimeline(selectedFile)
     }
     Connections {
