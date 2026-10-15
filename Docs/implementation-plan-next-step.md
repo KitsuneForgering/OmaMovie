@@ -16,8 +16,9 @@ regressions in interaction come before new breadth.
    merge; extend eligible sanitizer coverage to a bounded Session/app path.
 2. **Completed-output correctness (M7) — done 2026-10-12:** write failures are injected
    with `RLIMIT_FSIZE`, a 1,200-frame export survives a project switch, and selected
-   frames and samples are matched to their source by an independent decode. The
-   two-hour 1080p export with cuts, looks and a dissolve is the remaining long-output check.
+   frames and samples are matched to their source by an independent decode. Two-hour 1080p
+   exports with cuts, looks and a dissolve pass (2026-10-13; 2026-10-15 with 24 reordered cuts
+   checked frame by frame, `tools/bench/long-export/run.sh`).
 3. **Finish one editing path (M6/M8):** exercise import → source marks → exact edit
    → playback → save/reopen → export on Omarchy. Roll/slip/slide now have keyboard,
    pointer, menu and two-up paths with tests; the corrections, latency and retimed-audio
