@@ -7,6 +7,7 @@ void run_waveform_tests();
 void run_retimed_audio_tests();
 void run_block_partition_tests();
 void run_long_offset_tests();
+void run_vfr_audio_tests();
 
 int main(int argc, char* argv[]) {
     oma::set_log_level(oma::Category::Media, oma::LogLevel::Off);
@@ -16,5 +17,6 @@ int main(int argc, char* argv[]) {
     run_retimed_audio_tests();
     run_block_partition_tests();
     run_long_offset_tests();
+    run_vfr_audio_tests();
     return cest_result();
 }

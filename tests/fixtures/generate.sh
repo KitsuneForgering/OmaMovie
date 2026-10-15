@@ -174,6 +174,13 @@ ff -f lavfi -i "aevalsrc='if(eq(n\,24000)+eq(n\,60000)\,0.9\,0)':s=48000:d=2" \
     -c:a pcm_s16le -output_ts_offset 10800 "$out/pulse_3h.mkv"
 note pulse_3h.mkv
 
+# The same clicks beside VFR video (every third frame dropped, as h264_vfr.mkv) in MP4, whose audio
+# clock is the sample rate: audio placement must not depend on the video's frame times.
+ff -f lavfi -i "$(video_src 30 2)" -f lavfi -i "aevalsrc='if(eq(n\,24000)+eq(n\,60000)\,0.9\,0)':s=48000:d=2" \
+    -vf "select='not(eq(mod(n\\,3)\\,1))'" -fps_mode:v passthrough -c:v libx264 -preset veryfast \
+    -pix_fmt yuv420p -c:a pcm_s16le -shortest "$out/pulse_vfr.mov"
+note pulse_vfr.mov
+
 echo "Fixtures in $out:"
 printf '  %s\n' "${made[@]}"
 if ((${#skipped[@]})); then
