@@ -6,8 +6,10 @@ work by OmaMovie's own release path, not by competitor feature count. Revised 20
 by the [evidence status](implementation-plan-evidence-2026-10-14.md): two measured
 regressions in interaction come before new breadth.
 
-0. **Paused hardware scrub (M11):** move paused hardware decode off Qt's sync phase with
-   latest-request-wins ([async milestone](implementation-plan-async-interactive.md)).
+0. **Paused hardware scrub (M11) — done 2026-10-14:** paused hardware frames decode on their
+   own job worker with latest-request-wins; UI gap p95 221 → 12 ms at 1080p, 1323 → 12 ms at 4K
+   ([async milestone](implementation-plan-async-interactive.md), ADR-0020). Left: the 4K
+   composite still runs in Qt's sync phase (~11 ms).
 0. **5,000-clip edits (M6):** fixed 2026-10-14 (QML bindings reading the whole clip list for its
    length; p95 now 33–93 ms). Keep the audit's raw samples; an intermittent ~90 ms split sample remains unexplained.
 
