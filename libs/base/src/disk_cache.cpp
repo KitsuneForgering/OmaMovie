@@ -132,6 +132,13 @@ Result<void> DiskCache::put(std::string_view key, std::span<const std::uint8_t> 
         std::filesystem::remove(temp, ec);
         return std::unexpected(cache_error("cannot store a cache entry", final_path));
     }
+    // Only the writer that crosses the mark trims; a concurrent second pass is harmless.
+    const std::uint64_t written = written_.fetch_add(bytes.size(), std::memory_order_relaxed);
+    if (written + bytes.size() > budget() / 10 && written <= budget() / 10) {
+        // The entry is stored either way; a failed trim is retried at the next mark.
+        if (auto trimmed = evict(); !trimmed)
+            written_.store(0, std::memory_order_relaxed);
+    }
     return {};
 }
 
@@ -154,6 +161,7 @@ Result<std::uint64_t> DiskCache::clear() const {
 }
 
 Result<std::uint64_t> DiskCache::evict(std::uint64_t over, std::uint64_t down_to) const {
+    written_.store(0, std::memory_order_relaxed);
     struct Entry {
         std::filesystem::file_time_type used;
         std::uint64_t bytes;

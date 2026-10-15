@@ -111,6 +111,15 @@ bool default_root_follows_xdg() {
     return xdg && relative;
 }
 
+// A session that keeps writing stays near the budget without a separate eviction pass.
+bool stays_within_budget_while_writing() {
+    const DiskCache cache(scratch("session"), 20'000);
+    for (int i = 0; i < 100; ++i)
+        (void)cache.put("entry " + std::to_string(i), bytes(1'000, 1));
+    // At most the 90% target plus what one tenth of the budget lets accumulate before a trim.
+    return cache.size() <= 20'000 + 2'000 + 1'000 && cache.get("entry 99").has_value();
+}
+
 } // namespace
 
 void run_disk_cache_tests() {
@@ -121,6 +130,8 @@ void run_disk_cache_tests() {
         it("evicts the least recently used entries below the budget",
            { expect(evicts_least_recently_used()).toBeTruthy(); });
         it("clears every entry on request", { expect(clears_everything()).toBeTruthy(); });
+        it("trims itself while a session keeps writing",
+           { expect(stays_within_budget_while_writing()).toBeTruthy(); });
         it("lives under XDG_CACHE_HOME or ~/.cache",
            { expect(default_root_follows_xdg()).toBeTruthy(); });
     });

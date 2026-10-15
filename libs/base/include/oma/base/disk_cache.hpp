@@ -36,7 +36,9 @@ public:
 
     // The payload stored under `key`, or nothing. A hit refreshes the entry's age for eviction.
     [[nodiscard]] std::optional<std::vector<std::uint8_t>> get(std::string_view key) const;
-    // Stores `bytes` under `key`, replacing an older entry.
+    // Stores `bytes` under `key`, replacing an older entry. Once the entries written since the
+    // last eviction pass a tenth of the budget, the writing thread also runs evict(), so a long
+    // session stays near the budget (the caller is already off the UI thread).
     [[nodiscard]] Result<void> put(std::string_view key, std::span<const std::uint8_t> bytes) const;
     // Removes the least recently used entries until the store is under 90% of the budget, and
     // temporary files left by a crash. Returns the bytes removed. O(n log n) in entries.
@@ -53,6 +55,7 @@ private:
 
     std::filesystem::path dir_;
     std::atomic<std::uint64_t> budget_;
+    mutable std::atomic<std::uint64_t> written_{0}; // bytes put since the last evict()
 };
 
 } // namespace oma
