@@ -87,6 +87,7 @@ make fixtures                  # regenerate test media in tests/fixtures/generat
 make fuzz                      # libFuzzer targets for untrusted-file parsers (clang); FUZZ_RUNS=n, FUZZ_PROBE_SECONDS=s
 make fuzz-probe                # one target alone: cube, project, subtitles, otio or probe
 make fuzz-probe                # one target alone: cube, project, subtitles, otio, edl or probe
+make fuzz-probe                # one target alone: cube, project, subtitles, otio, edl, mlt or probe
 make spikes                    # M1 spikes in tools/spikes (Docs/spikes/)
 make run-gui                   # Qt/Vulkan editor shell; GUI_FILE=path or RUN_GUI_SMOKE=1
 build/release/omamovie --m4-audit FILE SECONDS    # A/V sync, per-stage timing (opens a window)
