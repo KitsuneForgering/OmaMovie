@@ -44,5 +44,9 @@ million elements, 64 MiB. `fuzz_mlt` runs in CI.
 
 `tests/importers/fixtures/melt_mix.mlt` is melt 7.40's own output (root path replaced);
 `tools/bench/cross-editor/roundtrip.sh` makes a document with melt, renders it with melt and
-with OmaMovie after `oma-project convert`, and compares the movies frame by frame. No `.kdenlive`
-file written by Kdenlive itself has been checked yet.
+with OmaMovie after `oma-project convert`, and compares the movies frame by frame. Kdenlive's own
+test projects (MLT 7.7-7.23: av, test-mix, clip-ids, test-nesting) read to ProjectIR with every
+skipped object named ([evidence](../Research/evidence/2026-10-15-kdenlive-dataset-import.txt)):
+Kdenlive keeps same-track mixes inside per-track tractors and track audio filters there too, both
+reported; its black background track is a colour generator. Not imported yet: same-track mixes
+as dissolves, nested sequences.
