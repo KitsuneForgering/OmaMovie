@@ -4,9 +4,8 @@ Continues [part 4](implementation-plan-code-review-4.md). Base revision `0e12ece
 
 #### 11. `apps/omamovie`: save, autosave and export
 
-Save and autosave are sound: the document is copied on the UI thread and written on the
-job worker through `project::save` (atomic, §14); an autosave finishing after a save or
-discard deletes its own file instead of resurrecting it.
+Save and autosave are sound: copied on the UI thread, written atomically on the worker
+(§14); an autosave finishing after a save or discard deletes its own file.
 
 - [x] Overlap rendering and encoding in export. The export loop renders and reads back
   frame n, then encodes it, then starts frame n+1 (`apps/omamovie/src/exporter.cpp:131`),
@@ -34,16 +33,17 @@ discard deletes its own file instead of resurrecting it.
   the rest is the VA surface upload and the encode. Threading swscale saves ~1.3 ms and
   takes cores x264 needs; the GPU conversion removes the 3.2 ms and 60% of the readback,
   after which rendering (~10 ms) becomes the slower stage. *Done for VA-API (2026-10-14)*:
-  `shaders/nv12_bt709.comp` writes BT.709 limited NV12 into a host-visible buffer
-  (`read_nv12`, `nv12_pass*.cpp`), `VideoWriter::write_nv12` copies it into the encoder's
-  frame; libx264 keeps RGBA. Within 1 level of a CPU conversion of the same render
-  (`tests/compositor/test_nv12.cpp`). Load 11-12: encoder stage 4.7-7.8 ms per frame (was
+  `nv12_bt709.comp` writes BT.709 limited NV12 into a host-visible buffer (`read_nv12`), within
+  1 level of a CPU conversion (`tests/compositor/test_nv12.cpp`). Load 11-12: encoder stage 4.7-7.8 ms per frame (was
   12-13), whole-file export 6.2 s (9.9 s before, melt 6.5 s), cuts 5.0-5.8 s (6.7 s), same
   PSNR and frames. Still one readback per frame (§7.2); the DMA-BUF hand-off stays open.
-- [ ] Give libx264 the GPU-made NV12 too (it accepts `nv12` input): the software route still
+- [x] Give libx264 the GPU-made NV12 too (it accepts `nv12` input): the software route still
   reads back RGBA and converts on the CPU, and stays 12-20% behind melt after the VA-API
   route caught up ([2026-10-15 rerun](Research/evidence/2026-10-15-cross-editor-after-export-work.txt)).
   The conversion is ~3 ms of a ~40 ms x264 frame, so expect a part of the gap, not all.
+  *Done (2026-10-15)*: encoders that accept NV12 get it (libx264); same output (High,
+  yuv420p, PSNR 44.40 vs 44.42 dB, frames exact). Load 2.6-8: whole 18.1 s (19.7 before),
+  cuts 8.8-12.3 s (11.7): within noise; the x264 encode itself dominates.
 
 #### 11. `apps/omamovie`: QML (§11.1)
 
