@@ -40,6 +40,10 @@ discard deletes its own file instead of resurrecting it.
   (`tests/compositor/test_nv12.cpp`). Load 11-12: encoder stage 4.7-7.8 ms per frame (was
   12-13), whole-file export 6.2 s (9.9 s before, melt 6.5 s), cuts 5.0-5.8 s (6.7 s), same
   PSNR and frames. Still one readback per frame (§7.2); the DMA-BUF hand-off stays open.
+- [ ] Give libx264 the GPU-made NV12 too (it accepts `nv12` input): the software route still
+  reads back RGBA and converts on the CPU, and stays 12-20% behind melt after the VA-API
+  route caught up ([2026-10-15 rerun](Research/evidence/2026-10-15-cross-editor-after-export-work.txt)).
+  The conversion is ~3 ms of a ~40 ms x264 frame, so expect a part of the gap, not all.
 
 #### 11. `apps/omamovie`: QML (§11.1)
 
@@ -51,7 +55,6 @@ opening and follow-the-playhead handlers); models, edits and rendering stay in C
 No new items. `diff` dumps both projects through `load` and `to_json`, so formatting cannot
 show up as a change, and compares lines with Myers' algorithm, O((N + M)·D) time and O(D²)
 memory, refusing past 2,000 edits: right for minimal pairs (§16.6). The commands reuse
-`libs/project`, `libs/importers` and `libs/ingest`; no parsing lives only in the CLI (§16.7).
-`tools/spikes` is being changed by another session and was not reviewed.
+`libs/project`, `libs/importers` and `libs/ingest` (§16.7). `tools/spikes` was not reviewed.
 
 [← Implementation plan](implementation-plan.md)

@@ -86,6 +86,9 @@ source for one editor. A famous name alone does not make a useful comparator.
   `run.sh 5 DIR cuts` gives both editors five reordered cuts (OTIO via `oma-project convert`
   / a melt playlist) and checks all 256 frames against the source: both exact; medians
   VA-API 6.7 s vs 4.8 s, x264 12.4 s vs 10.5 s. Playback and seek are not shared yet.
+  *After the export work (2026-10-15, [evidence](Research/evidence/2026-10-15-cross-editor-after-export-work.txt))*:
+  VA-API now matches melt within noise (whole 6.0 vs 6.0 s, cuts 4.9 vs 4.8 s); x264 stays
+  12-20% slower (19.7 vs 16.5 s, 11.7 vs 10.5 s). Load 8-11 for most of the run.
 - [ ] Add deterministic OmaMovie tests for the shared scene's edit, save/reopen and
   independently decoded export. Retain long-form and lifetime stress from
   [M10](implementation-plan-m10-validation.md); benchmark runs are evidence, not CI
