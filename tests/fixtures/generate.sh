@@ -168,6 +168,12 @@ ff -f lavfi -i "$(audio_src 48000 2)" -af "asetnsamples=n=480,aselect='not(betwe
     -c:a pcm_s16le "$out/tone_gap.mkv"
 note tone_gap.mkv
 
+# Two one-sample clicks (at samples 24000 and 60000 of 2 s, 48 kHz) in a file whose timestamps
+# start three hours in: sample-exact placement at long source offsets (M10 audio boundaries).
+ff -f lavfi -i "aevalsrc='if(eq(n\,24000)+eq(n\,60000)\,0.9\,0)':s=48000:d=2" \
+    -c:a pcm_s16le -output_ts_offset 10800 "$out/pulse_3h.mkv"
+note pulse_3h.mkv
+
 echo "Fixtures in $out:"
 printf '  %s\n' "${made[@]}"
 if ((${#skipped[@]})); then
