@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hand-written after Apple's FCPXML 1.10 reference: two 29.97 fps cuts of one asset with a
+     cross dissolve between them, a gap, and a connected title and clip above the spine. -->
+<fcpxml version="1.10">
+    <resources>
+        <format id="r1" name="FFVideoFormat1080p2997" frameDuration="1001/30000s" width="1920" height="1080"/>
+        <asset id="r2" name="clip" start="0s" duration="300300/30000s" hasVideo="1" hasAudio="1" format="r1">
+            <media-rep kind="original-media" src="file:///media/clip.mp4"/>
+        </asset>
+        <effect id="r3" name="Cross Dissolve" uid="FxPlug:4731E73A-8DAC-4113-9A30-AE85B1761265"/>
+        <effect id="r4" name="Basic Title" uid=".../Titles.localized/Basic Text.localized/Basic Title.localized/Basic Title.moti"/>
+    </resources>
+    <library>
+        <event name="Event">
+            <project name="Cuts">
+                <sequence format="r1" duration="150150/30000s" tcStart="0s">
+                    <spine>
+                        <asset-clip ref="r2" offset="0s" name="A" start="30030/30000s" duration="60060/30000s">
+                            <title ref="r4" lane="1" offset="30030/30000s" name="Hello" duration="30030/30000s"/>
+                            <adjust-volume amount="-6dB"/>
+                        </asset-clip>
+                        <transition name="Cross Dissolve" offset="54054/30000s" duration="12012/30000s">
+                            <filter-video ref="r3" name="Cross Dissolve"/>
+                        </transition>
+                        <asset-clip ref="r2" offset="60060/30000s" name="B" start="150150/30000s" duration="60060/30000s">
+                            <asset-clip ref="r2" lane="1" offset="180180/30000s" name="C" start="0s" duration="15015/30000s"/>
+                        </asset-clip>
+                        <gap offset="120120/30000s" name="Gap" start="0s" duration="30030/30000s"/>
+                    </spine>
+                </sequence>
+            </project>
+        </event>
+    </library>
+</fcpxml>
