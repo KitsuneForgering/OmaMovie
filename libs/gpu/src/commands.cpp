@@ -11,8 +11,8 @@ namespace oma::gpu {
 namespace {
 
 Error vk_failure(VkResult r, std::string what) {
-    return {r == VK_ERROR_DEVICE_LOST ? ErrorCode::DeviceLost : ErrorCode::Internal, Category::Gpu,
-            std::move(what), "VkResult " + std::to_string(static_cast<int>(r))};
+    return {error_code(r), Category::Gpu, std::move(what),
+            "VkResult " + std::to_string(static_cast<int>(r))};
 }
 
 // A failed submission or wait; a lost device is marked so producers stop (Device::lost).
@@ -227,6 +227,14 @@ void transition(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImageL
                                .imageMemoryBarrierCount = 1,
                                .pImageMemoryBarriers = &barrier};
     vkCmdPipelineBarrier2(cmd, &dep);
+}
+
+ErrorCode error_code(VkResult r) noexcept {
+    if (r == VK_ERROR_DEVICE_LOST)
+        return ErrorCode::DeviceLost;
+    if (r == VK_ERROR_OUT_OF_DEVICE_MEMORY || r == VK_ERROR_OUT_OF_HOST_MEMORY)
+        return ErrorCode::OutOfMemory;
+    return ErrorCode::Internal;
 }
 
 } // namespace oma::gpu

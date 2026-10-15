@@ -152,7 +152,7 @@ enum class Pass : std::uint8_t {
 };
 
 Error vk_failure(VkResult r, std::string what) {
-    return {ErrorCode::Internal, Category::Compositor, std::move(what),
+    return {gpu::error_code(r), Category::Compositor, std::move(what),
             "VkResult " + std::to_string(static_cast<int>(r))};
 }
 

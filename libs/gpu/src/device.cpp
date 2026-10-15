@@ -31,6 +31,8 @@ namespace {
 
 Error vk_error(vk::Result r, std::string what) {
     return {r == vk::Result::eErrorDeviceLost ? ErrorCode::DeviceLost
+            : r == vk::Result::eErrorOutOfDeviceMemory || r == vk::Result::eErrorOutOfHostMemory
+                ? ErrorCode::OutOfMemory
             : r == vk::Result::eErrorInitializationFailed ||
                     r == vk::Result::eErrorIncompatibleDriver
                 ? ErrorCode::Unsupported

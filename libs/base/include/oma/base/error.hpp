@@ -18,7 +18,8 @@ enum class ErrorCode : std::uint8_t {
     IoError,
     InvalidData,
     Internal,
-    DeviceLost, // the GPU device stopped working; nothing more can run on it
+    DeviceLost,  // the GPU device stopped working; nothing more can run on it
+    OutOfMemory, // host or GPU memory exhausted: a smaller size or fewer streams may work
 };
 
 [[nodiscard]] std::string_view to_string(ErrorCode code) noexcept;

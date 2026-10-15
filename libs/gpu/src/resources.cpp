@@ -4,6 +4,7 @@
 
 #include <unistd.h>
 
+#include "oma/gpu/commands.hpp"
 #include "oma/gpu/device.hpp"
 
 #include <algorithm>
@@ -16,11 +17,8 @@ namespace oma::gpu {
 namespace {
 
 Error vk_failure(VkResult r, std::string what) {
-    return {r == VK_ERROR_DEVICE_LOST ? ErrorCode::DeviceLost
-            : r == VK_ERROR_OUT_OF_DEVICE_MEMORY || r == VK_ERROR_OUT_OF_HOST_MEMORY
-                ? ErrorCode::Unsupported
-                : ErrorCode::Internal,
-            Category::Gpu, std::move(what), "VkResult " + std::to_string(static_cast<int>(r))};
+    return {error_code(r), Category::Gpu, std::move(what),
+            "VkResult " + std::to_string(static_cast<int>(r))};
 }
 
 struct MemoryChoice {

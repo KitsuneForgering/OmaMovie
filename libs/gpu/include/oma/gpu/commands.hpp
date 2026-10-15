@@ -53,6 +53,10 @@ private:
 void acquire_foreign(VkCommandBuffer cmd, VkImage image, std::uint32_t family);
 void release_foreign(VkCommandBuffer cmd, VkImage image, std::uint32_t family);
 
+// The error code for a failed Vulkan call: DeviceLost, OutOfMemory (host or device), else
+// Internal. One mapping for every library that calls Vulkan.
+[[nodiscard]] ErrorCode error_code(VkResult r) noexcept;
+
 // Records a full-subresource layout transition of a color image (synchronization2).
 void transition(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImageLayout to,
                 VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT);

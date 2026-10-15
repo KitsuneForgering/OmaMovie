@@ -97,6 +97,9 @@ Error av_error(int err, Category category, std::string message, const std::strin
     case AVERROR_EXIT:
         code = ErrorCode::Cancelled;
         break;
+    case AVERROR(ENOMEM):
+        code = ErrorCode::OutOfMemory;
+        break;
     default:
         break;
     }

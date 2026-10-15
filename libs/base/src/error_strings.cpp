@@ -51,6 +51,8 @@ std::string_view to_string(ErrorCode code) noexcept {
         return "invalid data";
     case ErrorCode::DeviceLost:
         return "GPU device lost";
+    case ErrorCode::OutOfMemory:
+        return "out of memory";
     case ErrorCode::Internal:
         return "internal error";
     }
