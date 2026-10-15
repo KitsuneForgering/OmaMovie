@@ -45,7 +45,7 @@ decode submits to the queue and stays admitted. More queues need an ADR and vali
   the render thread only composites. *Done (2026-10-14, [evidence](Research/evidence/2026-10-14-async-scrub.txt))*:
   UI gap p95 221 → 12 ms (1080p), 1323 → 12 ms (4K H.264), 254 → 16–19 ms (4K HEVC); both
   UI gates pass; first-frame latency unchanged at 1080p. Cancellation latency (now in the audit): 4K
-  hardware 150 → 5 ms p50 / 8.5 ms p95 after keeping stopped decoders open; gate passes. Remaining: the 4K composite in sync (~11 ms).
+  hardware 150 → 5 ms p50 / 8.5 ms p95 after keeping stopped decoders open; gate passes. Remaining: the 4K composite in sync (~11 ms). *Where it goes (2026-10-15)*: `PreviewItem::composite` runs from `updatePaintNode`, in Qt's sync phase while the GUI thread is blocked, and `VulkanCompositor::render` submits and waits; a bare 4K render takes 8.2-8.9 ms from submit to completion on the Iris Xe ([pass cost](Research/evidence/2026-10-14-m10-effect-pass-cost.txt)), so nearly all of it is GPU time, not recording. Unblocking the GUI means compositing in the render phase (`QQuickWindow::beforeRendering`, still Qt's render thread, so the swapchain argument of ADR-0005 holds) with the frame handed over in sync; that amends ADR-0005's threading and waits for a decision, since the UI gates already pass (4K gap p95 12 ms < 33 ms).
 - [x] Tests (`tests/app/test_paused_frames.cpp`): order of publication, final frame, project
   switch and destruction with a seek in flight, device loss; software and VA-API. Validation
   and synchronization validation, TSan and ASan/LSan clean.
