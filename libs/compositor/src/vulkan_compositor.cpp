@@ -302,6 +302,7 @@ struct VulkanCompositor::Impl {
     gpu::Buffer readback;
     std::map<std::size_t, Upload> uploads; // by input index
     std::vector<VkImageView> transient_views;
+    std::unique_ptr<detail::Nv12Pass> nv12; // export's NV12 readback, made on first use
 
     Impl() = default;
     Impl(const Impl&) = delete;
@@ -1290,6 +1291,32 @@ Result<std::vector<std::uint8_t>> VulkanCompositor::read_display() {
     d.display_readback.invalidate();
     const auto* data = static_cast<const std::uint8_t*>(d.display_readback.mapped());
     return std::vector<std::uint8_t>(data, data + bytes);
+}
+
+Result<VulkanCompositor::Nv12Image> VulkanCompositor::read_nv12() {
+    Impl& d = *impl_;
+    if (d.output.handle() == VK_NULL_HANDLE) {
+        return make_error(ErrorCode::InvalidArgument, Category::Compositor, "nothing rendered yet");
+    }
+    const std::uint32_t w = d.output.desc().width;
+    const std::uint32_t h = d.output.desc().height;
+    if (w % 2 != 0 || h % 2 != 0) {
+        return make_error(ErrorCode::Unsupported, Category::Compositor, "NV12 needs an even size");
+    }
+    if (!d.nv12) {
+        auto made = detail::Nv12Pass::create(*d.device, d.push_descriptors);
+        if (!made) {
+            return std::unexpected(made.error());
+        }
+        d.nv12 = std::move(*made);
+    }
+    const std::uint32_t stride = (w + 3) & ~3U;
+    auto bytes = d.nv12->run(*d.runner, d.output.view(), w, h, stride);
+    if (!bytes) {
+        return std::unexpected(bytes.error());
+    }
+    return Nv12Image{
+        .width = w, .height = h, .stride = stride, .bytes = {bytes->begin(), bytes->end()}};
 }
 
 } // namespace oma::compositor
