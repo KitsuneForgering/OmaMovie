@@ -9,6 +9,7 @@
 #include <format>
 #include <limits>
 #include <numeric>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace oma::timeline {
@@ -577,14 +578,21 @@ Result<void> validate_source(const Clip& c, const MediaInfo& m, Rational timebas
     return {};
 }
 
+// Where each clip is, built once per validation: looking primaries up by scanning every track
+// made validation O(connected x clips) per edit (code review, 2026-10-14).
+struct Placed {
+    const Clip* clip;
+    const Track* track;
+};
+using ClipIndex = std::unordered_map<ClipId, Placed>;
+
 // ADR-0014: the primary exists on another track, is not connected itself, plays at a constant
 // speed, shows the anchor's source, and the dependent starts exactly where it does.
-// ponytail: find_clip/track_of are linear, so this is O(clips) per connected clip; index the
-// clips if the long-form gate shows validation cost.
-Result<void> validate_anchor(const Timeline& tl, const Track& track, const Clip& c,
-                             const Anchor& anchor) {
-    const Clip* p = tl.find_clip(anchor.primary);
-    const Track* pt = p != nullptr ? tl.track_of(p->id) : nullptr;
+Result<void> validate_anchor(const Timeline& tl, const ClipIndex& clips, const Track& track,
+                             const Clip& c, const Anchor& anchor) {
+    const auto found = clips.find(anchor.primary);
+    const Clip* p = found != clips.end() ? found->second.clip : nullptr;
+    const Track* pt = found != clips.end() ? found->second.track : nullptr;
     bool valid = p != nullptr && pt != nullptr && pt->id != track.id && !p->anchor &&
                  p->time_map.is_constant() && detail::holds(*p, anchor.source, tl.timebase());
     if (valid) {
@@ -630,9 +638,9 @@ Result<void> validate_title(const Clip& c, const Title& title, const Track& t) {
 } // namespace
 
 Result<void> Timeline::validate() const {
-    std::unordered_set<MediaId> media_ids;
+    std::unordered_map<MediaId, const MediaInfo*> media_ids;
     for (const MediaInfo& m : media_) {
-        if (!m.id.valid() || !media_ids.insert(m.id).second) {
+        if (!m.id.valid() || !media_ids.emplace(m.id, &m).second) {
             return error(ErrorCode::InvalidData, "invalid or duplicate media ID",
                          std::format("media {}", m.id.value()));
         }
@@ -650,7 +658,8 @@ Result<void> Timeline::validate() const {
         }
     }
     std::unordered_set<TrackId> track_ids;
-    std::unordered_set<ClipId> clip_ids;
+    ClipIndex clip_ids;
+    std::vector<std::pair<const Clip*, const Track*>> connected; // checked once all are indexed
     for (const Track& t : tracks_) {
         if (!t.id.valid() || !track_ids.insert(t.id).second) {
             return error(ErrorCode::InvalidData, "invalid or duplicate track ID",
@@ -658,7 +667,7 @@ Result<void> Timeline::validate() const {
         }
         std::int64_t previous_end = 0;
         for (const Clip& c : t.clips) {
-            if (!c.id.valid() || !clip_ids.insert(c.id).second) {
+            if (!c.id.valid() || !clip_ids.emplace(c.id, Placed{.clip = &c, .track = &t}).second) {
                 return error(ErrorCode::InvalidData, "invalid or duplicate clip ID",
                              detail::clip_context(c.id));
             }
@@ -676,7 +685,8 @@ Result<void> Timeline::validate() const {
                 return std::unexpected(end.error());
             }
             previous_end = *end;
-            const MediaInfo* m = c.title ? nullptr : find_media(c.media);
+            const auto media = c.title ? media_ids.end() : media_ids.find(c.media);
+            const MediaInfo* m = media != media_ids.end() ? media->second : nullptr;
             if (c.title) {
                 if (auto r = validate_title(c, *c.title, t); !r) {
                     return r;
@@ -709,13 +719,19 @@ Result<void> Timeline::validate() const {
                 return r;
             }
             if (c.anchor) {
-                if (auto r = validate_anchor(*this, t, c, *c.anchor); !r) {
-                    return r;
-                }
+                connected.emplace_back(&c, &t); // its primary may sit on a later track
             }
             if (c.video.grade.lut.valid() && find_lut(c.video.grade.lut) == nullptr) {
                 return error(ErrorCode::InvalidData, "clip grades with an unknown LUT",
                              detail::clip_context(c.id));
+            }
+        }
+    }
+
+    for (const auto& [clip, track] : connected) {
+        if (const auto& anchor = clip->anchor) {
+            if (auto r = validate_anchor(*this, clip_ids, *track, *clip, *anchor); !r) {
+                return r;
             }
         }
     }
