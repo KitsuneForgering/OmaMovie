@@ -93,6 +93,7 @@ build/release/omamovie --m4-seek-audit FILE SEEKS # seek UI blocking and first-f
 build/release/omamovie --m4-scrub-audit FILE SEEKS # the same seeks paused: UI event-loop stall per seek
 build/release/omamovie --export-audit FILE OUT.mp4 # export one file, per-phase timing (opens a window)
 tools/bench/filmcraft-equivalent/run.sh [DIR]      # FilmCraft-equivalent workload + M1 spikes + tests, dated report (~10 min, opens windows)
+tools/bench/cross-editor/run.sh [REPEATS] [DIR]    # same-machine export vs melt (Kdenlive's engine), FFmpeg-checked (~20 min, opens windows)
 make oma-project               # build the native project inspect/validate/dump CLI
 build/debug/tools/oma-project/oma-project import FILE.otio  # OTIO import report (media not probed)
 build/debug/tools/oma-project/oma-project convert FILE.otio OUT.omamovie  # the app's OTIO import, saved
