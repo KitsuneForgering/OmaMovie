@@ -32,13 +32,12 @@ device; the admission gate's timed wait is the simplest way to observe a plain c
 The synchronous submit-and-wait per composite is already scoped by M4 (try bounded frames in
 flight only if queue waits dominate), so no new item.
 
-- [ ] Measure the per-frame VA-API import before changing it. Every decoded frame maps the
+- [x] Measure the per-frame VA-API import before changing it. Every decoded frame maps the
   surface, then per layer `dup`s the fd and creates an image, an imported allocation and a
-  timeline semaphore, all destroyed on release (`libs/media/src/video_decoder.cpp:382`,
-  `libs/gpu/src/resources.cpp:328`). The 1080p60 hardware gate passes with 3.5 ms
-  composites, so this is not a known bottleneck. Add the import to the audit's stage
-  lines; if it matters at 4K60 or several streams, cache imports per VA surface (bounded
-  by FFmpeg's pool, dropped when the frames context changes).
+  semaphore (`video_decoder.cpp:382`, `resources.cpp:328`). *Measured (2026-10-15, temporary
+  timers, release, load ~2)*: creating the Vulkan objects costs 0.05-0.08 ms per frame
+  (1080p H.264, 4K H.264, 4K HEVC); the rest of `import_vaapi` (2.2 / 8.7 / 3.3 ms) is
+  `av_hwframe_map` waiting for the hardware decode. No per-surface cache: nothing to save.
 - [x] Report GPU memory exhaustion as its own error, not `Unsupported` (`resources.cpp:19`):
   a fallback or notice could not tell a full VRAM from a format the driver refuses. *Fixed
   (2026-10-14)*: `ErrorCode::OutOfMemory` (also FFmpeg's `ENOMEM`), and one

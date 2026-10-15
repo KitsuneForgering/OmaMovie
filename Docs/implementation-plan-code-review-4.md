@@ -32,8 +32,8 @@ input slot (`stage_upload`), and the render graph is validated in one pass over 
 layers. Each render still creates and destroys a view per GPU plane and allocates its
 binding map and semaphore lists (`vulkan_compositor.cpp:567`, `:806`, `:908`), so a
 1080p60 viewer makes a few hundred Vulkan objects and small allocations per second.
-§23 asks for none in steady state, but the 1080p60 gate composites in 3.5 ms; record the
-cost in the per-stage audit before pooling views per imported surface.
+*Measured (2026-10-15, temporary timers, release)*: the two views of a VA-API frame cost
+~0.01 ms of a 2.6 ms render (1080p H.264, 4K HEVC): no pooling.
 
 #### 11. `apps/omamovie` (first passes)
 
