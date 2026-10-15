@@ -35,6 +35,7 @@ Evidence, milestones and acceptance criteria; update completed work and record s
 [M7 project export](implementation-plan-m7-project-export.md) <a id="m7--project--export"></a>
 ### Code cleanup during M6–M7
 [Code cleanup](implementation-plan-code-cleanup.md)
+[Code cleanup](implementation-plan-code-cleanup.md) · [item-by-item code review](implementation-plan-code-review.md)
 ### M8 — Creator
 [M8 creator](implementation-plan-m8-creator.md)
 ### M9 — Interop and color
