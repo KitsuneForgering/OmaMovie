@@ -17,7 +17,7 @@ external project → importer → ProjectIR (ADR-0008) → converter → OmaMovi
 |---|---|---|---|
 | OpenTimelineIO JSON (`.otio`) | Timeline.1, Stack.1, Track.1, Clip.1/2, Gap.1, Transition.1, ExternalReference.1, MissingReference.1, RationalTime.1, TimeRange.1 | 2: imported in the app (Import OpenTimelineIO…) and reported by `oma-project import` | `tests/importers` (hand-written file per the OTIO specification), `fuzz_otio`, `tests/project` (`from_ir`), `tests/app/test_import_timeline.cpp`, GUI smoke; no application's actual export checked |
 | FCPXML / `.fcpxmld` | — | none | Not started |
-| CMX 3600 EDL | CMX 3600: cuts, dissolves, V/A/AA/B channels, FROM CLIP NAME, SOURCE FILE, drop-frame | 2 into ProjectIR only (`import_edl`); not yet in the app or `oma-project` | `tests/importers/test_edl*.cpp` (hand-written file, [format notes](formats/edl.md)), `fuzz_edl`; no application's actual export checked |
+| CMX 3600 EDL | CMX 3600: cuts, dissolves, V/A/AA/B channels, FROM CLIP NAME, SOURCE FILE, drop-frame | 2: `oma-project import/convert FILE.edl [RATE]` (libs/ingest, media probed); not yet in the app (it needs a rate chooser) | `tests/importers/test_edl*.cpp` (hand-written file, [format notes](formats/edl.md)), `tests/project/test_cli.sh`, `fuzz_edl`; no application's actual export checked |
 | Kdenlive (MLT XML) | — | none | Not started |
 
 `libs/project-ir` (2026-10-13) holds the IR, its validation (`tests/project-ir`) and the import
