@@ -1,5 +1,7 @@
 #include "oma/project/document.hpp"
 
+#include "file_mode.hpp"
+
 #include "oma/timeline/effects.hpp"
 
 #include <simdjson.h>
@@ -1323,7 +1325,7 @@ Result<void> save(const Document& doc, const std::filesystem::path& file) {
         }
         written += static_cast<std::size_t>(n);
     }
-    if (::fchmod(fd, 0644) != 0 || ::fsync(fd) != 0) {
+    if (::fchmod(fd, detail::saved_file_mode(file)) != 0 || ::fsync(fd) != 0) {
         return fail("cannot sync the project", errno);
     }
     if (::close(fd) != 0) {
