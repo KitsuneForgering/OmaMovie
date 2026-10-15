@@ -96,6 +96,7 @@ build/release/omamovie --m4-scrub-audit FILE SEEKS # the same seeks paused: UI e
 build/release/omamovie --export-audit FILE OUT.mp4 # export one file, per-phase timing (opens a window)
 tools/bench/filmcraft-equivalent/run.sh [DIR]      # FilmCraft-equivalent workload + M1 spikes + tests, dated report (~10 min, opens windows)
 tools/bench/cross-editor/run.sh [REPEATS] [DIR]    # same-machine export vs melt (Kdenlive's engine), FFmpeg-checked (~20 min, opens windows)
+tools/bench/cross-editor/roundtrip.sh [DIR]        # one MLT project rendered by melt and by OmaMovie, compared frame by frame
 tools/bench/long-export/run.sh [MINUTES] [DIR]     # M7 long export: reordered cuts, dissolve, looks, FFmpeg-checked (2 h ≈ 35 min, ~9 GB)
 make oma-project               # build the native project inspect/validate/dump CLI
 build/debug/tools/oma-project/oma-project import FILE.otio  # OTIO import report (media not probed)
