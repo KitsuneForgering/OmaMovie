@@ -4,19 +4,21 @@
 #include "oma/ingest/media_entry.hpp"
 #include "oma/project/from_ir.hpp"
 
+#include "timeline_text.hpp"
+
 #include <algorithm>
 #include <cstdint>
-#include <fstream>
-#include <sstream>
 
 namespace oma::ingest {
 
 Result<project::Document> import_otio_file(const std::filesystem::path& path,
                                            const media::MediaImporter& importer,
                                            ir::ImportReport& report) {
-    std::stringstream text;
-    text << std::ifstream(path).rdbuf();
-    auto imported = importers::import_otio(text.str());
+    auto text = detail::read_timeline_text(path);
+    if (!text) {
+        return std::unexpected(text.error());
+    }
+    auto imported = importers::import_otio(*text);
     if (!imported) {
         return std::unexpected(imported.error());
     }

@@ -7,7 +7,6 @@
 namespace oma::importers {
 
 namespace {
-constexpr std::size_t kMaxBytes = std::size_t{64} << 20;
 constexpr std::size_t kMaxDepth = 64;
 
 std::unexpected<Error> refused(std::string what) {
@@ -17,7 +16,7 @@ std::unexpected<Error> refused(std::string what) {
 } // namespace
 
 Result<Imported> import_otio(std::string_view json) {
-    if (json.size() > kMaxBytes)
+    if (json.size() > kMaxOtioBytes)
         return refused("file larger than 64 MiB");
     simdjson::dom::parser parser;
     otio::Element root;

@@ -10,6 +10,7 @@
 #include "oma/project_ir/ir.hpp"
 #include "oma/project_ir/report.hpp"
 
+#include <cstddef>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -21,7 +22,10 @@ struct Imported {
     ir::ImportReport report;
 };
 
-// The file's text, at most 64 MiB, nesting at most 64 levels and 100,000 items.
+// The largest OTIO text accepted; callers reading a file check its size against it first.
+inline constexpr std::size_t kMaxOtioBytes = std::size_t{64} << 20;
+
+// The file's text, at most kMaxOtioBytes, nesting at most 64 levels and 100,000 items.
 [[nodiscard]] Result<Imported> import_otio(std::string_view json);
 
 // A media target as a local path: a file:// URL with %XX escapes (a malformed escape is kept as

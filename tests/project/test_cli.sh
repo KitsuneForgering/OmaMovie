@@ -44,6 +44,8 @@ status=0
 "$cli" convert tests/importers/fixtures/relative.otio "$converted" >/dev/null 2>&1 || status=$?
 test "$status" -eq 2
 rm -f "$converted"
+# A missing timeline is an I/O error, not "not JSON" (code review 2026-10-14).
+"$cli" convert "$file.missing.otio" "$converted" 2>&1 | grep -q 'cannot read the timeline file'
 
 # diff (CLAUDE.md §16.7): equal projects exit 0; different ones list their lines and exit 1.
 other=tests/fuzz/corpus/project/effects.json
