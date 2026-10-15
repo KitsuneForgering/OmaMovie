@@ -52,6 +52,18 @@ Error io_error(const char* what, const std::filesystem::path& path, int err) {
             std::format("{}: {}", what, ff::error_string(AVERROR(err))), path.string()};
 }
 
+// Whether `encoder` accepts `format` as input.
+bool takes(const AVCodec* encoder, AVPixelFormat format) {
+    const void* formats = nullptr;
+    int count = 0;
+    if (avcodec_get_supported_config(nullptr, encoder, AV_CODEC_CONFIG_PIX_FORMAT, 0, &formats,
+                                     &count) < 0 ||
+        formats == nullptr)
+        return false;
+    const auto* list = static_cast<const AVPixelFormat*>(formats);
+    return std::find(list, list + count, format) != list + count;
+}
+
 } // namespace
 
 struct VideoWriter::Impl {
@@ -215,6 +227,12 @@ Result<std::unique_ptr<VideoWriter>> VideoWriter::create(const std::filesystem::
     c.width = width;
     c.height = height;
     c.pix_fmt = AV_PIX_FMT_YUV420P;
+    // An encoder that takes NV12 (libx264) gets the compositor's GPU-made NV12 as it is
+    // (write_nv12), so the CPU converts nothing; the others keep planar 4:2:0.
+    if (!vaapi && takes(encoder, AV_PIX_FMT_NV12)) {
+        c.pix_fmt = AV_PIX_FMT_NV12;
+        impl->sw_format = AV_PIX_FMT_NV12;
+    }
     if (vaapi) {
         AVBufferRef* device = nullptr;
         const std::string node = options.render_node.string();
