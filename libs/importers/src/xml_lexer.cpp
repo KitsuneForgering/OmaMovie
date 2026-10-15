@@ -27,7 +27,10 @@ bool Reader::attributes(Element& e) {
             return true; // `>` or `/>` comes next
         }
         skip_space();
-        const char quote = at + 1 < text.size() && take("=") ? (skip_space(), text[at]) : '\0';
+        if (!take("="))
+            return false;
+        skip_space(); // `key =` then the end of the text: no quote to read
+        const char quote = at < text.size() ? text[at] : '\0';
         const std::size_t end =
             quote == '"' || quote == '\'' ? text.find(quote, at + 1) : text.npos;
         std::string value;

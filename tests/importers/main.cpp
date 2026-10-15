@@ -7,6 +7,7 @@ void run_otio_scale_tests();
 void run_edl_tests();
 void run_edl_refusal_tests();
 void run_xml_tests();
+void run_xml_bounds_tests();
 void run_mlt_tests();
 
 int main(int argc, char* argv[]) {
@@ -18,6 +19,7 @@ int main(int argc, char* argv[]) {
     run_edl_tests();
     run_edl_refusal_tests();
     run_xml_tests();
+    run_xml_bounds_tests();
     run_mlt_tests();
     return cest_result();
 }
