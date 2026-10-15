@@ -1,6 +1,5 @@
 #include "otio_detail.hpp"
 
-#include <algorithm>
 #include <format>
 
 namespace oma::importers::otio {
@@ -34,9 +33,9 @@ Result<std::string> media_of(Object clip, ir::Timeline& tl, Context& c) {
                           "media reference is not an object", name);
     const std::string schema = schema_of(o);
     const std::string target = text(o, "target_url");
-    const auto same = std::ranges::find(tl.media, target, &ir::MediaRef::target);
-    if (!target.empty() && same != tl.media.end())
-        return same->id;
+    if (const auto same = c.media_by_target.find(target);
+        !target.empty() && same != c.media_by_target.end())
+        return same->second;
     ir::MediaRef media{.id = std::format("m{}", tl.media.size() + 1),
                        .target = target,
                        .available = std::nullopt,
@@ -53,6 +52,7 @@ Result<std::string> media_of(Object clip, ir::Timeline& tl, Context& c) {
         c.issue(name, std::format("media reference {} has no file", schema),
                 "the clip is offline until relinked");
     }
+    c.media_by_target.emplace(target, media.id); // an empty target is never looked up
     tl.media.push_back(std::move(media));
     return tl.media.back().id;
 }

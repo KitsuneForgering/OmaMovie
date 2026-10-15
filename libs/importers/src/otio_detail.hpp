@@ -7,6 +7,7 @@
 #include <simdjson.h>
 
 #include <string>
+#include <unordered_map>
 
 namespace oma::importers::otio {
 
@@ -18,6 +19,8 @@ inline constexpr std::size_t kMaxItems = 100000;
 struct Context {
     ir::ImportReport& report;
     std::size_t items = 0;
+    // Media read so far by target URL: clips of one file share its media (O(1) per clip).
+    std::unordered_map<std::string, std::string> media_by_target;
     void issue(std::string object, std::string reason, std::string impact,
                ir::SupportLevel level = ir::SupportLevel::Recognized);
 };

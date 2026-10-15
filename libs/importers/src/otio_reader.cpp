@@ -33,7 +33,7 @@ Result<Imported> import_otio(std::string_view json) {
                             .issues = {}}};
     if (!out.report.version.starts_with("Timeline."))
         return refused(std::format("not an OTIO timeline ({})", out.report.version));
-    otio::Context c{.report = out.report};
+    otio::Context c{.report = out.report, .items = 0, .media_by_target = {}};
     out.timeline.name = otio::text(top, "name");
     otio::Element start;
     if (top["global_start_time"].get(start) == simdjson::SUCCESS && !start.is_null()) {
