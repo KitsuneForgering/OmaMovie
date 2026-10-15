@@ -81,7 +81,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [cube, project, subtitles, otio, probe]
+        target: [cube, project, subtitles, otio, edl, probe]
     steps:
       - uses: actions/checkout@v7
       - name: Fuzz one parser of untrusted files
