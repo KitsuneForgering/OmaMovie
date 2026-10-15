@@ -64,6 +64,14 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
     ExportStats local;
     ExportStats& st = stats != nullptr ? *stats : local;
     const auto started = Clock::now();
+    // On every return, so a failed export (a full disk, say) still reports where its time went.
+    struct Total {
+        ExportStats& st;
+        Clock::time_point started;
+        ~Total() {
+            st.total = std::chrono::duration<double, std::milli>(Clock::now() - started).count();
+        }
+    } const total{.st = st, .started = started};
     auto mark = started;
     const auto lap = [&mark](double& into) {
         const auto now = Clock::now();
@@ -129,6 +137,7 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
     EncodeStage encoder(**writer, static_cast<int>(request.width));
     const auto stop = [&](oma::Error error) -> oma::Result<void> {
         (void)encoder.finish(); // joins the worker before the writer is touched again
+        st.encode = encoder.encode_ms();
         return std::unexpected(std::move(error));
     };
     for (std::int64_t k = 0; k < request.frames; ++k) {
@@ -195,11 +204,10 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
         sample = next->value();
         ++st.frames;
     }
-    if (auto encoded = encoder.finish(); !encoded)
-        return encoded;
+    const auto encoded = encoder.finish();
     st.encode = encoder.encode_ms();
+    if (!encoded)
+        return encoded;
     (void)progress(request.frames, request.frames);
-    auto finished = (*writer)->finish();
-    st.total = std::chrono::duration<double, std::milli>(Clock::now() - started).count();
-    return finished;
+    return (*writer)->finish();
 }
