@@ -337,7 +337,7 @@ int main(int argc, char** argv) {
         const ExportStats& st = session.lastExportStats();
         const double n = static_cast<double>(std::max<std::int64_t>(1, st.frames));
         std::printf("export audit: %lld frames in %.0f ms (%.1f fps) -> %s\n  encoder: %s\n"
-                    "  per frame: build %.2f ms, render+readback %.2f ms, convert %.2f ms, encode %.2f ms, audio %.2f ms\n"
+                    "  per frame: build %.2f ms, render+readback %.2f ms, wait for encoder %.2f ms, encode (own worker) %.2f ms, mix %.2f ms\n"
                     "  result: %s\n",
                     static_cast<long long>(st.frames), st.total, n * 1000.0 / std::max(1.0, st.total), qPrintable(out), st.encoder.c_str(),
                     st.build / n, st.render / n, st.convert / n, st.encode / n, st.audio / n,

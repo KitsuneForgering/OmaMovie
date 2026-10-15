@@ -53,6 +53,11 @@ public:
     [[nodiscard]] Result<void> write(std::span<const std::uint8_t> rgb, int stride);
     // The same from packed RGBA8 (alpha ignored), as a GPU readback delivers it.
     [[nodiscard]] Result<void> write_rgba(std::span<const std::uint8_t> rgba, int stride);
+    // Whether write_nv12 applies: the VA-API encoder, which takes NV12 surfaces.
+    [[nodiscard]] bool takes_nv12() const noexcept;
+    // An NV12 frame (BT.709 limited range): `stride`-byte luma rows, then interleaved CbCr rows
+    // at half height (compositor::VulkanCompositor::read_nv12). No conversion on the CPU.
+    [[nodiscard]] Result<void> write_nv12(std::span<const std::uint8_t> nv12, int stride);
     // Appends interleaved samples (channels per frame) to the audio track, in order. The
     // caller keeps audio and video in step (the muxer interleaves by timestamp).
     [[nodiscard]] Result<void> write_audio(std::span<const float> interleaved);

@@ -19,6 +19,7 @@ extern "C" {
 #include <array>
 #include <cerrno>
 #include <climits>
+#include <cstring>
 #include <format>
 #include <limits>
 #include <optional>
@@ -90,6 +91,8 @@ struct VideoWriter::Impl {
     Result<void> encode(SwsContext* from, std::span<const std::uint8_t> pixels, int stride,
                         int bpp);
     Result<void> drain(AVCodecContext* from, AVStream* to) const;
+    // Sends `frame` (filled in sw_format): uploaded to a VA surface first on VA-API.
+    Result<void> send_video();
     // Encodes whole frames from the FIFO; with `flush`, also the remainder, padded with silence.
     Result<void> encode_audio(bool flush);
 };
@@ -352,6 +355,10 @@ Result<void> VideoWriter::Impl::encode(SwsContext* from, std::span<const std::ui
     if (rows != height) {
         return make_error(ErrorCode::Internal, Category::Encode, "cannot convert video frame");
     }
+    return send_video();
+}
+
+Result<void> VideoWriter::Impl::send_video() {
     AVFrame* send = frame.get();
     if (hw_frames) {
         // Upload into a VA surface from the encoder's pool (released when the encoder is done).
@@ -387,6 +394,38 @@ Result<void> VideoWriter::write_rgba(std::span<const std::uint8_t> rgba, int str
         }
     }
     return s.encode(s.scale_rgba.get(), rgba, stride, 4);
+}
+
+bool VideoWriter::takes_nv12() const noexcept {
+    return impl_->sw_format == AV_PIX_FMT_NV12;
+}
+
+Result<void> VideoWriter::write_nv12(std::span<const std::uint8_t> nv12, int stride) {
+    auto& s = *impl_;
+    const int w = s.codec->width;
+    const int h = s.codec->height;
+    if (s.finished || s.sw_format != AV_PIX_FMT_NV12 || stride < w ||
+        nv12.size() < static_cast<std::size_t>(stride) * static_cast<std::size_t>(h) * 3 / 2 ||
+        s.next_pts == std::numeric_limits<std::int64_t>::max()) {
+        return make_error(ErrorCode::InvalidArgument, Category::Encode, "invalid NV12 frame");
+    }
+    if (const int err = av_frame_make_writable(s.frame.get()); err < 0) {
+        return std::unexpected(ff::av_error(err, Category::Encode, "cannot reuse video frame"));
+    }
+    // Luma rows, then interleaved chroma rows at half height, each `w` bytes wide.
+    const auto row = static_cast<std::size_t>(stride);
+    const auto width = static_cast<std::size_t>(w);
+    const auto rows = static_cast<std::size_t>(h);
+    const std::uint8_t* uv = nv12.data() + (row * rows);
+    for (std::size_t y = 0; y < rows; ++y) {
+        std::memcpy(s.frame->data[0] + (static_cast<std::ptrdiff_t>(y) * s.frame->linesize[0]),
+                    nv12.data() + (y * row), width);
+    }
+    for (std::size_t y = 0; y < rows / 2; ++y) {
+        std::memcpy(s.frame->data[1] + (static_cast<std::ptrdiff_t>(y) * s.frame->linesize[1]),
+                    uv + (y * row), width);
+    }
+    return s.send_video();
 }
 
 Result<void> VideoWriter::write_audio(std::span<const float> interleaved) {

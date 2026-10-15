@@ -17,6 +17,7 @@ void run_vulkan_compositor_tests();
 void run_grade_tests();
 void run_lifetime_tests();
 void run_shared_frame_tests();
+void run_nv12_tests();
 
 namespace {
 
@@ -110,6 +111,7 @@ int main(int argc, char* argv[]) {
     run_grade_tests();
     run_lifetime_tests();
     run_shared_frame_tests();
+    run_nv12_tests();
     release_compositor_test_device();
     return cest_result();
 }

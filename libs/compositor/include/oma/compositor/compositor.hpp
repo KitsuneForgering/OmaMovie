@@ -84,6 +84,17 @@ public:
     // RGBA8 pixels of the last encode_display() (tests, export's software encoder).
     [[nodiscard]] Result<std::vector<std::uint8_t>> read_display();
 
+    // The last render as NV12 for a hardware encoder (export): BT.709 matrix, limited range,
+    // the Bt709 transfer above, chroma the mean of each 2x2 block. `stride`-byte luma rows,
+    // then `stride`-byte interleaved CbCr rows at half height. Even sizes only (Unsupported).
+    struct Nv12Image {
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+        std::uint32_t stride = 0; // a multiple of 4
+        std::vector<std::uint8_t> bytes;
+    };
+    [[nodiscard]] Result<Nv12Image> read_nv12();
+
 private:
     struct Impl;
     explicit VulkanCompositor(std::unique_ptr<Impl> impl);

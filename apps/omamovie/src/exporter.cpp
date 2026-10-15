@@ -1,5 +1,7 @@
 #include "exporter.hpp"
 
+#include "export_encoder.hpp"
+
 #include "oma/base/log.hpp"
 #include "oma/compositor/compositor.hpp"
 #include "oma/gpu/device.hpp"
@@ -14,16 +16,32 @@
 
 namespace {
 
-// One frame on the GPU, encoded to BT.709 RGBA8 and read back for the encoder.
-oma::Result<std::vector<std::uint8_t>> render_gpu(oma::compositor::VulkanCompositor& gpu,
-                                                  const ViewerFrame& view,
-                                                  std::span<const oma::compositor::LayerInput> in) {
+// One frame on the GPU, read back for the encoder: NV12 for VA-API (converted on the GPU, 1.5
+// bytes per pixel), else BT.709 RGBA8 for libx264's own conversion.
+oma::Result<EncodedFrame> render_gpu(oma::compositor::VulkanCompositor& gpu,
+                                     const ViewerFrame& view,
+                                     std::span<const oma::compositor::LayerInput> in, bool nv12) {
     if (auto rendered = gpu.render(view.graph, in); !rendered)
         return std::unexpected(rendered.error());
+    EncodedFrame out;
+    if (nv12) {
+        auto image = gpu.read_nv12();
+        if (!image)
+            return std::unexpected(image.error());
+        out.kind = EncodedFrame::Pixels::Nv12;
+        out.stride = static_cast<int>(image->stride);
+        out.pixels = std::move(image->bytes);
+        return out;
+    }
     if (auto encoded = gpu.encode_display(oma::compositor::VulkanCompositor::Transfer::Bt709);
         !encoded)
         return std::unexpected(encoded.error());
-    return gpu.read_display();
+    auto pixels = gpu.read_display();
+    if (!pixels)
+        return std::unexpected(pixels.error());
+    out.kind = EncodedFrame::Pixels::Rgba;
+    out.pixels = std::move(*pixels);
+    return out;
 }
 
 } // namespace
@@ -106,19 +124,23 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
                   gpu ? "Vulkan" : "CPU");
     oma::playback::TimelineAudio audio(request.timeline, request.paths, request.audio_rate, 2);
     const auto sample_tb = oma::Rational::make(1, request.audio_rate.hz()).value();
-    std::vector<std::uint8_t> rgb(static_cast<std::size_t>(request.width) * request.height * 3);
-    std::vector<float> sound;
     std::int64_t sample = 0;
+    // Declared after the writer: destroyed first, joining its worker before the writer goes.
+    EncodeStage encoder(**writer, static_cast<int>(request.width));
+    const auto stop = [&](oma::Error error) -> oma::Result<void> {
+        (void)encoder.finish(); // joins the worker before the writer is touched again
+        return std::unexpected(std::move(error));
+    };
     for (std::int64_t k = 0; k < request.frames; ++k) {
         if (!progress(k, request.frames)) {
-            return oma::make_error(oma::ErrorCode::Cancelled, oma::Category::Encode,
-                                   "export cancelled");
+            return stop(
+                oma::Error(oma::ErrorCode::Cancelled, oma::Category::Encode, "export cancelled"));
         }
         mark = Clock::now();
         auto view = build_viewer_frame(request.timeline, request.paths, request.luts, request.width,
                                        request.height, k, request.ticks_per_frame, frames);
         if (!view)
-            return std::unexpected(view.error());
+            return stop(view.error());
         lap(st.build);
         std::vector<oma::compositor::LayerInput> inputs;
         inputs.reserve((*view)->pictures.size());
@@ -128,12 +150,12 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
                               .rotation = p.rotation,
                               .sample_aspect = p.sample_aspect});
         }
+        EncodedFrame out;
         if (gpu) {
-            // The GPU encodes BT.709 RGBA8 and the software encoder reads it back: one 8-bit
-            // readback per frame, the documented exception for export until a hardware encoder
-            // takes GPU frames (CLAUDE.md §7.2). Measured: a float readback plus CPU encoding
-            // cost ~43 ms per 1080p frame (Research/evidence/2026-10-07-m7-export.txt).
-            auto pixels = render_gpu(*gpu, **view, inputs);
+            // The GPU encodes BT.709 RGBA8 and the encoder reads it back: one 8-bit readback per
+            // frame, the documented exception for export until a hardware encoder takes GPU
+            // frames (CLAUDE.md §7.2), overlapped with encoding the previous frame.
+            auto pixels = render_gpu(*gpu, **view, inputs, (*writer)->takes_nv12());
             if (!pixels && pixels.error().code() == oma::ErrorCode::DeviceLost) {
                 // A lost device takes no more work (ADR-0005). The CPU reference renders the
                 // same graph within the compositors' agreed tolerance, so the export finishes,
@@ -144,41 +166,38 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
                               k);
                 gpu.reset();
             } else if (!pixels) {
-                return std::unexpected(pixels.error());
+                return stop(pixels.error());
             } else {
-                lap(st.render);
-                if (auto w = (*writer)->write_rgba(*pixels, static_cast<int>(request.width) * 4);
-                    !w)
-                    return w;
+                out = std::move(*pixels);
             }
         }
         if (!gpu) {
             auto image = oma::compositor::CpuCompositor{}.render((*view)->graph, inputs);
             if (!image)
-                return std::unexpected(image.error());
-            lap(st.render);
+                return stop(image.error());
+            out.pixels.resize(static_cast<std::size_t>(request.width) * request.height * 3);
             encode_bt709(image->pixels.data(),
-                         static_cast<std::size_t>(image->width) * image->height, rgb.data());
-            lap(st.convert);
-            if (auto w = (*writer)->write(rgb, static_cast<int>(request.width) * 3); !w)
-                return w;
+                         static_cast<std::size_t>(image->width) * image->height, out.pixels.data());
         }
-        lap(st.encode);
+        lap(st.render);
         // Sound for this frame, sample-accurate: the samples from this frame's start to the
         // next one's (frame boundaries rarely fall on whole samples at 29.97 fps).
         const auto next = rate.frame_to_time(k + 1).rescaled(sample_tb, oma::Rounding::Floor);
         if (!next)
-            return std::unexpected(next.error());
-        const std::int64_t count = next->value() - sample;
-        sound.assign(static_cast<std::size_t>(count) * 2, 0.0F);
-        if (auto r = audio.render(sound, sample); !r)
-            return std::unexpected(r.error());
-        if (auto w = (*writer)->write_audio(sound); !w)
-            return w;
+            return stop(next.error());
+        out.sound.assign(static_cast<std::size_t>(next->value() - sample) * 2, 0.0F);
+        if (auto r = audio.render(out.sound, sample); !r)
+            return stop(r.error());
         lap(st.audio);
+        if (!encoder.push(std::move(out)))
+            break;       // the encoder failed: finish() below returns why
+        lap(st.convert); // time spent waiting for the encoder (backpressure)
         sample = next->value();
         ++st.frames;
     }
+    if (auto encoded = encoder.finish(); !encoded)
+        return encoded;
+    st.encode = encoder.encode_ms();
     (void)progress(request.frames, request.frames);
     auto finished = (*writer)->finish();
     st.total = std::chrono::duration<double, std::milli>(Clock::now() - started).count();

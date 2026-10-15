@@ -35,10 +35,10 @@ struct ExportRequest {
 struct ExportStats {
     std::int64_t frames = 0;
     double build = 0;   // evaluation and decode (frame builder)
-    double render = 0;  // composition and readback
-    double convert = 0; // linear light to BT.709 RGB24
-    double encode = 0;  // RGB to YUV and video encoder
-    double audio = 0;   // mix and audio encoder
+    double render = 0;  // composition and readback (or the CPU reference and BT.709 RGB24)
+    double convert = 0; // waiting for the encoder stage (backpressure)
+    double encode = 0;  // RGB to YUV, video and audio encoders, on the encoder stage's worker
+    double audio = 0;   // mix
     double total = 0;
     std::string encoder; // what was used, and why when it is not what was asked for
 };

@@ -1,5 +1,7 @@
 #include "oma/compositor/compositor.hpp"
 
+#include "nv12_pass.hpp"
+
 #include "layer_params.hpp"
 
 #include "oma/base/log.hpp"
@@ -269,6 +271,17 @@ struct BoundInput {
     media::SampleLayout layout;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
+
+    // The same images for another input, without a second access: waits, signals and the
+    // foreign release stay with the binding that holds the access.
+    [[nodiscard]] BoundInput alias() const {
+        BoundInput out;
+        out.views = views;
+        out.layout = layout;
+        out.width = width;
+        out.height = height;
+        return out;
+    }
 };
 
 } // namespace
@@ -819,7 +832,11 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
         Result<BoundInput> b =
             std::unexpected(Error(ErrorCode::Internal, Category::Compositor, ""));
         if (frame->on_gpu()) {
-            b = d.bind_gpu_frame(*frame);
+            // One GPU frame behind several inputs (a clip stacked over itself) is acquired once:
+            // its lock is not recursive, so a second acquire here would wait on this thread.
+            const auto same = std::ranges::find_if(
+                bound, [&](const auto& entry) { return inputs[entry.first].frame == frame; });
+            b = same != bound.end() ? same->second.alias() : d.bind_gpu_frame(*frame);
         } else {
             const auto staged = d.stage_upload(layer.input, *frame);
             if (staged) {
