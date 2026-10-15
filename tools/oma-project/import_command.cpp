@@ -1,18 +1,20 @@
-// `oma-project import FILE.otio`: the import report (CLAUDE.md §16.4, §16.7) from the importer and
-// converter the app uses. Media durations come from the file; files are checked, not probed.
+// `oma-project import FILE.otio|FILE.edl [RATE]`: the import report (CLAUDE.md §16.4, §16.7) from
+// the importer and converter the app uses. Media durations come from the file; files are checked,
+// not probed.
 #include "commands.hpp"
 
-#include "oma/importers/otio.hpp"
+#include "oma/importers/edl.hpp"
 #include "oma/project/from_ir.hpp"
 
 #include <cstdio>
 #include <fstream>
 #include <sstream>
 
-int run_import(const std::filesystem::path& file) {
+int run_import(const std::filesystem::path& file, oma::Rational edl_rate) {
     std::stringstream text;
     text << std::ifstream(file).rdbuf();
-    auto imported = oma::importers::import_otio(text.str());
+    auto imported = file.extension() == ".edl" ? oma::importers::import_edl(text.str(), edl_rate)
+                                               : oma::importers::import_otio(text.str());
     if (!imported) {
         std::fprintf(stderr, "%s\n", imported.error().summary().c_str());
         return 1;

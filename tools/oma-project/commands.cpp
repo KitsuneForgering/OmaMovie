@@ -2,6 +2,7 @@
 
 #include "oma/timeline/effects.hpp"
 
+#include <charconv>
 #include <cstdio>
 
 int run_command(std::string_view command, const oma::project::Document& doc,
@@ -40,4 +41,18 @@ int run_command(std::string_view command, const oma::project::Document& doc,
         }
     }
     return 0;
+}
+
+std::optional<oma::Rational> rate_of(std::string_view text) {
+    std::int64_t num = 0;
+    std::int64_t den = 1;
+    const auto slash = text.find('/');
+    const auto read = [](std::string_view s, std::int64_t& v) {
+        return std::from_chars(s.data(), s.data() + s.size(), v).ptr == s.data() + s.size();
+    };
+    if (!read(text.substr(0, slash), num) ||
+        (slash != std::string_view::npos && !read(text.substr(slash + 1), den)))
+        return std::nullopt;
+    auto r = oma::Rational::make(num, den);
+    return r && r->is_positive() ? std::optional(*r) : std::nullopt;
 }

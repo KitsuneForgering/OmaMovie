@@ -1,6 +1,6 @@
 #include "oma/ingest/timeline_import.hpp"
 
-#include "oma/importers/otio.hpp"
+#include "oma/importers/edl.hpp"
 #include "oma/ingest/media_entry.hpp"
 #include "oma/project/from_ir.hpp"
 
@@ -11,14 +11,15 @@
 
 namespace oma::ingest {
 
-Result<project::Document> import_otio_file(const std::filesystem::path& path,
-                                           const media::MediaImporter& importer,
-                                           ir::ImportReport& report) {
+Result<project::Document> import_timeline_file(const std::filesystem::path& path,
+                                               const media::MediaImporter& importer,
+                                               ir::ImportReport& report, Rational edl_rate) {
     auto text = detail::read_timeline_text(path);
     if (!text) {
         return std::unexpected(text.error());
     }
-    auto imported = importers::import_otio(*text);
+    auto imported = path.extension() == ".edl" ? importers::import_edl(*text, edl_rate)
+                                               : importers::import_otio(*text);
     if (!imported) {
         return std::unexpected(imported.error());
     }

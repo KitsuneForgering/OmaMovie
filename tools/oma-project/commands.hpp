@@ -12,11 +12,16 @@
 int run_command(std::string_view command, const oma::project::Document& doc,
                 const std::filesystem::path& file);
 
-// `import FILE.otio`: prints the import report (import_command.cpp).
-int run_import(const std::filesystem::path& file);
+// `import FILE.otio|FILE.edl [RATE]`: prints the import report (import_command.cpp); an EDL's
+// timecodes count frames at RATE (e.g. 25 or 30000/1001; default 30).
+int run_import(const std::filesystem::path& file, oma::Rational edl_rate);
 
-// `convert FILE.otio OUT.omamovie`: the import with media probed, saved (convert_command.cpp).
-int run_convert(const std::filesystem::path& file, const std::filesystem::path& out);
+// `convert FILE.otio|FILE.edl OUT.omamovie [RATE]`: the import with media probed, saved.
+int run_convert(const std::filesystem::path& file, const std::filesystem::path& out,
+                oma::Rational edl_rate);
+
+// "25", "24000/1001": an EDL's frame rate as given on the command line; nothing otherwise.
+[[nodiscard]] std::optional<oma::Rational> rate_of(std::string_view text);
 
 // `diff A B`: the line edits between two projects' canonical dumps (diff_command.cpp).
 int run_diff(const std::filesystem::path& a, const std::filesystem::path& b);

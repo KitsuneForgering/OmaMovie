@@ -6,7 +6,7 @@ std::optional<oma::project::Document> import_timeline(const std::filesystem::pat
                                                       const oma::media::MediaImporter& importer,
                                                       QStringList& issues, QString& why) {
     oma::ir::ImportReport report;
-    auto doc = oma::ingest::import_otio_file(path, importer, report);
+    auto doc = oma::ingest::import_timeline_file(path, importer, report);
     for (const auto& i : report.issues)
         issues << QString::fromStdString(i.object + ": " + i.reason + "; " + i.impact);
     if (!doc)

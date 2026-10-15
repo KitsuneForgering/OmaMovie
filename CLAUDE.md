@@ -99,6 +99,8 @@ tools/bench/long-export/run.sh [MINUTES] [DIR]     # M7 long export: reordered c
 make oma-project               # build the native project inspect/validate/dump CLI
 build/debug/tools/oma-project/oma-project import FILE.otio  # OTIO import report (media not probed)
 build/debug/tools/oma-project/oma-project convert FILE.otio OUT.omamovie  # the app's OTIO import, saved
+build/debug/tools/oma-project/oma-project import FILE.otio|FILE.edl [RATE]  # import report (media not probed; EDL rate, default 30)
+build/debug/tools/oma-project/oma-project convert FILE.otio|FILE.edl OUT.omamovie [RATE]  # the app's import, saved
 build/debug/tools/oma-project/oma-project diff A.omamovie B.omamovie  # changed dump lines (exit 1 if any)
 make BUILD=release DESTDIR=dir PREFIX=/usr install  # the installed tree (PKGBUILD, release tarball)
 makepkg -si                    # build and install the Arch package from the PKGBUILD

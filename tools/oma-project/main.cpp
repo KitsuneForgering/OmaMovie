@@ -8,8 +8,8 @@ namespace {
 
 int usage() {
     std::fputs("usage: oma-project inspect|validate|dump <file.omamovie>\n"
-               "       oma-project import <file.otio>\n"
-               "       oma-project convert <file.otio> <out.omamovie>\n"
+               "       oma-project import <file.otio|file.edl> [edl rate, e.g. 25 or 30000/1001]\n"
+               "       oma-project convert <file.otio|file.edl> <out.omamovie> [edl rate]\n"
                "       oma-project diff <a.omamovie> <b.omamovie>\n",
                stderr);
     return 2;
@@ -18,15 +18,19 @@ int usage() {
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc == 4 && std::string_view(argv[1]) == "diff")
+    const std::string_view command(argc > 1 ? argv[1] : "");
+    if (argc == 4 && command == "diff")
         return run_diff(argv[2], argv[3]);
-    if (argc == 4 && std::string_view(argv[1]) == "convert")
-        return run_convert(argv[2], argv[3]);
+    const bool timed = (command == "import" && argc == 4) || (command == "convert" && argc == 5);
+    const auto rate = timed ? rate_of(argv[argc - 1]) : oma::Rational::literal(30, 1);
+    if (!rate)
+        return usage();
+    if (command == "convert" && (argc == 4 || argc == 5))
+        return run_convert(argv[2], argv[3], *rate);
+    if (command == "import" && (argc == 3 || argc == 4))
+        return run_import(argv[2], *rate);
     if (argc != 3)
         return usage();
-    const std::string_view command(argv[1]);
-    if (command == "import")
-        return run_import(argv[2]);
     if (command != "inspect" && command != "validate" && command != "dump")
         return usage();
 
