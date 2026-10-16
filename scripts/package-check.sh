@@ -23,9 +23,19 @@ podman run --rm -v "$repo:/src:ro,Z" -v "$out:/out:Z" "$image" bash -euo pipefai
 
 # sway carries file capabilities that rootless podman cannot grant; drop them in the throwaway
 # container. The smoke reads tests/fixtures/generated relative to its working directory.
-podman run --rm -v "$repo:/src:ro,Z" -v "$out:/out:Z" "$image" bash -uo pipefail -c '
+podman run --rm -v "$repo:/src:ro,Z" -v "$out:/out:Z" "$image" bash -euo pipefail -c '
   pacman -Syu --noconfirm --needed sway vulkan-swrast libcap >/dev/null
   pacman -U --noconfirm /out/omamovie-git-r*-x86_64.pkg.tar.zst >/dev/null
+  test -x /usr/bin/omamovie
+  test -s /usr/share/omamovie/qml/Main.qml
+  test -s /usr/share/icons/hicolor/scalable/apps/omamovie.svg
+  test -s /usr/share/mime/packages/omamovie.xml
+  desktop-file-validate /usr/share/applications/omamovie.desktop
+  update-mime-database /usr/share/mime
+  printf "{}\n" >/tmp/package-check.omamovie
+  gio info -a standard::content-type /tmp/package-check.omamovie | grep -F "application/x-omamovie-project"
+  ldd /usr/bin/omamovie > /out/runtime-libs.log
+  ! grep -q "not found" /out/runtime-libs.log
   setcap -r /usr/bin/sway; useradd -m user
   su user -c "
     export XDG_RUNTIME_DIR=/tmp/xdg WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=pixman

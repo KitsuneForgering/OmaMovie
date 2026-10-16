@@ -5,8 +5,8 @@ name: Release
 # `make install` lays out under usr/, which omastore.toml points OmaStore at). Qt 6, FFmpeg and
 # Vulkan stay system libraries (Arch packages, PKGBUILD depends).
 #
-# The full CI, the notes and source tarball, and the app build run in parallel; `publish` runs
-# only when all three succeed, so a failed check never leaves a partial release behind.
+# A tag is checked before the full CI, source, and app jobs run. `publish` starts a draft,
+# verifies its assets, and makes it public only after every prerequisite succeeds.
 on:
   push:
     tags: ['v*.*.*']
@@ -19,11 +19,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate:
+    name: release tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Accept only version or release-candidate tags
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          [[ $TAG =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.[1-9][0-9]*)?$ ]]
+
   ci:
+    needs: validate
     uses: ./.github/workflows/ci.yml
 
   source:
     name: notes and source tarball
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -46,6 +58,7 @@ jobs:
 
   app:
     name: app tarball (release build, tested)
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -66,7 +79,7 @@ jobs:
 
   publish:
     name: publish
-    needs: [ci, source, app]
+    needs: [validate, ci, source, app]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -83,10 +96,23 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME}"
           version="${tag#v}"
+          (cd dist && sha256sum -c "oma-movie-${version}-src.tar.gz.sha256" \
+                                  "omamovie-${version}-x86_64-linux.tar.gz.sha256")
           prerelease=""
           if [[ $tag == *-* ]]; then prerelease="--prerelease"; fi
-          gh release create "$tag" $prerelease \
+          gh release create "$tag" --draft --verify-tag $prerelease \
             --title "OmaMovie ${version}" \
             --notes-file dist/release-notes.md \
             dist/oma-movie-${version}-src.tar.gz dist/oma-movie-${version}-src.tar.gz.sha256 \
             dist/omamovie-${version}-x86_64-linux.tar.gz dist/omamovie-${version}-x86_64-linux.tar.gz.sha256
+          assets="$(gh release view "$tag" --json assets,isDraft)"
+          jq -e --arg version "$version" '
+            .isDraft == true and
+            ([.assets[].name] | sort) == ([
+              "oma-movie-\($version)-src.tar.gz",
+              "oma-movie-\($version)-src.tar.gz.sha256",
+              "omamovie-\($version)-x86_64-linux.tar.gz",
+              "omamovie-\($version)-x86_64-linux.tar.gz.sha256"
+            ] | sort)
+          ' <<<"$assets"
+          gh release edit "$tag" --draft=false
