@@ -23,6 +23,12 @@ struct SemaphoreSubmit {
 // first compositor. Not thread-safe; one runner per thread.
 class CommandRunner {
 public:
+    struct RunTimings {
+        double record_ms = 0;
+        double submit_ms = 0;     // includes waiting for the device queue lock
+        double fence_wait_ms = 0; // includes queued work and GPU execution
+    };
+
     [[nodiscard]] static Result<CommandRunner> create(const Device& device, std::uint32_t family);
 
     CommandRunner(CommandRunner&& other) noexcept;
@@ -33,7 +39,8 @@ public:
 
     [[nodiscard]] Result<void> run(const std::function<void(VkCommandBuffer)>& record,
                                    std::span<const SemaphoreSubmit> waits = {},
-                                   std::span<const SemaphoreSubmit> signals = {});
+                                   std::span<const SemaphoreSubmit> signals = {},
+                                   RunTimings* timings = nullptr);
 
 private:
     CommandRunner() = default;

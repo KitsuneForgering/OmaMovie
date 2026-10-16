@@ -2,6 +2,7 @@
 
 #include "oma/gpu/device.hpp"
 
+#include <chrono>
 #include <string>
 #include <utility>
 #include <vector>
@@ -109,10 +110,17 @@ void CommandRunner::reset() noexcept {
 
 Result<void> CommandRunner::run(const std::function<void(VkCommandBuffer)>& record,
                                 std::span<const SemaphoreSubmit> waits,
-                                std::span<const SemaphoreSubmit> signals) {
+                                std::span<const SemaphoreSubmit> signals, RunTimings* timings) {
+    using Clock = std::chrono::steady_clock;
+    const auto elapsed_ms = [](Clock::time_point start) {
+        return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+    };
+    if (timings != nullptr)
+        *timings = {};
     if (device_->lost()) {
         return std::unexpected(lost_device()); // a lost device accepts no more work
     }
+    const auto record_start = Clock::now();
     vkResetCommandBuffer(cmd_, 0);
     const VkCommandBufferBeginInfo begin{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                                          .pNext = nullptr,
@@ -125,6 +133,8 @@ Result<void> CommandRunner::run(const std::function<void(VkCommandBuffer)>& reco
     if (const VkResult r = vkEndCommandBuffer(cmd_); r != VK_SUCCESS) {
         return std::unexpected(vk_failure(r, "cannot record commands"));
     }
+    if (timings != nullptr)
+        timings->record_ms = elapsed_ms(record_start);
     const auto wait_infos = to_infos(waits);
     const auto signal_infos = to_infos(signals);
     const VkCommandBufferSubmitInfo cbi{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
@@ -141,13 +151,19 @@ Result<void> CommandRunner::run(const std::function<void(VkCommandBuffer)>& reco
         .pCommandBufferInfos = &cbi,
         .signalSemaphoreInfoCount = static_cast<std::uint32_t>(signal_infos.size()),
         .pSignalSemaphoreInfos = signal_infos.data()};
+    const auto submit_start = Clock::now();
     device_->lock_queue(family_, 0);
     const VkResult submitted = vkQueueSubmit2(queue_, 1, &submit, fence_);
     device_->unlock_queue(family_, 0);
+    if (timings != nullptr)
+        timings->submit_ms = elapsed_ms(submit_start);
     if (submitted != VK_SUCCESS) {
         return std::unexpected(submit_failure(*device_, submitted, "queue submission failed"));
     }
+    const auto wait_start = Clock::now();
     const VkResult waited = vkWaitForFences(device_->device(), 1, &fence_, VK_TRUE, UINT64_MAX);
+    if (timings != nullptr)
+        timings->fence_wait_ms = elapsed_ms(wait_start);
     vkResetFences(device_->device(), 1, &fence_);
     if (waited != VK_SUCCESS) {
         return std::unexpected(submit_failure(*device_, waited, "waiting for the GPU failed"));

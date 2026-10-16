@@ -10,6 +10,7 @@
 #include "oma/playback/timeline_audio.hpp"
 
 #include <chrono>
+#include <ctime>
 #include <optional>
 #include <span>
 #include <vector>
@@ -29,17 +30,30 @@ oma::Result<EncodedFrame> render_gpu(oma::compositor::VulkanCompositor& gpu,
         for (int p = 0; p < input.frame->plane_count(); ++p)
             stats.software_input_bytes += input.frame->plane(p).size();
     }
-    if (auto rendered = gpu.render(view.graph, in); !rendered)
+    oma::compositor::VulkanCompositor::RenderTransferStats transfers;
+    if (auto rendered = gpu.render(view.graph, in, &transfers); !rendered)
         return std::unexpected(rendered.error());
+    stats.staged_inputs += transfers.staged_inputs;
+    stats.staged_bytes += transfers.staged_bytes;
+    stats.staging_ms += transfers.staging_ms;
+    stats.staging_row_copy_ms += transfers.row_copy_ms;
     EncodedFrame out;
     if (nv12) {
         const auto start = std::chrono::steady_clock::now();
-        auto image = gpu.read_nv12();
+        oma::compositor::VulkanCompositor::Nv12ReadbackTimings timings;
+        auto image = gpu.read_nv12(&timings);
         stats.readback_ms +=
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start)
                 .count();
         if (!image)
             return std::unexpected(image.error());
+        stats.nv12_record_ms += timings.record_ms;
+        stats.nv12_submit_ms += timings.submit_ms;
+        stats.nv12_fence_wait_ms += timings.fence_wait_ms;
+        stats.nv12_gpu_convert_ms += timings.gpu_convert_ms;
+        stats.nv12_gpu_timestamp_frames += timings.gpu_timestamp_available ? 1 : 0;
+        stats.nv12_invalidate_ms += timings.invalidate_ms;
+        stats.nv12_host_copy_ms += timings.host_copy_ms;
         ++stats.readbacks;
         stats.readback_bytes += image->bytes.size();
         out.kind = EncodedFrame::Pixels::Nv12;
@@ -83,14 +97,18 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
     ExportStats local;
     ExportStats& st = stats != nullptr ? *stats : local;
     const auto started = Clock::now();
+    const auto cpu_started = std::clock();
     // On every return, so a failed export (a full disk, say) still reports where its time went.
     struct Total {
         ExportStats& st;
         Clock::time_point started;
+        std::clock_t cpu_started;
         ~Total() {
             st.total = std::chrono::duration<double, std::milli>(Clock::now() - started).count();
+            st.process_cpu_ms =
+                1000.0 * static_cast<double>(std::clock() - cpu_started) / CLOCKS_PER_SEC;
         }
-    } const total{.st = st, .started = started};
+    } const total{.st = st, .started = started, .cpu_started = cpu_started};
     auto mark = started;
     const auto lap = [&mark](double& into) {
         const auto now = Clock::now();
@@ -100,15 +118,22 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
     const oma::FrameRate rate = request.timeline.frame_rate();
     // Software decode: export does not compete with the viewer's hardware decoder, and every
     // frame needs a CPU readback for the software encoder anyway.
-    FrameSource frames(nullptr);
+    FrameSource frames(nullptr, &st.decoded);
+    st.decode_path = "software (export FrameSource has no GPU device)";
+    st.compositor_path = "CPU reference (no Vulkan device)";
     std::unique_ptr<oma::compositor::VulkanCompositor> gpu;
     if (device != nullptr) {
-        if (auto compositor = oma::compositor::VulkanCompositor::create(*device))
+        if (auto compositor = oma::compositor::VulkanCompositor::create(*device)) {
             gpu = std::move(*compositor);
+        } else {
+            st.compositor_path =
+                "CPU reference (Vulkan compositor failed: " + compositor.error().summary() + ")";
+        }
     }
+    if (gpu)
+        st.compositor_path = "Vulkan (software frames staged to GPU)";
     if (!gpu)
-        oma::log_warn(oma::Category::Encode,
-                      "export: no Vulkan compositor, using the CPU reference (slow)");
+        oma::log_warn(oma::Category::Encode, "export: {}", st.compositor_path);
     // Encoder: the GPU's where validated (M7 gate on Intel, 2026-10-07), else libx264. Both keep
     // the requested resolution, rate, colour tags and audio; only speed and the encoder's own
     // quality differ.
@@ -193,6 +218,8 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
                               "export: GPU device lost at frame {}, continuing on the CPU "
                               "reference (slow)",
                               k);
+                st.compositor_path +=
+                    "; CPU reference after device loss at frame " + std::to_string(k);
                 gpu.reset();
             } else if (!pixels) {
                 return stop(pixels.error());

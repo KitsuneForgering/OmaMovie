@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -354,7 +355,8 @@ struct VulkanCompositor::Impl {
     // `width` x `height` is the reduced source; `across` keeps the source's `full_height`.
     [[nodiscard]] Result<BlurImages*> ensure_blur(std::size_t draw, std::uint32_t width,
                                                   std::uint32_t height, std::uint32_t full_height);
-    [[nodiscard]] Result<Upload*> stage_upload(std::size_t index, const media::VideoFrame& frame);
+    [[nodiscard]] Result<Upload*> stage_upload(std::size_t index, const media::VideoFrame& frame,
+                                               RenderTransferStats* transfers);
     [[nodiscard]] Result<BoundInput> bind_gpu_frame(media::VideoFrame& frame);
     [[nodiscard]] Result<LutImage*> ensure_lut(const std::shared_ptr<const Lut3d>& lut);
 };
@@ -517,7 +519,8 @@ Result<void> VulkanCompositor::Impl::ensure_params(std::size_t layers) {
 
 // Copies a software frame's planes into the staging buffer of its upload slot.
 Result<Upload*> VulkanCompositor::Impl::stage_upload(std::size_t index,
-                                                     const media::VideoFrame& frame) {
+                                                     const media::VideoFrame& frame,
+                                                     RenderTransferStats* transfers) {
     const media::SampleLayout layout = frame.layout();
     const auto width = static_cast<std::uint32_t>(frame.width());
     const auto height = static_cast<std::uint32_t>(frame.height());
@@ -553,6 +556,8 @@ Result<Upload*> VulkanCompositor::Impl::stage_upload(std::size_t index,
         up.staging = std::move(*staging);
     }
     auto* base = static_cast<std::uint8_t*>(up.staging.mapped());
+    const auto copy_start = std::chrono::steady_clock::now();
+    std::uint64_t copied_bytes = 0;
     for (int p = 0; p < layout.planes; ++p) {
         const auto i = static_cast<std::size_t>(p);
         const std::size_t row_bytes =
@@ -568,6 +573,14 @@ Result<Upload*> VulkanCompositor::Impl::stage_upload(std::size_t index,
             std::memcpy(base + up.offsets[i] + (y * row_bytes), src.data() + (y * stride),
                         row_bytes);
         }
+        copied_bytes += static_cast<std::uint64_t>(row_bytes) * rows;
+    }
+    if (transfers != nullptr) {
+        ++transfers->staged_inputs;
+        transfers->staged_bytes += copied_bytes;
+        transfers->row_copy_ms +=
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - copy_start)
+                .count();
     }
     up.staging.flush();
     return &up;
@@ -803,8 +816,10 @@ Result<std::unique_ptr<VulkanCompositor>> VulkanCompositor::create(const gpu::De
     return std::unique_ptr<VulkanCompositor>(new VulkanCompositor(std::move(impl)));
 }
 
-Result<void> VulkanCompositor::render(const RenderGraph& graph,
-                                      std::span<const LayerInput> inputs) {
+Result<void> VulkanCompositor::render(const RenderGraph& graph, std::span<const LayerInput> inputs,
+                                      RenderTransferStats* transfers) {
+    if (transfers != nullptr)
+        *transfers = {};
     Impl& d = *impl_;
     if (auto valid = validate(graph, inputs.size()); !valid) {
         return std::unexpected(valid.error());
@@ -838,7 +853,12 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
                 bound, [&](const auto& entry) { return inputs[entry.first].frame == frame; });
             b = same != bound.end() ? same->second.alias() : d.bind_gpu_frame(*frame);
         } else {
-            const auto staged = d.stage_upload(layer.input, *frame);
+            const auto stage_start = std::chrono::steady_clock::now();
+            const auto staged = d.stage_upload(layer.input, *frame, transfers);
+            if (transfers != nullptr)
+                transfers->staging_ms += std::chrono::duration<double, std::milli>(
+                                             std::chrono::steady_clock::now() - stage_start)
+                                             .count();
             if (staged) {
                 BoundInput in;
                 in.layout = (*staged)->layout;
@@ -1310,7 +1330,9 @@ Result<std::vector<std::uint8_t>> VulkanCompositor::read_display() {
     return std::vector<std::uint8_t>(data, data + bytes);
 }
 
-Result<VulkanCompositor::Nv12Image> VulkanCompositor::read_nv12() {
+Result<VulkanCompositor::Nv12Image> VulkanCompositor::read_nv12(Nv12ReadbackTimings* timings) {
+    if (timings != nullptr)
+        *timings = {};
     Impl& d = *impl_;
     if (d.output.handle() == VK_NULL_HANDLE) {
         return make_error(ErrorCode::InvalidArgument, Category::Compositor, "nothing rendered yet");
@@ -1328,12 +1350,26 @@ Result<VulkanCompositor::Nv12Image> VulkanCompositor::read_nv12() {
         d.nv12 = std::move(*made);
     }
     const std::uint32_t stride = (w + 3) & ~3U;
-    auto bytes = d.nv12->run(*d.runner, d.output.view(), w, h, stride);
+    detail::Nv12Pass::Timings pass_timings;
+    auto bytes = d.nv12->run(*d.runner, d.output.view(), w, h, stride,
+                             timings != nullptr ? &pass_timings : nullptr);
     if (!bytes) {
         return std::unexpected(bytes.error());
     }
-    return Nv12Image{
-        .width = w, .height = h, .stride = stride, .bytes = {bytes->begin(), bytes->end()}};
+    const auto copy_start = std::chrono::steady_clock::now();
+    std::vector<std::uint8_t> host_bytes(bytes->begin(), bytes->end());
+    if (timings != nullptr) {
+        timings->record_ms = pass_timings.commands.record_ms;
+        timings->submit_ms = pass_timings.commands.submit_ms;
+        timings->fence_wait_ms = pass_timings.commands.fence_wait_ms;
+        timings->gpu_convert_ms = pass_timings.gpu_convert_ms;
+        timings->gpu_timestamp_available = pass_timings.gpu_timestamp_available;
+        timings->invalidate_ms = pass_timings.invalidate_ms;
+        timings->host_copy_ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - copy_start)
+                .count();
+    }
+    return Nv12Image{.width = w, .height = h, .stride = stride, .bytes = std::move(host_bytes)};
 }
 
 } // namespace oma::compositor

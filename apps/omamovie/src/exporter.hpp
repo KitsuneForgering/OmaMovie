@@ -40,13 +40,28 @@ struct ExportStats {
     double encode = 0;  // RGB to YUV, video and audio encoders, on the encoder stage's worker
     double audio = 0;   // mix
     double total = 0;
-    std::string encoder; // what was used, and why when it is not what was asked for
+    double process_cpu_ms = 0;   // all process threads while this export job runs
+    std::string decode_path;     // export frame source and its hardware choice
+    std::string compositor_path; // selected renderer and any downgrade reason
+    std::string encoder;         // what was used, and why when it is not what was asked for
     // Transfer audit: counts at OmaMovie's explicit API boundaries, not driver-internal copies.
+    FrameSource::DecodeTransferStats decoded;
     std::uint64_t software_inputs = 0;
     std::uint64_t software_input_bytes = 0; // plane payload exposed to the compositor
+    std::uint64_t staged_inputs = 0;
+    std::uint64_t staged_bytes = 0; // packed software rows copied into Vulkan upload memory
+    double staging_ms = 0;
+    double staging_row_copy_ms = 0;
     std::uint64_t readbacks = 0;
     std::uint64_t readback_bytes = 0;
-    double readback_ms = 0; // read_nv12 includes GPU conversion, synchronization and host copy
+    double readback_ms = 0; // full readback call, including setup and host copy
+    double nv12_record_ms = 0;
+    double nv12_submit_ms = 0;
+    double nv12_fence_wait_ms = 0; // queued work and GPU execution, not shader-only time
+    double nv12_gpu_convert_ms = 0;
+    std::uint64_t nv12_gpu_timestamp_frames = 0;
+    double nv12_invalidate_ms = 0;
+    double nv12_host_copy_ms = 0;
     oma::media::WriterTransferStats writer_transfers;
 };
 

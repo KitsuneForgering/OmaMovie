@@ -63,7 +63,14 @@ public:
     VulkanCompositor(VulkanCompositor&&) = delete;
     VulkanCompositor& operator=(VulkanCompositor&&) = delete;
 
-    [[nodiscard]] Result<void> render(const RenderGraph& graph, std::span<const LayerInput> inputs);
+    struct RenderTransferStats {
+        std::uint64_t staged_inputs = 0; // unique software inputs copied for this render
+        std::uint64_t staged_bytes = 0;  // packed rows copied to upload memory
+        double staging_ms = 0;           // allocation, CPU copy and flush
+        double row_copy_ms = 0;
+    };
+    [[nodiscard]] Result<void> render(const RenderGraph& graph, std::span<const LayerInput> inputs,
+                                      RenderTransferStats* transfers = nullptr);
 
     // The last render's result, in VK_IMAGE_LAYOUT_GENERAL. Valid until the next render.
     [[nodiscard]] const gpu::Image* output() const noexcept;
@@ -93,7 +100,16 @@ public:
         std::uint32_t stride = 0; // a multiple of 4
         std::vector<std::uint8_t> bytes;
     };
-    [[nodiscard]] Result<Nv12Image> read_nv12();
+    struct Nv12ReadbackTimings {
+        double record_ms = 0;
+        double submit_ms = 0;
+        double fence_wait_ms = 0;  // includes queued GPU work, not isolated shader time
+        double gpu_convert_ms = 0; // Vulkan timestamps around NV12 dispatch, if available
+        bool gpu_timestamp_available = false;
+        double invalidate_ms = 0;
+        double host_copy_ms = 0;
+    };
+    [[nodiscard]] Result<Nv12Image> read_nv12(Nv12ReadbackTimings* timings = nullptr);
 
 private:
     struct Impl;

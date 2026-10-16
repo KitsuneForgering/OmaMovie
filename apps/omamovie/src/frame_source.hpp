@@ -11,6 +11,7 @@
 #include <QSize>
 
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <list>
@@ -39,18 +40,24 @@ struct Picture {
 // handed out are only read elsewhere.
 class FrameSource {
 public:
-    explicit FrameSource(const oma::gpu::Device* device = nullptr);
+    struct DecodeTransferStats {
+        std::uint64_t software_frames = 0;      // includes decoder lookahead and seek work
+        std::uint64_t software_plane_bytes = 0; // exposed plane spans, including row padding
+    };
+    explicit FrameSource(const oma::gpu::Device* device = nullptr,
+                         DecodeTransferStats* decode_transfers = nullptr);
     // The frame whose PTS is the last one <= `t` (the first frame when `t` precedes it).
     // Moving forward a little reuses the open decoder without seeking, so playback decodes
     // each frame once. Moving back a little reads the frames decoded last; past them, the
     // decoder seeks a chunk earlier and decodes forward to `t`, keeping that chunk, so reverse
     // playback decodes each group of pictures about once instead of once per frame shown.
-    [[nodiscard]] oma::Result<Picture> picture_at(const std::string& path, const oma::RationalTime& t);
+    [[nodiscard]] oma::Result<Picture> picture_at(const std::string& path,
+                                                  const oma::RationalTime& t);
 
     // A title clip's picture at the canvas size (ADR-0015), rasterized once per title and size:
     // the last kTitleCache are kept, most recent first, so playback does not redraw text.
-    [[nodiscard]] oma::Result<Picture> title_picture(const oma::timeline::Title& title, std::uint32_t width,
-                                                     std::uint32_t height);
+    [[nodiscard]] oma::Result<Picture> title_picture(const oma::timeline::Title& title,
+                                                     std::uint32_t width, std::uint32_t height);
 
     // The same frame converted to RGBA8 on the CPU (thumbnails, not the viewer), fitted inside
     // `box` keeping its pixel proportions, in one swscale pass (no full-size copy and no Qt
@@ -61,11 +68,13 @@ public:
                                                const oma::timeline::MediaInfo* media = nullptr);
 
     // Lets a seek's decode-forward stop early (VideoDecoder::set_interrupt); a stream stopped
-    // that way keeps its decoder but loses its position, so the next request seeks it. Empty: never.
+    // that way keeps its decoder but loses its position, so the next request seeks it. Empty:
+    // never.
     void set_interrupt(std::function<bool()> interrupted);
 
 private:
     const oma::gpu::Device* device_ = nullptr;
+    DecodeTransferStats* decode_transfers_ = nullptr;
     std::function<bool()> interrupted_;
     struct TitleEntry {
         oma::timeline::Title title;
@@ -96,12 +105,14 @@ private:
     [[nodiscard]] oma::Result<void> seek(Stream& s, const oma::RationalTime& t);
     [[nodiscard]] oma::Result<void> seek_to(Stream& s, const oma::RationalTime& t);
     [[nodiscard]] oma::Result<void> advance(Stream& s, const oma::RationalTime& t);
+    [[nodiscard]] oma::Result<std::optional<oma::media::VideoFrame>> next(Stream& s);
     // `frame` becomes the stream's current frame and the newest in its history.
     void record(Stream& s, std::shared_ptr<oma::media::VideoFrame> frame);
     // A frame already decoded that is the one on screen at `t` (a later frame follows it).
-    [[nodiscard]] std::shared_ptr<oma::media::VideoFrame> remembered(const std::string& path,
-                                                                     const oma::RationalTime& t) const;
-    [[nodiscard]] Picture picture_of(const Stream& s, std::shared_ptr<oma::media::VideoFrame> frame) const;
+    [[nodiscard]] std::shared_ptr<oma::media::VideoFrame>
+    remembered(const std::string& path, const oma::RationalTime& t) const;
+    [[nodiscard]] Picture picture_of(const Stream& s,
+                                     std::shared_ptr<oma::media::VideoFrame> frame) const;
 
     // A few open decoders, most recently used first: cutting between clips of the same files
     // keeps their decoders warm, and two per file let a transition between two parts of one

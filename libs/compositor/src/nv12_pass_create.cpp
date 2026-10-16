@@ -5,6 +5,7 @@
 #include "oma/gpu/device.hpp"
 
 #include <array>
+#include <vector>
 
 namespace oma::compositor::detail {
 
@@ -49,6 +50,29 @@ Result<std::unique_ptr<Nv12Pass>> Nv12Pass::create(const gpu::Device& device,
     vkDestroyShaderModule(dev, module, nullptr);
     if (made != VK_SUCCESS)
         return std::unexpected(nv12_failure(made, "cannot create the NV12 pipeline"));
+
+    // Optional diagnostic: keep export functional when a queue cannot provide timestamps.
+    std::uint32_t family_count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device.physical_device(), &family_count, nullptr);
+    std::vector<VkQueueFamilyProperties> families(family_count);
+    vkGetPhysicalDeviceQueueFamilyProperties(device.physical_device(), &family_count,
+                                             families.data());
+    if (device.graphics_family() < family_count) {
+        p->timestamp_valid_bits_ = families[device.graphics_family()].timestampValidBits;
+        if (p->timestamp_valid_bits_ != 0) {
+            VkPhysicalDeviceProperties properties{};
+            vkGetPhysicalDeviceProperties(device.physical_device(), &properties);
+            p->timestamp_period_ns_ = properties.limits.timestampPeriod;
+            const VkQueryPoolCreateInfo query{.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+                                              .pNext = nullptr,
+                                              .flags = 0,
+                                              .queryType = VK_QUERY_TYPE_TIMESTAMP,
+                                              .queryCount = 2,
+                                              .pipelineStatistics = 0};
+            if (vkCreateQueryPool(dev, &query, nullptr, &p->timestamps_) != VK_SUCCESS)
+                p->timestamps_ = VK_NULL_HANDLE;
+        }
+    }
     return p;
 }
 
