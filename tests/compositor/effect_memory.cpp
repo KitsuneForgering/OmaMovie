@@ -7,19 +7,6 @@ using oma::compositor::Layer;
 using oma::compositor::RenderGraph;
 using oma::compositor::VulkanCompositor;
 
-VkDeviceSize heap_usage(const oma::gpu::Device& device) {
-    VkPhysicalDeviceMemoryBudgetPropertiesEXT budget{};
-    budget.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
-    VkPhysicalDeviceMemoryProperties2 props{};
-    props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
-    props.pNext = &budget;
-    vkGetPhysicalDeviceMemoryProperties2(device.physical_device(), &props);
-    VkDeviceSize used = 0;
-    for (std::uint32_t i = 0; i < props.memoryProperties.memoryHeapCount; ++i)
-        used += budget.heapUsage[i];
-    return used;
-}
-
 double added_mib(const oma::gpu::Device& device, DecodedFrame& source, std::uint32_t w,
                  std::uint32_t h, const Layer& layer) {
     auto vk = VulkanCompositor::create(device);
@@ -31,10 +18,12 @@ double added_mib(const oma::gpu::Device& device, DecodedFrame& source, std::uint
     g.height = h;
     g.layers = {Layer{}};
     g.layers[0].fit = Fit::Fill;
-    static_cast<void>((*vk)->render(g, inputs));
-    const VkDeviceSize before = heap_usage(device);
+    if (!(*vk)->render(g, inputs))
+        return -1;
+    const double before = static_cast<double>((*vk)->detail_image_bytes());
     g.layers[0] = layer;
     g.layers[0].fit = Fit::Fill;
-    static_cast<void>((*vk)->render(g, inputs));
-    return static_cast<double>(heap_usage(device) - before) / (1 << 20);
+    if (!(*vk)->render(g, inputs))
+        return -1;
+    return (static_cast<double>((*vk)->detail_image_bytes()) - before) / (1 << 20);
 }

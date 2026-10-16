@@ -75,6 +75,10 @@ public:
     // The last render's result, in VK_IMAGE_LAYOUT_GENERAL. Valid until the next render.
     [[nodiscard]] const gpu::Image* output() const noexcept;
 
+    // Dedicated Vulkan allocation sizes of the live blur/sharpen intermediates. This excludes
+    // driver caches and other users of the device, unlike VK_EXT_memory_budget heap usage.
+    [[nodiscard]] std::uint64_t detail_image_bytes() const noexcept;
+
     // Copies the output back to memory (tests, thumbnails). Slow by design.
     [[nodiscard]] Result<RgbaImage> read_output();
 

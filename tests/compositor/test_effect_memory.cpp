@@ -1,7 +1,8 @@
 // M10 effects contract, memory per pass: the device memory each shipped effect adds to a warmed
-// compositor, read from VK_EXT_memory_budget's heap usage (the driver's own count of this
-// process's allocations). Looks run inside the composite pass and should add nothing; detail
-// (blur/sharpen) keeps two RGBA16F images per layer, sized by its reduction factor.
+// compositor, read from its live blur/sharpen image allocation sizes. The driver's heap budget
+// fluctuates during renders and can decrease between samples, so it cannot enforce this bound.
+// Looks run inside the composite pass and should add nothing; detail keeps two RGBA16F images
+// per layer, sized by its reduction factor.
 #include "effect_memory.hpp"
 
 #include <cstdio>

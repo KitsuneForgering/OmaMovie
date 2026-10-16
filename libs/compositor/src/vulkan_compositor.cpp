@@ -1185,6 +1185,21 @@ const gpu::Image* VulkanCompositor::output() const noexcept {
     return impl_->output.handle() != VK_NULL_HANDLE ? &impl_->output : nullptr;
 }
 
+std::uint64_t VulkanCompositor::detail_image_bytes() const noexcept {
+    const VkDevice device = impl_->device->device();
+    std::uint64_t bytes = 0;
+    for (const BlurImages& images : impl_->blur_images) {
+        for (const gpu::Image* image : {&images.across, &images.down}) {
+            if (image->handle() == VK_NULL_HANDLE)
+                continue;
+            VkMemoryRequirements requirements{};
+            vkGetImageMemoryRequirements(device, image->handle(), &requirements);
+            bytes += requirements.size;
+        }
+    }
+    return bytes;
+}
+
 Result<RgbaImage> VulkanCompositor::read_output() {
     Impl& d = *impl_;
     if (d.output.handle() == VK_NULL_HANDLE) {
