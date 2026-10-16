@@ -1,6 +1,6 @@
 # Implementation plan — OmaMovie
 
-Evidence, milestones and acceptance criteria; update completed work and record structural changes in an ADR. [Current engineering assessment](analysis/omamovie-2026-10-12.md). Latest: [evidence status 2026-10-14](implementation-plan-evidence-2026-10-14.md) · [async interactive work](implementation-plan-async-interactive.md).
+Evidence, milestones and acceptance criteria; update completed work and record structural changes in an ADR. [Current engineering assessment](analysis/omamovie-2026-10-12.md). Latest: [evidence status 2026-10-14](implementation-plan-evidence-2026-10-14.md) · [async interactive work](implementation-plan-async-interactive.md). `Implemented` means wired into code; `tested` has a relevant test; `measured` has a repeatable benchmark; `validated` has a declared workload and recorded result; `supported` is a bounded public commitment backed by appropriate evidence; `planned` is none of these.
 ## 1. Goal
 [Goal](implementation-plan-goal.md)
 ### Cross-editor workflow gap review (2026-10-11)
@@ -34,8 +34,9 @@ Evidence, milestones and acceptance criteria; update completed work and record s
 ### M7 — Project and export
 [M7 project export](implementation-plan-m7-project-export.md) <a id="m7--project--export"></a>
 ### Code cleanup during M6–M7
-[Code cleanup](implementation-plan-code-cleanup.md)
 [Code cleanup](implementation-plan-code-cleanup.md) · [item-by-item code review](implementation-plan-code-review.md)
+### Targeted RAII and lifetime work
+[RAII and lifetime plan](implementation-plan-code-cleanup.md#targeted-raii-and-lifetime-work)
 ### M8 — Creator
 [M8 creator](implementation-plan-m8-creator.md)
 ### M9 — Interop and color
@@ -44,6 +45,10 @@ Evidence, milestones and acceptance criteria; update completed work and record s
 [M10 validation](implementation-plan-m10-validation.md)
 ### M11 — Backend/frontend refactoring and responsive UI
 [M11 refactoring](implementation-plan-m11-refactoring.md)
+### M12 — GPU-native export and application ownership (post-v0.1)
+[M12 export and ownership](implementation-plan-m12-gpu-export-architecture.md)
+### v1.0 product closure — first-opening onboarding
+[Onboarding and contextual tooltips](implementation-plan-v1-onboarding.md)
 ### Conditional pilot — Community effect packs and curated marketplace (after M7/M8)
 [Community effect packs](implementation-plan-community-effect-packs.md)
 ### Conditional pilot — Agent-assisted editing through MCP (after M7)
@@ -54,6 +59,10 @@ Evidence, milestones and acceptance criteria; update completed work and record s
 [Tests quality](implementation-plan-tests-quality.md) · [QA strategy](implementation-plan-qa.md)
 ### Cross-editor benchmark and workflow comparison
 [Comparison protocol](implementation-plan-cross-editor-benchmarks.md)
+### Professional workload spike (experimental; outside the v0.1 gate)
+[Three-source 4K60/8K60 diagnostic](spikes/professional-workload.md)
+### Session stress testing
+[Repeatable seeded stress runner](spikes/session-stress.md)
 ## 6. Hardware matrix
 [Hardware matrix](implementation-plan-hardware-matrix.md)
 ## 7. Risks

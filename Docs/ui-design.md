@@ -2,6 +2,10 @@
 
 The design rationale and historical shell record are organized below. The [UI/UX evaluation](ui-ux-evaluation-2026-10-10.md) and [implementation plan](implementation-plan.md) track current behavior and remaining work.
 
+The planned [v1.0 first-opening tour and tooltip policy](implementation-plan-v1-onboarding.md)
+closes discoverability of the existing workflow; its manual evidence belongs to
+[M6 walkthrough](m6-walkthrough.md).
+
 - [Context and historical shell status (part 1)](ui-design-context-1.md)
 - [Context and historical shell status (part 2)](ui-design-context-2.md)
 - [Context and historical shell status (part 3)](ui-design-context-3.md)

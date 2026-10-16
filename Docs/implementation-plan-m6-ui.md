@@ -29,6 +29,11 @@ UI/UX tasks and acceptance criteria: [TDDO](ui-ux-tddo.md).
 
 Manual sessions for the task comparisons and this gate: [M6 walkthrough](m6-walkthrough.md) (media from `scripts/m6-task-media.sh`).
 
+**v1.0 product closure:** [first-opening onboarding and contextual tooltip policy](implementation-plan-v1-onboarding.md)
+is a distinct gate before v1.0 feature freeze. Reuse this M6 manual walkthrough and the
+existing action/settings infrastructure; its planned status does not change the M6
+implementation checkboxes or the scoped v0.1 decision.
+
 **Done when**: a short vlog can be edited from start to finish, including keyboard-only; the
 UI event latency is measured against a predeclared interaction budget; drawer/magnetic behavior is compared with a conventional inspector/track baseline at wide/half/narrow sizes. Theme switching tolerates missing/partial files without touching the preview; Qt queue and color gates have passed.
 

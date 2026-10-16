@@ -1,5 +1,22 @@
 ## 8. Next step
 
+**First executable action for M12 (post-v0.1 architecture): finish the transfer baseline.**
+The [first instrumented run](Research/evidence/2026-10-15-export-transfer-baseline.md)
+already counts software compositor inputs, NV12 readbacks, writer row copies and VA-API
+uploads on 1080p60 and 4K Intel exports. Next split `read_nv12()` into GPU conversion,
+queue wait and host-copy timings; measure actual compositor staging, process CPU/frame,
+memory/GPU use and downgrade reasons; repeat the same fixtures under controlled load with
+independent frame/audio fidelity checks. Only then compare a GPU-native encoder-input
+pilot. This remains a baseline task, not a zero-copy claim. See [M12](implementation-plan-m12-gpu-export-architecture.md).
+
+**v1.0 closure order:** settle the bounded [interop scope](implementation-plan-m9-interop-color.md)
+→ [first-opening tour and contextual tooltip coverage](implementation-plan-v1-onboarding.md)
+→ [M6 manual workflow from a clean profile](m6-walkthrough.md) → fixes/polish found there
+→ packaging and recovery → required CI gates → final regression/stress pass → feature
+freeze → release candidate. The tour is a product gate before feature freeze, not new
+editor feature breadth. Advanced VFX categories need a separately demonstrated workflow
+need before becoming v1.0 blockers.
+
 M5 and Intel M4 are closed; M7 has working project save/load and four selectable
 export profiles. The [current audit](analysis/omamovie-2026-10-12.md) sets the next
 work by OmaMovie's own release path, not by competitor feature count. Revised 2026-10-14
