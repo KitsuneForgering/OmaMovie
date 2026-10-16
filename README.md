@@ -34,7 +34,7 @@ The imported media stays on disk and is never modified. Save with `Ctrl+S` (an `
 - Preview the timeline with Vulkan compositing and audio clock playback; adjust clip gain, fades, and mute.
 - Use visible transport and edit controls, or their keyboard shortcuts, in the editor shell.
 
-The viewer decodes in hardware on Intel (VA-API) and in software elsewhere; `OMA_PREVIEW_HARDWARE=0` forces software. External project interchange (OTIO, FCPXML) is planned work, not a current capability.
+The viewer decodes in hardware on Intel (VA-API) and in software elsewhere; `OMA_PREVIEW_HARDWARE=0` forces software. The app has bounded OTIO, FCPXML, EDL and MLT import paths. See the [interop matrix](Docs/interop.md) for implemented subsets and evidence gaps; these are not general compatibility claims for every project made by those editors.
 
 ## Install
 
@@ -52,6 +52,6 @@ The package does not install this rule. It uses the Lua window-rule syntax of cu
 
 ## Build and development
 
-Run `make test` for the library tests or `make help` for available targets. The [implementation plan](Docs/implementation-plan.md) tracks completed and pending milestones. [UI design](Docs/ui-design.md) describes the editor workflow. [Format boundaries](Docs/format-architecture.md) and [CLAUDE.md](CLAUDE.md) cover architecture and contributor rules.
+Run `make test` for the library tests or `make help` for available targets. The [implementation plan](Docs/implementation-plan.md) tracks completed and pending milestones. [UI design](Docs/ui-design.md) describes the editor workflow. [Format boundaries](Docs/format-architecture.md), [contribution guide](CONTRIBUTING.md) and [agent guide](CLAUDE.md) point to architecture and development rules.
 
 License: [MIT](LICENSE).

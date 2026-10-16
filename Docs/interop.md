@@ -1,6 +1,6 @@
 # Interoperability support levels
 
-Support is declared per format **and version**, at the levels of CLAUDE.md §16.5, with the
+Support is declared per format **and version**, at the levels below, with the
 tests that prove each level. A format with no proven level is not supported. The path is
 external project → importer → ProjectIR (ADR-0008) → converter → OmaMovie project.
 

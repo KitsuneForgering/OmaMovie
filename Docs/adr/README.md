@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Decisions that significantly affect the architecture (CLAUDE.md §20). Each ADR records
+Decisions that significantly affect the architecture. Each ADR records
 context, decision, alternatives and consequences. An accepted ADR is not edited to change
 its decision: a new decision supersedes the old one in a new ADR, which marks the previous
 one as superseded.
@@ -11,7 +11,7 @@ one as superseded.
 | [0002](0002-time-representation.md) | Time representation | Accepted |
 | [0003](0003-threading-and-job-system.md) | Threading model and job system | Accepted |
 | [0004](0004-gpu-frames-sync-decode-policy.md) | GPU frame abstraction, synchronization and decode policy | Accepted |
-| [0005](0005-qt-vulkan-interop.md) | Qt Quick ↔ Vulkan compositor integration | Accepted (S4 import diagnostic; on-screen handoff pending) |
+| [0005](0005-qt-vulkan-interop.md) | Qt Quick ↔ Vulkan compositor integration | Accepted (on-screen handoff implemented; paused viewer amended by ADR-0020) |
 | [0006](0006-color-space-and-libplacebo.md) | Working color space, SDR stages and libplacebo | Accepted |
 | [0007](0007-project-format.md) | Native project format: versioned JSON, simdjson | Accepted |
 | [0008](0008-project-ir.md) | ProjectIR and preservation of external data | Accepted (own OTIO reader on simdjson) |
