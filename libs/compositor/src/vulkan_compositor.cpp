@@ -1186,7 +1186,7 @@ const gpu::Image* VulkanCompositor::output() const noexcept {
 }
 
 std::uint64_t VulkanCompositor::detail_image_bytes() const noexcept {
-    const VkDevice device = impl_->device->device();
+    VkDevice device = impl_->device->device();
     std::uint64_t bytes = 0;
     for (const BlurImages& images : impl_->blur_images) {
         for (const gpu::Image* image : {&images.across, &images.down}) {

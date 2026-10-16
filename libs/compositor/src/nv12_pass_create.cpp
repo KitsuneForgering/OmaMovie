@@ -62,7 +62,7 @@ Result<std::unique_ptr<Nv12Pass>> Nv12Pass::create(const gpu::Device& device,
         if (p->timestamp_valid_bits_ != 0) {
             VkPhysicalDeviceProperties properties{};
             vkGetPhysicalDeviceProperties(device.physical_device(), &properties);
-            p->timestamp_period_ns_ = properties.limits.timestampPeriod;
+            p->timestamp_period_ns_ = static_cast<double>(properties.limits.timestampPeriod);
             const VkQueryPoolCreateInfo query{.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
                                               .pNext = nullptr,
                                               .flags = 0,
