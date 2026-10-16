@@ -338,9 +338,20 @@ int main(int argc, char** argv) {
         const double n = static_cast<double>(std::max<std::int64_t>(1, st.frames));
         std::printf("export audit: %lld frames in %.0f ms (%.1f fps) -> %s\n  encoder: %s\n"
                     "  per frame: build %.2f ms, render+readback %.2f ms, wait for encoder %.2f ms, encode (own worker) %.2f ms, mix %.2f ms\n"
+                    "  transfers: software compositor inputs %llu (%llu payload bytes), GPU readbacks %llu (%llu bytes, %.2f ms total; NV12 includes conversion/wait/copy)\n"
+                    "  writer: NV12 CPU row copies %llu bytes (%.2f ms), VA-API uploads %llu (%llu bytes, %.2f ms)\n"
                     "  result: %s\n",
                     static_cast<long long>(st.frames), st.total, n * 1000.0 / std::max(1.0, st.total), qPrintable(out), st.encoder.c_str(),
                     st.build / n, st.render / n, st.convert / n, st.encode / n, st.audio / n,
+                    static_cast<unsigned long long>(st.software_inputs),
+                    static_cast<unsigned long long>(st.software_input_bytes),
+                    static_cast<unsigned long long>(st.readbacks),
+                    static_cast<unsigned long long>(st.readback_bytes), st.readback_ms,
+                    static_cast<unsigned long long>(st.writer_transfers.nv12_copy_bytes),
+                    st.writer_transfers.nv12_copy_ms,
+                    static_cast<unsigned long long>(st.writer_transfers.va_uploads),
+                    static_cast<unsigned long long>(st.writer_transfers.va_upload_bytes),
+                    st.writer_transfers.va_upload_ms,
                     qPrintable(session.exportedFile() == out ? QStringLiteral("written") : session.notice()));
         return session.exportedFile() == out ? 0 : 1;
     }

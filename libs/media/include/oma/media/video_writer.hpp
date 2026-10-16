@@ -40,6 +40,16 @@ struct VideoWriterOptions {
     OutputProfile profile = OutputProfile::Mp4H264Aac;
 };
 
+// Diagnostic counters for CPU input to the hardware encoder. Read after the writer's
+// caller has joined its encoding worker; these are not synchronized for live polling.
+struct WriterTransferStats {
+    std::uint64_t nv12_copy_bytes = 0;
+    std::uint64_t va_upload_bytes = 0;
+    std::uint64_t va_uploads = 0;
+    double nv12_copy_ms = 0;
+    double va_upload_ms = 0;
+};
+
 class VideoWriter {
 public:
     [[nodiscard]] static Result<std::unique_ptr<VideoWriter>>
@@ -58,6 +68,7 @@ public:
     // An NV12 frame (BT.709 limited range): `stride`-byte luma rows, then interleaved CbCr rows
     // at half height (compositor::VulkanCompositor::read_nv12). No conversion on the CPU.
     [[nodiscard]] Result<void> write_nv12(std::span<const std::uint8_t> nv12, int stride);
+    [[nodiscard]] WriterTransferStats transfer_stats() const noexcept;
     // Appends interleaved samples (channels per frame) to the audio track, in order. The
     // caller keeps audio and video in step (the muxer interleaves by timestamp).
     [[nodiscard]] Result<void> write_audio(std::span<const float> interleaved);

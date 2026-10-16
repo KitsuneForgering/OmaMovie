@@ -41,6 +41,13 @@ struct ExportStats {
     double audio = 0;   // mix
     double total = 0;
     std::string encoder; // what was used, and why when it is not what was asked for
+    // Transfer audit: counts at OmaMovie's explicit API boundaries, not driver-internal copies.
+    std::uint64_t software_inputs = 0;
+    std::uint64_t software_input_bytes = 0; // plane payload exposed to the compositor
+    std::uint64_t readbacks = 0;
+    std::uint64_t readback_bytes = 0;
+    double readback_ms = 0; // read_nv12 includes GPU conversion, synchronization and host copy
+    oma::media::WriterTransferStats writer_transfers;
 };
 
 // Runs on a job worker. `progress(done, total)` returns false to cancel (the partial output is

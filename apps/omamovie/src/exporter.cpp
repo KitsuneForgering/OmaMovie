@@ -20,14 +20,28 @@ namespace {
 // bytes per pixel), else BT.709 RGBA8 for libx264's own conversion.
 oma::Result<EncodedFrame> render_gpu(oma::compositor::VulkanCompositor& gpu,
                                      const ViewerFrame& view,
-                                     std::span<const oma::compositor::LayerInput> in, bool nv12) {
+                                     std::span<const oma::compositor::LayerInput> in, bool nv12,
+                                     ExportStats& stats) {
+    for (const auto& input : in) {
+        if (input.frame == nullptr || input.frame->on_gpu())
+            continue;
+        ++stats.software_inputs;
+        for (int p = 0; p < input.frame->plane_count(); ++p)
+            stats.software_input_bytes += input.frame->plane(p).size();
+    }
     if (auto rendered = gpu.render(view.graph, in); !rendered)
         return std::unexpected(rendered.error());
     EncodedFrame out;
     if (nv12) {
+        const auto start = std::chrono::steady_clock::now();
         auto image = gpu.read_nv12();
+        stats.readback_ms +=
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start)
+                .count();
         if (!image)
             return std::unexpected(image.error());
+        ++stats.readbacks;
+        stats.readback_bytes += image->bytes.size();
         out.kind = EncodedFrame::Pixels::Nv12;
         out.stride = static_cast<int>(image->stride);
         out.pixels = std::move(image->bytes);
@@ -36,9 +50,14 @@ oma::Result<EncodedFrame> render_gpu(oma::compositor::VulkanCompositor& gpu,
     if (auto encoded = gpu.encode_display(oma::compositor::VulkanCompositor::Transfer::Bt709);
         !encoded)
         return std::unexpected(encoded.error());
+    const auto start = std::chrono::steady_clock::now();
     auto pixels = gpu.read_display();
+    stats.readback_ms +=
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     if (!pixels)
         return std::unexpected(pixels.error());
+    ++stats.readbacks;
+    stats.readback_bytes += pixels->size();
     out.kind = EncodedFrame::Pixels::Rgba;
     out.pixels = std::move(*pixels);
     return out;
@@ -138,6 +157,7 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
     const auto stop = [&](oma::Error error) -> oma::Result<void> {
         (void)encoder.finish(); // joins the worker before the writer is touched again
         st.encode = encoder.encode_ms();
+        st.writer_transfers = (*writer)->transfer_stats();
         return std::unexpected(std::move(error));
     };
     for (std::int64_t k = 0; k < request.frames; ++k) {
@@ -163,8 +183,8 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
         if (gpu) {
             // The GPU encodes BT.709 RGBA8 and the encoder reads it back: one 8-bit readback per
             // frame, the documented exception for export until a hardware encoder takes GPU
-            // frames (CLAUDE.md §7.2), overlapped with encoding the previous frame.
-            auto pixels = render_gpu(*gpu, **view, inputs, (*writer)->takes_nv12());
+            // frames (M12 transfer baseline), overlapped with encoding the previous frame.
+            auto pixels = render_gpu(*gpu, **view, inputs, (*writer)->takes_nv12(), st);
             if (!pixels && pixels.error().code() == oma::ErrorCode::DeviceLost) {
                 // A lost device takes no more work (ADR-0005). The CPU reference renders the
                 // same graph within the compositors' agreed tolerance, so the export finishes,
@@ -206,6 +226,7 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
     }
     const auto encoded = encoder.finish();
     st.encode = encoder.encode_ms();
+    st.writer_transfers = (*writer)->transfer_stats();
     if (!encoded)
         return encoded;
     (void)progress(request.frames, request.frames);

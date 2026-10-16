@@ -18,6 +18,7 @@ extern "C" {
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <climits>
 #include <cstring>
 #include <format>
@@ -80,6 +81,7 @@ struct VideoWriter::Impl {
     ff::BufferPtr hw_device;
     ff::BufferPtr hw_frames;
     ff::FramePtr hw_frame;
+    WriterTransferStats transfers;
     AVStream* stream = nullptr;
     std::int64_t next_pts = 0;
     bool finished = false;
@@ -383,8 +385,16 @@ Result<void> VideoWriter::Impl::send_video() {
         av_frame_unref(hw_frame.get());
         if (const int err = av_hwframe_get_buffer(hw_frames.get(), hw_frame.get(), 0); err < 0)
             return std::unexpected(ff::av_error(err, Category::Encode, "no free VA-API surface"));
-        if (const int err = av_hwframe_transfer_data(hw_frame.get(), frame.get(), 0); err < 0)
+        const auto upload_started = std::chrono::steady_clock::now();
+        const int err = av_hwframe_transfer_data(hw_frame.get(), frame.get(), 0);
+        transfers.va_upload_ms += std::chrono::duration<double, std::milli>(
+                                      std::chrono::steady_clock::now() - upload_started)
+                                      .count();
+        if (err < 0)
             return std::unexpected(ff::av_error(err, Category::Encode, "cannot upload to VA-API"));
+        ++transfers.va_uploads;
+        transfers.va_upload_bytes += static_cast<std::uint64_t>(codec->width) *
+                                     static_cast<std::uint64_t>(codec->height) * 3 / 2;
         send = hw_frame.get();
     }
     send->pts = next_pts++;
@@ -418,6 +428,10 @@ bool VideoWriter::takes_nv12() const noexcept {
     return impl_->sw_format == AV_PIX_FMT_NV12;
 }
 
+WriterTransferStats VideoWriter::transfer_stats() const noexcept {
+    return impl_->transfers;
+}
+
 Result<void> VideoWriter::write_nv12(std::span<const std::uint8_t> nv12, int stride) {
     auto& s = *impl_;
     const int w = s.codec->width;
@@ -435,6 +449,7 @@ Result<void> VideoWriter::write_nv12(std::span<const std::uint8_t> nv12, int str
     const auto width = static_cast<std::size_t>(w);
     const auto rows = static_cast<std::size_t>(h);
     const std::uint8_t* uv = nv12.data() + (row * rows);
+    const auto copy_started = std::chrono::steady_clock::now();
     for (std::size_t y = 0; y < rows; ++y) {
         std::memcpy(s.frame->data[0] + (static_cast<std::ptrdiff_t>(y) * s.frame->linesize[0]),
                     nv12.data() + (y * row), width);
@@ -443,6 +458,11 @@ Result<void> VideoWriter::write_nv12(std::span<const std::uint8_t> nv12, int str
         std::memcpy(s.frame->data[1] + (static_cast<std::ptrdiff_t>(y) * s.frame->linesize[1]),
                     uv + (y * row), width);
     }
+    s.transfers.nv12_copy_ms +=
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - copy_started)
+            .count();
+    s.transfers.nv12_copy_bytes +=
+        static_cast<std::uint64_t>(w) * static_cast<std::uint64_t>(h) * 3 / 2;
     return s.send_video();
 }
 
