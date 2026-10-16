@@ -14,6 +14,12 @@ target_compile_options(s5_minimal_compositing PRIVATE ${OMA_TEST_WARNINGS})
 target_link_libraries(s5_minimal_compositing PRIVATE
     oma_compositor oma_media oma_gpu oma_base)
 
+# Bounded three-source stress diagnostic for professional-scale media. No Qt or export.
+add_executable(professional_workload_spike professional_workload.cpp)
+target_compile_options(professional_workload_spike PRIVATE ${OMA_TEST_WARNINGS})
+target_link_libraries(professional_workload_spike PRIVATE
+    oma_compositor oma_media oma_gpu oma_base)
+
 # s6: imports OmaMovie's device into libplacebo.
 pkg_check_modules(LIBPLACEBO REQUIRED libplacebo)
 add_executable(s6_libplacebo s6_libplacebo.cpp)

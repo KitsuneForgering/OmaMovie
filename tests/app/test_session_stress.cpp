@@ -10,11 +10,23 @@
 #include <QTemporaryDir>
 
 #include <cstdint>
+#include <cstdio>
 
 #include "oma_test.hpp"
 
 namespace {
 constexpr auto kCamera = "tests/fixtures/generated/h264_30fps_aac.mp4";
+int stress_count(const char* name, int fallback, int maximum) {
+    bool valid = false;
+    const int configured = qEnvironmentVariableIntValue(name, &valid);
+    return valid && configured > 0 && configured <= maximum ? configured : fallback;
+}
+
+std::uint32_t stress_seed(std::uint32_t fallback) {
+    bool valid = false;
+    const int configured = qEnvironmentVariableIntValue("OMA_STRESS_SEED", &valid);
+    return valid && configured >= 0 ? static_cast<std::uint32_t>(configured) : fallback;
+}
 // Sanitizer builds run a frame or a Vulkan device creation many times slower: the bounds are
 // about hangs, not speed (debug: cancel in tens of ms, shutdown in a few hundred).
 #if defined(__SANITIZE_THREAD__) || defined(__SANITIZE_ADDRESS__)
@@ -42,14 +54,17 @@ bool open_camera(Session& s) {
     return wait_for([&] { return s.clips().size() == 1 && !s.importsPending(); });
 }
 
-// 200 seeded transport and edit intents, a few milliseconds apart: the session stays valid,
+// Seeded transport and edit intents, a few milliseconds apart: the session stays valid,
 // responsive (each intent returns) and ends paused with its playhead inside the sequence.
+// Undo may legitimately remove the initial imported clip for some seeds.
 bool survives_transport_bursts() {
     Session s;
     if (!open_camera(s))
         return false;
-    std::uint32_t state = 2026;
-    for (int i = 0; i < 200; ++i) {
+    const int operations = stress_count("OMA_STRESS_TRANSPORT_OPS", 200, 2000);
+    std::uint32_t state = stress_seed(2026);
+    std::printf("transport stress seed=%u operations=%d\n", state, operations);
+    for (int i = 0; i < operations; ++i) {
         state = (state * 1664525U) + 1013904223U;
         switch ((state >> 24) % 8) {
         case 0:
@@ -81,8 +96,12 @@ bool survives_transport_bursts() {
     }
     s.pause();
     pump(50);
-    return !s.playing() && s.position() >= 0.0 && s.position() <= s.duration() + 1e-9 &&
-           !s.clips().isEmpty();
+    const bool valid = !s.playing() && s.position() >= 0.0 && s.position() <= s.duration() + 1e-9;
+    if (!valid)
+        std::printf("transport final playing=%d position=%.6f duration=%.6f clips=%lld\n",
+                    s.playing(), s.position(), s.duration(),
+                    static_cast<long long>(s.clips().size()));
+    return valid;
 }
 
 // An export of 20 s cancelled after its first frames ends promptly and publishes nothing.
@@ -125,8 +144,10 @@ bool survives_project_switches() {
     Session s;
     s.setSilent(true);
     s.setExportEncoder("software");
-    std::uint32_t state = 7;
-    for (int i = 0; i < 40; ++i) {
+    const int operations = stress_count("OMA_STRESS_SWITCH_OPS", 40, 200);
+    std::uint32_t state = stress_seed(7);
+    std::printf("project-switch stress seed=%u operations=%d\n", state, operations);
+    for (int i = 0; i < operations; ++i) {
         state = (state * 1664525U) + 1013904223U;
         switch ((state >> 24) % 5) {
         case 0:

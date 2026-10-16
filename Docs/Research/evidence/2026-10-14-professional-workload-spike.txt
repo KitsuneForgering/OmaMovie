@@ -1,0 +1,48 @@
+Professional workload spike: first 4K run (2026-10-14)
+Code: 0e12ece plus uncommitted professional_workload.cpp and current workspace changes.
+Build: CMake spikes preset, CMAKE_BUILD_TYPE=Release, target professional_workload_spike.
+Host: Intel i5-1135G7, Iris Xe (TGL GT2), Mesa 26.2.2, kernel 7.2.5-4-omarchy,
+FFmpeg n9.0.1. Power online=1; load observed shortly after run=13.49 8.10 6.66.
+One run only; no controlled cold/warm cache or paired baseline. The same source file is
+opened by three independent decoders, so filesystem cache reuse is likely.
+Source: /home/kitsune/.cache/omamovie-bench/fixtures/dec_hevc10_2160.mp4
+SHA-256: 6cbe223ace0704af44a297bc126766387de7b6a2e960e6a141e1040ef6ea647d
+Source: 3840x2160, HEVC Main 10, 24000/1001 fps; color tags unspecified.
+Command:
+  build/spikes/tools/spikes/professional_workload_spike 3840 2160 24 24 hardware \
+    /home/kitsune/.cache/omamovie-bench/fixtures/dec_hevc10_2160.mp4 \
+    /home/kitsune/.cache/omamovie-bench/fixtures/dec_hevc10_2160.mp4 \
+    /home/kitsune/.cache/omamovie-bench/fixtures/dec_hevc10_2160.mp4
+
+Raw diagnostic output (application log lines retained):
+02:12:37.760 INFO  gpu        device: Intel(R) Iris(R) Xe Graphics (TGL GT2) (Intel open-source Mesa driver, Mesa 26.2.2-arch1.1, /dev/dri/renderD128), Vulkan 1.4, 9 extensions, internally synchronized queues: yes (device.cpp:367)
+02:12:37.761 INFO  gpu        advertised: DMA-BUF true, DRM modifiers true, external semaphore fd true, video decode queue false, video codec operations 0x0 (device.cpp:375)
+02:12:37.793 INFO  decode     dec_hevc10_2160.mp4: hevc VA-API to Vulkan decode (video_decoder.cpp:550)
+02:12:37.798 INFO  decode     dec_hevc10_2160.mp4: hevc VA-API to Vulkan decode (video_decoder.cpp:550)
+02:12:37.803 INFO  decode     dec_hevc10_2160.mp4: hevc VA-API to Vulkan decode (video_decoder.cpp:550)
+device=Intel(R) Iris(R) Xe Graphics (TGL GT2) output=3840x2160 deadline=41.67 ms mode=hardware frames=24
+source0=3840x2160 codec=hevc depth=10 nominal-fps=23.976 path=VA-API to Vulkan
+source1=3840x2160 codec=hevc depth=10 nominal-fps=23.976 path=VA-API to Vulkan
+source2=3840x2160 codec=hevc depth=10 nominal-fps=23.976 path=VA-API to Vulkan
+decode p50=23.10 p95=33.03 p99=34.89 max=82.98 ms
+composite p50=41.89 p95=47.17 p99=51.73 max=56.94 ms
+sequential-total p50=64.72 p95=76.58 p99=77.05 max=134.72 ms
+sequential-over-deadline=24/24 throughput=14.7 fps cpu=5.7 ms/frame peak-rss=733544 KiB
+
+This is sequential decoder + synchronous compositor library work, without Qt presentation,
+audio or export. The 24/24 count is deadline overruns in that loop, not dropped frames in
+the editor. The 24 fps nominal budget of 41.67 ms is close to the source's 23.976 fps frame
+interval (41.71 ms), but not identical. Do not use this one loaded run to claim the app
+cannot play a three-layer scene in real time; a scheduler may overlap decode and render.
+
+Second run after rebuilding the final spike source, same input and command, 2026-10-14.
+The host load was not controlled; this run is corroboration of the bottleneck and a
+demonstration of timing variability, not a paired benchmark:
+device=Intel(R) Iris(R) Xe Graphics (TGL GT2) output=3840x2160 deadline=41.67 ms mode=hardware frames=24
+source0=3840x2160 codec=hevc depth=10 nominal-fps=23.976 path=VA-API to Vulkan
+source1=3840x2160 codec=hevc depth=10 nominal-fps=23.976 path=VA-API to Vulkan
+source2=3840x2160 codec=hevc depth=10 nominal-fps=23.976 path=VA-API to Vulkan
+decode p50=14.16 p95=25.35 p99=25.90 max=34.16 ms
+composite p50=29.67 p95=31.43 p99=31.43 max=42.41 ms
+sequential-total p50=43.03 p95=56.10 p99=58.09 max=62.99 ms
+sequential-over-deadline=19/24 throughput=22.5 fps cpu=3.7 ms/frame peak-rss=733544 KiB

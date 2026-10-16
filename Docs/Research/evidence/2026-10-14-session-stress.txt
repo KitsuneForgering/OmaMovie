@@ -1,0 +1,21 @@
+Session stress, 2026-10-14, commit 0e12ece plus dirty workspace changes.
+Command: tools/bench/stress/run.sh 3 /tmp/omamovie-stress-intel-20261014
+Host: Intel Iris Xe (TGL GT2), Mesa 26.2.2, Linux 7.2.5-4-omarchy.
+Build: debug app_tests; fixture SHA-256
+263600d970638826c89ac6d31c35435371281ff8c664feabb0092e39279cdaa3.
+The recorded host load was 16.36 16.04 12.01. Timings are diagnostics, not a speed claim.
+
+Three rounds, seeds 9945, 17864 and 25783. Each round passed:
+- two seeded transport/edit and project-switch tests;
+- export cancellation;
+- shutdown during playback/export;
+- eight repeated open/edit/play/save/export/close cycles with FD and RSS checks.
+All 15 selected test executions passed. Peak process RSS across cases: 177-234 MiB.
+Full per-case output: /tmp/omamovie-stress-intel-20261014/summary.txt and round logs.
+
+An initial sandbox run used llvmpipe rather than the Intel GPU. Its resource test failed
+at cycle 4: five FDs throughout, RSS 267100 KiB at cycle 1 and 337668 KiB at cycle 4,
+exceeding the test's 64 MiB post-warmup allowance. The same resource test passed for
+eight cycles on the real Intel GPU (five FDs throughout; RSS 176140 KiB at cycle 1 and
+168960 KiB at cycle 7). This isolates the observed failure to the llvmpipe run; it does
+not establish whether the increase was a driver cache or a leak in that path.
