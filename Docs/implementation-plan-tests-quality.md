@@ -29,7 +29,9 @@ storage changes. The combined gate has not run; its 5,000-clip part failed on 20
 (split p95 136–147 ms) and passes after a fix (84–93 ms, [evidence status](implementation-plan-evidence-2026-10-14.md)).
 
 Current audit flags and `Research/evidence` measurements record their fixtures and
-hardware; the proposed `tools/bench` runner is not implemented. Future benchmarks
+hardware. The FilmCraft-equivalent `tools/bench/filmcraft-equivalent/run.sh` runner is
+implemented; its multitrack scene and the [cross-editor comparison
+protocol](implementation-plan-cross-editor-benchmarks.md) remain planned. Future benchmarks
 must record hardware, driver, FFmpeg version, codec, decode path, build and cache state.
 
 The [QA strategy](implementation-plan-qa.md) defines the regression rule, distinct
