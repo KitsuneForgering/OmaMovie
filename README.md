@@ -17,7 +17,13 @@ make deps
 make run-gui
 ```
 
-`make deps` installs the packages declared in [PKGBUILD](PKGBUILD) using `pacman` and may request sudo. `make run-gui` builds and opens the Qt Quick editor. Use **Import** or `Ctrl+I` to choose a local file, then select it in the library and append it to the storyline. You can split at the playhead with `Ctrl+B`, undo with `Ctrl+Z`, and play or pause with Space.
+`make deps` installs the packages declared in [PKGBUILD](PKGBUILD) using `pacman` and may request sudo. `make run-gui` builds and opens the Qt Quick editor.
+
+For a first edit:
+
+1. Choose **New project**, then **Import** (`Ctrl+I`). Files imported while the timeline is empty are added to the storyline automatically. Once it has clips, new imports stay in the media library until you place them.
+2. Select a library item and use **Add** (`E`) to append it. To use only part of it, open the source viewer (`Shift+O`), set In (`I`) and Out (`O`), then use **Add**. Escape returns to the sequence viewer.
+3. Play or pause with Space, split at the playhead with `Ctrl+B`, and undo with `Ctrl+Z`. Save with `Ctrl+S` and export with `Ctrl+E`.
 
 You can also open a file directly:
 
@@ -25,7 +31,7 @@ You can also open a file directly:
 make run-gui GUI_FILE=/path/to/video.mp4
 ```
 
-The imported media stays on disk and is never modified. Save with `Ctrl+S` (an `.omamovie` file) and reopen it later with `Ctrl+O`. `Ctrl+K` opens the command palette, which lists every action and lets you change its shortcut. `Ctrl+E` offers the output formats supported by the installed FFmpeg build: MP4 (H.264/AAC), Matroska (H.264/AAC or HEVC/AAC), and WebM (VP9/Vorbis). H.264 can use the GPU encoder on validated Intel hardware (VA-API), with a software fallback. Other profiles use software encoders. All outputs use the project's size and frame rate.
+The imported media stays on disk and is never modified. Projects are saved as `.omamovie` files and can be reopened with `Ctrl+O`. `Ctrl+K` opens the command palette, which lists every action and lets you change its shortcut. `Ctrl+E` offers the output formats supported by the installed FFmpeg build: MP4 (H.264/AAC), Matroska (H.264/AAC or HEVC/AAC), and WebM (VP9/Vorbis). H.264 can use the GPU encoder on validated Intel hardware (VA-API), with a software fallback. Other profiles use software encoders. All outputs use the project's size and frame rate.
 
 ## What works today
 
