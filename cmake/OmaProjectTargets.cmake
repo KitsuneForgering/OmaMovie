@@ -27,6 +27,8 @@ add_custom_command(
 add_custom_target(fixtures DEPENDS ${CMAKE_SOURCE_DIR}/tests/fixtures/generated/.stamp)
 
 if(OMA_BUILD_TESTS)
+    add_test(NAME release_tag_guard COMMAND bash ${CMAKE_SOURCE_DIR}/tests/release_tag_guard.sh
+        ${CMAKE_SOURCE_DIR}/scripts/require-release-commit.sh)
     add_subdirectory(tests/base)
     add_subdirectory(tests/gpu)
     add_subdirectory(tests/media)

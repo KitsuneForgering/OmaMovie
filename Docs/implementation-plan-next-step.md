@@ -38,8 +38,10 @@ regressions in interaction come before new breadth.
    run of `ci` failed as expected, and all checks passed on `041ecb9`. A later GCC TSan
    report inside lavapipe's LLVM 23 workers failed `ci` again on `7b953e3`; the external
    library boundary now has a focused suppression ([evidence](Research/evidence/2026-10-16-package-release-gate.md)).
-   The active ruleset requires the exact contexts with strict status checks; recheck
-   the final SHA after this change. Session/app tests already run in the ASan/TSan
+   The full matrix, aggregator `ci` and `conventional commits` passed on `86b30bd`
+   ([evidence](Research/evidence/2026-10-17-release-tag-and-staged-smoke.md)). The active
+   ruleset requires the exact contexts with strict status checks; recheck the final SHA
+   after the release-gate change. Session/app tests already run in the ASan/TSan
    matrix; see [M10](implementation-plan-m10-validation.md). The versioned policy is in
    `.github/rulesets/master.json`.
 2. **Completed-output correctness (M7) — done 2026-10-12:** write failures are injected
@@ -53,7 +55,10 @@ regressions in interaction come before new breadth.
    policy need the [manual sessions](m6-walkthrough.md) before the workflow is called ready.
 4. **Prove release packaging and recovery (M7/M10):** the clean Arch package built,
    installed and passed the installed GUI smoke under sway/lavapipe on 2026-10-16
-   ([evidence](Research/evidence/2026-10-16-package-release-gate.md)). Repeat on a
+   ([evidence](Research/evidence/2026-10-16-package-release-gate.md)). The release job now
+   blocks tags outside `master` and smokes its staged installed app; a clean Arch run
+   passed on 2026-10-17
+   ([evidence](Research/evidence/2026-10-17-release-tag-and-staged-smoke.md)). Repeat on a
    disposable Omarchy profile with the release candidate, reopen/recover the same test
    project and check the published archive rather than only this branch's PKGBUILD.
 5. **Expand only for a named hand-off (M8/M9):** portable project, one interchange

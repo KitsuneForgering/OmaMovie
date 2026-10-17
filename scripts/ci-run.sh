@@ -43,6 +43,23 @@ docker run --rm --cap-add SYS_PTRACE \
         release) # the shipped tree, built and tested: stage/usr
             make -j"$(nproc)" BUILD=release test build/release/omamovie
             make BUILD=release DESTDIR=/src/stage PREFIX=/usr install
+            # Exercise the installed layout that becomes the release tarball. The regular CI
+            # smoke runs from build/release and cannot catch missing installed QML or assets.
+            test -x stage/usr/bin/omamovie
+            test -s stage/usr/share/omamovie/qml/Main.qml
+            test -s stage/usr/share/icons/hicolor/scalable/apps/omamovie.svg
+            test -s stage/usr/share/mime/packages/omamovie.xml
+            desktop-file-validate stage/usr/share/applications/omamovie.desktop
+            pacman -S --noconfirm --needed sway vulkan-swrast libcap >/dev/null
+            make BUILD=release fixtures
+            setcap -r /usr/bin/sway
+            useradd -m smoke
+            su smoke -c "
+                export XDG_RUNTIME_DIR=/tmp/xdg WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=pixman
+                mkdir -m 700 \$XDG_RUNTIME_DIR && sway -c /dev/null >/tmp/sway.log 2>&1 &
+                for i in \$(seq 50); do ls /tmp/xdg/wayland-? >/dev/null 2>&1 && break; sleep 0.2; done
+                export WAYLAND_DISPLAY=\$(basename /tmp/xdg/wayland-?)
+                QT_QPA_PLATFORM=wayland timeout 600 stage/usr/bin/omamovie --smoke"
             ;;
         *) echo "unknown CI task: $OMA_CI_TASK" >&2; exit 2 ;;
     esac
