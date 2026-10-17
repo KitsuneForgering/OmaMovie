@@ -69,9 +69,11 @@ Popup {
             doThis: "Return to the sequence if Source is open. Use " + label(actionSet.playPause) +
                     " to check the edit, then " + label(actionSet.save) + " to save the project and " +
                     label(actionSet.exportMovie) + " to make a movie file.",
-            result: "The project can be reopened and edited. For a title, volume or a transition, " +
-                    "search those names in " + label(actionSet.commandPalette) + " or use the context menu (" +
-                    (actionSet.clipMenu.keys || "Menu key") + ")."
+            result: "The saved project stays editable; Export makes a separate movie. To try more: put the playhead " +
+                    "where text should start and choose " + label(actionSet.addTitle) + "; select a clip with sound " +
+                    "and choose " + label(actionSet.volume) + "; click the join marker between two touching " +
+                    "storyline clips for a Cross dissolve. Find title and volume again with " +
+                    label(actionSet.commandPalette) + "."
         }
     ] : []
 
