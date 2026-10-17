@@ -973,11 +973,12 @@ int run_gui_smoke(const SmokeContext& context) {
              session.showProjects();
          }},
         {"save from guard", after(300), [&] {
+             const bool was_dirty = session.dirty();
              const bool asked = click_button("newProject");
              const bool saved_first = asked && click_button("saveFirst");
-             r.guard = r.guard && session.dirty() && saved_first;
-             if (!r.guard) std::printf("GUI smoke: Save from guard failed (asked %d, clicked %d, dirty %d, importing %d, status '%s')\n",
-                                       asked, saved_first, session.dirty(), session.importsPending(), qPrintable(session.status()));
+             r.guard = r.guard && was_dirty && saved_first;
+             if (!r.guard) std::printf("GUI smoke: Save from guard failed (dirty before %d, asked %d, clicked %d, importing %d, status '%s')\n",
+                                       was_dirty, asked, saved_first, session.importsPending(), qPrintable(session.status()));
          }},
         {"saved then new", [&] { return session.media().isEmpty() || run->elapsed() > 5000; }, [&] {
              r.guard = r.guard && session.media().isEmpty() && session.projectPath().isEmpty();
@@ -1690,7 +1691,12 @@ int run_gui_smoke(const SmokeContext& context) {
              r.launch = r.launch && clips.size() == 2 && session.editing() &&
                         clips[0].toMap().value("name") == QStringLiteral("hevc_10bit.mp4") &&
                         clips[1].toMap().value("name") == QStringLiteral("h264_30fps_aac.mp4");
-             if (!r.launch) std::printf("GUI smoke: launch by files failed (%lld clips)\n", static_cast<long long>(clips.size()));
+             if (!r.launch) {
+                 std::printf("GUI smoke: launch by files failed (%lld clips, %lld media, pending %d, %s)\n",
+                             static_cast<long long>(clips.size()), static_cast<long long>(session.media().size()),
+                             session.importsPending(), qPrintable(session.status()));
+                 application.exit(1);
+             }
          }},
         // Live theme and font (omarchy-integration.md §3): a theme switch the way theme-set does
         // it (delete, move, then theme.name), a malformed palette that must change nothing,
@@ -1738,6 +1744,12 @@ int run_gui_smoke(const SmokeContext& context) {
              session.seek(0.3);
              session.splitAtPlayhead();
              saved.clips_after_edit = clip_count();
+             if (saved.clips_after_edit == 0) {
+                 std::printf("GUI smoke: no clips before autosave (%lld media, pending %d, %s)\n",
+                             static_cast<long long>(session.media().size()), session.importsPending(), qPrintable(session.status()));
+                 application.exit(1);
+                 return;
+             }
              session.autosave();
          }},
         {"autosaved", [&] {
@@ -1781,6 +1793,11 @@ int run_gui_smoke(const SmokeContext& context) {
         // Export (M7): the sequence becomes an MP4 with picture and sound of its length.
         {"export", after(100), [&] {
              saved.export_seconds = session.duration();
+             if (session.clips().isEmpty()) {
+                 std::printf("GUI smoke: no clips to export (autosave %d, %s)\n", r.autosave, qPrintable(session.status()));
+                 application.exit(1);
+                 return;
+             }
              // An unsaved change, then export and save at once: the save must not wait for the export.
              session.selectClip(session.clips().front().toMap().value("id").toDouble());
              session.setClipOpacity(0.9);

@@ -61,6 +61,9 @@ regressions in interaction come before new breadth.
    ([evidence](Research/evidence/2026-10-17-release-tag-and-staged-smoke.md)). Repeat on a
    disposable Omarchy profile with the release candidate, reopen/recover the same test
    project and check the published archive rather than only this branch's PKGBUILD.
+   Three installed Intel smokes passed after a smoke-driver crash and a false Save-guard
+   failure were fixed; the earlier empty-timeline run still needs RC repetition
+   ([evidence](Research/evidence/2026-10-17-native-smoke-crash.md)).
 5. **Expand only for a named hand-off (M8/M9):** portable project, one interchange
    format or stems need a receiving task and fidelity gate. They are not v0.1 gates.
 
