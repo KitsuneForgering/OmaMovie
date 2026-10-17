@@ -4,7 +4,7 @@
 # frame count, A/V length, sound at the start, middle and end, and sampled frames (check.py).
 # Usage: tools/bench/long-export/run.sh [minutes=120] [report-dir]   (opens the app's window)
 # The output is large (a two-hour VA-API export is ~10 GB): it goes under the report dir.
-set -uo pipefail
+set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../.." && pwd)
@@ -15,6 +15,7 @@ app="$repo/build/release/omamovie"
 cli="$repo/build/release/tools/oma-project/oma-project"
 mkdir -p "$dir" "$(dirname "$src")"
 report="$dir/report.txt"
+trap 'echo "FAIL: $report" >&2' ERR
 
 [[ -s $src ]] || ffmpeg -v error -y -f lavfi -i "testsrc2=s=1920x1080:r=30:d=600" \
     -f lavfi -i "sine=f=440:d=600" -vf "hue=h=360*t/600,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p" \
@@ -31,9 +32,11 @@ python3 -I "$here/project.py" otio "$minutes" "$src" "$dir/edit.otio" &&
     python3 -I "$here/project.py" plan "$minutes" "$src" "$dir/plan.json" || exit 1
 
 {
+    import=$(tr '\n' ' ' < "$dir/convert.txt")
+    import=${import% }
     echo "Long export $(date '+%F %T %z'): $minutes min, commit $(git -C "$repo" rev-parse --short HEAD)"
     echo "GPU: $(vulkaninfo --summary 2>/dev/null | grep -m1 deviceName | cut -d= -f2- | sed 's/^ //')"
-    echo "load: $(cut -d' ' -f1-3 /proc/loadavg); import: $(tr '\n' ' ' < "$dir/convert.txt")"
+    echo "load: $(cut -d' ' -f1-3 /proc/loadavg); import: $import"
     python3 -I "$here/../cross-editor/measure.py" timeout $((minutes * 60)) "$app" --export-audit \
         "$dir/edit.omamovie" "$dir/out.mp4" 2>&1 | grep -E '^(export audit|  |measure:)'
     [[ -s $dir/out.mp4 ]] || { echo "export failed: nothing to check"; exit 1; }
@@ -43,11 +46,6 @@ python3 -I "$here/project.py" otio "$minutes" "$src" "$dir/edit.otio" &&
     v=$(ffprobe -v error -select_streams v:0 -show_entries stream=duration -of csv=p=0 "$dir/out.mp4")
     a=$(ffprobe -v error -select_streams a:0 -show_entries stream=duration -of csv=p=0 "$dir/out.mp4")
     echo "frames $got/$want, video $v s, audio $a s, $(stat -c %s "$dir/out.mp4") bytes"
-    for at in 1 $((minutes * 30)) $((minutes * 60 - 2)); do
-        printf 'sound at %s s: ' "$at"
-        ffmpeg -v info -ss "$at" -t 1 -i "$dir/out.mp4" -vn -af volumedetect -f null - 2>&1 |
-            grep -o 'mean_volume: [-0-9.]* dB'
-    done
     python3 -I "$here/check.py" "$dir/out.mp4" "$src" "$dir/plan.json"
     echo "load at end: $(cut -d' ' -f1-3 /proc/loadavg)"
 } > "$report" 2>&1

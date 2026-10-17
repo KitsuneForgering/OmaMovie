@@ -6,13 +6,14 @@
 # export_oma route(hardware|software) out input: a video or a project; a private config and
 # cache per run (cold).
 export_oma() {
-    local route=$1 out=$2 src=$3 home
+    local route=$1 out=$2 src=$3 home rc=0
     home=$(mktemp -d)
     mkdir -p "$home/config/omamovie"
     printf '[export]\nencoder=%s\n' "$route" > "$home/config/omamovie/settings.ini"
     XDG_CONFIG_HOME="$home/config" XDG_CACHE_HOME="$home/cache" XDG_DATA_HOME="$home/data" \
-        python3 -I "$here/measure.py" timeout 900 "$app" --export-audit "$src" "$out"
+        python3 -I "$here/measure.py" timeout 900 "$app" --export-audit "$src" "$out" || rc=$?
     rm -rf "$home"
+    return "$rc"
 }
 
 # export_melt route out producer-args...: one file, or a playlist of file in= out= triples.

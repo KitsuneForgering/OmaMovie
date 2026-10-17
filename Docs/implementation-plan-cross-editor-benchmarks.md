@@ -8,6 +8,22 @@ analysis](analysis/omamovie-2026-10-14-filmcraft-benchmarks.md) compares publish
 FilmCraft figures from other machines and methods. It is context, not a direct result.
 No named competitor has been run under the protocol below.
 
+The pre-release correctness gate is `scripts/rc-validation.sh [report-dir] [long-minutes=120]
+[comparison-repeats=5]`. It runs the release tests, 3,000 seeds × 200 stateful edit steps,
+shared cuts and full-source exports
+through OmaMovie and MLT's `melt` on both encode routes, then a two-hour edited OmaMovie
+export. `assert_output.py` now fails on a wrong frame count, dimensions, duration,
+incomplete per-frame comparison or a worst luma PSNR below 35 dB. A seeded-noise audio
+fixture lets it match each cut's source interval at three points and detect silence,
+wrong audio or drift beyond its 50 ms encoder-delay search. A failing comparator output is
+reported, never interpreted as an OmaMovie speed win. The long-form oracle checks frame
+count, A/V duration and sound at beginning/middle/end in addition to its cut, look and
+dissolve checks. Record the exact SHA, hardware, versions, load and complete reports for
+the RC; a passing benchmark on a different machine cannot substitute for that run.
+The [2026-10-17 pilot](Research/evidence/2026-10-17-rc-correctness-pilot.md) passed one
+round on each shared scene, the extended edit properties and a 25-minute long edit;
+the default five-round/two-hour gate remains to be run on the frozen RC SHA.
+
 ## Comparator set and eligibility
 
 | Tier | Candidates | Comparison boundary |

@@ -6,7 +6,12 @@
 scene_inputs() {
     local scene=$1 src=$2 dir=$3
     case $scene in
-        whole) oma_in=$src; melt_in=("$src") ;;
+        whole)
+            oma_in=$src
+            # MLT's implicit producer end may round up by one frame. Bound both
+            # editors to the same decoded source-frame interval explicitly.
+            melt_in=("$src" "in=0" "out=$(($(frames_of "$src") - 1))")
+            ;;
         cuts)
             oma_in="$dir/cuts.omamovie"
             cuts_project "$src" "$oma_in" || return 1

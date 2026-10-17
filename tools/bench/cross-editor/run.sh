@@ -3,7 +3,7 @@
 # BT.709 source through hardware and software H.264, every output checked by FFmpeg (protocol:
 # Docs/implementation-plan-cross-editor-benchmarks.md). Opens OmaMovie's window; run it idle.
 # Usage: tools/bench/cross-editor/run.sh [repeats=5] [report-dir] [scene=whole|cuts] (scenes.sh)
-set -uo pipefail
+set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../.." && pwd)
@@ -13,9 +13,10 @@ out_dir="${2:-${XDG_DATA_HOME:-$HOME/.local/share}/omamovie-bench/cross-editor}/
 fixtures="${XDG_CACHE_HOME:-$HOME/.cache}/omamovie-bench/fixtures"
 app="$repo/build/release/omamovie"
 cli="$repo/build/release/tools/oma-project/oma-project"
-src="$fixtures/xed_1080p24_bt709.mp4"
+src="$fixtures/xed_1080p24_bt709_noise-v3.mp4"
 mkdir -p "$out_dir" "$fixtures"
 report="$out_dir/report.txt"
+trap 'echo "FAIL: $report" >&2' ERR
 
 # shellcheck source=editors.sh
 . "$here/editors.sh"
@@ -26,9 +27,11 @@ report="$out_dir/report.txt"
 # shellcheck source=scenes.sh
 . "$here/scenes.sh"
 
-# 20 s 1080p 23.976 grain and tone (FilmCraft's recipe), tagged BT.709: untagged, editors guess.
+# 20 s 1080p 23.976 grain (FilmCraft's picture recipe) and seeded noise audio. The audio
+# signature makes every source interval distinguishable after cuts and lossy re-encoding.
 [[ -s $src ]] || ffmpeg -v error -y -f lavfi -i "testsrc2=s=1920x1080:r=24000/1001:d=20,noise=alls=6:allf=t" \
-    -f lavfi -i "sine=f=440:d=20" -vf "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p" \
+    -f lavfi -i "anoisesrc=c=pink:seed=739:a=0.2:d=20:r=48000" \
+    -vf "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=limited" \
     -c:v libx264 -preset fast -crf 20 -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
     -color_range tv -c:a aac -shortest -movflags +faststart "$src" || exit 1
 
@@ -51,7 +54,9 @@ report="$out_dir/report.txt"
             out="$out_dir/$editor-$route-$round.mp4"
             if [[ $editor == oma ]]; then args=("$oma_in"); else args=("${melt_in[@]}"); fi
             m=$("export_$editor" "$route" "$out" "${args[@]}" 2>&1 | grep -E '^measure:|^  encoder:' | tr '\n' ' ')
-            echo "round $round $editor $route: $m| $(scene_verify "$scene" "$src" "$out")"
+            m=${m% }
+            echo "round $round $editor $route: $m"
+            python3 -I "$here/assert_output.py" "$scene" "$src" "$out"
             rm -f "$out"
         done
     done

@@ -1,0 +1,19 @@
+Long export 2026-10-17 19:18:00 -0300: 25 min, commit 0b2a8ab
+GPU: Intel(R) Iris(R) Xe Graphics (TGL GT2)
+load: 6.83 5.85 4.27; import: level reached: 2 media: 1 saved: /tmp/omamovie-rc-long/2026-10-17-1918/converted.omamovie
+export audit: 45000 frames in 343557 ms (131.0 fps) -> /tmp/omamovie-rc-long/2026-10-17-1918/out.mp4
+  encoder: VA-API H.264 (GPU)
+  path: decode software (export FrameSource has no GPU device); compositor Vulkan (software frames staged to GPU)
+  process CPU: 965262 ms total, 21.45 ms/frame (all threads during export)
+  per frame: build 0.12 ms, render+readback 7.33 ms, wait for encoder 0.02 ms, encode (own worker) 4.86 ms, mix 0.15 ms
+  decode output: 45214 software frames, 140633625600 plane-span bytes (includes lookahead/seek)
+  transfers: software compositor inputs 45029 (140058201600 payload bytes), GPU readbacks 45000 (139968000000 bytes, 91942.26 ms total)
+  compositor staging: 45029 inputs, 140058201600 packed bytes, 38296.73 ms total (38202.09 ms row copies; GPU transfer in render time)
+  NV12 readback phases: record 2538.33 ms, submit 3092.12 ms, fence wait 70820.44 ms, invalidate 6.94 ms, host copy 14965.13 ms (fence wait includes queued GPU work)
+  NV12 GPU conversion: 20345.16 ms across 45000 timestamped frames (dispatch only; queue delay remains in fence wait)
+  writer: NV12 CPU row copies 139968000000 bytes (36997.23 ms), VA-API uploads 45000 (139968000000 bytes, 100357.33 ms)
+  result: written
+measure: rc=0 wall_s=344.75 user_s=882.95 sys_s=83.71 peak_rss_mb=804
+frames 45000/45000, video 1500.000000 s, audio 1500.010667 s, 1607220126 bytes
+checked 15 frames: plain worst 0.41 levels; dissolve mix 30.5 vs ends 73.2/72.4; PASS
+load at end: 3.40 4.55 4.40
