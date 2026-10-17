@@ -28,6 +28,11 @@ podman run --rm -v "$repo:/src:ro,Z" -v "$out:/out:Z" "$image" bash -euo pipefai
   pacman -U --noconfirm /out/omamovie-git-r*-x86_64.pkg.tar.zst >/dev/null
   test -x /usr/bin/omamovie
   test -s /usr/share/omamovie/qml/Main.qml
+  test -s /usr/share/omamovie/qml/WelcomeTour.qml
+  test -s "/usr/share/omamovie/demo/First Edit.omamovie"
+  test -s /usr/share/omamovie/demo/media/01-opening.mp4
+  test -s /usr/share/omamovie/demo/media/02-detail.mp4
+  test -s /usr/share/omamovie/demo/media/03-finale.mp4
   test -s /usr/share/icons/hicolor/scalable/apps/omamovie.svg
   test -s /usr/share/mime/packages/omamovie.xml
   desktop-file-validate /usr/share/applications/omamovie.desktop

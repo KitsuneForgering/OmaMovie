@@ -87,8 +87,9 @@ Docs and code supply OmaMovie's current decisions and facts.
 
 Build the committed workflow before adding effect categories or competitor parity. The
 [v0.1 release decision](Docs/implementation-plan-milestone-overview.md) covers only its
-validated Intel/software scope; [v1.0 onboarding](Docs/implementation-plan-v1-onboarding.md)
-is a later product gate. AMD/NVIDIA, full HDR and other desired capabilities require their
+validated Intel/software scope; the [first-opening tour](Docs/implementation-plan-v1-onboarding.md)
+and bundled editable demo are in v0.1, while contextual tooltip and novice task gates
+remain open. AMD/NVIDIA, full HDR and other desired capabilities require their
 own evidence. Do not turn aesthetic refactoring into a release gate.
 
 A change is done when its actual behavior and error/fallback path have proportional

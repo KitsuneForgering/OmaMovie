@@ -45,6 +45,8 @@ endif()
 install(TARGETS omamovie RUNTIME DESTINATION bin)
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/qml/
     DESTINATION share/omamovie/qml FILES_MATCHING PATTERN "*.qml")
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/demo/
+    DESTINATION share/omamovie/demo FILES_MATCHING PATTERN "*.omamovie" PATTERN "*.mp4")
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/data/omamovie.desktop DESTINATION share/applications)
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/data/omamovie.svg
     DESTINATION share/icons/hicolor/scalable/apps)

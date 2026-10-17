@@ -1,15 +1,29 @@
-### v1.0 product closure — first-opening tour and contextual tooltips
+### First-opening tour and contextual tooltips
 
-**Status: planned; gate before v1.0 feature freeze, not a v0.1 or M12 gate.** This closes
-discoverability of the editing model already committed to the core workflow. It does not
-add editing capabilities. The M6 manual walkthrough remains the primary evidence; tests
-alone cannot prove that a new editor understands the consequences of an action.
+**Status: first-opening tour implemented for v0.1 on 2026-10-17; contextual tooltip coverage
+and the M6 novice walkthrough remain open.** The tour was brought forward at the maintainer's
+request. It teaches the editing model already committed to the core workflow and adds no
+editing capabilities. Tests cannot prove that a new editor understands an action's consequences.
 
-**Existing basis and gap (2026-10-15).** M6 already has a central action registry,
+**Earlier basis and gap (2026-10-15).** M6 already had a central action registry,
 remappable shortcuts, Command Palette, contextual menus and persisted app settings.
 `Main.qml` declares `OmaAction` text/keys/handlers; `ActionRegistry` exposes actions and
 palette search, but has no focused tooltip text API. Some isolated QML controls use
-hover-only `ToolTip`; there is no first-opening tour or persisted onboarding completion.
+hover-only `ToolTip`.
+
+**Current implementation.** `WelcomeTour.qml` opens on a fresh profile and presents six
+task steps through a first edit: find a command, start/import, mark a source range, place
+it, cut/correct, and save/export. It uses the existing actions for names and current
+shortcuts. The first step explains the Command Palette and opens it on request. The
+second step opens a bundled three-shot demo as an unsaved copy; F1 resumes at the next
+step. Finish or
+“Don't show again” persists a per-user setting; Escape or “Skip for now” leaves the tour
+available on the next launch. F1, the Projects button, the edit toolbar and the Command
+Palette reopen it. The popup is modal and changes no `Session` or project state. The GUI
+smoke checks first opening, the palette handoff, the demo handoff, Escape, reopening,
+completion, persistence, and a 640 px window at 130% text. A headless app test edits the
+demo, saves, reopens and independently decodes its exported movie. Human task evidence is
+still required.
 `Docs/ui-design-2-1.md`, `ui-design-6.md` and `ui-design-10.md` mention tooltips, but do not
 specify coverage or keyboard access. Preserve the existing sources of truth rather than
 adding a parallel shortcut list.

@@ -8,9 +8,12 @@ Run on Omarchy with a release build; one person, screen recorded if possible.
 every 2 s), cutaway (8 s, silent), phone-clip (6 s portrait) and long-recording (10 min, a
 beep a minute) to `~/Videos/omamovie-m6`. Start each task from a new project.
 
-**v1.0 first-launch pass.** Begin once with a clean application profile (isolated
+**First-launch pass for v0.1.** Begin once with a clean application profile (isolated
 `XDG_CONFIG_HOME`/`XDG_STATE_HOME`, no existing onboarding preference). Follow or complete
-the short tour, then perform T1–T5 below. Record any operation whose meaning remains
+the short tour. Open its Command Palette button, find Import, return to the tour, then
+open the demo edit. Mark a range from its third media tile, place it, split or trim a shot,
+save a copy and export; check whether the tour made each step predictable. Then perform
+T1–T5 below. Record any operation whose meaning remains
 unclear, and each missing, wrong or excessive tooltip. Close the tour and find Help,
 Command Palette and shortcuts again without prompting. Repeat T5 keyboard-only with the
 tour closed. Record whether the tour can be dismissed/reopened and whether a narrow window

@@ -35,6 +35,7 @@ AppSettings::AppSettings(QString settings_file, QObject* parent)
     cache_limit_ = one_of(settings.value("cache/limit_mb").toString(), kCacheLimits);
     export_encoder_ = one_of(settings.value("export/encoder").toString(), kExportEncoders);
     text_size_ = one_of(settings.value("appearance/text_size").toString(), kTextSizes);
+    tour_completed_ = settings.value("onboarding/tour_completed", false).toBool();
     startup_decode_path_ = decode_path_;
 }
 
@@ -91,6 +92,13 @@ void AppSettings::setTextSize(const QString& value) {
     store("appearance/text_size", valid, kTextSizes.front());
 }
 
+void AppSettings::setTourCompleted(bool value) {
+    if (value == tour_completed_) return;
+    tour_completed_ = value;
+    store("onboarding/tour_completed", value ? QStringLiteral("true") : QStringLiteral("false"),
+          QStringLiteral("false"));
+}
+
 void AppSettings::setSystem(QVariantMap system) {
     system_ = std::move(system);
     emit systemChanged();
@@ -103,6 +111,7 @@ void AppSettings::resetAll() {
     setCacheLimit(kCacheLimits.front());
     setExportEncoder(kExportEncoders.front());
     setTextSize(kTextSizes.front());
+    setTourCompleted(false);
 }
 
 QString AppSettings::previewQuality() const { return preview_quality_; }
@@ -113,5 +122,6 @@ QString AppSettings::cacheLimit() const { return cache_limit_; }
 QString AppSettings::exportEncoder() const { return export_encoder_; }
 QString AppSettings::textSize() const { return text_size_; }
 double AppSettings::textScale() const { return text_size_.toDouble() / 100.0; }
+bool AppSettings::tourCompleted() const { return tour_completed_; }
 QVariantMap AppSettings::system() const { return system_; }
 void AppSettings::refreshSystem() { emit systemRequested(); }

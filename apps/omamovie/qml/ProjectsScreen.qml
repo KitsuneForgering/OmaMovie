@@ -17,6 +17,7 @@ Item {
         height: 60
         UiText { text: "OmaMovie"; color: root.fg; font.pixelSize: Math.round(18 * appSettings.textScale); font.bold: true }
         Item { Layout.fillWidth: true }
+        OmaButton { objectName: "projectsTour"; action: actions.welcomeTour; text: "Tour" }
         OmaButton { objectName: "settingsButton"; action: actions.settings; iconName: "settings"; showLabel: false }
         OmaButton { objectName: "openProject"; action: actions.openProject; iconName: "open" }
         OmaButton {
@@ -82,6 +83,19 @@ Item {
             text: "Nothing open yet. Start a new project or open a saved one."
             color: root.muted
             font.pixelSize: Math.round(12 * appSettings.textScale)
+        }
+        RowLayout {
+            visible: demoAvailable
+            Layout.fillWidth: true
+            spacing: 10
+            OmaButton { objectName: "openDemoProject"; action: actions.openDemo; text: "Explore demo edit" }
+            UiText {
+                Layout.fillWidth: true
+                text: "A short editable movie to try cuts, source ranges, save and export."
+                color: root.muted
+                font.pixelSize: Math.round(11 * appSettings.textScale)
+                wrapMode: Text.Wrap
+            }
         }
 
         UiText {

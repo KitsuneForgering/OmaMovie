@@ -47,6 +47,11 @@ docker run --rm --cap-add SYS_PTRACE \
             # smoke runs from build/release and cannot catch missing installed QML or assets.
             test -x stage/usr/bin/omamovie
             test -s stage/usr/share/omamovie/qml/Main.qml
+            test -s stage/usr/share/omamovie/qml/WelcomeTour.qml
+            test -s "stage/usr/share/omamovie/demo/First Edit.omamovie"
+            test -s stage/usr/share/omamovie/demo/media/01-opening.mp4
+            test -s stage/usr/share/omamovie/demo/media/02-detail.mp4
+            test -s stage/usr/share/omamovie/demo/media/03-finale.mp4
             test -s stage/usr/share/icons/hicolor/scalable/apps/omamovie.svg
             test -s stage/usr/share/mime/packages/omamovie.xml
             desktop-file-validate stage/usr/share/applications/omamovie.desktop

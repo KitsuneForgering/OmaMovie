@@ -62,6 +62,7 @@ void run_recording_workflow_tests();
 void run_export_transfer_tests();
 void run_export_levels_tests();
 void run_real_recording_tests();
+void run_demo_project_tests();
 
 int main(int argc, char* argv[]) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
@@ -136,5 +137,6 @@ int main(int argc, char* argv[]) {
     run_export_transfer_tests();
     run_export_levels_tests();
     run_real_recording_tests();
+    run_demo_project_tests();
     return cest_result();
 }

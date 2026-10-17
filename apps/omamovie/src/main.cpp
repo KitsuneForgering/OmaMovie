@@ -192,6 +192,9 @@ int main(int argc, char** argv) {
     QObject::connect(&theme, &omarchy::Theme::paletteChanged, &engine,
                      [&] { engine.rootContext()->setContextProperty("colors", theme.palette()); });
     engine.rootContext()->setContextProperty("uiFont", theme.font().family());
+    const QString demo_path = QDir::cleanPath(qml_dir() + QStringLiteral("/../demo/First Edit.omamovie"));
+    engine.rootContext()->setContextProperty("demoProjectUrl", QUrl::fromLocalFile(demo_path));
+    engine.rootContext()->setContextProperty("demoAvailable", QFileInfo::exists(demo_path));
     QObject::connect(&theme, &omarchy::Theme::fontChanged, &engine, [&] {
         apply_font();
         engine.rootContext()->setContextProperty("uiFont", theme.font().family());

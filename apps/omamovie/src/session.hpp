@@ -312,6 +312,8 @@ public:
     // Replaces the session with a saved project: its library is imported again (thumbnails,
     // details) under the saved IDs, the timeline is restored as saved.
     Q_INVOKABLE void openProject(const QUrl& url);
+    // Opens a bundled sample as an unsaved copy, so Save asks for the user's own path.
+    Q_INVOKABLE void openDemoProject(const QUrl& url);
     // Opens an OpenTimelineIO file as a new, unsaved project; its notes go to importReport.
     // `edlRate` ("25", "30000/1001"): the frame rate an EDL's timecodes count in (EDLs name none).
     Q_INVOKABLE void importTimeline(const QUrl& url, const QString& edlRate = QStringLiteral("30"));
@@ -576,7 +578,8 @@ private:
     // `known`: a library item of an opened project, imported again under its saved ID and
     // media range (the restored timeline references them).
     void importFile(const QString& path, bool append, std::optional<oma::project::MediaRef> known = std::nullopt);
-    void applyProject(oma::project::Document doc, const QString& path);
+    void applyProject(oma::project::Document doc, const QString& path, const QString& unsaved_name = {});
+    void openProjectFile(const QUrl& url, bool as_template);
     // A LUT of an opened project: parsed in the background into the tables under its saved ID.
     void loadLut(const QString& path, oma::timeline::LutId id);
     // What saving records: timeline, revision, library and LUT counts, and library edits that
@@ -668,6 +671,7 @@ private:
     std::uint64_t next_lut_ = 1;
     std::unordered_map<std::uint64_t, QString> lut_paths_; // LUT ID -> its .cube file
     QString project_path_;
+    QString unsaved_project_name_;
     // Preserve compatible fields this version cannot interpret across app saves and autosaves.
     std::vector<std::pair<std::string, std::string>> project_unknown_;
     Marker saved_{false, 0, 0, 0, 0};

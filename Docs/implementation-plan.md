@@ -47,7 +47,7 @@ Evidence, milestones and acceptance criteria; update completed work and record s
 [M11 refactoring](implementation-plan-m11-refactoring.md)
 ### M12 — GPU-native export and application ownership (post-v0.1)
 [M12 export and ownership](implementation-plan-m12-gpu-export-architecture.md)
-### v1.0 product closure — first-opening onboarding
+### First-opening tour (v0.1) and contextual tooltips (v1.0)
 [Onboarding and contextual tooltips](implementation-plan-v1-onboarding.md)
 ### Conditional pilot — Community effect packs and curated marketplace (after M7/M8)
 [Community effect packs](implementation-plan-community-effect-packs.md)

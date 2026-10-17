@@ -168,7 +168,7 @@ int run_gui_smoke(const SmokeContext& context) {
         bool controls = false, lanes = false, looks = false, transitions = false, dragdrop = false;
         bool tab = false, guard = false, grading = false, project = false, recordings = false, connected = false, timing = false;
         bool palette = false, palette_keys = false, theme = false, launch = false, settings = false, menu_keys = false, titles = false, autosave = false;
-        bool device_lost = false, layout = true, key_workflow = false;
+        bool device_lost = false, layout = true, key_workflow = false, tour = false, demo = false;
         qsizetype key_clips = 0;
         double key_in = 0;
         double after_steps = 0;
@@ -305,6 +305,60 @@ int run_gui_smoke(const SmokeContext& context) {
     std::unique_ptr<SmokeRun> run;
     const auto after = [&](qint64 ms) { return [&run, ms] { return run->elapsed() >= ms; }; };
     run = std::make_unique<SmokeRun>(application, std::vector<SmokeRun::Step>{
+        {"first tour", after(300), [&] {
+             auto* tour = window->findChild<QObject*>(QStringLiteral("welcomeTour"));
+             r.tour = tour && tour->property("opened").toBool() && !app_settings.tourCompleted() && !session.editing();
+             r.tour = r.tour && click_button("tourOpenPalette") && !tour->property("opened").toBool();
+         }},
+        {"tour palette", after(500), [&] {
+             auto* palette = window->findChild<QObject*>(QStringLiteral("commandPalette"));
+             r.tour = r.tour && palette && palette->property("opened").toBool() && !app_settings.tourCompleted();
+             press(Qt::Key_Escape);
+             r.tour = r.tour && !palette->property("opened").toBool();
+             actions.trigger(QStringLiteral("welcomeTour"));
+         }},
+        {"tour reopened", after(150), [&] {
+             auto* tour = window->findChild<QObject*>(QStringLiteral("welcomeTour"));
+             r.tour = r.tour && tour && tour->property("opened").toBool() && tour->property("step").toInt() == 1;
+             r.demo = click_button("tourOpenDemo");
+             r.tour = r.tour && !tour->property("opened").toBool();
+         }},
+        {"demo loaded", [&] { return (clip_count() == 3 && !session.importsPending()) || run->elapsed() > 15000; }, [&] {
+             r.demo = r.demo && clip_count() == 3 && session.media().size() == 3 &&
+                      session.projectPath().isEmpty() && session.projectName() == QStringLiteral("First edit demo") &&
+                      !session.importsPending();
+             actions.trigger(QStringLiteral("welcomeTour"));
+             auto* tour = window->findChild<QObject*>(QStringLiteral("welcomeTour"));
+             r.tour = r.tour && tour && tour->property("opened").toBool() && tour->property("step").toInt() == 2;
+             press(Qt::Key_Escape);
+             r.tour = r.tour && !tour->property("opened").toBool() && !app_settings.tourCompleted();
+             session.newProject();
+             session.showProjects();
+             actions.trigger(QStringLiteral("welcomeTour"));
+             window->resize(640, 520);
+             app_settings.setTextSize(QStringLiteral("130"));
+         }},
+        {"tour narrow", after(700), [&] {
+             screenshot(window, "OMA_GUI_SMOKE_TOUR_SCREENSHOT");
+             const auto next = items_named("tourNext");
+             const auto dismiss = items_named("tourDismiss");
+             r.tour = r.tour && next.size() == 1 && dismiss.size() == 1 &&
+                      next.front()->mapToScene(QPointF(next.front()->width(), next.front()->height())).x() <= window->width() &&
+                      next.front()->mapToScene(QPointF(next.front()->width(), next.front()->height())).y() <= window->height() &&
+                      dismiss.front()->mapToScene(QPointF()).x() >= 0;
+             for (int i = 0; i < 5; ++i) r.tour = click_button("tourNext") && r.tour;
+             screenshot(window, "OMA_GUI_SMOKE_TOUR_LAST_SCREENSHOT");
+             auto* tour = window->findChild<QObject*>(QStringLiteral("welcomeTour"));
+             r.tour = r.tour && tour->property("step").toInt() == 5 && click_button("tourNext") &&
+                      !tour->property("opened").toBool() && app_settings.tourCompleted() &&
+                      AppSettings(smoke_recordings.filePath(QStringLiteral("settings.ini"))).tourCompleted();
+             actions.trigger(QStringLiteral("welcomeTour"));
+             r.tour = r.tour && tour->property("opened").toBool() && tour->property("step").toInt() == 0;
+             press(Qt::Key_Escape);
+             window->resize(1600, 900);
+             app_settings.setTextSize(QStringLiteral("100"));
+             if (!r.tour) std::printf("GUI smoke: first-launch tour, persistence or narrow layout failed\n");
+         }},
         {"start", after(300), [&] {
              screenshot(window, "OMA_GUI_SMOKE_PROJECTS_SCREENSHOT");
              // Projects lists the recording; Edit puts it on a new project's storyline.
@@ -913,14 +967,17 @@ int run_gui_smoke(const SmokeContext& context) {
              session.showProjects();
          }},
         {"tab", after(200), [&] {
-             // Buttons take keyboard focus: from the top of Projects, Tab lands on Settings, then
-             // Open project.
+             // Buttons take keyboard focus: from the top of Projects, Tab lands on Tour,
+             // Settings, then Open project.
              window->contentItem()->forceActiveFocus();
              press(Qt::Key_Tab);
              const QQuickItem* first = window->activeFocusItem();
-             r.tab = first != nullptr && first->objectName() == QStringLiteral("settingsButton");
+             r.tab = first != nullptr && first->objectName() == QStringLiteral("projectsTour");
              press(Qt::Key_Tab);
              const QQuickItem* focused = window->activeFocusItem();
+             r.tab = r.tab && focused != nullptr && focused->objectName() == QStringLiteral("settingsButton");
+             press(Qt::Key_Tab);
+             focused = window->activeFocusItem();
              r.tab = r.tab && focused != nullptr && focused->objectName() == QStringLiteral("openProject");
          }},
         {"discard dialog", after(300), [&] {
@@ -2086,15 +2143,15 @@ int run_gui_smoke(const SmokeContext& context) {
              const bool edits = r.imported && r.split && r.undone && r.redone && r.rippled && r.inserted &&
                                 r.overwritten && r.trimmed && r.played && r.audio && r.volume && r.muted &&
                                 r.gpu_viewer && r.shuttle && r.lanes && r.looks && r.transitions && r.dragdrop && r.guard &&
-                                r.grading && r.project && r.recordings && r.connected && r.timing && r.palette && r.theme && r.launch && r.settings && r.titles && r.autosave && r.device_lost && r.layout;
+                                r.grading && r.project && r.recordings && r.connected && r.timing && r.palette && r.theme && r.launch && r.settings && r.titles && r.autosave && r.device_lost && r.layout && r.tour && r.demo;
              const bool keys = r.space && r.escape && r.stepped && r.tab && r.palette_keys && r.menu_keys && r.key_workflow;
              std::printf("GUI smoke: edits %s (import %d, split %d, undo %d, redo %d, ripple delete %d, "
                          "insert %d, overwrite %d, trim %d, play %d, audio %d, volume %d, mute %d, "
                          "GPU viewer %d, J/K/L %d, audio lanes %d, video looks %d, transitions %d, drag and drop %d, "
-                         "discard guard %d, grading %d, save and reopen %d, recordings %d, connect %d, framing/freeze/reverse/opacity %d, palette and remap %d, live theme and font %d, open files and single instance %d, settings %d, titles %d, autosave and recovery %d, device loss %d)\n",
+                         "discard guard %d, grading %d, save and reopen %d, recordings %d, connect %d, framing/freeze/reverse/opacity %d, palette and remap %d, live theme and font %d, open files and single instance %d, settings %d, titles %d, autosave and recovery %d, device loss %d, tour %d, demo %d)\n",
                          edits ? "PASS" : "FAIL", r.imported, r.split, r.undone, r.redone, r.rippled,
                          r.inserted, r.overwritten, r.trimmed, r.played, r.audio, r.volume, r.muted,
-                         r.gpu_viewer, r.shuttle, r.lanes, r.looks, r.transitions, r.dragdrop, r.guard, r.grading, r.project, r.recordings, r.connected, r.timing, r.palette, r.theme, r.launch, r.settings, r.titles, r.autosave, r.device_lost);
+                         r.gpu_viewer, r.shuttle, r.lanes, r.looks, r.transitions, r.dragdrop, r.guard, r.grading, r.project, r.recordings, r.connected, r.timing, r.palette, r.theme, r.launch, r.settings, r.titles, r.autosave, r.device_lost, r.tour, r.demo);
              if (r.keys_focused) {
                  std::printf("GUI smoke: keyboard %s (Tab %d, Space %d, Escape %d, Right x3 -> %.4fs, palette %d, menus %d, edit workflow %d)\n",
                              keys ? "PASS" : "FAIL", r.tab, r.space, r.escape, r.after_steps, r.palette_keys, r.menu_keys, r.key_workflow);

@@ -1,0 +1,368 @@
+{
+  "format": "omamovie-project",
+  "format_version": 7,
+  "canvas": {
+    "width": 640,
+    "height": 360
+  },
+  "media": [
+    {
+      "id": 1,
+      "name": "01-opening.mp4",
+      "path": "media/01-opening.mp4",
+      "absolute_path": "",
+      "size": 63273,
+      "hash": "26429a5da47298b2",
+      "start": {
+        "value": 0,
+        "timebase": "1/15360"
+      },
+      "duration": {
+        "value": 61440,
+        "timebase": "1/15360"
+      },
+      "has_video": true,
+      "has_audio": true,
+      "still": false,
+      "audio_only": false
+    },
+    {
+      "id": 2,
+      "name": "02-detail.mp4",
+      "path": "media/02-detail.mp4",
+      "absolute_path": "",
+      "size": 63118,
+      "hash": "15d534a5afb957be",
+      "start": {
+        "value": 0,
+        "timebase": "1/15360"
+      },
+      "duration": {
+        "value": 61440,
+        "timebase": "1/15360"
+      },
+      "has_video": true,
+      "has_audio": true,
+      "still": false,
+      "audio_only": false
+    },
+    {
+      "id": 3,
+      "name": "03-finale.mp4",
+      "path": "media/03-finale.mp4",
+      "absolute_path": "",
+      "size": 62899,
+      "hash": "2675a00bd72aab29",
+      "start": {
+        "value": 0,
+        "timebase": "1/15360"
+      },
+      "duration": {
+        "value": 61440,
+        "timebase": "1/15360"
+      },
+      "has_video": true,
+      "has_audio": true,
+      "still": false,
+      "audio_only": false
+    }
+  ],
+  "luts": [],
+  "sequence": {
+    "frame_rate": "30/1",
+    "timebase": "1/48000",
+    "storyline": 1,
+    "media": [
+      1,
+      2,
+      3
+    ],
+    "luts": [],
+    "tracks": [
+      {
+        "id": 1,
+        "kind": "video",
+        "name": "V",
+        "muted": false,
+        "hidden": false,
+        "clips": [
+          {
+            "id": 2,
+            "media": 1,
+            "start": {
+              "value": 0,
+              "timebase": "1/48000"
+            },
+            "duration": {
+              "value": 96000,
+              "timebase": "1/48000"
+            },
+            "source_in": {
+              "value": 0,
+              "timebase": "1/30"
+            },
+            "speed": "1/1",
+            "video": {
+              "fit": "fit",
+              "crop": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "transform": {
+                "offset_x": 0,
+                "offset_y": 0,
+                "scale_x": 1,
+                "scale_y": 1,
+                "rotation": 0
+              },
+              "transform_keys": [],
+              "opacity": 1,
+              "opacity_keys": [],
+              "blend": "normal",
+              "color": {
+                "exposure": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "temperature": 0
+              },
+              "effects": [],
+              "grade": {
+                "slope": [
+                  1,
+                  1,
+                  1
+                ],
+                "offset": [
+                  0,
+                  0,
+                  0
+                ],
+                "power": [
+                  1,
+                  1,
+                  1
+                ],
+                "saturation": 1,
+                "master": [],
+                "red": [],
+                "green": [],
+                "blue": [],
+                "lut": 0,
+                "lut_amount": 1
+              }
+            },
+            "audio": {
+              "gain": 1,
+              "gain_keys": [],
+              "muted": false,
+              "fade_in": {
+                "value": 0,
+                "timebase": "1/1"
+              },
+              "fade_out": {
+                "value": 0,
+                "timebase": "1/1"
+              },
+              "eq": {
+                "low_db": 0,
+                "mid_db": 0,
+                "high_db": 0
+              },
+              "noise": {
+                "amount": 0,
+                "floor_db": -50
+              }
+            },
+            "audio_detached": false
+          },
+          {
+            "id": 3,
+            "media": 2,
+            "start": {
+              "value": 96000,
+              "timebase": "1/48000"
+            },
+            "duration": {
+              "value": 96000,
+              "timebase": "1/48000"
+            },
+            "source_in": {
+              "value": 0,
+              "timebase": "1/30"
+            },
+            "speed": "1/1",
+            "video": {
+              "fit": "fit",
+              "crop": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "transform": {
+                "offset_x": 0,
+                "offset_y": 0,
+                "scale_x": 1,
+                "scale_y": 1,
+                "rotation": 0
+              },
+              "transform_keys": [],
+              "opacity": 1,
+              "opacity_keys": [],
+              "blend": "normal",
+              "color": {
+                "exposure": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "temperature": 0
+              },
+              "effects": [],
+              "grade": {
+                "slope": [
+                  1,
+                  1,
+                  1
+                ],
+                "offset": [
+                  0,
+                  0,
+                  0
+                ],
+                "power": [
+                  1,
+                  1,
+                  1
+                ],
+                "saturation": 1,
+                "master": [],
+                "red": [],
+                "green": [],
+                "blue": [],
+                "lut": 0,
+                "lut_amount": 1
+              }
+            },
+            "audio": {
+              "gain": 1,
+              "gain_keys": [],
+              "muted": false,
+              "fade_in": {
+                "value": 0,
+                "timebase": "1/1"
+              },
+              "fade_out": {
+                "value": 0,
+                "timebase": "1/1"
+              },
+              "eq": {
+                "low_db": 0,
+                "mid_db": 0,
+                "high_db": 0
+              },
+              "noise": {
+                "amount": 0,
+                "floor_db": -50
+              }
+            },
+            "audio_detached": false
+          },
+          {
+            "id": 4,
+            "media": 3,
+            "start": {
+              "value": 192000,
+              "timebase": "1/48000"
+            },
+            "duration": {
+              "value": 96000,
+              "timebase": "1/48000"
+            },
+            "source_in": {
+              "value": 0,
+              "timebase": "1/30"
+            },
+            "speed": "1/1",
+            "video": {
+              "fit": "fit",
+              "crop": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "transform": {
+                "offset_x": 0,
+                "offset_y": 0,
+                "scale_x": 1,
+                "scale_y": 1,
+                "rotation": 0
+              },
+              "transform_keys": [],
+              "opacity": 1,
+              "opacity_keys": [],
+              "blend": "normal",
+              "color": {
+                "exposure": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "temperature": 0
+              },
+              "effects": [],
+              "grade": {
+                "slope": [
+                  1,
+                  1,
+                  1
+                ],
+                "offset": [
+                  0,
+                  0,
+                  0
+                ],
+                "power": [
+                  1,
+                  1,
+                  1
+                ],
+                "saturation": 1,
+                "master": [],
+                "red": [],
+                "green": [],
+                "blue": [],
+                "lut": 0,
+                "lut_amount": 1
+              }
+            },
+            "audio": {
+              "gain": 1,
+              "gain_keys": [],
+              "muted": false,
+              "fade_in": {
+                "value": 0,
+                "timebase": "1/1"
+              },
+              "fade_out": {
+                "value": 0,
+                "timebase": "1/1"
+              },
+              "eq": {
+                "low_db": 0,
+                "mid_db": 0,
+                "high_db": 0
+              },
+              "noise": {
+                "amount": 0,
+                "floor_db": -50
+              }
+            },
+            "audio_detached": false
+          }
+        ]
+      }
+    ],
+    "markers": [],
+    "captions": []
+  }
+}

@@ -258,6 +258,7 @@ void Session::newProject() {
     luts_ = std::make_shared<const LutTables>();
     lut_paths_.clear();
     project_path_.clear();
+    unsaved_project_name_.clear();
     project_unknown_.clear();
     saved_ = {false, 0, 0, 0, library_revision_};
     emit lutsChanged();
@@ -278,6 +279,7 @@ void Session::newProject() {
     emit positionChanged();
     emit statusChanged();
     emit viewChanged();
+    emit projectChanged();
 }
 
 void Session::showProjects() {
@@ -1698,7 +1700,9 @@ Session::Marker Session::savedMarker() const {
 }
 
 QString Session::projectName() const {
-    return project_path_.isEmpty() ? QStringLiteral("Untitled project") : QFileInfo(project_path_).completeBaseName();
+    return project_path_.isEmpty() ? (unsaved_project_name_.isEmpty() ? QStringLiteral("Untitled project")
+                                                                      : unsaved_project_name_)
+                                    : QFileInfo(project_path_).completeBaseName();
 }
 
 oma::project::Document Session::document() const {
@@ -1894,12 +1898,16 @@ void Session::exportMovie(const QUrl& url, const QString& profile) {
 
 void Session::cancelExport() { export_job_.cancel(); }
 
-void Session::openProject(const QUrl& url) {
+void Session::openProject(const QUrl& url) { openProjectFile(url, false); }
+
+void Session::openDemoProject(const QUrl& url) { openProjectFile(url, true); }
+
+void Session::openProjectFile(const QUrl& url, bool as_template) {
     const QString path = url.isLocalFile() ? url.toLocalFile() : url.toString();
     if (path.isEmpty()) return;
     setNotice(QStringLiteral("Opening %1…").arg(QFileInfo(path).fileName()));
     const unsigned generation = ++generation_; // drops results of work for the session it replaces
-    imports_.push_back(workers_.submit("open-project", [this, generation, path](oma::JobContext&) {
+    imports_.push_back(workers_.submit("open-project", [this, generation, path, as_template](oma::JobContext&) {
         auto doc = oma::project::load(std::filesystem::path(path.toStdString()));
         std::optional<oma::project::Document> loaded;
         QString why;
@@ -1910,21 +1918,23 @@ void Session::openProject(const QUrl& url) {
         }
         // The Timeline inside is copyable; a shared_ptr keeps the functor copyable for Qt.
         auto shared = std::make_shared<std::optional<oma::project::Document>>(std::move(loaded));
-        post_to_ui(this, [this, generation, path, why, shared] {
+        post_to_ui(this, [this, generation, path, why, shared, as_template] {
             if (generation != generation_)
                 return;
             if (!*shared) {
                 fail(QStringLiteral("Cannot open %1: %2").arg(QFileInfo(path).fileName(), why));
                 return;
             }
-            applyProject(std::move(**shared), path);
+            applyProject(std::move(**shared), as_template ? QString() : path,
+                         as_template ? QStringLiteral("First edit demo") : QString());
         });
         return oma::Result<void>{};
     }));
 }
 
-void Session::applyProject(oma::project::Document doc, const QString& path) {
+void Session::applyProject(oma::project::Document doc, const QString& path, const QString& unsaved_name) {
     newProject();
+    unsaved_project_name_ = unsaved_name;
     project_unknown_ = std::move(doc.unknown);
     const bool restoring = !restoring_.isEmpty() && path == restoring_;
     if (restoring) {

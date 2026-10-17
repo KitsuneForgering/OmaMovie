@@ -18,6 +18,13 @@ ApplicationWindow {
     title: session.editing ? session.projectName + (session.dirty ? " •" : "") + " — OmaMovie" : "OmaMovie — Projects"
     color: colors.background
     font.family: uiFont // Controls and popups inherit it
+    property bool tourOfferedThisRun: false
+    onVisibleChanged: {
+        if (visible && !tourOfferedThisRun && !appSettings.tourCompleted) {
+            tourOfferedThisRun = true
+            Qt.callLater(() => { if (!appSettings.tourCompleted && !tour.opened) tour.restart() })
+        }
+    }
 
     property color fg: colors.foreground
     property color muted: colors.dark_foreground
@@ -371,6 +378,10 @@ ApplicationWindow {
             text: "Open project…"; keys: "Ctrl+O"
             onTriggered: root.confirmDiscard("Open another project", () => openDialog.open())
         }
+        property OmaAction openDemo: OmaAction {
+            text: "Explore the demo edit"; enabled: demoAvailable
+            onTriggered: root.confirmDiscard("Open the demo edit", () => session.openDemoProject(demoProjectUrl))
+        }
         property OmaAction toggleParade: OmaAction {
             text: "Show RGB parade or luma waveform"
             onTriggered: root.scopeParade = !root.scopeParade
@@ -554,7 +565,17 @@ ApplicationWindow {
         }
         property OmaAction commandPalette: OmaAction {
             text: "Command palette"; keys: "Ctrl+K"
-            onTriggered: palette.opened ? palette.close() : palette.open()
+            onTriggered: {
+                if (tour.opened) {
+                    tour.resumeStep = 1
+                    tour.close()
+                    Qt.callLater(() => palette.open())
+                } else palette.opened ? palette.close() : palette.open()
+            }
+        }
+        property OmaAction welcomeTour: OmaAction {
+            text: "Welcome tour"; keys: "F1"
+            onTriggered: tour.opened ? tour.close() : tour.restart()
         }
         property OmaAction info: OmaAction {
             text: "Info"; keys: "Ctrl+Shift+I"; enabled: actions.editing && !!session.info.name; checkable: true
@@ -769,6 +790,7 @@ ApplicationWindow {
                 OmaButton { action: actions.save; iconName: "save"; showLabel: !root.compact }
                 OmaButton { action: actions.importMedia; iconName: "import"; showLabel: !root.compact }
                 OmaButton { action: actions.exportMovie; iconName: "export"; text: "Export"; showLabel: !root.compact }
+                OmaButton { objectName: "editorTour"; action: actions.welcomeTour; iconName: "help"; showLabel: false }
             }
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.line }
         }
@@ -963,6 +985,14 @@ ApplicationWindow {
     }
 
     CommandPalette { id: palette }
+    WelcomeTour {
+        id: tour
+        actionSet: actions
+        settings: appSettings
+        hostWindow: root
+        onCommandPaletteRequested: Qt.callLater(() => actions.commandPalette.trigger())
+        onDemoRequested: Qt.callLater(() => actions.openDemo.trigger())
+    }
     SettingsDialog { id: settingsDialog; commandPalette: palette }
     ImportTimeline { id: timelineImport }
 
@@ -974,10 +1004,11 @@ ApplicationWindow {
                 sequence: modelData.keys
                 // The palette takes the keyboard while open; only Ctrl+K reaches through to close it.
                 enabled: modelData.enabled && (!palette.opened || modelData === actions.commandPalette)
+                         && (!tour.opened || modelData === actions.welcomeTour || modelData === actions.commandPalette)
                          && (!settingsDialog.opened || modelData === actions.settings)
                          && (session.editing || modelData === actions.importMedia
                              || modelData === actions.openProject || modelData === actions.commandPalette
-                             || modelData === actions.settings)
+                             || modelData === actions.settings || modelData === actions.welcomeTour)
                 onActivated: modelData.trigger()
             }
         }

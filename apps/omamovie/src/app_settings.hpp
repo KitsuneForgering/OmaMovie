@@ -24,6 +24,8 @@ class AppSettings : public QObject {
     // QML multiplies its pixel sizes by textScale.
     Q_PROPERTY(QString textSize READ textSize WRITE setTextSize NOTIFY changed)
     Q_PROPERTY(double textScale READ textScale NOTIFY changed)
+    // A per-user presentation choice, never part of a project.
+    Q_PROPERTY(bool tourCompleted READ tourCompleted WRITE setTourCompleted NOTIFY changed)
     // The decode path this run started with, to tell the user a change waits for a restart.
     Q_PROPERTY(QString startupDecodePath READ startupDecodePath CONSTANT)
     // Read-only facts for the screen: GPU, driver, active decode path and why, audio output,
@@ -40,6 +42,7 @@ public:
     [[nodiscard]] QString exportEncoder() const;
     [[nodiscard]] QString textSize() const;
     [[nodiscard]] double textScale() const;
+    [[nodiscard]] bool tourCompleted() const;
     [[nodiscard]] QVariantMap system() const;
 
     void setPreviewQuality(const QString& value);
@@ -48,6 +51,7 @@ public:
     void setCacheLimit(const QString& value);
     void setExportEncoder(const QString& value);
     void setTextSize(const QString& value);
+    void setTourCompleted(bool value);
     void setSystem(QVariantMap system);
     Q_INVOKABLE void resetAll();
     // The screen asks for fresh system facts when it opens (the audio device may have changed).
@@ -69,5 +73,6 @@ private:
     QString cache_limit_;
     QString export_encoder_;
     QString startup_decode_path_;
+    bool tour_completed_ = false;
     QVariantMap system_;
 };
