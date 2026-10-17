@@ -33,9 +33,13 @@ regressions in interaction come before new breadth.
 1. **Enforce the existing CI (M10):** a repository ruleset now protects `master`
    (2026-10-15): PR, linear history, resolved review threads, no force push/deletion,
    and required `ci` plus `conventional commits` checks. The `ci` aggregator on this
-   branch gates test/GUI/lint/includes/fuzz jobs; confirm it runs on the first PR
-   before closing this gate. Extend eligible sanitizer coverage to a bounded
-   Session/app path. The versioned policy is in `.github/rulesets/master.json`.
+   branch gates test/GUI/lint/includes/fuzz jobs. Draft PR [#4](https://github.com/KitsuneForgering/OmaMovie/pull/4)
+   now exercises both required contexts: `conventional commits` passed, a defective
+   run of `ci` failed as expected, and all checks passed on `041ecb9`. The active ruleset
+   requires the exact contexts with strict status checks; recheck the final SHA after
+   further commits. Session/app tests already run in the ASan/TSan
+   matrix; see [M10](implementation-plan-m10-validation.md). The versioned policy is in
+   `.github/rulesets/master.json`.
 2. **Completed-output correctness (M7) — done 2026-10-12:** write failures are injected
    with `RLIMIT_FSIZE`, a 1,200-frame export survives a project switch, and selected
    frames and samples are matched to their source by an independent decode. Two-hour 1080p
@@ -45,8 +49,11 @@ regressions in interaction come before new breadth.
    → playback → save/reopen → export on Omarchy. Roll/slip/slide now have keyboard,
    pointer, menu and two-up paths with tests; the corrections, latency and retimed-audio
    policy need the [manual sessions](m6-walkthrough.md) before the workflow is called ready.
-4. **Prove release packaging and recovery (M7/M10):** launch the installed package
-   in a disposable Omarchy environment and reopen/recover the same test project.
+4. **Prove release packaging and recovery (M7/M10):** the clean Arch package built,
+   installed and passed the installed GUI smoke under sway/lavapipe on 2026-10-16
+   ([evidence](Research/evidence/2026-10-16-package-release-gate.md)). Repeat on a
+   disposable Omarchy profile with the release candidate, reopen/recover the same test
+   project and check the published archive rather than only this branch's PKGBUILD.
 5. **Expand only for a named hand-off (M8/M9):** portable project, one interchange
    format or stems need a receiving task and fidelity gate. They are not v0.1 gates.
 

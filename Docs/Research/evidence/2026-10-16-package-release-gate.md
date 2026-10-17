@@ -31,6 +31,18 @@ installed Intel run, or the final release tarball smoke after `v0.1.0-rc.1`.
 
 PR [#4](https://github.com/KitsuneForgering/OmaMovie/pull/4) was opened as a draft against
 `master` to exercise the active ruleset, whose required contexts are `ci` and
-`conventional commits`. The latter passed on the PR. The first full CI run blocked the PR on
-Clang and clang-tidy diagnostics; these were addressed in later branch commits. The aggregate
-`ci` check and merge gate must still be observed on the final SHA before marking them passed.
+`conventional commits`. A defective CI run failed on Clang/clang-tidy diagnostics, and its
+aggregate `ci` check failed too. After those fixes, run `38985319118` on `041ecb9` passed all
+eight GCC/Clang build variants, GUI smoke, format, tidy, include rules, eight fuzz jobs and
+`ci`; run `38985319129` passed `conventional commits`. The active `master` ruleset requires
+the exact two contexts with strict status checks, and GitHub reported the PR merge state
+`CLEAN` at that SHA. Recheck both contexts after the final branch commit.
+
+The host-native Release app was installed to `/tmp/omamovie-host-stage/usr` and launched from
+that staged tree on Intel. Its first GUI smoke attempt failed the play/J/K/L position checks
+with audio running; a second attempt passed. This is an unresolved intermittent native smoke
+observation, so this run is not evidence of a stable Intel GUI workflow. The Arch package from
+the newer rolling snapshot also could not launch on this older host because it requires
+`libsimdjson.so.34` while the host has `.33` (and different Qt minor versions). The clean
+Arch container passed with its matched runtime libraries; Omarchy package validation must
+use a compatible, updated environment.
