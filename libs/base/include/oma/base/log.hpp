@@ -56,6 +56,8 @@ template <typename... Args>
 struct LogFormat {
     template <typename S>
         requires std::convertible_to<const S&, std::string_view>
+    // Logging calls intentionally convert format literals to LogFormat at the call site.
+    // NOLINTNEXTLINE(misc-explicit-constructor)
     consteval LogFormat(const S& fmt, std::source_location loc = std::source_location::current())
         : format(fmt), location(loc) {}
 
