@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="112" viewBox="0 0 480 112" role="img" aria-labelledby="title">
+  <title id="title">OmaMovie</title>
+  <rect width="480" height="112" rx="22" fill="#14161c"/>
+  <g transform="translate(16 16) scale(.333333)">
+    <rect x="8" y="8" width="240" height="240" rx="48" fill="#14161c"/>
+    <rect x="40" y="44" width="176" height="108" rx="14" fill="none" stroke="#e2e5ee" stroke-width="10"/>
+    <path d="M114 74 L150 98 L114 122 Z" fill="#3ee8ff"/>
+    <rect x="40" y="176" width="60" height="28" rx="6" fill="#3ee8ff"/>
+    <rect x="108" y="176" width="44" height="28" rx="6" fill="#e2e5ee"/>
+    <rect x="160" y="176" width="56" height="28" rx="6" fill="#8b91a2"/>
+    <rect x="124" y="166" width="6" height="48" rx="3" fill="#ff6b6b"/>
+  </g>
+  <text x="118" y="72" fill="#e2e5ee" font-family="DejaVu Sans, sans-serif" font-size="43" font-weight="700" letter-spacing="-1.5">OmaMovie</text>
+</svg>

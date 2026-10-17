@@ -9,7 +9,7 @@
 
 namespace oma {
 
-enum class ErrorCode : std::uint16_t {
+enum class ErrorCode : std::uint8_t {
     InvalidArgument,
     Overflow,
     OutOfRange,
@@ -18,6 +18,8 @@ enum class ErrorCode : std::uint16_t {
     IoError,
     InvalidData,
     Internal,
+    DeviceLost,  // the GPU device stopped working; nothing more can run on it
+    OutOfMemory, // host or GPU memory exhausted: a smaller size or fewer streams may work
 };
 
 [[nodiscard]] std::string_view to_string(ErrorCode code) noexcept;
@@ -28,10 +30,10 @@ class Error {
 public:
     Error(ErrorCode code, Category category, std::string message, std::string context = {});
 
-    [[nodiscard]] ErrorCode code() const noexcept { return code_; }
-    [[nodiscard]] Category category() const noexcept { return category_; }
-    [[nodiscard]] const std::string& message() const noexcept { return message_; }
-    [[nodiscard]] const std::string& context() const noexcept { return context_; }
+    [[nodiscard]] ErrorCode code() const noexcept;
+    [[nodiscard]] Category category() const noexcept;
+    [[nodiscard]] const std::string& message() const noexcept;
+    [[nodiscard]] const std::string& context() const noexcept;
 
     // Human-readable form: "[category] code: message (context)".
     // (Not named describe(): that name is a Cest macro in test files.)
@@ -47,10 +49,7 @@ private:
 template <typename T>
 using Result = std::expected<T, Error>;
 
-[[nodiscard]] inline std::unexpected<Error>
-make_error(ErrorCode code, Category category, std::string message, std::string context = {}) {
-    return std::unexpected<Error>(std::in_place, code, category, std::move(message),
-                                  std::move(context));
-}
+[[nodiscard]] std::unexpected<Error> make_error(ErrorCode code, Category category,
+                                                std::string message, std::string context = {});
 
 } // namespace oma

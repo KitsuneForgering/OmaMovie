@@ -1,0 +1,48 @@
+Audit date: 2026-10-03
+Repository baseline: 2f6abf32e95a10f29ebeb39ac2b67ec36b297397
+Read-only environment observations; no GPU benchmark rerun.
+
+$ pacman -Q omarchy ffmpeg mesa qt6-base vulkan-headers
+omarchy 4.0.4-1
+ffmpeg 2:9.0.1-4
+mesa 1:26.2.2-1
+qt6-base 6.11.2-3
+vulkan-headers 1:1.4.357.0-1
+
+exit=0
+
+$ pkg-config --modversion libavutil Qt6Quick
+61.1.101
+6.11.2
+
+exit=0
+
+$ ffmpeg -version
+ffmpeg version n9.0.1 Copyright (c) 2000-2026 the FFmpeg developers
+built with gcc 16 (GCC)
+configuration: --prefix=/usr --disable-debug --disable-static --disable-stripping --enable-amf --enable-avisynth --enable-cuda-llvm --enable-lto --enable-fontconfig --enable-frei0r --enable-gmp --enable-gnutls --enable-gpl --enable-ladspa --enable-lcms2 --enable-libaom --enable-libass --enable-libbluray --enable-libbs2b --enable-libdav1d --enable-libdrm --enable-libdvdnav --enable-libdvdread --enable-libfreetype --enable-libfribidi --enable-libgsm --enable-libharfbuzz --enable-libiec61883 --enable-libjack --enable-libjxl --enable-libmodplug --enable-libmp3lame --enable-libopencore_amrnb --enable-libopencore_amrwb --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libplacebo --enable-libpulse --enable-librav1e --enable-librsvg --enable-librubberband --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libsrt --enable-libssh --enable-libsvtav1 --enable-libtheora --enable-libv4l2 --enable-libvidstab --enable-libvmaf --enable-libvorbis --enable-libvpl --enable-libvpx --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxcb --enable-libxml2 --enable-libxvid --enable-libzimg --enable-libzmq --enable-nvdec --enable-nvenc --enable-opencl --enable-opengl --enable-shared --enable-vapoursynth --enable-version3 --enable-vulkan --disable-decoder=magicyuv
+libavutil      61.  1.101 / 61.  1.101
+libavcodec     63.  1.101 / 63.  1.101
+libavformat    63.  1.101 / 63.  1.101
+libavdevice    63.  1.101 / 63.  1.101
+libavfilter    12.  1.101 / 12.  1.101
+libswscale     10.  1.101 / 10.  1.101
+libswresample   7.  1.101 /  7.  1.101
+
+Exiting with exit code 0
+
+exit=0
+
+SHA-256 of inspected local sources (installed files, not upstream release provenance):
+9d1aaeb0c16104d678742c04d6a8700fed365e7eb65a8eaef5fb3845ddf634e3  /usr/share/omarchy/version
+2356e6e19656fcc67aa345fc46352a310945e54146706c039bf92a7bd3b3fb5a  /usr/share/omarchy/bin/omarchy-theme-set
+a429ed1b18114ff3e784fc4479c6b829e9effb64c0f9d22d3b15eda4c62d86b5  /usr/share/omarchy/bin/omarchy-theme-color
+6d70541c44a82fde5a44d712f348df35f8372c080436433916694738627c4c66  /usr/share/omarchy/bin/omarchy-capture-screenrecording
+fa35b43154b49a286c2717490a07b542b5868b3e5101e86e3df628b22bc55962  /usr/share/omarchy/default/hypr/windows.lua
+e2409d80ef7e88455326e50f853d60bb18b2cf909b5820066bf46d538aaeedd7  /usr/share/omarchy/default/hypr/apps/davinci-resolve.lua
+99434167d84b242050bbb32485679e92c29934fd5102df01265f7673612167fc  /usr/share/omarchy/install/omarchy-base.packages
+036d13f9b4e74653fbf18f30b867b5ec3397f39d87b97d0400aac3378d6a6603  /usr/share/omarchy/install/hardware/vulkan.sh
+1c796829df784813ad53df48c967eb17281054a9b0ff544949be2ad3a1bcb946  /usr/share/omarchy/install/hardware/intel/video-acceleration.sh
+aeb211e2a4c97eac7fd2ff8908e57b075dc2a125f66a2fe47e770c8cf7cc2634  /usr/include/libavutil/hwcontext_vulkan.h
+
+/usr/share/omarchy/version: 4.0.0.alpha

@@ -1,0 +1,22 @@
+M10 recording workflow on real Omarchy recordings (2026-10-13)
+
+Machine: Intel Iris Xe (TGL GT2), Mesa 26.2.2, FFmpeg 9.0.1, debug build, software export.
+Command: OMA_REAL_RECORDING=<file> build/debug/tests/app_tests "real recording's frames"
+Files: the user's own captures (omarchy-capture-screenrecording via gpu-screen-recorder), not
+kept in the repository. Profile probed: H.264 High 1920x1080, 60 fps CFR, no B-frames, time base
+1/15360, BT.709 limited range; AAC LC stereo 96 kHz when recorded with sound.
+
+Flow: import, split at 0.25 s, ripple delete the head, save, reopen, export (mp4-h264).
+Checks by ffmpeg, outside OmaMovie: exported frame count = source - 15; every 15th exported frame
+within 2 levels/pixel of its source frame and no frame within +-30 matching better by more than
+1/8 level/pixel; mixed sound cross-correlated over every 0.5 s window with sound (+-10 ms search).
+
+  8.1 s, no sound      473 frames  pass                                 14 s
+ 36.4 s, sound        2174 frames  pass; 1 sounding window, lag 0        52 s
+108.0 s, sound        6465 frames  pass; 6 sounding windows, lag 0      154 s
+
+Found on the way: before the export-transfer fix (ADR-0006 amendment) exported frames differed
+from their source by ~12 levels/pixel (SAD 44-50k of 3600 pixels); after it by ~0.2 (SAD ~700).
+The first recording with sound had a silent left channel (microphone on the right only) and one
+burst of sound in 36 s: a first-channel check at fixed points had compared nothing. The check now
+mixes channels, scans every window and fails when sound exists but no window was compared.

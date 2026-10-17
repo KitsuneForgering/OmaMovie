@@ -1,0 +1,25 @@
+S6 raw output (2026-10-04, release build, Iris Xe, Mesa 26.2.2, libplacebo 7.360.1, FFmpeg n9.0.1). Input: h264.mp4 from tools/spikes/s3-decode-paths.sh. Two runs; a third run under VK_LAYER_KHRONOS_validation reported only FFmpeg's known VA-API mapping leak at vkDestroyDevice (ADR-0004).
+== 1. pl_vulkan_import on OmaMovie's device (7 device extensions): OK
+== 2. SDR display encode of the 1920x1080 RGBA16F compositor output (median of 20)
+  compositor encode_display    0.58 ms
+  libplacebo (no dither)       0.85 ms
+  max difference 4 of 255, 1346525 of 8294400 samples differ
+  vs the sRGB formula: compositor 1, libplacebo 4 levels at most
+== 3. VA-API frame: 2 image(s), formats 9/16
+  YUV->RGB + 1920x1080 -> 1280x720 linear RGBA16F (median of 20)
+  libplacebo fast              0.60 ms
+  libplacebo default           3.18 ms
+  libplacebo high quality      7.22 ms
+  compositor                   0.89 ms (bilinear, includes its own output clear)
+== 1. pl_vulkan_import on OmaMovie's device (7 device extensions): OK
+== 2. SDR display encode of the 1920x1080 RGBA16F compositor output (median of 20)
+  compositor encode_display    0.56 ms
+  libplacebo (no dither)       1.80 ms
+  max difference 4 of 255, 1346525 of 8294400 samples differ
+  vs the sRGB formula: compositor 1, libplacebo 4 levels at most
+== 3. VA-API frame: 2 image(s), formats 9/16
+  YUV->RGB + 1920x1080 -> 1280x720 linear RGBA16F (median of 20)
+  libplacebo fast              0.89 ms
+  libplacebo default           2.77 ms
+  libplacebo high quality      7.17 ms
+  compositor                   0.96 ms (bilinear, includes its own output clear)

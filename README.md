@@ -1,35 +1,63 @@
 # OmaMovie
 
-OmaMovie is an in-progress video editor for people using [Omarchy](https://omarchy.org/). The goal is to import everyday video and screen recordings, cut them on a timeline, and export a finished video through a native desktop interface.
+<img src="Docs/media/omamovie-logo.svg" width="360" alt="OmaMovie logo: a play button over three timeline clips">
 
-**Current status:** there is no editor window or `omamovie` executable yet. This repository currently contains C++ libraries for time and jobs, media decoding, Vulkan resources, and compositing, plus tests and hardware experiments. You cannot edit or export a video with it today. The first usable editor is planned for v0.1; see the [implementation plan](Docs/implementation-plan.md).
+OmaMovie is a video editor under development for Omarchy. Its current editor shell lets you import local videos and pictures, arrange clips on a timeline, preview the result, and adjust clip audio. It saves and opens projects and exports MP4, Matroska, or WebM movies.
 
-## What is here now
+![OmaMovie editor showing a preview, video clips, and an audio lane on the timeline](Docs/media/editor-test.webp)
 
-- `libs/base` handles rational time, errors, logging, and cancellable jobs.
-- `libs/media` probes and decodes video and audio with FFmpeg.
-- `libs/gpu` and `libs/compositor` provide Vulkan resources and CPU/GPU compositing code.
-- Tests cover these components; the hardware experiments and their results are in [`Docs/spikes/`](Docs/spikes/).
+*The running editor with synthetic test clips. The preview and timeline are captured from the GUI smoke test.*
 
-The intended first release adds the timeline, playback, project saving, export, and the desktop interface. Those are development goals, not current features.
+## Try the editor
 
-## Build and run the current tests
-
-On an up-to-date Arch Linux or Omarchy system, install the build and test dependencies listed in [PKGBUILD](PKGBUILD): a C++23 compiler, GNU Make, FFmpeg, Vulkan headers and loader, shaderc, and a Vulkan driver (or `vulkan-swrast` for software Vulkan tests). The repository's dependency helper uses `sudo pacman`; review its package list before running it.
+On an Omarchy or current Arch Linux system, from this repository:
 
 ```sh
-git clone https://github.com/KitsuneForgering/OmaMovie.git
-cd OmaMovie
-make test
+make deps
+make run-gui
 ```
 
-`make test` builds the libraries and test binaries, generates media fixtures with FFmpeg, and runs the test suites. It does not launch a video editor. Run `make help` for the available build targets. Hardware dependent tests may need a working Vulkan device or software Vulkan driver.
+`make deps` installs the packages declared in [PKGBUILD](PKGBUILD) using `pacman` and may request sudo. `make run-gui` builds and opens the Qt Quick editor.
 
-## Project details
+For a first edit:
 
-- [Implementation plan](Docs/implementation-plan.md) — milestones, current work, and release criteria.
-- [Architecture decisions](Docs/adr/README.md) — build, time representation, threading, and GPU policies.
-- [Research](Docs/Research/README.md) — product and hardware research.
-- [Development guide](CLAUDE.md) — engineering rules and module boundaries; its repository status section may lag behind the code.
+1. Choose **New project**, then **Import** (`Ctrl+I`). Files imported while the timeline is empty are added to the storyline automatically. Once it has clips, new imports stay in the media library until you place them.
+2. Select a library item and use **Add** (`E`) to append it. To use only part of it, open the source viewer (`Shift+O`), set In (`I`) and Out (`O`), then use **Add**. Escape returns to the sequence viewer.
+3. Play or pause with Space, split at the playhead with `Ctrl+B`, and undo with `Ctrl+Z`. Save with `Ctrl+S` and export with `Ctrl+E`.
 
-The project targets Omarchy on Arch Linux. Windows, macOS, and X11 support are outside its current scope. It is licensed under the [MIT license](LICENSE).
+You can also open a file directly:
+
+```sh
+make run-gui GUI_FILE=/path/to/video.mp4
+```
+
+The imported media stays on disk and is never modified. Projects are saved as `.omamovie` files and can be reopened with `Ctrl+O`. `Ctrl+K` opens the command palette, which lists every action and lets you change its shortcut. `Ctrl+E` offers the output formats supported by the installed FFmpeg build: MP4 (H.264/AAC), Matroska (H.264/AAC or HEVC/AAC), and WebM (VP9/Vorbis). H.264 can use the GPU encoder on validated Intel hardware (VA-API), with a software fallback. Other profiles use software encoders. All outputs use the project's size and frame rate.
+
+## What works today
+
+- Import and inspect local video, audio and still image files through FFmpeg. Import checks that the chosen video and audio streams can produce an initial frame or samples; later damage in a file may still cause a decode error.
+- Append, insert, overwrite, split, trim, delete, and ripple edit clips with undo and redo.
+- Preview the timeline with Vulkan compositing and audio clock playback; adjust clip gain, fades, and mute.
+- Use visible transport and edit controls, or their keyboard shortcuts, in the editor shell.
+
+The viewer decodes in hardware on Intel (VA-API) and in software elsewhere; `OMA_PREVIEW_HARDWARE=0` forces software. The app has bounded OTIO, FCPXML, EDL and MLT import paths. See the [interop matrix](Docs/interop.md) for implemented subsets and evidence gaps; these are not general compatibility claims for every project made by those editors.
+
+## Install
+
+`makepkg -si` builds the package from the [PKGBUILD](PKGBUILD) and installs `omamovie`, its launcher entry, icon and the `.omamovie` file type. The editor follows the active Omarchy theme and font while it runs.
+
+### Full opacity on Hyprland
+
+Omarchy makes ordinary windows slightly translucent, which blends the wallpaper into the viewer. OmaMovie's window class (Wayland app_id) is `omamovie`. To keep it opaque, as Omarchy does for DaVinci Resolve, add this to `~/.config/hypr/windows.lua`:
+
+```lua
+o.window("^omamovie$", { tag = "-default-opacity", opacity = "1 1" })
+```
+
+The package does not install this rule. It uses the Lua window-rule syntax of current Omarchy (`default/hypr/apps/davinci-resolve.lua`); older Hyprland configurations need their own syntax. Full opacity only stops the blending: it does not calibrate the display.
+
+## Build and development
+
+Run `make test` for the library tests or `make help` for available targets. The [implementation plan](Docs/implementation-plan.md) tracks completed and pending milestones. [UI design](Docs/ui-design.md) describes the editor workflow. [Format boundaries](Docs/format-architecture.md), [contribution guide](CONTRIBUTING.md) and [agent guide](CLAUDE.md) point to architecture and development rules.
+
+License: [MIT](LICENSE).

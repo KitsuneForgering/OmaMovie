@@ -1,0 +1,20 @@
+M6 Settings: hardware decode chosen for media the GPU cannot decode (2026-10-12)
+
+Machine: Intel Iris Xe (TigerLake), iHD VA-API. vainfo lists H.264 ConstrainedBaseline,
+Main and High only; no High 4:4:4 profile.
+Command: OMA_PREVIEW_HARDWARE=1 build/debug/omamovie --m4-audit \
+         tests/fixtures/generated/h264_444.mp4 5
+(OMA_PREVIEW_HARDWARE=1 forces the same path as Settings > Decode > Hardware.)
+
+Log (excerpt):
+  INFO  decode  h264_444.mp4: h264 VA-API to Vulkan decode
+  ERROR media   [h264 @ ...] no frame!
+  WARN  decode  h264_444.mp4: VA-API to Vulkan decode refused h264 (High 4:4:4 Predictive),
+                falling back to software
+  M4 audit: media is shorter than 5 seconds
+
+Result: the forced hardware path is attempted, refused by the driver on the first frame and
+replaced by software decode, with the profile named in the warning. FFmpeg's "no frame!"
+error is logged once before the fallback. The audit itself stopped because the fixture is
+shorter than its 5-second minimum, so frame pacing after the fallback was not measured here;
+the viewer path after fallback is the ordinary software path covered elsewhere.

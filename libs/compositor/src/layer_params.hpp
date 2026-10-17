@@ -3,6 +3,8 @@
 // Per-layer parameters shared by the CPU reference and the compute shader. The struct mirrors
 // the std140 uniform block in shaders/composite.comp; change both together.
 
+#include "look.hpp"
+
 #include "oma/compositor/compositor.hpp"
 #include "oma/media/video_frame.hpp"
 
@@ -28,10 +30,41 @@ struct alignas(16) LayerParams {
     std::array<float, 4> gamut_b{};
     std::array<float, 4> misc{};          // opacity, sample scale
     std::array<std::int32_t, 4> mode{};   // chroma mode, chroma shift x, chroma shift y, transfer
-    std::array<std::int32_t, 4> extra{};  // blend mode, source width, source height
+    std::array<float, 4> chroma{};        // first chroma sample center in luma pixel coordinates
+    std::array<std::int32_t, 4> extra{};  // blend mode, source width, source height, alpha plane
     std::array<std::int32_t, 4> region{}; // output pixels to process: x0, y0, x1, y1
+    // The look (src/look.hpp): gains r, g, b and the contrast power; matrix rows with offsets;
+    // vignette darkening, its center (source pixels) and 1 / the distance to the corners.
+    std::array<float, 4> gains{1.0F, 1.0F, 1.0F, 1.0F};
+    std::array<float, 4> look_r{1.0F, 0.0F, 0.0F, 0.0F};
+    std::array<float, 4> look_g{0.0F, 1.0F, 0.0F, 0.0F};
+    std::array<float, 4> look_b{0.0F, 0.0F, 1.0F, 0.0F};
+    std::array<float, 4> vignette{};
+    // Blur and sharpen (src/look.hpp Detail): mode, sharpen amount, radius in taps, reduction
+    // factor; then the gaussian weights, center first, four per vector.
+    std::array<float, 4> detail{};
+    std::array<std::array<float, 4>, (kMaxBlurRadius + 4) / 4> weights{};
+    // Grading (grade.hpp): which stages run (the kGrade* bits) and the LUT size; the LUT amount;
+    // the CDL (saturation in slope.w); the LUT domain minimum and (size - 1) / its extent; the
+    // point counts of the master, red, green and blue curves; and their points (x, y, tangent),
+    // kMaxCurvePoints per curve.
+    std::array<std::int32_t, 4> grade{};
+    std::array<float, 4> lut_amount{};
+    std::array<float, 4> cdl_slope{1.0F, 1.0F, 1.0F, 1.0F};
+    std::array<float, 4> cdl_offset{};
+    std::array<float, 4> cdl_power{1.0F, 1.0F, 1.0F, 0.0F};
+    std::array<float, 4> lut_min{};
+    std::array<float, 4> lut_scale{};
+    std::array<std::int32_t, 4> curve_count{};
+    std::array<std::array<float, 4>, 4 * kMaxCurvePoints> curve{};
 };
-static_assert(sizeof(LayerParams) == 13U * 16U, "LayerParams must match the std140 block");
+static_assert(sizeof(LayerParams) == std::size_t{97} * 16U,
+              "LayerParams must match the std140 block");
+
+// Bits of LayerParams::grade[0], an int in the std140 block the shaders read.
+inline constexpr std::int32_t kGradeCdl = 1;
+inline constexpr std::int32_t kGradeCurves = 2;
+inline constexpr std::int32_t kGradeLut = 4;
 
 struct PreparedLayer {
     LayerParams params;

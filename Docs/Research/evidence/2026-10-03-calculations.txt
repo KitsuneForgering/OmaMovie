@@ -1,0 +1,11 @@
+1920x1080 NV12: 3110400 bytes; 2.966309 MiB; one full-frame transfer at 60 fps: 0.186624 GB/s
+1920x1080 P010: 6220800 bytes; 5.932617 MiB; one full-frame transfer at 60 fps: 0.373248 GB/s
+1920x1080 RGBA16F: 16588800 bytes; 15.820312 MiB; one full-frame transfer at 60 fps: 0.995328 GB/s
+3840x2160 NV12: 12441600 bytes; 11.865234 MiB; one full-frame transfer at 60 fps: 0.746496 GB/s
+3840x2160 P010: 24883200 bytes; 23.730469 MiB; one full-frame transfer at 60 fps: 1.492992 GB/s
+3840x2160 RGBA16F: 66355200 bytes; 63.281250 MiB; one full-frame transfer at 60 fps: 3.981312 GB/s
+60 fps deadline: 16.666666666666668 ms
+4K RGBA16F, 3 streams x 8 frames: 1518.75 MiB
+10 s constant 2x: 20 s source
+10 s linear 1x to 2x: 15.0 s source
+10 s freeze: 0 s source

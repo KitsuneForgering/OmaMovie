@@ -24,9 +24,21 @@ depends=(
     'gcc-libs'                  # libstdc++ (libs/base)
     'glibc'
     'vulkan-icd-loader'         # libvulkan (libs/gpu)
-    'ffmpeg'                    # libavformat/libavcodec/libavutil/libswresample (libs/media)
+    'ffmpeg'                    # libavformat/libavcodec/libavutil/libavfilter/libswresample/libswscale (libs/media)
+    'libpipewire'               # PipeWire client (libs/audio)
+    'simdjson'                  # project file parsing (libs/project, ADR-0007)
+    'qt6-base'                  # Qt GUI and versioned RHI headers (apps/omamovie)
+    'qt6-declarative'           # Qt Quick, Controls, Dialogs and Shapes (apps/omamovie QML)
+    'hicolor-icon-theme'        # the icon's directory
+    'shared-mime-info'          # the .omamovie project type
+    'desktop-file-utils'        # the desktop entry's MIME cache
+)
+optdepends=(
+    'intel-media-driver: GPU video decoding and export encoding (VA-API) on Intel'
 )
 makedepends=(
+    'cmake'                     # the build (ADR-0018)
+    'ninja'                     # the generator the presets use
     'git'
     'vulkan-headers'            # vulkan.hpp / vulkan_raii.hpp (libs/gpu)
     'shaderc'                   # glslc: GLSL compute shaders to SPIR-V (libs/compositor)
@@ -42,6 +54,7 @@ _devdepends=(
     'vulkan-tools'              # vulkaninfo (S1)
     'vulkan-validation-layers'  # validate synchronization in spikes and libs/gpu
     'libva-utils'               # vainfo (S1)
+    'libplacebo'                # S6 (also an ffmpeg dependency; not linked by shipped code)
 )
 
 source=("${pkgname}::git+${url}.git")
@@ -58,9 +71,9 @@ pkgver() {
 
 build() {
     cd "${pkgname}"
-    # The Makefile appends makepkg's CXXFLAGS/LDFLAGS. Warnings from distribution flags must not
-    # fail a user's build, so -Werror stays a developer/CI setting.
-    make BUILD=release WERROR=0 libs tests
+    # The Makefile forwards makepkg's CXXFLAGS/CPPFLAGS/LDFLAGS into the CMake cache. Warnings from
+    # distribution flags must not fail a user's build, so -Werror stays a developer/CI setting.
+    make BUILD=release WERROR=0 libs tests build/release/omamovie
 }
 
 check() {
@@ -70,6 +83,5 @@ check() {
 
 package() {
     cd "${pkgname}"
-    install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
-    # The omamovie executable, desktop entry and icon are installed here once the app exists (M6/M7).
+    make BUILD=release WERROR=0 DESTDIR="${pkgdir}" PREFIX=/usr LICENSE_NAME="${pkgname}" install
 }

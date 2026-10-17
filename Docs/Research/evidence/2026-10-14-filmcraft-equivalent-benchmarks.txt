@@ -1,0 +1,192 @@
+FilmCraft-equivalent benchmarks on OmaMovie (2026-10-14)
+
+Machine: Intel Core i5-1135G7 (4 cores / 8 threads), Iris Xe (TGL GT2), Mesa 26.2.2, iHD 26.2.4,
+15 GB RAM, eDP 1920x1080 @ 60 Hz. OmaMovie commit 1c587b2, BUILD=release. Load average 2-7
+(desktop session, no parallel builds). FilmCraft was not built or run here.
+Fixtures: FilmCraft's own recipes (crates/ui-egui/examples/bench/fixtures.rs): testsrc2 + noise
+alls=6, 24000/1001 fps; x264 fast crf 20, x265 fast crf 22 (Main and Main 10), libvpx-vp9
+realtime cpu-used 8 crf 32, SVT-AV1 preset 10 crf 35 keyint 48, prores_ks profile 3. Generated
+in the scratchpad, not committed.
+
+== Decode: every frame through FFmpeg (the decoder oma-media wraps), not the app path.
+Software = FFmpeg CPU decode; vaapi = -hwaccel vaapi -hwaccel_output_format vaapi (frames stay
+on the GPU, no read-back, no Vulkan import). CPU ms/frame is the median of 3, fps the best of 3.
+dec_h264_1080.mp4      off     120 frames  CPU    30.7 ms/frame     215 fps
+dec_h264_1080.mp4      vaapi   120 frames  CPU     0.8 ms/frame     444 fps
+dec_h264_2160.mp4      off      72 frames  CPU   120.3 ms/frame      51 fps
+dec_h264_2160.mp4      vaapi    72 frames  CPU     2.4 ms/frame     118 fps
+dec_hevc_1080.mp4      off     120 frames  CPU    18.3 ms/frame     240 fps
+dec_hevc_1080.mp4      vaapi   120 frames  CPU     0.6 ms/frame    1121 fps
+dec_hevc_2160.mp4      off      72 frames  CPU    78.2 ms/frame      62 fps
+dec_hevc_2160.mp4      vaapi    72 frames  CPU     2.4 ms/frame     286 fps
+dec_hevc10_2160.mp4    off      72 frames  CPU   100.3 ms/frame      50 fps
+dec_hevc10_2160.mp4    vaapi    72 frames  CPU     3.0 ms/frame     247 fps
+dec_vp9_1080.webm      off     120 frames  CPU    11.1 ms/frame     333 fps
+dec_vp9_1080.webm      vaapi   120 frames  CPU     0.3 ms/frame    1212 fps
+dec_vp9_2160.webm      off      72 frames  CPU    45.6 ms/frame      93 fps
+dec_vp9_2160.webm      vaapi    72 frames  CPU     1.3 ms/frame     298 fps
+dec_av1_1080.mp4       off     120 frames  CPU     5.4 ms/frame     486 fps
+dec_av1_1080.mp4       vaapi   120 frames  CPU     0.3 ms/frame    1101 fps
+dec_av1_2160.mp4       off      72 frames  CPU    18.4 ms/frame     153 fps
+dec_av1_2160.mp4       vaapi    72 frames  CPU     1.1 ms/frame     285 fps
+dec_prores_1080.mov    off      48 frames  CPU    32.5 ms/frame     187 fps
+dec_prores_1080.mov    vaapi  fallback (yuv422p10le)
+dec_prores_2160.mov    off      24 frames  CPU   127.5 ms/frame      45 fps
+dec_prores_2160.mov    vaapi  fallback (yuv422p10le)
+
+== Playback: omamovie --m4-audit FILE 8 (192 frames due); hw = default VA-API to Vulkan,
+sw = OMA_PREVIEW_HARDWARE=0; full = OMA_PREVIEW_SCALE=1, auto = adaptive preview quality.
+== a1080.mp4 hw-full run1 load 3.14
+M4 audit: PASS, 8 s, hardware pilot decode, PipeWire audio, 599 samples, 190 composites, p99 30.79 ms, max 31.81 ms, first/last mean delta 0.00 ms, signed range -31.81..21.13 ms, underruns 0 (first -1.00 s), dropped video 3, frame interval 41.71 ms
+M4 audit stages: composite p50 3.56 p95 7.33 p99 11.45 ms, interval p50 40.12 p95 59.71 p99 62.09 ms
+== a1080.mp4 hw-full run2 load 2.97
+M4 audit: PASS, 8 s, hardware pilot decode, PipeWire audio, 599 samples, 192 composites, p99 32.27 ms, max 35.77 ms, first/last mean delta 0.00 ms, signed range -35.77..21.58 ms, underruns 0 (first -1.00 s), dropped video 2, frame interval 41.71 ms
+M4 audit stages: composite p50 3.62 p95 7.36 p99 12.76 ms, interval p50 40.05 p95 60.22 p99 82.74 ms
+== a1080.mp4 sw-full run1 load 2.81
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 600 samples, 188 composites, p99 31.00 ms, max 32.15 ms, first/last mean delta 0.00 ms, signed range -32.15..21.00 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 41.71 ms
+M4 audit stages: composite p50 8.13 p95 10.54 p99 11.63 ms, interval p50 40.02 p95 61.21 p99 67.56 ms
+== a1080.mp4 sw-full run2 load 2.69
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 599 samples, 188 composites, p99 31.92 ms, max 33.62 ms, first/last mean delta 0.00 ms, signed range -33.62..15.10 ms, underruns 0 (first -1.00 s), dropped video 2, frame interval 41.71 ms
+M4 audit stages: composite p50 8.14 p95 10.28 p99 13.28 ms, interval p50 40.10 p95 61.82 p99 68.12 ms
+== a1080.mp4 sw-auto run1 load 2.58
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 596 samples, 188 composites, p99 32.40 ms, max 34.29 ms, first/last mean delta 0.00 ms, signed range -34.29..26.75 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 41.71 ms
+M4 audit stages: composite p50 7.95 p95 10.04 p99 16.36 ms, interval p50 40.18 p95 60.83 p99 65.97 ms
+== a1080.mp4 sw-auto run2 load 3.19
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 600 samples, 188 composites, p99 31.44 ms, max 32.50 ms, first/last mean delta 0.00 ms, signed range -32.50..21.21 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 41.71 ms
+M4 audit stages: composite p50 8.18 p95 9.66 p99 13.09 ms, interval p50 40.08 p95 60.83 p99 61.80 ms
+== a2160.mp4 hw-full run1 load 3.02
+M4 audit: PASS, 8 s, hardware pilot decode, PipeWire audio, 594 samples, 191 composites, p99 28.02 ms, max 28.81 ms, first/last mean delta 0.00 ms, signed range -28.81..19.38 ms, underruns 0 (first -1.00 s), dropped video 2, frame interval 41.71 ms
+M4 audit stages: composite p50 11.27 p95 15.05 p99 21.98 ms, interval p50 40.12 p95 59.88 p99 74.41 ms
+== a2160.mp4 hw-full run2 load 2.77
+M4 audit: PASS, 8 s, hardware pilot decode, PipeWire audio, 584 samples, 189 composites, p99 28.27 ms, max 29.40 ms, first/last mean delta 0.00 ms, signed range -29.40..18.58 ms, underruns 0 (first -1.00 s), dropped video 5, frame interval 41.71 ms
+M4 audit stages: composite p50 11.23 p95 16.59 p99 19.81 ms, interval p50 40.11 p95 59.77 p99 67.19 ms
+== a2160.mp4 sw-full run1 load 2.58
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 560 samples, 180 composites, p99 24.96 ms, max 25.54 ms, first/last mean delta 0.00 ms, signed range -25.54..18.79 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 41.71 ms
+M4 audit stages: composite p50 15.29 p95 23.14 p99 29.13 ms, interval p50 40.18 p95 59.60 p99 76.60 ms
+== a2160.mp4 sw-full run2 load 3.78
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 541 samples, 180 composites, p99 24.60 ms, max 25.12 ms, first/last mean delta 0.00 ms, signed range -25.12..19.96 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 41.71 ms
+M4 audit stages: composite p50 15.38 p95 23.12 p99 36.80 ms, interval p50 40.09 p95 59.60 p99 96.06 ms
+== a2160.mp4 sw-auto run1 load 4.21
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 487 samples, 177 composites, p99 23.35 ms, max 24.21 ms, first/last mean delta 0.00 ms, signed range -24.21..20.73 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 41.71 ms
+M4 audit stages: composite p50 15.81 p95 24.54 p99 31.63 ms, interval p50 40.23 p95 59.01 p99 62.28 ms
+== a2160.mp4 sw-auto run2 load 5.05
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 542 samples, 172 composites, p99 25.17 ms, max 26.10 ms, first/last mean delta 0.00 ms, signed range -26.10..18.60 ms, underruns 0 (first -1.00 s), dropped video 2, frame interval 41.71 ms
+M4 audit stages: composite p50 15.11 p95 24.27 p99 37.33 ms, interval p50 40.10 p95 60.46 p99 99.25 ms
+== hevc2160.mp4 hw-full run1 load 4.89
+M4 audit: PASS, 8 s, hardware pilot decode, PipeWire audio, 580 samples, 192 composites, p99 28.83 ms, max 29.71 ms, first/last mean delta 0.00 ms, signed range -29.71..19.17 ms, underruns 0 (first -1.00 s), dropped video 2, frame interval 41.71 ms
+M4 audit stages: composite p50 10.71 p95 15.17 p99 21.03 ms, interval p50 40.06 p95 59.88 p99 62.18 ms
+== hevc2160.mp4 hw-full run2 load 4.29
+M4 audit: PASS, 8 s, hardware pilot decode, PipeWire audio, 588 samples, 190 composites, p99 29.04 ms, max 29.48 ms, first/last mean delta 0.00 ms, signed range -29.48..21.06 ms, underruns 0 (first -1.00 s), dropped video 3, frame interval 41.71 ms
+M4 audit stages: composite p50 10.65 p95 14.98 p99 20.48 ms, interval p50 40.05 p95 60.10 p99 62.39 ms
+== hevc2160.mp4 sw-full run1 load 4.01
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 566 samples, 183 composites, p99 24.10 ms, max 25.06 ms, first/last mean delta 0.00 ms, signed range -25.06..19.00 ms, underruns 0 (first -1.00 s), dropped video 3, frame interval 41.71 ms
+M4 audit stages: composite p50 15.77 p95 21.64 p99 28.96 ms, interval p50 40.13 p95 59.48 p99 60.64 ms
+== hevc2160.mp4 sw-full run2 load 3.55
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 539 samples, 182 composites, p99 24.58 ms, max 42.90 ms, first/last mean delta 0.00 ms, signed range -24.94..42.90 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 41.71 ms
+M4 audit stages: composite p50 15.84 p95 24.41 p99 28.33 ms, interval p50 40.05 p95 59.86 p99 65.82 ms
+== hevc2160.mp4 sw-auto run1 load 3.43
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 541 samples, 185 composites, p99 24.29 ms, max 24.81 ms, first/last mean delta 0.00 ms, signed range -24.81..19.71 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 41.71 ms
+M4 audit stages: composite p50 15.85 p95 23.82 p99 31.24 ms, interval p50 40.16 p95 59.11 p99 66.08 ms
+== hevc2160.mp4 sw-auto run2 load 3.76
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 567 samples, 181 composites, p99 24.94 ms, max 25.60 ms, first/last mean delta 0.00 ms, signed range -25.60..20.52 ms, underruns 0 (first -1.00 s), dropped video 0, frame interval 41.71 ms
+M4 audit stages: composite p50 15.29 p95 25.41 p99 33.18 ms, interval p50 40.07 p95 59.17 p99 60.39 ms
+== vp92160.webm hw-full run1 load 3.72
+M4 audit: PASS, 8 s, hardware pilot decode, PipeWire audio, 586 samples, 191 composites, p99 28.75 ms, max 30.23 ms, first/last mean delta 0.00 ms, signed range -30.23..19.25 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 41.71 ms
+M4 audit stages: composite p50 10.55 p95 14.95 p99 24.74 ms, interval p50 40.07 p95 59.98 p99 60.80 ms
+== vp92160.webm hw-full run2 load 3.45
+M4 audit: PASS, 8 s, hardware pilot decode, PipeWire audio, 595 samples, 190 composites, p99 28.62 ms, max 29.54 ms, first/last mean delta 0.00 ms, signed range -29.54..17.83 ms, underruns 0 (first -1.00 s), dropped video 4, frame interval 41.71 ms
+M4 audit stages: composite p50 10.56 p95 11.29 p99 15.94 ms, interval p50 40.08 p95 59.54 p99 60.72 ms
+== vp92160.webm sw-full run1 load 3.07
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 568 samples, 182 composites, p99 25.10 ms, max 26.10 ms, first/last mean delta 0.00 ms, signed range -26.10..19.96 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 41.71 ms
+M4 audit stages: composite p50 15.40 p95 20.73 p99 26.94 ms, interval p50 40.01 p95 61.36 p99 68.44 ms
+== vp92160.webm sw-full run2 load 2.75
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 551 samples, 181 composites, p99 25.10 ms, max 25.81 ms, first/last mean delta 0.00 ms, signed range -25.81..20.83 ms, underruns 0 (first -1.00 s), dropped video 2, frame interval 41.71 ms
+M4 audit stages: composite p50 15.65 p95 21.57 p99 27.74 ms, interval p50 40.16 p95 60.07 p99 62.28 ms
+== vp92160.webm sw-auto run1 load 2.85
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 552 samples, 182 composites, p99 24.31 ms, max 25.90 ms, first/last mean delta 0.00 ms, signed range -25.90..19.65 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 41.71 ms
+M4 audit stages: composite p50 15.45 p95 20.62 p99 22.49 ms, interval p50 39.93 p95 59.62 p99 61.54 ms
+== vp92160.webm sw-auto run2 load 2.87
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 565 samples, 182 composites, p99 24.79 ms, max 25.58 ms, first/last mean delta 0.00 ms, signed range -25.58..19.25 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 41.71 ms
+M4 audit stages: composite p50 15.32 p95 22.55 p99 28.62 ms, interval p50 40.10 p95 60.81 p99 67.21 ms
+== av12160.mp4 hw-full run1 load 2.81
+M4 audit: PASS, 8 s, hardware pilot decode, PipeWire audio, 567 samples, 192 composites, p99 28.44 ms, max 29.15 ms, first/last mean delta 0.00 ms, signed range -29.15..20.02 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 41.71 ms
+M4 audit stages: composite p50 11.16 p95 18.01 p99 24.36 ms, interval p50 40.11 p95 60.71 p99 81.64 ms
+== av12160.mp4 hw-full run2 load 2.60
+M4 audit: PASS, 8 s, hardware pilot decode, PipeWire audio, 586 samples, 189 composites, p99 28.23 ms, max 30.04 ms, first/last mean delta 0.00 ms, signed range -30.04..19.96 ms, underruns 0 (first -1.00 s), dropped video 3, frame interval 41.71 ms
+M4 audit stages: composite p50 11.15 p95 16.80 p99 22.80 ms, interval p50 40.04 p95 59.79 p99 102.40 ms
+== av12160.mp4 sw-full run1 load 2.44
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 537 samples, 188 composites, p99 23.54 ms, max 25.08 ms, first/last mean delta 0.00 ms, signed range -25.08..20.02 ms, underruns 0 (first -1.00 s), dropped video 2, frame interval 41.71 ms
+M4 audit stages: composite p50 16.47 p95 22.16 p99 25.59 ms, interval p50 39.94 p95 60.62 p99 90.28 ms
+== av12160.mp4 sw-full run2 load 2.29
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 530 samples, 187 composites, p99 23.42 ms, max 24.44 ms, first/last mean delta 0.00 ms, signed range -24.44..20.23 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 41.71 ms
+M4 audit stages: composite p50 16.47 p95 23.18 p99 27.88 ms, interval p50 40.07 p95 60.92 p99 74.21 ms
+== av12160.mp4 sw-auto run1 load 2.19
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 508 samples, 189 composites, p99 22.96 ms, max 24.65 ms, first/last mean delta 0.00 ms, signed range -24.65..21.31 ms, underruns 0 (first -1.00 s), dropped video 3, frame interval 41.71 ms
+M4 audit stages: composite p50 16.76 p95 22.94 p99 30.43 ms, interval p50 40.10 p95 59.99 p99 79.85 ms
+== av12160.mp4 sw-auto run2 load 2.40
+M4 audit: PASS, 8 s, software decode, PipeWire audio, 491 samples, 188 composites, p99 22.73 ms, max 24.15 ms, first/last mean delta 0.00 ms, signed range -24.15..21.08 ms, underruns 0 (first -1.00 s), dropped video 2, frame interval 41.71 ms
+M4 audit stages: composite p50 16.83 p95 23.52 p99 25.40 ms, interval p50 40.16 p95 60.12 p99 104.34 ms
+
+== Process CPU per played frame: getrusage CPU of an --m4-audit 9 run minus a 5 run, / 96 frames
+a1080.mp4      hw  cpu5 2.12s cpu9 2.74s -> 6.5 ms CPU/frame, 0.16 cores
+a1080.mp4      sw  cpu5 7.30s cpu9 10.27s -> 31.0 ms CPU/frame, 0.74 cores
+a2160.mp4      hw  cpu5 3.52s cpu9 4.22s -> 7.3 ms CPU/frame, 0.18 cores
+a2160.mp4      sw  cpu5 34.40s cpu9 56.41s -> 229.6 ms CPU/frame, 5.50 cores
+hevc2160.mp4   hw  cpu5 2.79s cpu9 3.33s -> 5.6 ms CPU/frame, 0.13 cores
+hevc2160.mp4   sw  cpu5 19.89s cpu9 28.42s -> 88.9 ms CPU/frame, 2.13 cores
+vp92160.webm   hw  cpu5 2.73s cpu9 3.41s -> 7.1 ms CPU/frame, 0.17 cores
+vp92160.webm   sw  cpu5 15.20s cpu9 17.86s -> 27.7 ms CPU/frame, 0.66 cores
+av12160.mp4    hw  cpu5 1.71s cpu9 2.22s -> 5.3 ms CPU/frame, 0.13 cores
+av12160.mp4    sw  cpu5 6.80s cpu9 9.97s -> 33.0 ms CPU/frame, 0.79 cores
+
+== Seek (playing) and scrub (paused), 24 seeks each
+-- a1080.mp4 hw
+M4 seek audit: 24 seeks, PipeWire audio, UI blocked p50 3.26 p95 4.77 max 5.04 ms, first composited frame p50 147.51 p95 310.25 max 320.17 ms, 0 without a frame in 500 ms
+M4 scrub audit: 24 paused seeks, null audio, UI event-loop gap p50 65.52 p95 270.18 max 301.68 ms, 
+-- a1080.mp4 sw
+M4 seek audit: 24 seeks, PipeWire audio, UI blocked p50 3.28 p95 83.76 max 99.47 ms, first composited frame p50 190.10 p95 451.53 max 469.54 ms, 3 without a frame in 500 ms
+M4 scrub audit: 24 paused seeks, null audio, UI event-loop gap p50 9.05 p95 13.03 max 15.48 ms, 
+-- a2160.mp4 hw
+M4 seek audit: 24 seeks, PipeWire audio, UI blocked p50 9.10 p95 12.97 max 69.23 ms, first composited frame p50 258.89 p95 520.24 max 520.24 ms, 7 without a frame in 500 ms
+M4 scrub audit: 24 paused seeks, null audio, UI event-loop gap p50 331.00 p95 1322.73 max 1481.29 ms, 
+-- a2160.mp4 sw
+M4 seek audit: 24 seeks, PipeWire audio, UI blocked p50 77.19 p95 105.28 max 116.59 ms, first composited frame p50 229.54 p95 525.20 max 525.20 ms, 12 without a frame in 500 ms
+M4 scrub audit: 24 paused seeks, null audio, UI event-loop gap p50 3.89 p95 24.34 max 26.37 ms, 
+-- hevc2160.mp4 hw
+M4 seek audit: 24 seeks, PipeWire audio, UI blocked p50 3.18 p95 4.44 max 14.14 ms, first composited frame p50 119.04 p95 253.88 max 301.57 ms, 0 without a frame in 500 ms
+M4 scrub audit: 24 paused seeks, null audio, UI event-loop gap p50 132.15 p95 253.36 max 274.77 ms, 
+-- hevc2160.mp4 sw
+M4 seek audit: 24 seeks, PipeWire audio, UI blocked p50 71.14 p95 101.71 max 104.65 ms, first composited frame p50 92.91 p95 436.70 max 436.70 ms, 11 without a frame in 500 ms
+M4 scrub audit: 24 paused seeks, null audio, UI event-loop gap p50 7.78 p95 25.03 max 31.01 ms, 
+
+== Export (20 s 1080p H.264 + AAC source, default profile) and timeline (--m6-timeline-audit N)
+export audit: 479 frames in 7670 ms (62.5 fps) -> /tmp/claude-1000/-home-kitsune-Projects-Omarchy-OmaMovie/cdc87586-0120-483d-b992-eab1ba70f607/scratchpad/out_a1080_1.mp4
+  encoder: VA-API H.264 (GPU)
+  per frame: build 0.26 ms, render+readback 7.46 ms, convert 0.00 ms, encode 7.04 ms, audio 1.21 ms
+  result: written
+RU cpu 26.999 s peakRSS 355 MB exit 0
+export audit: 479 frames in 7394 ms (64.8 fps) -> /tmp/claude-1000/-home-kitsune-Projects-Omarchy-OmaMovie/cdc87586-0120-483d-b992-eab1ba70f607/scratchpad/out_a1080_2.mp4
+  encoder: VA-API H.264 (GPU)
+  per frame: build 0.28 ms, render+readback 7.29 ms, convert 0.00 ms, encode 6.68 ms, audio 1.14 ms
+  result: written
+RU cpu 26.454 s peakRSS 359 MB exit 0
+M6 timeline audit: 1000 clips, model build 2.0 ms, open 95.0 ms (save, load, reimport, UI), RSS	  367000 kB, peak	  367000 kB
+  seek         p50     16.5  p95     33.4  max     33.4 ms
+  select       p50     12.3  p95     40.7  max     40.7 ms
+  split        p50     19.4  p95     53.0  max     53.0 ms
+  ripple del   p50     18.8  p95     42.0  max     42.0 ms
+  undo         p50     16.5  p95     39.9  max     40.2 ms
+  trim drag: 100 pointer events, 25 scope updates
+  drag event   p50     16.7  p95     16.9  max     32.3 ms
+  trim, undo   p50     22.4  p95     22.4  max     22.4 ms
+RU cpu 5.025 s peakRSS 358 MB exit 0
+M6 timeline audit: 5000 clips, model build 34.9 ms, open 194.4 ms (save, load, reimport, UI), RSS	  595416 kB, peak	  595416 kB
+  seek         p50     12.6  p95     33.2  max     33.2 ms
+  select       p50     11.6  p95     19.4  max     19.4 ms
+  split        p50     36.8  p95    135.6  max    135.6 ms
+  ripple del   p50     21.3  p95    107.6  max    107.6 ms
+  undo         p50     29.2  p95    128.1  max    130.4 ms
+  trim drag: 100 pointer events, 25 scope updates
+  drag event   p50     16.6  p95     17.0  max     17.2 ms
+  trim, undo   p50     31.2  p95     31.2  max     31.2 ms
+RU cpu 6.614 s peakRSS 581 MB exit 0

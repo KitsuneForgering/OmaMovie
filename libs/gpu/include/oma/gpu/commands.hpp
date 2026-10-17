@@ -23,6 +23,12 @@ struct SemaphoreSubmit {
 // first compositor. Not thread-safe; one runner per thread.
 class CommandRunner {
 public:
+    struct RunTimings {
+        double record_ms = 0;
+        double submit_ms = 0;     // includes waiting for the device queue lock
+        double fence_wait_ms = 0; // includes queued work and GPU execution
+    };
+
     [[nodiscard]] static Result<CommandRunner> create(const Device& device, std::uint32_t family);
 
     CommandRunner(CommandRunner&& other) noexcept;
@@ -33,7 +39,8 @@ public:
 
     [[nodiscard]] Result<void> run(const std::function<void(VkCommandBuffer)>& record,
                                    std::span<const SemaphoreSubmit> waits = {},
-                                   std::span<const SemaphoreSubmit> signals = {});
+                                   std::span<const SemaphoreSubmit> signals = {},
+                                   RunTimings* timings = nullptr);
 
 private:
     CommandRunner() = default;
@@ -46,6 +53,16 @@ private:
     VkCommandBuffer cmd_ = VK_NULL_HANDLE;
     VkFence fence_ = VK_NULL_HANDLE;
 };
+
+// Ownership of another driver's image (an imported DMA-BUF) for one submission: acquire from
+// VK_QUEUE_FAMILY_FOREIGN_EXT before reading it on `family`, release back after. The layout stays
+// GENERAL, the layout external memory is shared in.
+void acquire_foreign(VkCommandBuffer cmd, VkImage image, std::uint32_t family);
+void release_foreign(VkCommandBuffer cmd, VkImage image, std::uint32_t family);
+
+// The error code for a failed Vulkan call: DeviceLost, OutOfMemory (host or device), else
+// Internal. One mapping for every library that calls Vulkan.
+[[nodiscard]] ErrorCode error_code(VkResult r) noexcept;
 
 // Records a full-subresource layout transition of a color image (synchronization2).
 void transition(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImageLayout to,

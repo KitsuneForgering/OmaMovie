@@ -1,0 +1,118 @@
+Per-frame heap allocations while decoding (2026-10-04, release libs, Iris Xe, FFmpeg n9.0.1, iHD 26.2.4).
+Method: LD_PRELOAD shim counting malloc + posix_memalign (source below) around VideoDecoder::next(), frames 100-500 of h264.mp4 (1080p60 testsrc2, tools/spikes/s3-decode-paths.sh); callers from backtrace()+dladdr, top 4 frames.
+
+software: 36.4 allocations per frame (frames 100-500)
+VA-API: 103.2 allocations per frame (frames 100-500)
+
+-- callers, sw (400 frames)
+   6114 ALLOC av_malloc<av_mallocz<av_buffer_ref<av_buffer_replace<
+   2472 ALLOC av_malloc<av_mallocz<av_buffer_ref<av_frame_ref<
+   1206 ALLOC av_malloc<av_mallocz<av_buffer_pool_get<avcodec_default_get_buffer2<
+    804 ALLOC av_malloc<av_refstruct_alloc_ext_c<?<?<
+    802 ALLOC av_malloc<av_mallocz<av_buffer_create<av_buffer_alloc<
+    409 ALLOC av_malloc<av_mallocz<av_dict_set<?<
+    401 ALLOC _Znwm<_ZN3oma5media12VideoDecoder4Impl6finishESt10unique_ptrI7AVFr<_ZN3oma5media12VideoDecoder4nextEv<main<
+    401 ALLOC av_malloc<?<?<av_read_frame<
+    401 ALLOC av_malloc<av_mallocz<av_fast_mallocz<av_fast_padded_malloc<
+    401 ALLOC av_malloc<av_mallocz<av_buffer_ref<av_packet_ref<
+    401 ALLOC av_malloc<av_mallocz<av_buffer_ref<?<
+    401 ALLOC av_malloc<av_frame_alloc<_ZN3oma5media12VideoDecoder4Impl7receiveEv<_ZN3oma5media12VideoDecoder4nextEv<
+    401 ALLOC av_malloc<av_buffer_alloc<av_grow_packet<?<
+     13 ALLOC ?<?<_dl_catch_exception<?<
+
+-- callers, hw (400 frames)
+  15193 ALLOC _Znwm<?<?<?<
+   4413 ALLOC ?<?<?<?<
+   2817 ALLOC av_malloc<av_mallocz<av_buffer_ref<av_frame_ref<
+   2406 ALLOC av_malloc<av_mallocz<av_buffer_create<?<
+   2005 ALLOC ?<?<?<vaCreateBuffer<
+   1604 ALLOC av_malloc<av_mallocz<av_buffer_ref<?<
+   1604 ALLOC av_malloc<av_mallocz<?<?<
+    802 ALLOC _Znwm<?<vaSyncSurface<?<
+    802 ALLOC _Znwm<?<vaRenderPicture<?<
+    802 ALLOC av_malloc<av_refstruct_alloc_ext_c<?<?<
+    802 ALLOC av_malloc<av_mallocz<av_vk_frame_alloc<?<
+    802 ALLOC av_malloc<av_mallocz<av_buffer_ref<av_buffer_replace<
+    802 ALLOC av_malloc<av_mallocz<av_buffer_create<av_buffer_alloc<
+    802 ALLOC av_malloc<av_frame_alloc<?<?<
+
+-- shim (count.c)
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <execinfo.h>
+#include <stdatomic.h>
+#include <stdio.h>
+#include <stddef.h>
+#include <string.h>
+atomic_long oma_alloc_count;
+int oma_alloc_trace;
+static __thread int busy;
+static void* (*real_malloc)(size_t);
+static int (*real_memalign)(void**, size_t, size_t);
+static void note(void) {
+    if (!oma_alloc_trace || busy) return;
+    busy = 1;
+    void* bt[8]; int n = backtrace(bt, 8);
+    char line[512] = ""; 
+    for (int i = 2; i < n && i < 6; ++i) { Dl_info inf; if (dladdr(bt[i], &inf) && inf.dli_sname) { strncat(line, inf.dli_sname, 60); strcat(line, "<"); } else strcat(line, "?<"); }
+    fprintf(stderr, "ALLOC %s\n", line);
+    busy = 0;
+}
+void* malloc(size_t n) { if (!real_malloc) real_malloc = dlsym(RTLD_NEXT, "malloc"); oma_alloc_count++; note(); return real_malloc(n); }
+int posix_memalign(void** p, size_t a, size_t n) { if (!real_memalign) real_memalign = dlsym(RTLD_NEXT, "posix_memalign"); oma_alloc_count++; note(); return real_memalign(p, a, n); }
+
+-- probe (probe.cpp)
+#include "oma/gpu/device.hpp"
+#include "oma/media/video_decoder.hpp"
+#include <atomic>
+#include <cstdio>
+#include <dlfcn.h>
+#include <string_view>
+using namespace oma;
+int main(int argc, char** argv) {
+    auto* counter = static_cast<std::atomic<long>*>(dlsym(RTLD_DEFAULT, "oma_alloc_count"));
+    const bool hw = argc > 2 && std::string_view(argv[2]) == "hw";
+    auto dev = gpu::Device::create();
+    media::VideoDecoderOptions o;
+    o.device = dev->get();
+    if (!hw) o.paths = {media::DecodePath::Software};
+    auto d = media::VideoDecoder::open(argv[1], o);
+    long before = 0;
+    int n = 0;
+    for (;; ++n) {
+        if (n == 100) { before = counter->load(); *static_cast<int*>(dlsym(RTLD_DEFAULT, "oma_alloc_trace")) = 1; }
+        auto f = (*d)->next();
+        if (!f || !*f) break;
+        if (n == 500) { std::printf("%s: %.1f allocations per frame (frames 100-500)\n", hw ? "VA-API" : "software", (counter->load() - before) / 400.0); break; }
+    }
+}
+
+== Vulkan device memory (vkAllocateMemory/vkFreeMemory called by OmaMovie code; FFmpeg allocates through its own dispatch table and is not counted)
+S5 scene, 600 frames, release; maxMemoryAllocationCount = 4294967295 (ANV).
+-- software
+vkAllocateMemory from OmaMovie code: 16 calls, 16 freed, peak 16 live, peak 46.9 MB
+-- hardware
+vkAllocateMemory from OmaMovie code: 8 calls, 8 freed, peak 8 live, peak 28.4 MB
+-- shim (vkcount.c)
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <stdatomic.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <vulkan/vulkan.h>
+static atomic_long allocs, frees, live, peak;
+static atomic_ullong bytes, peak_bytes;
+VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(VkDevice d, const VkMemoryAllocateInfo* i, const VkAllocationCallbacks* a, VkDeviceMemory* m) {
+    static PFN_vkAllocateMemory real; if (!real) real = (PFN_vkAllocateMemory)dlsym(RTLD_NEXT, "vkAllocateMemory");
+    allocs++; long l = ++live; if (l > peak) peak = l;
+    unsigned long long b = (bytes += i->allocationSize); if (b > peak_bytes) peak_bytes = b;
+    return real(d, i, a, m);
+}
+VKAPI_ATTR void VKAPI_CALL vkFreeMemory(VkDevice d, VkDeviceMemory m, const VkAllocationCallbacks* a) {
+    static PFN_vkFreeMemory real; if (!real) real = (PFN_vkFreeMemory)dlsym(RTLD_NEXT, "vkFreeMemory");
+    if (m) { frees++; live--; }
+    real(d, m, a);
+}
+__attribute__((destructor)) static void report(void) {
+    fprintf(stderr, "vkAllocateMemory from OmaMovie code: %ld calls, %ld freed, peak %ld live, peak %.1f MB\n", (long)allocs, (long)frees, (long)peak, peak_bytes / 1048576.0);
+}

@@ -1,0 +1,14 @@
+## What Apple's documents establish
+
+| Mechanism | Documented behavior | Bounded lesson |
+|---|---|---|
+| Magnetic timeline | A primary storyline ripples around edits. Connected clips move with the primary clip. The Position tool overwrites at a fixed place and leaves a gap at the origin. [Apple guide, “Intro to the Magnetic Timeline”](https://support.apple.com/en-hk/guide/final-cut-pro/verb8fcfc133/mac), “Primary storyline” through “Position tool and gap clips”. | Couple a dependent clip to an anchor, and expose a deliberate way to preserve absolute timing. The attractive language about being faster is vendor opinion, not evidence. |
+| Recovery | Changes save automatically; a project can be duplicated; the library database is backed up separately from media. [Apple, “Save and back up projects”](https://support.apple.com/guide/final-cut-pro/save-and-back-up-projects-ver79aa3d71/mac), opening paragraphs. | Separate live autosave, a user-restorable version, and source-media backup claims. OmaMovie has no nested-clip snapshot requirement yet. |
+| Media representations | Original, optimized and proxy media are distinct. Transcoding can happen in the background; generated files can be deleted and recreated. Apple instructs users to choose original/optimized before sharing. [Apple, “Create optimized and proxy files”](https://support.apple.com/en-md/guide/final-cut-pro/verb8e5f6fd/mac), “Create” and “Delete” sections. | Model proxy as replaceable media tied to an immutable source identity. OmaMovie should enforce an export-source policy itself rather than rely on the user's viewer setting. |
+| Organization | Roles label clip function and support timeline grouping and separate exports. [Apple, “Organize clips by roles”](https://support.apple.com/en-gb/guide/final-cut-pro/verdbd59f7/mac), opening paragraphs. | Useful if source discovery or audio deliverables become frequent tasks; neither is established for OmaMovie's first release. |
+| Interchange | Final Cut imports/exports versioned FCPXML; exports from version 1.10 onward use `.fcpxmld` bundles. [Apple, “Use XML to transfer projects”](https://support.apple.com/en-euro/guide/final-cut-pro/verdbd66ae/12.4/mac/26.6), “Import” and “Export”. Apple documents rational time attributes and a DTD. [Apple Developer, “Timing Attributes”](https://developer.apple.com/documentation/professional-video-applications/timing-attributes); [“Creating FCPXML Documents”](https://developer.apple.com/documentation/professional-video-applications/creating-fcpxml-documents). | M9 must pin an actual export version and test semantic mapping. XML validity alone does not establish edit fidelity. |
+
+All Apple pages share one vendor lineage. They establish advertised/documented
+contracts, not independent evidence of efficiency or user preference.
+
+[Return to final-cut-pro.md](final-cut-pro.md)

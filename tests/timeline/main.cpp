@@ -1,0 +1,43 @@
+#include "oma_test.hpp"
+
+void run_model_tests();
+void run_edit_tests();
+void run_evaluate_tests();
+void run_transition_tests();
+void run_keyframe_tests();
+void run_time_map_tests();
+void run_anchor_tests();
+void run_title_tests();
+void run_effect_tests();
+void run_caption_tests();
+void run_canvas_tests();
+void run_scalar_key_tests();
+void run_detach_tests();
+void run_video_range_tests();
+void run_effect_preset_tests();
+void run_media_color_tests();
+void run_property_tests();
+void run_no_op_edit_tests();
+
+int main(int argc, char* argv[]) {
+    cest_init(argc, argv);
+    run_model_tests();
+    run_edit_tests();
+    run_evaluate_tests();
+    run_transition_tests();
+    run_keyframe_tests();
+    run_time_map_tests();
+    run_anchor_tests();
+    run_title_tests();
+    run_effect_tests();
+    run_caption_tests();
+    run_canvas_tests();
+    run_scalar_key_tests();
+    run_detach_tests();
+    run_video_range_tests();
+    run_effect_preset_tests();
+    run_media_color_tests();
+    run_property_tests();
+    run_no_op_edit_tests();
+    return cest_result();
+}

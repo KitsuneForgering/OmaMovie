@@ -1,0 +1,23 @@
+M7 — PKGBUILD build, install and launch in clean containers (2026-10-13)
+
+Command: scripts/package-check.sh (podman, docker.io/library/archlinux:latest, 6.5 min).
+1. Build container: base-devel + git; the PKGBUILD's source points at this checkout
+   (git+file, branch feature/first-release) instead of the published repository;
+   makepkg -s installs depends/makedepends/checkdepends and runs build() and check()
+   (the whole ctest suite: 10/10 on llvmpipe, Mesa 26.2.4). Package omamovie-git
+   r230.18c30f2-1 (2.84 MiB) plus its debug package.
+2. Launch container: a second clean image; pacman -U the package, sway + vulkan-swrast;
+   sway runs headless (WLR_BACKENDS=headless, pixman renderer) as a non-root user and the
+   installed /usr/bin/omamovie runs --smoke with QT_QPA_PLATFORM=wayland from a read-only
+   mount of the repository (the smoke reads tests/fixtures/generated): GUI smoke PASS
+   (edits, keyboard, classic controls), exit 0.
+Found on the way:
+  - QT_QPA_PLATFORM=offscreen cannot launch the app: "Qt could not adopt the Vulkan instance"
+    (the viewer needs a Vulkan-capable window); a Wayland compositor is required.
+  - sway's file capabilities cannot be granted in rootless podman; the script drops them
+    inside the throwaway container.
+  - makepkg could not update pkgver when the rewritten PKGBUILD belonged to root (r0-1).
+  - The new app write-fault test crashed check() with SIGBUS under llvmpipe (memfd-backed
+    device memory under RLIMIT_FSIZE); fixed by injecting app-level faults before rendering.
+Not covered: Hyprland/Omarchy itself (the compositor here is sway), real GPU drivers in the
+container, VA-API, PipeWire audio output (the smoke plays to a null sink there).

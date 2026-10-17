@@ -10,7 +10,9 @@
 
 extern "C" {
 #include <libavutil/hwcontext.h>
+#include <libavutil/hwcontext_drm.h>
 #include <libavutil/pixdesc.h>
+#include <libswscale/swscale.h>
 }
 
 #include <algorithm>
@@ -66,6 +68,25 @@ Error unsupported(std::string message, const std::string& context = {}) {
     return {ErrorCode::Unsupported, Category::Decode, std::move(message), context};
 }
 
+struct SwsFreer {
+    void operator()(SwsContext* p) const noexcept { sws_freeContext(p); }
+};
+
+// Consumers read YUV or planar GBR (SampleLayout); packed RGB, palette and grey frames (PNG,
+// JPEG, RGB codecs) are rearranged into planar GBR. Alpha is dropped for now.
+AVPixelFormat planar_rgb_for(AVPixelFormat format) {
+    const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(format);
+    if (desc == nullptr || (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) != 0) {
+        return AV_PIX_FMT_NONE;
+    }
+    const bool rgb_like =
+        (desc->flags & (AV_PIX_FMT_FLAG_RGB | AV_PIX_FMT_FLAG_PAL)) != 0 || desc->nb_components < 3;
+    if (!rgb_like || format == AV_PIX_FMT_GBRP || format == AV_PIX_FMT_GBRP16) {
+        return AV_PIX_FMT_NONE;
+    }
+    return desc->comp[0].depth > 8 ? AV_PIX_FMT_GBRP16 : AV_PIX_FMT_GBRP;
+}
+
 } // namespace
 
 struct VideoDecoder::Impl {
@@ -84,9 +105,7 @@ struct VideoDecoder::Impl {
     // Hardware state.
     AVPixelFormat wanted_hw = AV_PIX_FMT_NONE;
     bool hw_rejected = false; // the driver refused the stream; set from get_format
-    ff::BufferPtr vk_device;  // FFmpeg's view of OmaMovie's device
-    ff::BufferPtr vk_frames;  // Vulkan frames derived from the VA-API pool
-    const std::uint8_t* vk_frames_source = nullptr; // data of the VA-API frames context
+    ff::BufferPtr vk_device;  // FFmpeg's view of OmaMovie's device (Vulkan Video)
 
     // Decode position.
     bool draining = false;
@@ -94,13 +113,28 @@ struct VideoDecoder::Impl {
     std::optional<RationalTime> seek_target;
     std::optional<RationalTime> last_seek; // where a software fallback restarts
     ff::FramePtr pending;                  // first frame past a seek target, returned next
+    // Seeking decodes forward from a keyframe; non-reference frames that end before the target
+    // can neither be shown nor be needed later, so the decoder skips them (AVDISCARD_NONREF).
+    // A packet's duration is a DTS delta that VFR media can make misleading, so the latest
+    // presentation time sent while skipping is kept: if the frame found is earlier, a skipped
+    // frame was the one on screen, and the seek is redone without skipping (exact either way).
+    std::optional<RationalTime> skipped_up_to;
+    bool skipping_allowed = true;
+    std::function<bool()> interrupted;                   // set_interrupt
+    std::unique_ptr<SwsContext, SwsFreer> to_planar_rgb; // reused while the format holds
 
     [[nodiscard]] Result<void> open_path(DecodePath candidate);
     [[nodiscard]] Result<void> reposition();
     [[nodiscard]] Result<void> fall_back_to_software();
     [[nodiscard]] Result<ff::FramePtr> receive();
+    // In a seek: the frame is at or before the target, so it may be the one on screen.
+    [[nodiscard]] bool frame_before_target(const AVFrame& frame) const {
+        const auto pts = ff::to_time(frame.best_effort_timestamp, info.timebase);
+        return pts && seek_target && *pts <= *seek_target;
+    }
     [[nodiscard]] Result<VideoFrame> finish(ff::FramePtr frame);
-    [[nodiscard]] Result<ff::FramePtr> map_to_vulkan(const AVFrame& src);
+    // VA-API surface -> DRM_PRIME (FFmpeg, VA only) -> our Vulkan images (ADR-0004).
+    [[nodiscard]] Result<void> import_vaapi(const AVFrame& src, VideoFrame::Impl& out) const;
 
     static AVPixelFormat pick_format(AVCodecContext* ctx, const AVPixelFormat* formats);
 };
@@ -143,11 +177,18 @@ Result<void> VideoDecoder::Impl::open_path(DecodePath candidate) {
         if (!codec_supports(*codec, AV_HWDEVICE_TYPE_VAAPI)) {
             return std::unexpected(unsupported("no VA-API hwaccel for codec", codec->name));
         }
-        // TODO(M2): open the render node of the selected Vulkan device (VK_EXT_physical_device_drm)
-        // so hybrid laptops decode on the same GPU that composites.
+        // Decode on the GPU that composites (hybrid laptops): its render node, when the driver
+        // reports one; otherwise libva's default device, which matches on single-GPU machines.
+        const std::string& node = device->info().render_node;
+        if (node.empty()) {
+            log_warn(Category::Decode,
+                     "{}: Vulkan device has no render node, VA-API uses the "
+                     "default device",
+                     file.filename().string());
+        }
         AVBufferRef* va = nullptr;
-        if (const int err =
-                av_hwdevice_ctx_create(&va, AV_HWDEVICE_TYPE_VAAPI, nullptr, nullptr, 0);
+        if (const int err = av_hwdevice_ctx_create(
+                &va, AV_HWDEVICE_TYPE_VAAPI, node.empty() ? nullptr : node.c_str(), nullptr, 0);
             err < 0) {
             return std::unexpected(ff::av_error(err, Category::Decode, "no VA-API device"));
         }
@@ -189,8 +230,6 @@ Result<void> VideoDecoder::Impl::open_path(DecodePath candidate) {
     dec = std::move(*ctx);
     path = candidate;
     hw_rejected = false;
-    vk_frames.reset();
-    vk_frames_source = nullptr;
     return {};
 }
 
@@ -213,8 +252,10 @@ Result<void> VideoDecoder::Impl::reposition() {
         }
     }
     avcodec_flush_buffers(dec.get());
+    dec->skip_frame = AVDISCARD_DEFAULT;
     draining = false;
     pending.reset();
+    skipped_up_to.reset();
     return {};
 }
 
@@ -278,6 +319,19 @@ Result<ff::FramePtr> VideoDecoder::Impl::receive() {
             av_packet_unref(pkt.get());
             continue;
         }
+        dec->skip_frame = AVDISCARD_DEFAULT;
+        if (seek_target && skipping_allowed && pkt->duration > 0) {
+            const auto pts = ff::to_time(pkt->pts, info.timebase);
+            const auto length = RationalTime::make(pkt->duration, info.timebase);
+            const auto end = pts && length ? pts->plus(*length)
+                                           : Result<RationalTime>(std::unexpected(length.error()));
+            if (pts && end && *end <= *seek_target) {
+                dec->skip_frame = AVDISCARD_NONREF;
+                if (!skipped_up_to || *skipped_up_to < *pts) {
+                    skipped_up_to = *pts;
+                }
+            }
+        }
         const int sr = avcodec_send_packet(dec.get(), pkt.get());
         av_packet_unref(pkt.get());
         if (hw_rejected) {
@@ -295,32 +349,102 @@ Result<ff::FramePtr> VideoDecoder::Impl::receive() {
     }
 }
 
-Result<ff::FramePtr> VideoDecoder::Impl::map_to_vulkan(const AVFrame& src) {
-    // Every frame carries its own reference; the pool is the referenced data.
-    if (!vk_frames || vk_frames_source != src.hw_frames_ctx->data) {
-        // The decoder recreates its pool on size changes; derive a matching Vulkan pool.
-        AVBufferRef* derived = nullptr;
-        const int err = av_hwframe_ctx_create_derived(&derived, AV_PIX_FMT_VULKAN, vk_device.get(),
-                                                      src.hw_frames_ctx, 0);
-        if (err < 0) {
-            return std::unexpected(
-                ff::av_error(err, Category::Decode, "cannot derive Vulkan frames from VA-API"));
-        }
-        vk_frames.reset(derived);
-        vk_frames_source = src.hw_frames_ctx->data;
+namespace {
+
+constexpr std::uint32_t fourcc(char a, char b, char c, char d) {
+    return static_cast<std::uint32_t>(a) | (static_cast<std::uint32_t>(b) << 8) |
+           (static_cast<std::uint32_t>(c) << 16) | (static_cast<std::uint32_t>(d) << 24);
+}
+
+// The single-plane layers VA-API exports for NV12 and P010 (VA_EXPORT_SURFACE_SEPARATE_LAYERS),
+// as drm_fourcc.h defines them.
+VkFormat layer_format(std::uint32_t drm) {
+    switch (drm) {
+    case fourcc('R', '8', ' ', ' '):
+        return VK_FORMAT_R8_UNORM;
+    case fourcc('G', 'R', '8', '8'):
+        return VK_FORMAT_R8G8_UNORM;
+    case fourcc('R', '1', '6', ' '):
+        return VK_FORMAT_R16_UNORM;
+    case fourcc('G', 'R', '3', '2'):
+        return VK_FORMAT_R16G16_UNORM;
+    default:
+        return VK_FORMAT_UNDEFINED;
     }
-    ff::FramePtr out(av_frame_alloc());
-    if (!out) {
+}
+
+} // namespace
+
+// FFmpeg's own VA-API -> Vulkan map (hwcontext_vulkan.c) leaks its last mapped frame and frames
+// context on every closed decoder in FFmpeg 9.0.1 (a reference cycle through its execution
+// context), so FFmpeg only exports the surface (it waits for decoding with vaSyncSurface first)
+// and the import is OmaMovie's: one image per exported layer, no copy.
+Result<void> VideoDecoder::Impl::import_vaapi(const AVFrame& src, VideoFrame::Impl& out) const {
+    ff::FramePtr drm(av_frame_alloc());
+    if (!drm) {
         return make_error(ErrorCode::Internal, Category::Decode, "cannot allocate a frame");
     }
-    out->format = AV_PIX_FMT_VULKAN;
-    out->hw_frames_ctx = av_buffer_ref(vk_frames.get());
-    // AV_HWFRAME_MAP_DIRECT fails with EINVAL in FFmpeg 9; the plain mapping still imports the
-    // DMA-BUF without a copy (S2).
-    if (const int err = av_hwframe_map(out.get(), &src, AV_HWFRAME_MAP_READ); err < 0) {
-        return std::unexpected(ff::av_error(err, Category::Decode, "cannot map VA-API to Vulkan"));
+    drm->format = AV_PIX_FMT_DRM_PRIME;
+    if (const int err = av_hwframe_map(drm.get(), &src, AV_HWFRAME_MAP_READ); err < 0) {
+        return std::unexpected(
+            ff::av_error(err, Category::Decode, "cannot export a VA-API surface"));
     }
-    return out;
+    const auto* desc = reinterpret_cast<const AVDRMFrameDescriptor*>(drm->data[0]);
+    const AVPixelFormat sw =
+        reinterpret_cast<const AVHWFramesContext*>(src.hw_frames_ctx->data)->sw_format;
+    const AVPixFmtDescriptor* pix = av_pix_fmt_desc_get(sw);
+    if (desc == nullptr || pix == nullptr || desc->nb_layers <= 0 ||
+        std::cmp_greater(desc->nb_layers, kMaxFrameImages)) {
+        return make_error(ErrorCode::Unsupported, Category::Decode, "unexpected VA-API export");
+    }
+    auto imported = std::make_unique<ImportedFrame>();
+    imported->device = device;
+    for (int i = 0; i < desc->nb_layers; ++i) {
+        const AVDRMLayerDescriptor& layer = desc->layers[i];
+        const VkFormat format = layer_format(layer.format);
+        if (layer.nb_planes != 1 || format == VK_FORMAT_UNDEFINED ||
+            layer.planes[0].object_index < 0 || layer.planes[0].object_index >= desc->nb_objects) {
+            return make_error(ErrorCode::Unsupported, Category::Decode,
+                              "unexpected VA-API export layer");
+        }
+        const AVDRMPlaneDescriptor& plane = layer.planes[0];
+        const AVDRMObjectDescriptor& object = desc->objects[plane.object_index];
+        // Chroma layers are subsampled: round up like the decoder's surfaces.
+        const int sx = i > 0 ? pix->log2_chroma_w : 0;
+        const int sy = i > 0 ? pix->log2_chroma_h : 0;
+        auto image = gpu::DmaBufImage::import(
+            *device,
+            gpu::DmaBufPlane{.fd = object.fd,
+                             .offset = static_cast<std::uint64_t>(plane.offset),
+                             .pitch = static_cast<std::uint64_t>(plane.pitch),
+                             .modifier = object.format_modifier,
+                             .format = format,
+                             .width = static_cast<std::uint32_t>(-((-src.width) >> sx)),
+                             .height = static_cast<std::uint32_t>(-((-src.height) >> sy))});
+        if (!image) {
+            return std::unexpected(image.error());
+        }
+        imported->images[static_cast<std::size_t>(i)] = std::move(*image);
+        const VkSemaphoreTypeCreateInfo timeline{.sType =
+                                                     VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+                                                 .pNext = nullptr,
+                                                 .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+                                                 .initialValue = 0};
+        const VkSemaphoreCreateInfo create{
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, .pNext = &timeline, .flags = 0};
+        if (const VkResult r =
+                vkCreateSemaphore(device->device(), &create, nullptr,
+                                  &imported->semaphores[static_cast<std::size_t>(i)]);
+            r != VK_SUCCESS) {
+            return make_error(ErrorCode::Internal, Category::Decode,
+                              "cannot create a frame semaphore");
+        }
+        imported->count = static_cast<std::uint32_t>(i + 1);
+    }
+    out.frame = std::move(drm); // keeps the surface and its descriptors until `imported` is gone
+    out.imported = std::move(imported);
+    out.layout = sw;
+    return {};
 }
 
 Result<VideoFrame> VideoDecoder::Impl::finish(ff::FramePtr frame) {
@@ -331,15 +455,35 @@ Result<VideoFrame> VideoDecoder::Impl::finish(ff::FramePtr frame) {
         impl->duration = ff::to_time(frame->duration, info.timebase);
     }
     if (frame->format == AV_PIX_FMT_VAAPI) {
-        auto mapped = map_to_vulkan(*frame);
-        if (!mapped) {
-            return std::unexpected(mapped.error());
+        if (auto r = import_vaapi(*frame, *impl); !r) {
+            return std::unexpected(r.error());
         }
-        impl->frame = std::move(*mapped);
+    } else if (const AVPixelFormat planar =
+                   planar_rgb_for(static_cast<AVPixelFormat>(frame->format));
+               planar != AV_PIX_FMT_NONE) {
+        // ponytail: one new frame per conversion; pool it if RGB video ever plays in real time.
+        to_planar_rgb.reset(
+            sws_getCachedContext(to_planar_rgb.release(), frame->width, frame->height,
+                                 static_cast<AVPixelFormat>(frame->format), frame->width,
+                                 frame->height, planar, SWS_POINT, nullptr, nullptr, nullptr));
+        ff::FramePtr out(av_frame_alloc());
+        if (!to_planar_rgb || !out) {
+            return std::unexpected(unsupported("cannot convert this RGB format", file.string()));
+        }
+        out->format = planar;
+        out->width = frame->width;
+        out->height = frame->height;
+        if (const int err = sws_scale_frame(to_planar_rgb.get(), out.get(), frame.get()); err < 0) {
+            return std::unexpected(ff::av_error(err, Category::Decode, "RGB conversion failed"));
+        }
+        av_frame_copy_props(out.get(), frame.get());
+        impl->frame = std::move(out);
     } else {
         impl->frame = std::move(frame);
     }
-    if (impl->frame->format == AV_PIX_FMT_VULKAN) {
+    if (impl->imported) {
+        // import_vaapi set the layout from the VA-API pool.
+    } else if (impl->frame->format == AV_PIX_FMT_VULKAN) {
         impl->layout =
             reinterpret_cast<const AVHWFramesContext*>(impl->frame->hw_frames_ctx->data)->sw_format;
     } else {
@@ -391,6 +535,14 @@ Result<std::unique_ptr<VideoDecoder>> VideoDecoder::open(const std::filesystem::
         return make_error(ErrorCode::Internal, Category::Decode, "cannot allocate a packet");
     }
 
+    // ADR-0006: no tone mapping yet; HDR is shown through the SDR path and said so once.
+    if (impl->info.video && (impl->info.video->color.transfer == AVCOL_TRC_SMPTE2084 ||
+                             impl->info.video->color.transfer == AVCOL_TRC_ARIB_STD_B67)) {
+        log_warn(Category::Decode, "{}: HDR ({}) is shown as SDR without tone mapping",
+                 path.filename().string(),
+                 impl->info.video->color.transfer == AVCOL_TRC_SMPTE2084 ? "PQ" : "HLG");
+    }
+
     std::string refusals;
     for (const DecodePath candidate : options.paths) {
         auto opened = impl->open_path(candidate);
@@ -439,22 +591,41 @@ Result<std::optional<VideoFrame>> VideoDecoder::next() {
             return std::unexpected(received.error());
         }
         ff::FramePtr frame = std::move(*received);
+        if (d.seek_target && (!frame || !d.frame_before_target(*frame))) {
+            // The seek resolves here. A skipped non-reference frame later than the one found
+            // would have been on screen: decode the same stretch again without skipping.
+            const auto found = candidate
+                                   ? ff::to_time(candidate->best_effort_timestamp, d.info.timebase)
+                                   : std::nullopt;
+            if (d.skipped_up_to && (!found || *found < *d.skipped_up_to)) {
+                d.skipping_allowed = false;
+                if (auto r = d.reposition(); !r) {
+                    return std::unexpected(r.error());
+                }
+                candidate.reset();
+                continue;
+            }
+            d.skipping_allowed = true;
+        }
         if (!frame) { // end of stream
             d.seek_target.reset();
             if (!candidate) {
                 return std::optional<VideoFrame>();
             }
-            frame = std::move(candidate);
+            frame = std::exchange(candidate, nullptr);
         } else if (d.seek_target) {
-            const auto pts = ff::to_time(frame->best_effort_timestamp, d.info.timebase);
-            if (pts && *pts <= *d.seek_target) {
+            if (d.frame_before_target(*frame)) {
                 candidate = std::move(frame);
+                if (d.interrupted && d.interrupted()) {
+                    return make_error(ErrorCode::Cancelled, Category::Decode, "seek interrupted",
+                                      d.file.string());
+                }
                 continue;
             }
             d.seek_target.reset();
             if (candidate) {
                 d.pending = std::move(frame);
-                frame = std::move(candidate);
+                frame = std::exchange(candidate, nullptr);
             }
         }
 
@@ -476,9 +647,14 @@ Result<std::optional<VideoFrame>> VideoDecoder::next() {
 }
 
 Result<void> VideoDecoder::seek(const RationalTime& t) {
+    impl_->skipping_allowed = true;
     impl_->seek_target = t;
     impl_->last_seek = t;
     return impl_->reposition();
+}
+
+void VideoDecoder::set_interrupt(std::function<bool()> interrupted) {
+    impl_->interrupted = std::move(interrupted);
 }
 
 } // namespace oma::media

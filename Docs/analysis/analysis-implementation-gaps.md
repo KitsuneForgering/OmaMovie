@@ -1,0 +1,13 @@
+## 8. Pontos Fracos / Lacunas (Implementação)
+
+| Lacuna | Local/Ref | Impacto | Prioridade |
+|---|---|---|---|
+| **Grafo de deps vs implementado**: `project` não depende de `project-ir` no CMake atual, mas target prevê. Também `project-ir`/`importers` não existem sob `libs/`. | [project CMake](libs/project/CMakeLists.txt#L8), [cmake/OmaDependencyGraph.cmake](cmake/OmaDependencyGraph.cmake#L24–28), [§5.1](CLAUDE.md#51-layout) | Inconsistência entre design (ProjectIR neutro, importers separados) e código atual. Difícil avaliar extensibilidade de importers com precisão. | Alta (arquitetura) |
+| **M7 parcialmente conectado**: `libs/project` não está "wired to the app" ([§0](CLAUDE.md#0-repository-status)). Carregamento/salvamento não é usado ativamente pela UI (Session/Editor). | [CLAUDE.md §0](CLAUDE.md#0-repository-status), [apps/omamovie/src/session.*](apps/omamovie/src/session.*) | Projeto nativo ainda não é caminho principal na app (funciona via timeline em memória). | Alta (M7) |
+| **Export ausente** (M7). | [§0](CLAUDE.md#0-repository-status), [implementation-plan M7](../implementation-plan.md#m7--project--export) | Não fecha pipeline GPU→encode→mux. | Alta (M7) |
+| **Device loss recovery automático não implementado** (tratado como final). | [ADR-0005](../adr/0005-qt-vulkan-interop.md#admission-for-producers-on-other-threads-2026-10-05), [device.hpp mark_lost](libs/gpu/include/oma/gpu/device.hpp#L118–125) | Em reset real de driver, app mostra aviso e para preview; recovery (novo device + nova window) não tentado. | Média |
+| **Leak FFmpeg mapeado suprimido (não resolvido upstream)** — suprimido em ASan, mas não removido. | [ADR-0004 amendment](../adr/0004-gpu-frames-sync-decode-policy.md#amendment-2026-10-06-omamovie-imports-va-api-surfaces-itself), [tests/support/lsan.supp](tests/support/lsan.supp) | Suprime leak conhecido (~200KB/decoder) p/ testes; precisa acompanhar upstream FFmpeg 9.0.1. Workaround atual (import próprio) evita leak no path novo? ADR diz "no objects left at vkDestroyDevice" com import próprio — bom sinal, suprimido pode ser legado. | Baixa (monitoramento) |
+| **NVDEC/AMD (S7/S8) não implementados**. | [M1](../implementation-plan.md#m1--hardware-spikes), [ADR-0004](../adr/0004-gpu-frames-sync-decode-policy.md) | Só Intel validado. | Baixa (matriz HW) |
+| **Preservação unknown fields: apenas top-level** (não por objeto). | [ADR-0007](../adr/0007-project-format.md#decision): "Unknown fields inside known objects… are not kept yet". | Round-trip imperfeito p/ campos desconhecidos dentro de objetos (clips/tracks) em versões futuras. | Baixa (compat futura) |
+
+[Return to analysis-implementation.md](analysis-implementation.md)

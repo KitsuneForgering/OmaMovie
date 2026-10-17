@@ -1,131 +1,53 @@
-# OpenCL in OmaMovie: evaluation
+# OpenCL: scope decision and corrected rationale
 
-> **Decision (2026-10-02): OpenCL removed from the project.** Vulkan Compute is the generic
-> backend; CUDA remains an NVIDIA specialization. This document stays as the record of the
-> analysis behind the decision (`CLAUDE.md` §9.3).
+> Reviewed on 2026-10-03 with skeptical-research. This is non-normative research.
+> Source metadata and access limits: [source register](sources.md). Decisions and open
+> validation gates: [audit](skeptical-review.md). Product descriptions are not user studies.
 
-> Research done on 2026-10-02. Sourced facts are linked in the [Sources](#sources) section.
-> Items marked **(verify)** need confirmation.
->
-> Verified locally: `ocl-icd` (the loader) is installed, but **no ICD is registered**
-> (`/etc/OpenCL/vendors` does not exist). The Omarchy 4.0.4 installer **does not install an
-> OpenCL runtime** for any vendor. Packages available on Arch: `opencl-mesa` (rusticl),
-> `intel-compute-runtime`, `rocm-opencl-runtime`, `opencl-nvidia`.
+## 1. Conclusion
 
----
+Keep OpenCL excluded under the existing 2026-10-02 maintainer decision. Vulkan Compute
+already addresses compositor-resident effects; an additional backend has no demonstrated
+project use case. This is a maintenance/scope preference, not a finding that OpenCL cannot
+share memory with Vulkan.
 
-## 1. Summary
+## 2. Counterevidence
 
-`CLAUDE.md` described OpenCL as the "generic compute backend". The research indicates that,
-**on Omarchy and for a GPU-first pipeline, Vulkan Compute fills that role better**, and OpenCL
-should be an **optional, later** backend, subject to two factors:
+[Khronos's interop sample](https://docs.vulkan.org/samples/latest/samples/extensions/open_cl_interop/README.html)
+describes sharing external memory and semaphores and matching devices by UUID. It refutes
+an API-level impossibility claim. It does not establish support on every runtime or image
+format, nor performance on OmaMovie workloads.
 
-1. **Zero-copy interop with Vulkan.** The decisive point. In rusticl (Mesa)
-   `cl_khr_external_memory` was still in development at the end of 2025. Without it, an OpenCL
-   effect forces a frame copy, which violates the core principle of `CLAUDE.md` §7.
-2. **Availability.** The OpenCL runtime is not installed on Omarchy. Vulkan always is.
+[Mesa Rusticl documentation](https://docs.mesa3d.org/rusticl.html) describes Gallium-based
+OpenCL and distro-configurable default device enabling. This review did not establish an
+external-memory extension matrix for installed Rusticl/NEO/ROCm. The prior absolute claim
+that Rusticl has no zero-copy Vulkan interop was unsupported for the specified 2026 build.
+Unavailability of evidence is not evidence of absence. The old OpenCL 3.1 runtime table is
+withdrawn pending direct runtime queries/versioned release evidence.
 
-This **diverged from `CLAUDE.md` at the time** and was decided by the maintainer (see §6).
+## 3. Comparison under equivalent criteria
 
----
-
-## 2. State of OpenCL on Linux (2026)
-
-| Runtime | Hardware | Status |
+| Criterion | Vulkan Compute | OpenCL alternative |
 |---|---|---|
-| **rusticl** (Mesa, `opencl-mesa`) | Intel (iris), AMD (radeonsi), Zink (any Vulkan), Asahi, llvmpipe | **OpenCL 3.1** in Mesa 26.2. Enabled by default on some drivers (radeonsi, asahi, freedreno, zink); others need `RUSTICL_ENABLE` |
-| **intel-compute-runtime** (NEO) | Intel | Intel's official runtime (OpenCL + Level Zero) |
-| **ROCm** (`rocm-opencl-runtime`) | AMD | AMD's official runtime |
-| **NVIDIA** (`opencl-nvidia`, ~103 MiB) | NVIDIA | Supports the Vulkan interop extensions |
+| Current compositor storage | Same-device access with barriers | Requires compatible external-memory/sync contracts |
+| Additional project work | Existing GPU integration | Runtime discovery, import and kernel/backend maintenance |
+| Existing required effect | Can implement initial effects | No identified effect requiring it |
+| Portability of numeric features | Query shader features | Query device/version/extensions; do not assume precision |
+| Performance | Pending effect benchmark | Pending same-effect, same-GPU benchmark including transfers |
 
-### Interop with Vulkan
-- Khronos extensions: `cl_khr_external_memory` (+ `_opaque_fd`, `_dma_buf`), `cl_khr_semaphore`,
-  `cl_khr_external_semaphore` (+ `_opaque_fd`). They allow sharing memory and synchronizing with Vulkan.
-- **NVIDIA** documents using these extensions with its OpenCL.
-- **rusticl**: `cl_khr_external_memory` listed as work in progress at XDC 2025. **(verify the state in Mesa 26.2)**.
-- **intel-compute-runtime**: support for the external extensions not confirmed in this research **(verify)**.
-- There is an official Vulkan sample, "Cross vendor OpenCL and Vulkan interoperability".
+Installation defaults are version-sensitive convenience evidence. They do not determine
+whether a packaged application can declare a runtime dependency. No desktop runtime changes
+were made during this review.
 
----
+## 4. What would reopen the decision
 
-## 3. The Blender lesson
+An existing OpenCL library/kernel must solve a concrete effect better than the baseline,
+with representative output correctness, import/sync/lifetime and total latency measured.
+Record that evidence and a new ADR before adding the backend. Blender's Cycles choices were
+for a different workload and do not prove the choice for a video editor.
 
-Blender **removed OpenCL from Cycles in version 3.0** (the Cycles-X rewrite). Reasons given:
-- a limited kernel implementation in OpenCL;
-- **driver bugs** from certain vendors;
-- a **stalled standard**;
-- hard maintenance of code separate from the C++/CUDA path.
+## 5. Validation status
 
-Afterwards AMD, Apple and Intel contributed **HIP, Metal and oneAPI** backends.
-
-**Lesson for OmaMovie:** maintaining an extra compute backend is expensive and depends on driver
-quality. Blender preferred native per-vendor backends over a "generic" backend that worked
-poorly everywhere.
-
-Counterpoint: OpenCL has evolved since 2021 (OpenCL 3.0/3.1, a mature rusticl), and Darktable
-still uses OpenCL successfully **(general knowledge)**.
-
----
-
-## 4. Comparison: Vulkan Compute vs. OpenCL for OmaMovie
-
-| Criterion | Vulkan Compute | OpenCL |
-|---|---|---|
-| Available on Omarchy by default | **Yes** (Vulkan drivers always installed) | No |
-| Direct access to compositor images | **Yes, same device and memory** | Only with interop extensions |
-| Zero-copy interop on Mesa | Not applicable (native) | In development (rusticl) |
-| Kernel language | GLSL/HLSL/Slang → SPIR-V | OpenCL C / C++ for OpenCL → SPIR-V |
-| Convenience for general compute | Lower (more verbose, descriptors) | **Higher** (simpler buffer and kernel model) |
-| Precision and numeric features | Depends on extensions | Good precision support and math builtins |
-| Ecosystem of ready kernels | Video shaders (libplacebo, FFmpeg) | Scientific libraries, Darktable, FFmpeg OpenCL filters |
-| Use in FFmpeg | Vulkan filters + decode/encode | OpenCL filters (`hwcontext_opencl`, with VA-API interop on Intel) |
-
----
-
-## 5. Where OpenCL could still make sense
-
-- **Reusing existing kernels or libraries** written in OpenCL, when rewriting them in Vulkan is not worth it.
-- **Non-visual computation** (audio analysis, scene detection, statistics) where OpenCL's
-  simpler model helps and the data does not need to live in a Vulkan image.
-- **NVIDIA**, if an effect is simpler in OpenCL than in CUDA and interop is available.
-
-None of these cases exists in OmaMovie today.
-
----
-
-## 6. Recommendation and decision
-
-Recommendation presented to the maintainer:
-
-1. **Vulkan Compute is the default generic backend** of `ComputeBackend`. Every effect has a Vulkan implementation.
-2. `CpuBackend` stays as the correctness reference and for tests.
-3. **OpenCL becomes an optional backend**, implemented only when:
-   - there is a concrete case (one of the items in §5); and
-   - zero-copy interop with Vulkan has been verified on the target runtime (test
-     `cl_khr_external_memory_dma_buf`/`_opaque_fd` on rusticl and NEO).
-4. The `ComputeBackend` interface keeps allowing OpenCL (the door stays open), and the OpenCL
-   runtime is **detected at runtime** (`dlopen` of the ICD loader), never required.
-
-**Decision (2026-10-02):** the maintainer chose to **remove OpenCL entirely**. `CLAUDE.md` §4
-and §9.3 were updated: Vulkan Compute is the generic backend, and adding OpenCL back requires an
-explicit decision and an ADR.
-
----
-
-## Sources
-
-- [Phoronix: Rusticl ready with OpenCL 3.1 on Radeon, Intel Iris & Zink](https://phoronix.com/news/OpenCL-3.1-Same-Day-Rusticl)
-- [Comss: Mesa 26.2.0 with OpenCL 3.1](https://www.comss.ru/page.php?id=21518)
-- [Phoronix: Rusticl has turned out remarkably well (XDC 2025)](https://phoronix.com/news/Rusticl-XDC2025)
-- [Phoronix: Mesa 24.3 build option to enable Rusticl by default](https://phoronix.com/news/Rusticl-Default-Mesa-24.3)
-- [Phoronix: Mesa Git makes it easier activating Rusticl (RUSTICL_ENABLE)](https://www.phoronix.com/news/Mesa-RUSTICL_ENABLE)
-- [Phoronix: Rusticl adds cl_khr_gl_sharing](https://www.phoronix.com/news/Rusticl-cl_khr_gl_sharing)
-- [Khronos: OpenCL 3.0 extensions for NN inferencing and OpenCL/Vulkan interop](https://www.khronos.org/blog/khronos-releases-opencl-3.0-extensions-for-neural-network-inferencing-and-opencl-vulkan-interop)
-- [Khronos Registry: cl_khr_external_memory](https://registry.khronos.org/OpenCL/sdk/3.0/docs/man/html/cl_khr_external_memory.html)
-- [NVIDIA: Using semaphore and memory sharing extensions for Vulkan interop with OpenCL](https://developer.nvidia.com/blog/using-semaphore-and-memory-sharing-extensions-for-vulkan-interop-with-opencl)
-- [Vulkan Samples: Cross vendor OpenCL and Vulkan interoperability](https://docs.vulkan.org/samples/latest/samples/extensions/open_cl_interop/README.html)
-- [Phoronix: OpenCL 3.0.9 extensions for Vulkan interop](https://www.phoronix.com/news/OpenCL-3.0.9-Extensions)
-- [Blender 3.0 release notes: Cycles](https://wiki.blender.org/release_notes/3.0/cycles/)
-- [Blender: Next level support for AMD GPUs](https://code.blender.org/2021/11/next-level-support-for-amd-gpus/)
-- [GPUOpen: Blender Cycles AMD GPU](https://gpuopen.com/blender-cycles-amd-gpu/)
-- Local Omarchy 4.0.4 files: `/usr/share/omarchy/install/hardware/`
+Documentary analysis only. No OpenCL runtime/kernel/interop experiment ran here. Generic
+API support is documented; the target-device extension matrix remains pending. Existing
+Vulkan + CPU reference work continues without implementing three backends at once.

@@ -1,0 +1,54 @@
+#version 450
+
+// Export encode on the GPU (code review part 5): the compositor's linear BT.709 RGBA16F image as
+// NV12, BT.709 matrix, limited range, written straight into a host-visible buffer so the
+// readback is 1.5 bytes per pixel and the CPU converts nothing. The transfer is the export one
+// (display_srgb.comp's `bt709`: the inverse BT.1886 EOTF). Chroma is the mean of each 2x2 block
+// of encoded R'G'B', the centre of the block.
+//
+// One invocation fills a 4x2 block: one word of each luma row and one of the chroma row. The
+// buffer holds `stride`-byte luma rows, then `stride`-byte interleaved CbCr rows; the stride is
+// a multiple of 4 and the size is even (VulkanCompositor::read_nv12 checks both).
+
+layout(local_size_x = 16, local_size_y = 8) in;
+layout(rgba16f, set = 0, binding = 0) uniform readonly image2D linear_image;
+layout(std430, set = 0, binding = 1) writeonly buffer Nv12 { uint words[]; } nv12;
+layout(push_constant) uniform Params { uint stride; } params;
+
+const vec3 kLuma = vec3(0.2126, 0.7152, 0.0722);
+
+vec3 encode_bt709(vec3 linear_rgb) {
+    return pow(clamp(linear_rgb, vec3(0.0), vec3(1.0)), vec3(1.0 / 2.4));
+}
+
+uint pack(vec4 v) {
+    uvec4 b = uvec4(clamp(round(v), vec4(0.0), vec4(255.0)));
+    return b.x | (b.y << 8) | (b.z << 16) | (b.w << 24);
+}
+
+vec2 chroma(vec3 rgb) {
+    float y = dot(rgb, kLuma);
+    return vec2(128.0) + 224.0 * vec2((rgb.b - y) / 1.8556, (rgb.r - y) / 1.5748);
+}
+
+void main() {
+    ivec2 size = imageSize(linear_image);
+    uvec2 block = gl_GlobalInvocationID.xy;
+    if (int(block.x * 4u) >= size.x || int(block.y * 2u) >= size.y) return;
+    vec4 rows[2];
+    vec3 sums[2] = vec3[2](vec3(0.0), vec3(0.0));
+    for (int i = 0; i < 4; ++i) {
+        for (int r = 0; r < 2; ++r) {
+            // Past a width that is not a multiple of 4: repeat the edge into the row padding.
+            ivec2 p = min(ivec2(int(block.x * 4u) + i, int(block.y * 2u) + r), size - 1);
+            vec3 e = encode_bt709(imageLoad(linear_image, p).rgb);
+            rows[r][i] = 16.0 + 219.0 * dot(e, kLuma);
+            sums[i / 2] += e;
+        }
+    }
+    uint row0 = (block.y * 2u * params.stride + block.x * 4u) / 4u;
+    uint uv = (params.stride * uint(size.y) + block.y * params.stride + block.x * 4u) / 4u;
+    nv12.words[row0] = pack(rows[0]);
+    nv12.words[row0 + params.stride / 4u] = pack(rows[1]);
+    nv12.words[uv] = pack(vec4(chroma(sums[0] * 0.25), chroma(sums[1] * 0.25)));
+}

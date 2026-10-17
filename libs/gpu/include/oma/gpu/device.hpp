@@ -5,6 +5,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -31,16 +32,31 @@ struct DeviceInfo {
     std::string name;
     std::string driver_name;
     std::string driver_info;
+    std::string render_node; // "/dev/dri/renderD128"; empty if the driver does not say
     uint32_t vendor_id = 0;
     uint32_t device_id = 0;
     uint32_t api_version = 0;
     VkPhysicalDeviceType type = VK_PHYSICAL_DEVICE_TYPE_OTHER;
+    // Advertised prerequisites, not proof that a particular codec/profile can be decoded.
+    bool dma_buf_import = false;
+    bool drm_modifiers = false;
+    bool external_semaphore_fd = false;
+    bool video_decode_queue = false;
+    VkVideoCodecOperationFlagsKHR advertised_video_codecs = 0;
 };
 
 struct DeviceOptions {
     // Pick the first device whose name contains this text (case-sensitive). Without it, the first
     // hardware device is used, falling back to a CPU implementation (e.g. lavapipe in CI).
-    std::optional<std::string> name_contains;
+    std::optional<std::string> name_contains = std::nullopt;
+    // Qt 6.11 retrieves queues with vkGetDeviceQueue, which requires zero creation flags.
+    // Disabling this requires every consumer to participate in external synchronization.
+    bool internally_synchronized_queues = true;
+    // Instance requirements of the presentation bridge or validation tools. Missing requested
+    // extensions/layers fail creation; libs/gpu does not depend on a window system or Qt.
+    // The `= {}` let callers designate only some fields without GCC's -Wmissing-field-initializers.
+    std::vector<std::string> instance_extensions = {}; // NOLINT(readability-redundant-member-init)
+    std::vector<std::string> instance_layers = {};     // NOLINT(readability-redundant-member-init)
 };
 
 // Lists the devices the loader exposes, without creating any logical device.
@@ -61,7 +77,8 @@ public:
     [[nodiscard]] uint32_t graphics_family() const noexcept;
 
     // Whether queues were created internally synchronized (VK_KHR_internally_synchronized_queues):
-    // FFmpeg, the compositor and Qt can then submit to the same queue without an application lock.
+    // Compatible consumers can then submit without an application lock. Qt 6.11 cannot retrieve
+    // these flagged queues (S4); this does not imply compatibility with its device import API.
     [[nodiscard]] bool internally_synchronized_queues() const noexcept;
     [[nodiscard]] VkDeviceQueueCreateFlags queue_create_flags() const noexcept;
 
@@ -80,10 +97,33 @@ public:
     [[nodiscard]] VkQueue queue(uint32_t family, uint32_t index) const;
 
     // Vulkan requires external synchronization of a VkQueue unless it was created internally
-    // synchronized. Every submitter (FFmpeg, the compositor, Qt) brackets vkQueueSubmit* and
-    // vkQueuePresent with these; they are no-ops on internally synchronized queues.
+    // synchronized. OmaMovie submitters bracket vkQueueSubmit* with these; they are no-ops on
+    // internally synchronized queues. Qt does not call these hooks: its bridge must serialize
+    // ALL queue access with other consumers (including submission, waits and presentation).
+    // The lock is recursive: a thread that already holds a queue may submit to it again.
     void lock_queue(uint32_t family, uint32_t index) const;
     void unlock_queue(uint32_t family, uint32_t index) const;
+
+    // Admission for work that may submit from threads other than the Qt render thread
+    // (ADR-0005). Qt creates, resizes and destroys its swapchain, and waits for the device to
+    // idle, between frames, where these hooks cannot reach; the bridge closes admission there
+    // and opens it for each frame. Admission is open by default, so headless users see no
+    // change.
+    //
+    // admit() waits while admission is closed and returns false, without admission, once
+    // `cancelled` returns true (checked every few milliseconds). Pair a true result with
+    // leave(). close_admission() stops new admissions and waits for the admitted work to leave;
+    // a waiting close takes precedence over new admissions.
+    [[nodiscard]] bool admit(const std::function<bool()>& cancelled) const;
+    // Device loss (VK_ERROR_DEVICE_LOST) is final for a VkDevice: every later call may fail.
+    // The first submitter that sees it marks the device; from then on admit() refuses, so
+    // producers stop, and the owner shows the loss instead of retrying. Recovery needs a new
+    // device (and, for a device shared with Qt, a new window). Any thread.
+    [[nodiscard]] bool lost() const noexcept;
+    void mark_lost() const; // logs once
+    void leave() const;
+    void close_admission() const;
+    void open_admission() const;
 
 private:
     struct Impl;

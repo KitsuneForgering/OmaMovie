@@ -1,0 +1,19 @@
+M8 — cost of constant-speed sound in playback::TimelineAudio (2026-10-13)
+
+Machine: Intel Core (Tiger Lake), Arch/Omarchy. Build: release playback_tests (-O2; built
+with OMA_WERROR=OFF because GCC 16 raises a -Warray-bounds false positive in
+tests/playback/test_waveform.cpp in release, as it does in tests/media).
+Harness (temporary, not in the repository): tone_44100.wav (2 s, 44.1 kHz WAV) placed at
+1x, 2x and 1/2x over as much of the sequence as the source allows; 20 passes per speed, each
+a new TimelineAudio rendering 1,024-frame stereo blocks at 48 kHz from a different start
+(so every pass opens the decoder and seeks), then to the end of the clip.
+
+speed   open + seek + first block (mean of 20)   steady decode + resample + mix
+ 1x            7.64 / 7.77 ms                     0.588 / 0.596 ms per second of output
+ 2x            7.58 / 7.81 ms                     0.923 / 0.924 ms per second of output
+ 1/2x          8.02 / 7.99 ms                     0.440 / 0.449 ms per second of output
+
+Reading: cost scales with the media decoded (2x reads twice the source per output second),
+below 0.1 % of real time on one core either way; the seek cost does not depend on speed.
+Not measured: compressed sources (AAC/Opus decode), many retimed clips at once, and the
+pitch-preserving alternative (needs a time-stretch dependency decision).

@@ -3,29 +3,16 @@
 #include "oma/base/error.hpp"
 #include "oma/base/time.hpp"
 #include "oma/media/probe.hpp"
+#include "oma/media/video_decoder_options.hpp"
 #include "oma/media/video_frame.hpp"
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <vector>
 
-namespace oma::gpu {
-class Device;
-}
-
 namespace oma::media {
-
-struct VideoDecoderOptions {
-    // OmaMovie's device; it must outlive the decoder. Without it only software decode is possible.
-    const gpu::Device* device = nullptr;
-    // Paths to try, in order. The default is the policy measured in S1/S2: VA-API imported into
-    // Vulkan, then Vulkan Video, then software. Leave Software out to forbid the fallback.
-    std::vector<DecodePath> paths = {DecodePath::VaapiToVulkan, DecodePath::VulkanVideo,
-                                     DecodePath::Software};
-    std::optional<int> stream; // stream index; default: the best video stream
-    int threads = 0;           // software decode threads, 0 = automatic
-};
 
 // Decodes one video stream of a file in presentation order. Not thread-safe: one thread drives a
 // decoder (the playback scheduler owns one per clip).
@@ -53,6 +40,11 @@ public:
     // Makes the next frame the one on screen at `t`: the last frame whose pts <= t, or the first
     // frame when `t` precedes it. Exact on variable frame rate media (CLAUDE.md §6).
     [[nodiscard]] Result<void> seek(const RationalTime& t);
+
+    // Checked between decoded frames while a seek decodes forward to its target (up to a GOP):
+    // when it returns true, next() stops with ErrorCode::Cancelled. The decoder is then in the
+    // middle of that seek and must be sought again (or dropped) before it is used. Empty: never.
+    void set_interrupt(std::function<bool()> interrupted);
 
 private:
     struct Impl;

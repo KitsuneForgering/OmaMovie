@@ -1,61 +1,14 @@
 #include "oma/base/error.hpp"
 
 #include <format>
+#include <utility>
 
 namespace oma {
 
-std::string_view to_string(Category category) noexcept {
-    switch (category) {
-    case Category::Base:
-        return "base";
-    case Category::Media:
-        return "media";
-    case Category::Decode:
-        return "decode";
-    case Category::Encode:
-        return "encode";
-    case Category::Gpu:
-        return "gpu";
-    case Category::Compositor:
-        return "compositor";
-    case Category::Timeline:
-        return "timeline";
-    case Category::Project:
-        return "project";
-    case Category::Importer:
-        return "importer";
-    case Category::Audio:
-        return "audio";
-    case Category::Cache:
-        return "cache";
-    case Category::Playback:
-        return "playback";
-    case Category::Ui:
-        return "ui";
-    }
-    return "unknown";
-}
-
-std::string_view to_string(ErrorCode code) noexcept {
-    switch (code) {
-    case ErrorCode::InvalidArgument:
-        return "invalid argument";
-    case ErrorCode::Overflow:
-        return "overflow";
-    case ErrorCode::OutOfRange:
-        return "out of range";
-    case ErrorCode::Cancelled:
-        return "cancelled";
-    case ErrorCode::Unsupported:
-        return "unsupported";
-    case ErrorCode::IoError:
-        return "I/O error";
-    case ErrorCode::InvalidData:
-        return "invalid data";
-    case ErrorCode::Internal:
-        return "internal error";
-    }
-    return "unknown error";
+std::unexpected<Error> make_error(ErrorCode code, Category category, std::string message,
+                                  std::string context) {
+    return std::unexpected<Error>(std::in_place, code, category, std::move(message),
+                                  std::move(context));
 }
 
 Error::Error(ErrorCode code, Category category, std::string message, std::string context)
@@ -68,6 +21,19 @@ std::string Error::summary() const {
     }
     return std::format("[{}] {}: {} ({})", to_string(category_), to_string(code_), message_,
                        context_);
+}
+
+ErrorCode Error::code() const noexcept {
+    return code_;
+}
+Category Error::category() const noexcept {
+    return category_;
+}
+const std::string& Error::message() const noexcept {
+    return message_;
+}
+const std::string& Error::context() const noexcept {
+    return context_;
 }
 
 } // namespace oma

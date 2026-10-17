@@ -22,22 +22,22 @@ extern "C" {
 namespace oma::media::ff {
 
 struct FormatCloser {
-    void operator()(AVFormatContext* p) const noexcept { avformat_close_input(&p); }
+    void operator()(AVFormatContext* p) const noexcept;
 };
 struct CodecFreer {
-    void operator()(AVCodecContext* p) const noexcept { avcodec_free_context(&p); }
+    void operator()(AVCodecContext* p) const noexcept;
 };
 struct FrameFreer {
-    void operator()(AVFrame* p) const noexcept { av_frame_free(&p); }
+    void operator()(AVFrame* p) const noexcept;
 };
 struct PacketFreer {
-    void operator()(AVPacket* p) const noexcept { av_packet_free(&p); }
+    void operator()(AVPacket* p) const noexcept;
 };
 struct BufferUnref {
-    void operator()(AVBufferRef* p) const noexcept { av_buffer_unref(&p); }
+    void operator()(AVBufferRef* p) const noexcept;
 };
 struct SwrFreer {
-    void operator()(SwrContext* p) const noexcept { swr_free(&p); }
+    void operator()(SwrContext* p) const noexcept;
 };
 
 using FormatPtr = std::unique_ptr<AVFormatContext, FormatCloser>;

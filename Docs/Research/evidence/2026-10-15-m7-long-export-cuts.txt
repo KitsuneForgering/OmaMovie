@@ -1,0 +1,38 @@
+M7 long export with reordered cuts (2026-10-15): tools/bench/long-export/run.sh 120
+Edit: 24 five-minute cuts of a ten-minute 1080p30 BT.709 source (testsrc2 with a hue sweep of
+one turn per ten minutes, so distant source times differ in colour), reordered, a 1 s dissolve
+between cuts 1 and 2, sepia on cut 3 and cut 23; OTIO converted by `oma-project convert` (level
+2), looks added to the project. Export by the app (--export-audit, VA-API). Checks by FFmpeg
+only: frame count, A/V length, mean volume at 1 s / 1 h / 1 h 59 min 58 s, and 72 sampled frames
+(start, middle and end of every cut) against the source frame the plan puts there, as 160x90
+RGB thumbnails: plain cuts must match (<= 6 levels), looked cuts must differ (>= 10), the
+dissolve's middle must sit nearer the average of its two ends than half-way to either.
+
+Result: PASS. 216000/216000 frames, video and audio 7200.000 s, 125.2 fps (28 min 47 s), peak
+RSS 810 MB; plain cuts within 0.50 levels; dissolve middle 30.5 from the average against 73.2 /
+72.4 from its ends. The 2026-10-13 run of a similar edit took 52 min 45 s (68.2 fps), before the
+export moved its encoder to its own worker and read VA-API frames back as GPU-made NV12.
+
+Memory: sampled every 30 s on a 25-minute run, RSS rises from 803 to 815 MB after warm-up and
+levels off; a first two-hour run peaked at 894 MB and this one at 810 MB. The slow part is the
+MP4 muxer's sample index, kept until `moov` is written at the end: linear in duration, bounded.
+Earlier attempt: the same run with an untinted source failed only its dissolve check, which had
+no power there (the two ends differed by 2.6 grey levels); the hue sweep fixed the test.
+A 25-minute attempt in a 3 GB tmpfs filled it at frame 43053: the app reported "cannot write
+packet" and removed its temporary file (disk-full semantics, M7); the runner now checks space.
+
+Raw report:
+Long export 2026-10-15 01:28:47 -0300: 120 min, commit db5b646
+GPU: Intel(R) Iris(R) Xe Graphics (TGL GT2)
+load: 3.96 5.58 5.95; import: level reached: 2 media: 1 saved: /home/kitsune/.local/share/omamovie-bench/long-export/2026-10-15-0128/converted.omamovie 
+export audit: 216000 frames in 1725881 ms (125.2 fps) -> /home/kitsune/.local/share/omamovie-bench/long-export/2026-10-15-0128/out.mp4
+  encoder: VA-API H.264 (GPU)
+  per frame: build 0.11 ms, render+readback 7.57 ms, wait for encoder 0.17 ms, encode (own worker) 4.85 ms, mix 0.13 ms
+  result: written
+measure: rc=0 wall_s=1726.73 user_s=4221.04 sys_s=413.85 peak_rss_mb=810
+frames 216000/216000, video 7200.000000 s, audio 7200.000000 s, 8745770169 bytes
+sound at 1 s: mean_volume: -21.1 dB
+sound at 3600 s: mean_volume: -21.1 dB
+sound at 7198 s: mean_volume: -21.1 dB
+checked 72 frames: plain worst 0.50 levels; dissolve mix 30.5 vs ends 73.2/72.4; PASS
+load at end: 8.70 7.23 5.81

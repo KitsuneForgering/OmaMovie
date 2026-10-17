@@ -1,0 +1,29 @@
+M7 — native project save/open cost by phase (2026-10-07)
+
+Machine: Intel Core (Tiger Lake) laptop with Iris Xe, NVMe, Arch/Omarchy. Build: release
+libraries (-O2), GCC, simdjson from Arch. Warm page cache (the file was just written); cold
+open was not measured (it needs dropping the page cache as root).
+
+Workload: one storyline track, N clips of 2 s alternating over 50 media items, each clip with
+opacity 0.9 and one look effect (format 4). Built with Timeline::restore, then
+project::to_json / save / from_json / load. A scratch program linked against the libraries
+(not in the repository); timings are single runs.
+
+clips   file     to_json  save(atomic,fsync)  from_json(parse+DTO+restore)  load(all)  validate  peak RSS
+  500   1.2 MB    2.7 ms    2.9 ms              3.3 ms                        3.7 ms     0.1 ms     15 MB
+ 5000  12.1 MB   19.7 ms   21.7 ms             31.4 ms                       34.6 ms     1.4 ms    107 MB
+20000  48.5 MB   74.6 ms   81.2 ms            116.9 ms                      149.1 ms     5.8 ms    368 MB
+
+Reading: every phase grows linearly with clip count; at the long-form gate's 5,000 clips the
+library work for save and open is ~20-35 ms, well inside an interactive budget, so JSON +
+simdjson stays (ADR-0007) and a SQLite index is not justified by project-file cost.
+
+Size: ~2.4 KB per clip. In a sample clip, default-valued groups (grade, colour, crop,
+transform, audio) are about half the content and indentation most of the rest; gzip shrinks
+the file ~15x. Omitting default-valued fields would roughly halve the file without a schema
+change (readers already default absent fields). Not done: the measured cost does not need it,
+and full output keeps diffs of a single setting local.
+
+Not measured here: cold open, re-import of the library (one probe per media item on the job
+workers), and UI materialization (measured separately in
+2026-10-06-m6-long-timeline.txt).

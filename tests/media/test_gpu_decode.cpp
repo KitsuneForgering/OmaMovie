@@ -1,3 +1,4 @@
+#include "oma/gpu/commands.hpp"
 #include "oma/gpu/device.hpp"
 #include "oma/media/video_decoder.hpp"
 
@@ -94,6 +95,7 @@ public:
     }
 
     [[nodiscard]] bool ok() const { return ok_; }
+    [[nodiscard]] bool plane_formats_ok() const { return plane_formats_ok_; }
 
     // Returns the first luma bytes when `copy` is set; empty on failure.
     std::vector<uint8_t> consume(VideoFrame& frame, bool copy) {
@@ -102,12 +104,27 @@ public:
             return {};
         }
         const GpuImages& img = access->images();
+        // One image per plane (VA-API): each reports its plane's format, never the frame's
+        // multi-planar one, or views over it are invalid (VUID-VkImageViewCreateInfo-format-06415).
+        if (img.image_count > 1) {
+            for (uint32_t i = 0; i < img.image_count; ++i) {
+                plane_formats_ok_ = plane_formats_ok_ && (img.formats[i] == VK_FORMAT_R8_UNORM ||
+                                                          img.formats[i] == VK_FORMAT_R8G8_UNORM ||
+                                                          img.formats[i] == VK_FORMAT_R16_UNORM ||
+                                                          img.formats[i] == VK_FORMAT_R16G16_UNORM);
+            }
+        }
         vkResetCommandBuffer(cmd_, 0);
         const VkCommandBufferBeginInfo begin{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                                              .pNext = nullptr,
                                              .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
                                              .pInheritanceInfo = nullptr};
         vkBeginCommandBuffer(cmd_, &begin);
+        if (img.foreign) { // imported VA-API surfaces: take them from their driver first
+            for (uint32_t i = 0; i < img.image_count; ++i) {
+                oma::gpu::acquire_foreign(cmd_, img.images[i], d_.graphics_family());
+            }
+        }
         std::vector<VkImageMemoryBarrier2> to_src;
         for (uint32_t i = 0; i < img.image_count; ++i) {
             to_src.push_back(
@@ -140,6 +157,11 @@ public:
                                    VK_IMAGE_LAYOUT_GENERAL));
         }
         dependency(back);
+        if (img.foreign) {
+            for (uint32_t i = 0; i < img.image_count; ++i) {
+                oma::gpu::release_foreign(cmd_, img.images[i], d_.graphics_family());
+            }
+        }
         vkEndCommandBuffer(cmd_);
 
         std::vector<VkSemaphoreSubmitInfo> waits;
@@ -241,6 +263,7 @@ private:
     VkBuffer buffer_ = VK_NULL_HANDLE;
     VkDeviceMemory memory_ = VK_NULL_HANDLE;
     bool ok_ = false;
+    bool plane_formats_ok_ = true;
     int consumed_ = 0;
 };
 
@@ -328,6 +351,7 @@ void decode_on_gpu(const char* name) {
     std::printf("    %s: %s, %d frames, %d on the GPU\n", name,
                 std::string(oma::media::to_string((*d)->path())).c_str(), frames, on_gpu);
     expect(frames).toEqual(30);
+    expect(consumer.plane_formats_ok()).toBeTruthy();
     if ((*d)->path() == DecodePath::Software) {
         expect(on_gpu).toEqual(0);
         return;

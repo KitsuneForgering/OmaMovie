@@ -1,0 +1,1090 @@
+#include "oma/timeline/edit.hpp"
+
+#include "anchors.hpp"
+#include "commands.hpp"
+#include "mutation.hpp"
+
+#include <algorithm>
+#include <optional>
+#include <utility>
+
+namespace oma::timeline::edit {
+
+namespace {
+
+using detail::error;
+using detail::Steps;
+
+Result<const Clip*> get_clip(const Timeline& tl, ClipId id) {
+    const Clip* c = tl.find_clip(id);
+    if (c == nullptr) {
+        return error(ErrorCode::InvalidArgument, "unknown clip", detail::clip_context(id));
+    }
+    return c;
+}
+
+Result<const Track*> get_track(const Timeline& tl, TrackId id) {
+    const Track* t = tl.find_track(id);
+    if (t == nullptr) {
+        return error(ErrorCode::InvalidArgument, "unknown track", detail::track_context(id));
+    }
+    return t;
+}
+
+// The clip with its first instant moved to `new_start` and its end kept: the source in moves
+// by the same amount of timeline time, mapped exactly through the clip's speed.
+Result<Clip> with_start(const Timeline& tl, Clip c, std::int64_t new_start) {
+    const std::int64_t end = c.end_ticks();
+    if (new_start >= end || new_start < 0) {
+        return error(ErrorCode::InvalidArgument, "the clip would be empty",
+                     detail::clip_context(c.id));
+    }
+    const std::int64_t moved = new_start - c.start.value();
+    // How far the media position moves to the new first instant. A segmented map (ADR-0013) is
+    // cut there, or grows its first segment outward and is measured back from the old start.
+    Result<RationalTime> offset =
+        std::unexpected(Error(ErrorCode::Internal, Category::Timeline, ""));
+    if (c.time_map.is_constant() || moved >= 0) {
+        offset = c.time_map.media_offset(moved, tl.timebase());
+        if (!c.time_map.is_constant()) {
+            auto cut = c.time_map.slice(moved, c.duration.value());
+            if (!cut) {
+                return std::unexpected(cut.error());
+            }
+            c.time_map = *cut;
+        }
+    } else {
+        auto grown = c.time_map.extended(-moved, 0);
+        if (!grown) {
+            return std::unexpected(grown.error());
+        }
+        auto ahead = grown->media_offset(-moved, tl.timebase());
+        offset = ahead ? RationalTime::make(-ahead->value(), ahead->timebase()) : ahead;
+        c.time_map = *grown;
+    }
+    if (!offset) {
+        return std::unexpected(offset.error());
+    }
+    auto source_in = detail::add_exact(c.source_in, *offset);
+    if (!source_in) {
+        return std::unexpected(source_in.error());
+    }
+    c.source_in = *source_in;
+    c.start = tl.at(new_start);
+    c.duration = tl.at(end - new_start);
+    return c;
+}
+
+Result<Clip> with_end(const Timeline& tl, Clip c, std::int64_t new_end) {
+    if (new_end <= c.start.value()) {
+        return error(ErrorCode::InvalidArgument, "the clip would be empty",
+                     detail::clip_context(c.id));
+    }
+    const std::int64_t length = new_end - c.start.value();
+    if (!c.time_map.is_constant()) {
+        auto resized = length <= c.duration.value()
+                           ? c.time_map.slice(0, length)
+                           : c.time_map.extended(0, length - c.duration.value());
+        if (!resized) {
+            return std::unexpected(resized.error());
+        }
+        c.time_map = *resized;
+    }
+    c.duration = tl.at(length);
+    return c;
+}
+
+std::int64_t track_end(const Track& t) {
+    return t.clips.empty() ? 0 : t.clips.back().end_ticks();
+}
+
+// Empties [from, to) on a track: clips inside are removed, clips crossing an edge are trimmed,
+// and a clip covering the whole range is split around it (the tail gets a new ID).
+Result<Steps> clear_range(Timeline& tl, const Track& track, std::int64_t from, std::int64_t to) {
+    Steps steps;
+    for (const Clip& c : track.clips) {
+        const std::int64_t start = c.start_ticks();
+        const std::int64_t end = c.end_ticks();
+        if (end <= from || start >= to) {
+            continue;
+        }
+        if (start >= from && end <= to) {
+            steps.push_back(detail::erase_clip(c.id));
+        } else if (start < from && end > to) {
+            auto head = with_end(tl, c, from);
+            auto tail = with_start(tl, c, to);
+            if (!head || !tail) {
+                return std::unexpected(!head ? head.error() : tail.error());
+            }
+            tail->id = ClipId(detail::Mutation(tl).allocate_id());
+            tail->transition_in.reset(); // the new cut inside the clip is a plain one
+            steps.push_back(detail::replace_clip(*head));
+            steps.push_back(detail::insert_clip(track.id, *tail));
+        } else if (start < from) {
+            auto head = with_end(tl, c, from);
+            if (!head) {
+                return std::unexpected(head.error());
+            }
+            steps.push_back(detail::replace_clip(*head));
+        } else {
+            auto tail = with_start(tl, c, to);
+            if (!tail) {
+                return std::unexpected(tail.error());
+            }
+            steps.push_back(detail::replace_clip(*tail));
+        }
+    }
+    return steps;
+}
+
+Result<Clip> new_clip(const Timeline& tl, ClipId id, std::int64_t start, const ClipSource& source) {
+    auto duration = tl.to_ticks(source.duration);
+    if (!duration) {
+        return std::unexpected(duration.error());
+    }
+    if (*duration <= 0) {
+        return error(ErrorCode::InvalidArgument, "clip duration must be positive",
+                     detail::clip_context(id));
+    }
+    if (auto end = detail::add_ticks(start, *duration); !end) {
+        return std::unexpected(end.error());
+    }
+    return Clip{.id = id,
+                .media = source.media,
+                .start = tl.at(start),
+                .duration = tl.at(*duration),
+                .source_in = source.source_in,
+                .time_map = source.time_map,
+                .video = source.video,
+                .audio = source.audio,
+                .audio_detached = false,
+                .transition_in = std::nullopt,
+                .anchor = std::nullopt,
+                .title = source.title};
+}
+
+// A change to a clip plus a shift of the clips after it. Whichever frees space runs first, so
+// no intermediate state overlaps: growing shifts first, shrinking changes first.
+Steps change_and_shift(Clip changed, TrackId track, std::int64_t shift_from,
+                       std::int64_t shift_by) {
+    Steps steps;
+    auto change = detail::replace_clip(std::move(changed));
+    auto shift = detail::shift_clips(track, shift_from, shift_by);
+    if (shift_by > 0) {
+        steps.push_back(std::move(shift));
+        steps.push_back(std::move(change));
+    } else {
+        steps.push_back(std::move(change));
+        steps.push_back(std::move(shift));
+    }
+    return steps;
+}
+
+std::unique_ptr<Command> single(std::string name, std::unique_ptr<Command> step) {
+    Steps steps;
+    steps.push_back(std::move(step));
+    return detail::make_transaction(std::move(name), std::move(steps));
+}
+
+} // namespace
+
+std::unique_ptr<Command> add_track(TrackId id, TrackKind kind, std::string name,
+                                   std::optional<std::size_t> index) {
+    return detail::make_planned(
+        "Add Track", [=, name = std::move(name)](Timeline& tl) -> Result<Steps> {
+            Steps steps;
+            steps.push_back(detail::insert_track(Track{.id = id,
+                                                       .kind = kind,
+                                                       .name = name,
+                                                       .muted = false,
+                                                       .hidden = false,
+                                                       .clips = {}},
+                                                 index.value_or(tl.tracks().size())));
+            return steps;
+        });
+}
+
+std::unique_ptr<Command> remove_track(TrackId id) {
+    return single("Remove Track", detail::erase_track(id));
+}
+
+std::unique_ptr<Command> set_track_flags(TrackId id, bool muted, bool hidden) {
+    return single("Change Track", detail::set_flags(id, muted, hidden));
+}
+
+std::unique_ptr<Command> overwrite(TrackId track, ClipId id, RationalTime at, ClipSource source) {
+    return detail::make_planned("Overwrite",
+                                [=, source = std::move(source)](Timeline& tl) -> Result<Steps> {
+                                    auto t = get_track(tl, track);
+                                    auto start = tl.to_ticks(at);
+                                    if (!t || !start) {
+                                        return std::unexpected(!t ? t.error() : start.error());
+                                    }
+                                    auto clip = new_clip(tl, id, *start, source);
+                                    if (!clip) {
+                                        return std::unexpected(clip.error());
+                                    }
+                                    auto steps = clear_range(tl, **t, *start, clip->end_ticks());
+                                    if (!steps) {
+                                        return steps;
+                                    }
+                                    steps->push_back(detail::insert_clip(track, *clip));
+                                    return steps;
+                                });
+}
+
+std::unique_ptr<Command> insert(TrackId track, ClipId id, RationalTime at, ClipSource source) {
+    return detail::make_planned(
+        "Insert", [=, source = std::move(source)](Timeline& tl) -> Result<Steps> {
+            auto t = get_track(tl, track);
+            auto start = tl.to_ticks(at);
+            if (!t || !start) {
+                return std::unexpected(!t ? t.error() : start.error());
+            }
+            auto clip = new_clip(tl, id, *start, source);
+            if (!clip) {
+                return std::unexpected(clip.error());
+            }
+            const std::int64_t length = clip->duration.value();
+            Steps steps;
+            const Clip* spanning = tl.clip_at(track, *start);
+            std::optional<Clip> tail;
+            if (spanning != nullptr && spanning->start_ticks() < *start) {
+                // The head ends at the insertion point; the tail keeps its source range and moves
+                // right by the inserted length.
+                auto head = with_end(tl, *spanning, *start);
+                auto moved = with_start(tl, *spanning, *start);
+                if (!head || !moved) {
+                    return std::unexpected(!head ? head.error() : moved.error());
+                }
+                moved->start = tl.at(*start + length);
+                moved->id = ClipId(detail::Mutation(tl).allocate_id());
+                tail = *moved;
+                steps.push_back(detail::replace_clip(*head));
+            }
+            steps.push_back(detail::shift_clips(track, *start, length));
+            if (tail) {
+                steps.push_back(detail::insert_clip(track, *tail));
+            }
+            steps.push_back(detail::insert_clip(track, *clip));
+            return steps;
+        });
+}
+
+std::unique_ptr<Command> append(TrackId track, ClipId id, ClipSource source) {
+    return detail::make_planned("Append",
+                                [=, source = std::move(source)](Timeline& tl) -> Result<Steps> {
+                                    auto t = get_track(tl, track);
+                                    if (!t) {
+                                        return std::unexpected(t.error());
+                                    }
+                                    auto clip = new_clip(tl, id, track_end(**t), source);
+                                    if (!clip) {
+                                        return std::unexpected(clip.error());
+                                    }
+                                    Steps steps;
+                                    steps.push_back(detail::insert_clip(track, *clip));
+                                    return steps;
+                                });
+}
+
+std::unique_ptr<Command> remove_clip(ClipId id) {
+    return single("Delete", detail::erase_clip(id));
+}
+
+std::unique_ptr<Command> ripple_delete(ClipId id) {
+    return detail::make_planned("Ripple Delete", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        if (!c) {
+            return std::unexpected(c.error());
+        }
+        Steps steps;
+        steps.push_back(detail::erase_clip(id));
+        steps.push_back(
+            detail::shift_clips(tl.track_of(id)->id, (*c)->end_ticks(), -(*c)->duration.value()));
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> ripple_delete_range(TrackId track, RationalTime from, RationalTime to) {
+    return detail::make_planned("Ripple Delete", [=](Timeline& tl) -> Result<Steps> {
+        auto t = get_track(tl, track);
+        auto a = tl.to_ticks(from);
+        auto b = tl.to_ticks(to);
+        if (!t || !a || !b) {
+            return std::unexpected(!t ? t.error() : (!a ? a.error() : b.error()));
+        }
+        if (*b <= *a || *a < 0) {
+            return error(ErrorCode::InvalidArgument, "empty or negative range",
+                         detail::track_context(track));
+        }
+        auto steps = clear_range(tl, **t, *a, *b);
+        if (!steps) {
+            return steps;
+        }
+        steps->push_back(detail::shift_clips(track, *b, *a - *b));
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> split(ClipId id, RationalTime at) {
+    return detail::make_planned("Split", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        auto point = tl.to_ticks(at);
+        if (!c || !point) {
+            return std::unexpected(!c ? c.error() : point.error());
+        }
+        if (*point <= (*c)->start_ticks() || *point >= (*c)->end_ticks()) {
+            return error(ErrorCode::InvalidArgument, "split point outside the clip",
+                         detail::clip_context(id));
+        }
+        auto head = with_end(tl, **c, *point);
+        auto tail = with_start(tl, **c, *point);
+        if (!head || !tail) {
+            return std::unexpected(!head ? head.error() : tail.error());
+        }
+        tail->id = ClipId(detail::Mutation(tl).allocate_id());
+        tail->transition_in.reset(); // the new cut inside the clip is a plain one
+        Steps steps;
+        steps.push_back(detail::replace_clip(*head));
+        steps.push_back(detail::insert_clip(tl.track_of(id)->id, *tail));
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> trim_start(ClipId id, RationalTime new_start, bool ripple) {
+    return detail::make_planned("Trim", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        auto start = tl.to_ticks(new_start);
+        if (!c || !start) {
+            return std::unexpected(!c ? c.error() : start.error());
+        }
+        auto trimmed = with_start(tl, **c, *start);
+        if (!trimmed) {
+            return std::unexpected(trimmed.error());
+        }
+        if (!ripple) {
+            Steps steps;
+            steps.push_back(detail::replace_clip(*trimmed));
+            return steps;
+        }
+        // Ripple: the clip keeps its position; what follows moves by the length change.
+        const std::int64_t delta = *start - (*c)->start_ticks();
+        trimmed->start = (*c)->start;
+        return change_and_shift(*trimmed, tl.track_of(id)->id, (*c)->end_ticks(), -delta);
+    });
+}
+
+std::unique_ptr<Command> trim_end(ClipId id, RationalTime new_end, bool ripple) {
+    return detail::make_planned("Trim", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        auto end = tl.to_ticks(new_end);
+        if (!c || !end) {
+            return std::unexpected(!c ? c.error() : end.error());
+        }
+        auto trimmed = with_end(tl, **c, *end);
+        if (!trimmed) {
+            return std::unexpected(trimmed.error());
+        }
+        if (!ripple) {
+            Steps steps;
+            steps.push_back(detail::replace_clip(*trimmed));
+            return steps;
+        }
+        return change_and_shift(*trimmed, tl.track_of(id)->id, (*c)->end_ticks(),
+                                *end - (*c)->end_ticks());
+    });
+}
+
+std::unique_ptr<Command> roll(ClipId left, RationalTime edit_point) {
+    return detail::make_planned("Roll", [=](Timeline& tl) -> Result<Steps> {
+        auto l = get_clip(tl, left);
+        auto point = tl.to_ticks(edit_point);
+        if (!l || !point) {
+            return std::unexpected(!l ? l.error() : point.error());
+        }
+        const Track* track = tl.track_of(left);
+        const Clip* r = tl.clip_at(track->id, (*l)->end_ticks());
+        if (r == nullptr || r->start_ticks() != (*l)->end_ticks()) {
+            return error(ErrorCode::InvalidArgument, "no clip starts at the end of this one",
+                         detail::clip_context(left));
+        }
+        auto new_left = with_end(tl, **l, *point);
+        auto new_right = with_start(tl, *r, *point);
+        if (!new_left || !new_right) {
+            return std::unexpected(!new_left ? new_left.error() : new_right.error());
+        }
+        Steps steps;
+        auto change_left = detail::replace_clip(*new_left);
+        auto change_right = detail::replace_clip(*new_right);
+        // The clip that shrinks goes first so the other one has room.
+        if (*point > (*l)->end_ticks()) {
+            steps.push_back(std::move(change_right));
+            steps.push_back(std::move(change_left));
+        } else {
+            steps.push_back(std::move(change_left));
+            steps.push_back(std::move(change_right));
+        }
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> slip(ClipId id, RationalTime delta) {
+    return detail::make_planned("Slip", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        auto d = tl.to_ticks(delta);
+        if (!c || !d) {
+            return std::unexpected(!c ? c.error() : d.error());
+        }
+        auto offset = (*c)->time_map.is_constant() ? (*c)->time_map.media_offset(*d, tl.timebase())
+                                                   : RationalTime::make(*d, tl.timebase());
+        if (!offset) {
+            return std::unexpected(offset.error());
+        }
+        auto source_in = detail::add_exact((*c)->source_in, *offset);
+        if (!source_in) {
+            return std::unexpected(source_in.error());
+        }
+        Clip slipped = **c;
+        slipped.source_in = *source_in;
+        Steps steps;
+        steps.push_back(detail::replace_clip(slipped));
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> slide(ClipId id, RationalTime delta) {
+    return detail::make_planned("Slide", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        auto d = tl.to_ticks(delta);
+        if (!c || !d) {
+            return std::unexpected(!c ? c.error() : d.error());
+        }
+        const Clip& clip = **c;
+        const Track* track = tl.track_of(id);
+        const Clip* prev =
+            clip.start_ticks() > 0 ? tl.clip_at(track->id, clip.start_ticks() - 1) : nullptr;
+        const Clip* next = tl.clip_at(track->id, clip.end_ticks());
+        if (next != nullptr && next->start_ticks() != clip.end_ticks()) {
+            next = nullptr;
+        }
+        Clip moved = clip;
+        moved.start = tl.at(clip.start_ticks() + *d);
+        if (moved.start.value() < 0) {
+            return error(ErrorCode::InvalidArgument, "slide before time zero",
+                         detail::clip_context(id));
+        }
+        std::unique_ptr<Command> change_prev;
+        std::unique_ptr<Command> change_next;
+        if (prev != nullptr) {
+            auto p = with_end(tl, *prev, prev->end_ticks() + *d);
+            if (!p) {
+                return std::unexpected(p.error());
+            }
+            change_prev = detail::replace_clip(*p);
+        }
+        if (next != nullptr) {
+            auto n = with_start(tl, *next, next->start_ticks() + *d);
+            if (!n) {
+                return std::unexpected(n.error());
+            }
+            change_next = detail::replace_clip(*n);
+        }
+        // Shrink the neighbour on the side the clip moves toward, move it, grow the other.
+        Steps steps;
+        auto& first = *d > 0 ? change_next : change_prev;
+        auto& last = *d > 0 ? change_prev : change_next;
+        if (first) {
+            steps.push_back(std::move(first));
+        }
+        steps.push_back(detail::replace_clip(moved));
+        if (last) {
+            steps.push_back(std::move(last));
+        }
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> move_clip(ClipId id, TrackId track, RationalTime start) {
+    return detail::make_planned("Move", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        auto t = get_track(tl, track);
+        auto s = tl.to_ticks(start);
+        if (!c || !t || !s) {
+            return std::unexpected(!c ? c.error() : (!t ? t.error() : s.error()));
+        }
+        if (tl.track_of(id)->kind != (*t)->kind) {
+            return error(ErrorCode::InvalidArgument, "tracks of different kinds",
+                         detail::clip_context(id));
+        }
+        Steps steps;
+        if (tl.track_of(id)->id == track && *s == (*c)->start_ticks()) {
+            return steps; // where it already is: no edit
+        }
+        Clip moved = **c;
+        moved.start = tl.at(*s);
+        steps.push_back(detail::erase_clip(id));
+        steps.push_back(detail::insert_clip(track, moved));
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> ripple_move(ClipId id, RationalTime at) {
+    return detail::make_planned("Move", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        auto s = tl.to_ticks(at);
+        if (!c || !s) {
+            return std::unexpected(!c ? c.error() : s.error());
+        }
+        const Track& track = *tl.track_of(id);
+        const std::int64_t length = (*c)->duration.value();
+        const std::int64_t end = (*c)->end_ticks();
+        // Where the other clips sit once the moved one is taken out and its gap closed.
+        const auto closed = [&](std::int64_t t) {
+            return t >= end ? t - length : t;
+        };
+        if (*s < 0) {
+            return error(ErrorCode::InvalidArgument, "negative time", detail::clip_context(id));
+        }
+        Steps steps;
+        if (*s == (*c)->start_ticks()) {
+            return steps; // back where it was: no edit, and its transitions stay
+        }
+        for (const Clip& other : track.clips) {
+            if (other.id == id) {
+                continue;
+            }
+            const std::int64_t start = closed(other.start_ticks());
+            if (start < *s && *s < start + other.duration.value()) {
+                return error(ErrorCode::InvalidArgument, "the clip would land inside another clip",
+                             detail::clip_context(id));
+            }
+            // Cleared first, in the current positions, so the shifts below move the result.
+            const bool followed = other.start_ticks() == end;
+            if (other.transition_in && (followed || start == *s)) {
+                Clip plain = other;
+                plain.transition_in.reset();
+                steps.push_back(detail::replace_clip(plain));
+            }
+        }
+        Clip moved = **c;
+        moved.start = tl.at(*s);
+        moved.transition_in.reset();
+        steps.push_back(detail::erase_clip(id));
+        steps.push_back(detail::shift_clips(track.id, end, -length));
+        steps.push_back(detail::shift_clips(track.id, *s, length));
+        steps.push_back(detail::insert_clip(track.id, moved));
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> set_speed(ClipId id, Rational speed, bool ripple) {
+    return detail::make_planned("Speed", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        auto map = TimeMap::constant(speed);
+        if (!c || !map) {
+            return std::unexpected(!c ? c.error() : map.error());
+        }
+        // The media span the clip covers; a segmented map (freeze, reverse, ramps) becomes
+        // forward playback of that span.
+        auto span = (*c)->time_map.extent((*c)->duration.value(), tl.timebase());
+        auto unit = detail::multiply(tl.timebase(), speed);
+        if (!span || !unit) {
+            return std::unexpected(!span ? span.error() : unit.error());
+        }
+        auto first = detail::add_exact((*c)->source_in, span->first);
+        auto length = detail::add_exact(
+            span->second, *RationalTime::make(-span->first.value(), span->first.timebase()));
+        if (!first || !length) {
+            return std::unexpected(!first ? first.error() : length.error());
+        }
+        // Rounding down keeps the source range inside the media.
+        auto ticks = rescale(length->value(), length->timebase(), *unit, Rounding::Floor);
+        if (!ticks) {
+            return std::unexpected(ticks.error());
+        }
+        if (*ticks <= 0) {
+            return error(ErrorCode::InvalidArgument, "the clip would be empty",
+                         detail::clip_context(id));
+        }
+        Clip changed = **c;
+        changed.source_in = *first;
+        changed.time_map = *map;
+        changed.duration = tl.at(*ticks);
+        if (!ripple) {
+            Steps steps;
+            steps.push_back(detail::replace_clip(changed));
+            return steps;
+        }
+        return change_and_shift(changed, tl.track_of(id)->id, (*c)->end_ticks(),
+                                *ticks - (*c)->duration.value());
+    });
+}
+
+std::unique_ptr<Command> connect(ClipId dependent, ClipId primary) {
+    return detail::make_planned("Connect", [=](Timeline& tl) -> Result<Steps> {
+        auto d = get_clip(tl, dependent);
+        auto p = get_clip(tl, primary);
+        if (!d || !p) {
+            return std::unexpected(!d ? d.error() : p.error());
+        }
+        // Checked here, not left to validate(): Editor drops a same-track anchor while it follows
+        // connections, which would turn this edit into an Undo entry that does nothing.
+        if (tl.track_of(dependent) == tl.track_of(primary)) {
+            return error(ErrorCode::InvalidArgument, "the primary clip is on the same track",
+                         detail::clip_context(dependent));
+        }
+        if ((*p)->anchor || !(*p)->time_map.is_constant()) {
+            return error(ErrorCode::InvalidArgument,
+                         "the primary clip is connected itself or changes speed",
+                         detail::clip_context(primary));
+        }
+        if (detail::has_dependents(tl, dependent)) {
+            return error(ErrorCode::InvalidArgument, "other clips are connected to this clip",
+                         detail::clip_context(dependent));
+        }
+        if ((*d)->start_ticks() < (*p)->start_ticks() || (*d)->start_ticks() >= (*p)->end_ticks()) {
+            return error(ErrorCode::InvalidArgument, "the clip does not start on the primary clip",
+                         detail::clip_context(dependent));
+        }
+        auto source = detail::source_at(**p, (*d)->start_ticks(), tl.timebase());
+        if (!source) {
+            return std::unexpected(source.error());
+        }
+        Clip changed = **d;
+        changed.anchor = Anchor{.primary = primary, .source = *source};
+        Steps steps;
+        steps.push_back(detail::replace_clip(std::move(changed))); // validate() checks the rest
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> disconnect(ClipId dependent) {
+    return detail::make_planned("Disconnect", [=](Timeline& tl) -> Result<Steps> {
+        auto d = get_clip(tl, dependent);
+        if (!d) {
+            return std::unexpected(d.error());
+        }
+        Clip changed = **d;
+        changed.anchor.reset();
+        Steps steps;
+        steps.push_back(detail::replace_clip(std::move(changed)));
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> set_time_map(ClipId id, TimeMap map, bool ripple) {
+    return detail::make_planned("Speed", [=, map = std::move(map)](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        if (!c) {
+            return std::unexpected(c.error());
+        }
+        Clip changed = **c;
+        changed.time_map = map;
+        if (!map.is_constant()) {
+            changed.duration = tl.at(map.length());
+        }
+        const std::int64_t grown = changed.duration.value() - (*c)->duration.value();
+        if (!ripple || grown == 0) {
+            Steps steps;
+            steps.push_back(detail::replace_clip(changed));
+            return steps;
+        }
+        return change_and_shift(changed, tl.track_of(id)->id, (*c)->end_ticks(), grown);
+    });
+}
+
+std::unique_ptr<Command> reverse(ClipId id) {
+    return detail::make_planned("Reverse", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        if (!c) {
+            return std::unexpected(c.error());
+        }
+        const std::int64_t duration = (*c)->duration.value();
+        auto map = (*c)->time_map.reversed(duration);
+        auto end = (*c)->time_map.media_offset(duration, tl.timebase());
+        if (!map || !end) {
+            return std::unexpected(!map ? map.error() : end.error());
+        }
+        auto source_in = detail::add_exact((*c)->source_in, *end);
+        if (!source_in) {
+            return std::unexpected(source_in.error());
+        }
+        Clip changed = **c;
+        changed.source_in = *source_in;
+        changed.time_map = *map;
+        Steps steps;
+        steps.push_back(detail::replace_clip(changed));
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> freeze_frame(ClipId id, RationalTime at, RationalTime length,
+                                      bool ripple) {
+    return detail::make_planned("Freeze Frame", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        auto t = tl.to_ticks(at);
+        auto hold = tl.to_ticks(length);
+        if (!c || !t || !hold) {
+            return std::unexpected(!c ? c.error() : (!t ? t.error() : hold.error()));
+        }
+        const std::int64_t local = *t - (*c)->start_ticks();
+        const std::int64_t duration = (*c)->duration.value();
+        if (local < 0 || local >= duration || *hold <= 0) {
+            return error(ErrorCode::InvalidArgument, "freeze frame outside the clip",
+                         detail::clip_context(id));
+        }
+        auto whole = (*c)->time_map.as_segments(duration);
+        if (!whole) {
+            return std::unexpected(whole.error());
+        }
+        std::vector<TimeSegment> segments;
+        if (local > 0) {
+            auto head = whole->slice(0, local);
+            if (!head) {
+                return std::unexpected(head.error());
+            }
+            segments.assign(head->segments().begin(), head->segments().end());
+        }
+        segments.push_back(TimeSegment{.kind = TimeSegment::Kind::Freeze,
+                                       .length = *hold,
+                                       .from = Rational::literal(0, 1),
+                                       .to = Rational::literal(0, 1)});
+        auto tail = whole->slice(local, duration);
+        if (!tail) {
+            return std::unexpected(tail.error());
+        }
+        segments.insert(segments.end(), tail->segments().begin(), tail->segments().end());
+        auto map = TimeMap::segmented(std::move(segments));
+        if (!map) {
+            return std::unexpected(map.error());
+        }
+        Clip changed = **c;
+        changed.time_map = *map;
+        changed.duration = tl.at(map->length());
+        if (!ripple) {
+            Steps steps;
+            steps.push_back(detail::replace_clip(changed));
+            return steps;
+        }
+        return change_and_shift(changed, tl.track_of(id)->id, (*c)->end_ticks(), *hold);
+    });
+}
+
+std::unique_ptr<Command> set_video(ClipId id, VideoProperties video) {
+    return detail::make_planned("Video Adjustments",
+                                [=, video = std::move(video)](Timeline& tl) -> Result<Steps> {
+                                    auto c = get_clip(tl, id);
+                                    if (!c) {
+                                        return std::unexpected(c.error());
+                                    }
+                                    Clip changed = **c;
+                                    changed.video = video;
+                                    Steps steps;
+                                    steps.push_back(detail::replace_clip(changed));
+                                    return steps;
+                                });
+}
+
+std::unique_ptr<Command> set_video_range(ClipId id, RationalTime from, RationalTime to,
+                                         VideoProperties video) {
+    return detail::make_planned(
+        "Video Adjustments", [=, video = std::move(video)](Timeline& tl) -> Result<Steps> {
+            auto c = get_clip(tl, id);
+            auto a = tl.to_ticks(from);
+            auto b = tl.to_ticks(to);
+            if (!c || !a || !b) {
+                return std::unexpected(!c ? c.error() : !a ? a.error() : b.error());
+            }
+            const Clip& clip = **c;
+            const TrackId track = tl.track_of(id)->id;
+            const std::int64_t first = std::max(*a, clip.start_ticks());
+            const std::int64_t last = std::min(*b, clip.end_ticks());
+            if (first >= last) {
+                return error(ErrorCode::InvalidArgument, "the range does not cover the clip",
+                             detail::clip_context(id));
+            }
+            // Each cut is a split: the part after it gets a new ID and a plain cut.
+            const auto cut = [&](const Clip& whole,
+                                 std::int64_t at) -> Result<std::pair<Clip, Clip>> {
+                auto head = with_end(tl, whole, at);
+                auto tail = with_start(tl, whole, at);
+                if (!head || !tail) {
+                    return std::unexpected(!head ? head.error() : tail.error());
+                }
+                tail->id = ClipId(detail::Mutation(tl).allocate_id());
+                tail->transition_in.reset();
+                return std::pair{*head, *tail};
+            };
+            Steps steps;
+            Clip middle = clip;
+            if (first > clip.start_ticks()) {
+                auto parts = cut(clip, first);
+                if (!parts) {
+                    return std::unexpected(parts.error());
+                }
+                steps.push_back(detail::replace_clip(parts->first));
+                middle = parts->second;
+            }
+            std::optional<Clip> rest;
+            if (last < clip.end_ticks()) {
+                auto parts = cut(middle, last);
+                if (!parts) {
+                    return std::unexpected(parts.error());
+                }
+                middle = parts->first;
+                rest = parts->second;
+            }
+            middle.video = video;
+            steps.push_back(middle.id == id ? detail::replace_clip(middle)
+                                            : detail::insert_clip(track, middle));
+            if (rest) {
+                steps.push_back(detail::insert_clip(track, *rest));
+            }
+            return steps;
+        });
+}
+
+std::unique_ptr<Command> set_title(ClipId id, Title title) {
+    return detail::make_planned(
+        "Title", [=, title = std::move(title)](Timeline& tl) -> Result<Steps> {
+            auto c = get_clip(tl, id);
+            if (!c) {
+                return std::unexpected(c.error());
+            }
+            if (!(*c)->title) {
+                return error(ErrorCode::InvalidArgument, "the clip is not a title",
+                             detail::clip_context(id));
+            }
+            Clip changed = **c;
+            changed.title = title;
+            Steps steps;
+            steps.push_back(detail::replace_clip(changed));
+            return steps;
+        });
+}
+
+std::unique_ptr<Command> set_audio(ClipId id, const AudioProperties& audio) {
+    return detail::make_planned("Audio Adjustments", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        if (!c) {
+            return std::unexpected(c.error());
+        }
+        Clip changed = **c;
+        changed.audio = audio;
+        Steps steps;
+        steps.push_back(detail::replace_clip(changed));
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> set_transition(ClipId id, std::optional<Transition> transition) {
+    return detail::make_planned("Transition", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, id);
+        if (!c) {
+            return std::unexpected(c.error());
+        }
+        Clip changed = **c;
+        changed.transition_in = transition;
+        if (transition) {
+            auto ticks = tl.to_ticks(transition->duration);
+            if (!ticks) {
+                return std::unexpected(ticks.error());
+            }
+            changed.transition_in->duration = tl.at(*ticks);
+        }
+        Steps steps;
+        steps.push_back(detail::replace_clip(changed));
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> detach_audio(ClipId video, TrackId lane, ClipId audio) {
+    return detail::make_planned("Detach Audio", [=](Timeline& tl) -> Result<Steps> {
+        auto c = get_clip(tl, video);
+        auto t = get_track(tl, lane);
+        if (!c || !t) {
+            return std::unexpected(!c ? c.error() : t.error());
+        }
+        const MediaInfo* m = tl.find_media((*c)->media);
+        if (tl.track_of(video)->kind != TrackKind::Video || m == nullptr || !m->has_audio ||
+            (*c)->audio_detached) {
+            return error(ErrorCode::InvalidArgument, "the clip has no sound to detach",
+                         detail::clip_context(video));
+        }
+        if ((*t)->kind != TrackKind::Audio) {
+            return error(ErrorCode::InvalidArgument, "sound detaches onto an audio track",
+                         detail::track_context(lane));
+        }
+        Clip sound = **c;
+        sound.id = audio;
+        sound.video = {};
+        // Connected to its picture (ADR-0014), so edits that move the picture move its sound.
+        // A picture that is itself connected cannot host one; the sound then shares its anchor.
+        if ((*c)->time_map.is_constant() && !(*c)->anchor) {
+            sound.anchor = Anchor{.primary = video, .source = (*c)->source_in};
+        }
+        Clip picture = **c;
+        picture.audio_detached = true;
+        Steps steps;
+        steps.push_back(detail::insert_clip(lane, sound));
+        steps.push_back(detail::replace_clip(picture));
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> add_marker(MarkerId id, RationalTime at, std::string name) {
+    return detail::make_planned(
+        "Add Marker", [=, name = std::move(name)](Timeline& tl) -> Result<Steps> {
+            auto ticks = tl.to_ticks(at);
+            if (!ticks) {
+                return std::unexpected(ticks.error());
+            }
+            Steps steps;
+            steps.push_back(
+                detail::insert_marker(Marker{.id = id, .time = tl.at(*ticks), .name = name}));
+            return steps;
+        });
+}
+
+std::unique_ptr<Command> remove_marker(MarkerId id) {
+    return single("Remove Marker", detail::erase_marker(id));
+}
+
+namespace {
+
+// Sequence times on the grid, rebuilt in the sequence timebase (so equal times compare equal).
+Result<Caption> on_grid(const Timeline& tl, Caption c) {
+    auto start = tl.to_ticks(c.start);
+    auto duration = tl.to_ticks(c.duration);
+    if (!start) {
+        return std::unexpected(start.error());
+    }
+    if (!duration) {
+        return std::unexpected(duration.error());
+    }
+    c.start = tl.at(*start);
+    c.duration = tl.at(*duration);
+    return c;
+}
+
+// A caption edit as one step on the whole list; `change` edits a copy of the current list.
+std::unique_ptr<Command>
+caption_edit(std::string name,
+             std::function<Result<void>(const Timeline&, std::vector<Caption>&)> change) {
+    return detail::make_planned(
+        std::move(name), [change = std::move(change)](Timeline& tl) -> Result<Steps> {
+            std::vector<Caption> next(tl.captions().begin(), tl.captions().end());
+            if (auto r = change(tl, next); !r) {
+                return std::unexpected(r.error());
+            }
+            Steps steps;
+            steps.push_back(detail::replace_captions(std::move(next)));
+            return steps;
+        });
+}
+
+} // namespace
+
+std::unique_ptr<Command> add_caption(Caption caption) {
+    return caption_edit("Add Caption",
+                        [caption = std::move(caption)](const Timeline& tl,
+                                                       std::vector<Caption>& list) -> Result<void> {
+                            if (!caption.id.valid() ||
+                                std::ranges::find(list, caption.id, &Caption::id) != list.end()) {
+                                return error(ErrorCode::InvalidArgument,
+                                             "caption ID is invalid or in use");
+                            }
+                            auto c = on_grid(tl, caption);
+                            if (!c) {
+                                return std::unexpected(c.error());
+                            }
+                            list.push_back(std::move(*c));
+                            return {};
+                        });
+}
+
+std::unique_ptr<Command> set_caption(Caption caption) {
+    return caption_edit("Edit Caption",
+                        [caption = std::move(caption)](const Timeline& tl,
+                                                       std::vector<Caption>& list) -> Result<void> {
+                            const auto it = std::ranges::find(list, caption.id, &Caption::id);
+                            if (it == list.end()) {
+                                return error(ErrorCode::InvalidArgument, "no such caption");
+                            }
+                            auto c = on_grid(tl, caption);
+                            if (!c) {
+                                return std::unexpected(c.error());
+                            }
+                            *it = std::move(*c);
+                            return {};
+                        });
+}
+
+std::unique_ptr<Command> remove_caption(CaptionId id) {
+    return caption_edit(
+        "Remove Caption", [id](const Timeline&, std::vector<Caption>& list) -> Result<void> {
+            if (std::erase_if(list, [&](const Caption& c) { return c.id == id; }) == 0) {
+                return error(ErrorCode::InvalidArgument, "no such caption");
+            }
+            return {};
+        });
+}
+
+std::unique_ptr<Command> set_canvas(std::uint32_t width, std::uint32_t height) {
+    return detail::make_planned("Canvas", [width, height](Timeline& tl) -> Result<Steps> {
+        if (width < 16 || height < 16 || width > 16384 || height > 16384 || (width & 1U) != 0 ||
+            (height & 1U) != 0) {
+            return error(ErrorCode::InvalidArgument,
+                         "the canvas must be even and 16 to 16384 pixels each way");
+        }
+        Steps steps;
+        if (tl.canvas_width() != 0 && tl.canvas_height() != 0) {
+            const double sx = static_cast<double>(width) / tl.canvas_width();
+            const double sy = static_cast<double>(height) / tl.canvas_height();
+            const auto scaled = [&](Transform t) {
+                t.offset_x *= sx;
+                t.offset_y *= sy;
+                return t;
+            };
+            for (const Track& track : tl.tracks()) {
+                for (const Clip& c : track.clips) {
+                    if (c.video.transform.offset_x == 0.0 && c.video.transform.offset_y == 0.0 &&
+                        c.video.transform_keys.empty()) {
+                        continue; // nothing in pixels to move
+                    }
+                    Clip changed = c;
+                    changed.video.transform = scaled(changed.video.transform);
+                    for (TransformKey& k : changed.video.transform_keys)
+                        k.value = scaled(k.value);
+                    steps.push_back(detail::replace_clip(std::move(changed)));
+                }
+            }
+        }
+        steps.push_back(detail::set_canvas(width, height));
+        return steps;
+    });
+}
+
+std::unique_ptr<Command> replace_captions(std::vector<Caption> captions) {
+    return caption_edit("Import Captions",
+                        [captions = std::move(captions)](
+                            const Timeline& tl, std::vector<Caption>& list) -> Result<void> {
+                            list.clear();
+                            for (const Caption& caption : captions) {
+                                auto c = on_grid(tl, caption);
+                                if (!c) {
+                                    return std::unexpected(c.error());
+                                }
+                                list.push_back(std::move(*c));
+                            }
+                            return {};
+                        });
+}
+
+std::unique_ptr<Command> transaction(std::string name,
+                                     std::vector<std::unique_ptr<Command>> commands) {
+    return detail::make_transaction(std::move(name), std::move(commands));
+}
+
+} // namespace oma::timeline::edit

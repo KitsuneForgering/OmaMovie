@@ -1,0 +1,17 @@
+## What the documentation establishes
+
+| Mechanism | Documented behavior | Bounded application to OmaMovie |
+|---|---|---|
+| [Trimmer](https://help.magix-hub.com/video/vegas/23/en/content/topics/2-window/window_trimmer.htm), “Selecting data” and “Adding media to the timeline” | Selects source in/out before timeline placement; supports insertion from the cursor, three-point editing, and subclips. | Pilot a source viewer with I/O and insert/overwrite. Start with `ClipSource` carrying the selected range; reusable subclips are a separate decision. |
+| [Post-edit ripple](https://help.magix-hub.com/video/vegas/23/en/content/topics/7-edit/post_edit_ripple.htm), “Ripple types” and “Applying…” | Can affect the edited tracks or all tracks; broader modes also move markers and automation. Automatic mode changes the visual highlight. | Specify what each command moves and preview it during drag. Current OmaMovie commands move only the edited track and anchored dependents; do not call that all-track ripple. |
+| [Sync links](https://help.magix-hub.com/video/vegas/23/en/content/topics/7-edit/using_sync_links.htm), introduction and creation | One-way relation: a dependent follows the main event, but moving it does not move the main event. | Compare with ADR-0014. OmaMovie's anchor follows a position in the primary media and covers the central case; its split, trim, and deletion rules differ. Do not infer complete equivalence or copy internal representation. |
+| [Takes](https://help.magix-hub.com/video/vegas/23/en/content/topics/7-edit/take.htm), “Creating”, “Choosing”, and “Switching” | An event can contain alternate sources and an active take used for playback/render. | Pilot media substitution that preserves event start, duration, and effects. Define alignment, available duration, audio, and project references first. |
+| [Automatic crossfades](https://help.magix-hub.com/video/vegas/23/en/content/topics/7-edit/autocrossfades.htm), “Creating a crossfade” | Overlap on one track can create a crossfade when the option is active. | Compare the gesture with OmaMovie's explicit cut transition. Silent overlap would change current storyline semantics. |
+| [Adjustment events](https://help.magix-hub.com/video/vegas/23/en/content/topics/7-edit/adjustmentevents.htm), introduction and “Limiting…” | A time-bounded event applies effects to videos below it and can restrict affected tracks. | Consider only after the per-clip effect stack and a real task requiring one correction over several shots. Track scope, composition order, and export must be explicit. |
+| [Video proxies](https://help.magix-hub.com/video/vegas/23/en/content/topics/5-preview/creating_intermediate_files.htm), note and “Preview Quality” | Proxies serve preview; the guide says rendering uses originals. | Reinforces the planned M8 separation, without proving a proxy helps OmaMovie's hardware or should be generated automatically. |
+| [Multicamera editing](https://help.magix-hub.com/video/vegas/23/en/content/topics/7-edit/editing_multicamera_video.htm), introduction and “Previewing multiple takes” | Choose takes during playback or pause and split the event at a switch; the help warns that many previews limit frame rate. | Keep multicamera separate from a simple takes pilot; it needs synchronization, multiple decoders, and measured preview deadlines. |
+
+These pages share **one vendor lineage**. They establish documented behavior, not user
+preference, Linux performance, or internal implementation details.
+
+[Return to vegas-pro.md](vegas-pro.md)

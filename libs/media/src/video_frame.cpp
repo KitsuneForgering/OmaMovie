@@ -1,15 +1,20 @@
 #include "oma/media/video_frame.hpp"
 
+#include "color_codes.hpp"
 #include "video_frame_impl.hpp"
+
+#include "oma/gpu/device.hpp"
 
 extern "C" {
 #include <libavutil/hwcontext.h>
 #include <libavutil/hwcontext_vulkan.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/pixdesc.h>
+#include <libswscale/swscale.h>
 }
 
 #include <array>
+#include <climits>
 #include <cstddef>
 #include <utility>
 
@@ -35,6 +40,14 @@ std::string_view to_string(DecodePath path) noexcept {
     return "unknown";
 }
 
+bool compositable(const SampleLayout& layout) noexcept {
+    if (layout.container_bits != 8 && layout.container_bits != 16)
+        return false;
+    if (layout.yuv)
+        return !layout.alpha && (layout.planes == 2 || layout.planes == 3);
+    return layout.planes == (layout.alpha ? 4 : 3);
+}
+
 // ------------------------------------------------------------------------------- GpuAccess
 
 GpuAccess::GpuAccess(void* frame, const GpuImages& images) noexcept
@@ -56,12 +69,25 @@ GpuAccess::~GpuAccess() {
     release();
 }
 
+const GpuImages& GpuAccess::images() const noexcept {
+    return images_;
+}
+
 void GpuAccess::commit(VkImageLayout layout, VkAccessFlags2 access) noexcept {
     if (frame_ == nullptr) {
         return;
     }
-    const auto* f = static_cast<const AVFrame*>(frame_);
-    auto* vkf = reinterpret_cast<AVVkFrame*>(f->data[0]);
+    auto* impl = static_cast<VideoFrame::Impl*>(frame_);
+    if (impl->imported) {
+        // Foreign images go back to their exporter after each use: GENERAL again.
+        for (std::uint32_t i = 0; i < images_.image_count; ++i) {
+            impl->imported->values[i] = images_.signal_values[i];
+            images_.wait_values[i] = images_.signal_values[i];
+            images_.signal_values[i] += 1;
+        }
+        return;
+    }
+    auto* vkf = reinterpret_cast<AVVkFrame*>(impl->frame->data[0]);
     for (std::uint32_t i = 0; i < images_.image_count; ++i) {
         vkf->sem_value[i] = images_.signal_values[i];
         vkf->layout[i] = layout;
@@ -76,7 +102,12 @@ void GpuAccess::release() noexcept {
     if (frame_ == nullptr) {
         return;
     }
-    const auto* f = static_cast<const AVFrame*>(std::exchange(frame_, nullptr));
+    auto* impl = static_cast<VideoFrame::Impl*>(std::exchange(frame_, nullptr));
+    if (impl->imported) {
+        impl->imported->lock.unlock();
+        return;
+    }
+    const AVFrame* f = impl->frame.get();
     AVHWFramesContext* fc = frames_of(*f);
     const auto* vk_fc = static_cast<const AVVulkanFramesContext*>(fc->hwctx);
     if (vk_fc->unlock_frame != nullptr) {
@@ -107,7 +138,7 @@ DecodePath VideoFrame::path() const noexcept {
     return impl_->path;
 }
 bool VideoFrame::on_gpu() const noexcept {
-    return impl_->frame->format == AV_PIX_FMT_VULKAN;
+    return impl_->frame->format == AV_PIX_FMT_VULKAN || impl_->imported != nullptr;
 }
 
 std::string_view VideoFrame::pixel_format() const noexcept {
@@ -138,12 +169,50 @@ SampleLayout VideoFrame::layout() const noexcept {
     l.chroma_shift_x = desc->log2_chroma_w;
     l.chroma_shift_y = desc->log2_chroma_h;
     l.yuv = (desc->flags & AV_PIX_FMT_FLAG_RGB) == 0;
+    l.alpha = (desc->flags & AV_PIX_FMT_FLAG_ALPHA) != 0;
     l.interleaved_chroma =
         l.yuv && desc->nb_components >= 3 && desc->comp[1].plane == desc->comp[2].plane;
     if (l.interleaved_chroma) {
         l.container_bits = desc->comp[1].step * 4; // two samples per chroma step
     }
     return l;
+}
+
+Result<VideoFrame> VideoFrame::from_rgba(int width, int height, std::span<const std::uint8_t> rgba,
+                                         int stride) {
+    constexpr int kMaxSide = 16384;
+    if (width <= 0 || height <= 0 || width > kMaxSide || height > kMaxSide || stride < width * 4 ||
+        rgba.size() < static_cast<std::size_t>(stride) * static_cast<std::size_t>(height - 1) +
+                          static_cast<std::size_t>(width) * 4) {
+        return make_error(ErrorCode::InvalidArgument, Category::Media, "invalid RGBA picture");
+    }
+    ff::FramePtr frame(av_frame_alloc());
+    if (!frame) {
+        return make_error(ErrorCode::Internal, Category::Media, "cannot allocate a frame");
+    }
+    frame->format = AV_PIX_FMT_GBRAP;
+    frame->width = width;
+    frame->height = height;
+    if (const int err = av_frame_get_buffer(frame.get(), 0); err < 0) {
+        return std::unexpected(ff::av_error(err, Category::Media, "cannot allocate frame planes"));
+    }
+    // gbrap planes: 0 G, 1 B, 2 R, 3 A.
+    constexpr std::array<int, 4> kSourceChannel{1, 2, 0, 3};
+    for (int y = 0; y < height; ++y) {
+        const std::uint8_t* row = rgba.data() + static_cast<std::ptrdiff_t>(y) * stride;
+        for (std::size_t plane = 0; plane < kSourceChannel.size(); ++plane) {
+            std::uint8_t* out =
+                frame->data[plane] + static_cast<std::ptrdiff_t>(y) * frame->linesize[plane];
+            const int channel = kSourceChannel[plane];
+            for (int x = 0; x < width; ++x)
+                out[x] = row[(x * 4) + channel];
+        }
+    }
+    auto impl = std::make_unique<Impl>();
+    impl->frame = std::move(frame);
+    impl->layout = AV_PIX_FMT_GBRAP;
+    impl->path = DecodePath::Software;
+    return VideoFrame(std::move(impl));
 }
 
 std::span<const std::uint8_t> VideoFrame::plane(int index) const noexcept {
@@ -169,12 +238,79 @@ int VideoFrame::stride(int index) const noexcept {
     return impl_->frame->linesize[index];
 }
 
+Result<void> VideoFrame::copy_rgba(std::span<std::uint8_t> destination, int destination_stride,
+                                   std::optional<ColorInfo> read_as) const {
+    return copy_rgba_scaled(destination, destination_stride, impl_->frame->width,
+                            impl_->frame->height, read_as);
+}
+
+Result<void> VideoFrame::copy_rgba_scaled(std::span<std::uint8_t> destination,
+                                          int destination_stride, int width, int height,
+                                          std::optional<ColorInfo> read_as) const {
+    const AVFrame& frame = *impl_->frame;
+    if (on_gpu() || frame.width <= 0 || frame.height <= 0 || width <= 0 || height <= 0 ||
+        width > INT_MAX / 4 || destination_stride < width * 4 ||
+        destination.size() <
+            static_cast<std::size_t>(destination_stride) * static_cast<std::size_t>(height)) {
+        return make_error(ErrorCode::InvalidArgument, Category::Decode,
+                          "invalid software RGBA preview destination");
+    }
+    const bool reduces = width < frame.width || height < frame.height;
+    auto* scale = sws_getContext(
+        frame.width, frame.height, static_cast<AVPixelFormat>(frame.format), width, height,
+        AV_PIX_FMT_RGBA, reduces ? SWS_AREA : SWS_BILINEAR, nullptr, nullptr, nullptr);
+    if (scale == nullptr) {
+        return make_error(ErrorCode::Unsupported, Category::Decode,
+                          "cannot convert this video pixel format to RGBA");
+    }
+    // swscale defaults to BT.601 limited range; use the stream's matrix and range, resolving
+    // unspecified values as the compositor does (BT.709 above 576 lines, limited range).
+    // H.273 matrix codes are AVColorSpace values.
+    AVColorSpace matrix =
+        read_as ? ff::defined_or(static_cast<AVColorSpace>(read_as->matrix), AVCOL_SPC_NB,
+                                 AVCOL_SPC_UNSPECIFIED)
+                : ff::defined_or(frame.colorspace, AVCOL_SPC_NB, AVCOL_SPC_UNSPECIFIED);
+    if (matrix == AVCOL_SPC_UNSPECIFIED || matrix == AVCOL_SPC_RESERVED) {
+        matrix = frame.height > 576 ? AVCOL_SPC_BT709 : AVCOL_SPC_SMPTE170M;
+    }
+    const bool full = read_as ? read_as->range == ColorRange::Full
+                              : ff::defined_or(frame.color_range, AVCOL_RANGE_NB,
+                                               AVCOL_RANGE_UNSPECIFIED) == AVCOL_RANGE_JPEG;
+    const int* coefficients = sws_getCoefficients(matrix);
+    sws_setColorspaceDetails(scale, coefficients, full ? 1 : 0, coefficients, 1, 0, 1 << 16,
+                             1 << 16);
+    const std::array<std::uint8_t*, 4> data{destination.data(), nullptr, nullptr, nullptr};
+    const std::array<int, 4> linesize{destination_stride, 0, 0, 0};
+    const int rows =
+        sws_scale(scale, frame.data, frame.linesize, 0, frame.height, data.data(), linesize.data());
+    sws_freeContext(scale);
+    if (rows != height) {
+        return make_error(ErrorCode::Internal, Category::Decode, "RGBA preview conversion failed");
+    }
+    return {};
+}
+
 Result<GpuAccess> VideoFrame::acquire_gpu() {
     if (!on_gpu()) {
         return make_error(ErrorCode::Unsupported, Category::Decode,
                           "frame is in system memory, not on the GPU");
     }
-    AVFrame* f = impl_->frame.get();
+    if (ImportedFrame* imp = impl_->imported.get()) {
+        imp->lock.lock(); // unlocked by GpuAccess::release
+        GpuImages images;
+        images.foreign = true;
+        images.image_count = imp->count;
+        for (std::uint32_t i = 0; i < imp->count; ++i) {
+            images.images[i] = imp->images[i].handle();
+            images.formats[i] = imp->images[i].format();
+            images.layouts[i] = VK_IMAGE_LAYOUT_GENERAL;
+            images.semaphores[i] = imp->semaphores[i];
+            images.wait_values[i] = imp->values[i];
+            images.signal_values[i] = imp->values[i] + 1;
+        }
+        return GpuAccess(impl_.get(), images);
+    }
+    const AVFrame* f = impl_->frame.get();
     AVHWFramesContext* fc = frames_of(*f);
     const auto* vk_fc = static_cast<const AVVulkanFramesContext*>(fc->hwctx);
     auto* vkf = reinterpret_cast<AVVkFrame*>(f->data[0]);
@@ -196,7 +332,39 @@ Result<GpuAccess> VideoFrame::acquire_gpu() {
         images.signal_values[i] = vkf->sem_value[i] + 1;
         images.image_count = static_cast<std::uint32_t>(i + 1);
     }
-    return GpuAccess(f, images);
+    // One image per plane (VA-API import): FFmpeg reports the multi-planar format of the whole
+    // frame for image 0, but each image holds one plane; views need the plane's own format.
+    if (images.image_count > 1) {
+        const SampleLayout l = layout();
+        const bool wide = l.container_bits > 8;
+        for (std::uint32_t i = 0; i < images.image_count; ++i) {
+            const bool pair = i > 0 && l.interleaved_chroma;
+            images.formats[i] = wide ? (pair ? VK_FORMAT_R16G16_UNORM : VK_FORMAT_R16_UNORM)
+                                     : (pair ? VK_FORMAT_R8G8_UNORM : VK_FORMAT_R8_UNORM);
+        }
+    }
+    return GpuAccess(impl_.get(), images);
+}
+
+ImportedFrame::~ImportedFrame() {
+    // The images may still be read by a submitted composite: wait for the last values the
+    // consumers signaled before the memory goes back to VA-API.
+    if (device == nullptr) {
+        return;
+    }
+    VkDevice dev = device->device();
+    if (count > 0) {
+        const VkSemaphoreWaitInfo wait{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+                                       .pNext = nullptr,
+                                       .flags = 0,
+                                       .semaphoreCount = count,
+                                       .pSemaphores = semaphores.data(),
+                                       .pValues = values.data()};
+        (void)vkWaitSemaphores(dev, &wait, UINT64_MAX);
+    }
+    for (std::uint32_t i = 0; i < count; ++i) {
+        vkDestroySemaphore(dev, semaphores[i], nullptr);
+    }
 }
 
 } // namespace oma::media

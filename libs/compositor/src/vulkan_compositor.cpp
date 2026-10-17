@@ -1,5 +1,7 @@
 #include "oma/compositor/compositor.hpp"
 
+#include "nv12_pass.hpp"
+
 #include "layer_params.hpp"
 
 #include "oma/base/log.hpp"
@@ -9,12 +11,21 @@
 #include "oma/media/video_frame.hpp"
 
 #include <algorithm>
+#include <cerrno>
+#include <chrono>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <format>
+#include <fstream>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include <unistd.h>
 
 namespace oma::compositor {
 
@@ -24,13 +35,127 @@ namespace {
 constexpr auto kCompositeSpv = std::to_array<std::uint32_t>({
 #include "composite.comp.inc"
 });
+// SPIR-V of shaders/display_srgb.comp.
+constexpr auto kDisplaySpv = std::to_array<std::uint32_t>({
+#include "display_srgb.comp.inc"
+});
+constexpr VkFormat kDisplayFormat = VK_FORMAT_R8G8B8A8_UNORM;
 
 constexpr std::uint32_t kGroupSize = 16;
 constexpr VkFormat kOutputFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-constexpr std::size_t kMaxPlanes = 3;
+// Blur intermediates: half floats halve the bandwidth of the passes (evidence 2026-10-04 §5)
+// and stay within the GPU vs CPU tolerance.
+constexpr VkFormat kBlurFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+constexpr std::size_t kMaxPlanes = 4;  // three colour planes and straight alpha (gbrap)
+constexpr std::uint32_t kBindings = 9; // see shaders/composite.comp
+// LUT entries: lookups are 32-bit float, read with texelFetch (no filtering needed).
+constexpr VkFormat kLutFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+// LUT images kept between renders. ponytail: least recently used out past this; a project uses few
+// LUTs.
+constexpr std::size_t kMaxLutImages = 8;
+constexpr std::size_t kMaxPipelineCacheBytes = 16U << 20;
+
+std::filesystem::path pipeline_cache_path(const VkPhysicalDeviceProperties& props) {
+    // Read on the thread creating the compositor; OmaMovie never modifies its environment.
+    const char* xdg = std::getenv("XDG_CACHE_HOME"); // NOLINT(concurrency-mt-unsafe)
+    const char* home = std::getenv("HOME");          // NOLINT(concurrency-mt-unsafe)
+    std::filesystem::path root;
+    if (xdg != nullptr && std::filesystem::path(xdg).is_absolute()) {
+        root = xdg;
+    } else if (home != nullptr && std::filesystem::path(home).is_absolute()) {
+        root = std::filesystem::path(home) / ".cache";
+    } else {
+        return {};
+    }
+    return root / "omamovie" /
+           std::format("pipeline-{:08x}-{:08x}-{:08x}.bin", props.vendorID, props.deviceID,
+                       props.driverVersion);
+}
+
+std::vector<std::uint8_t> load_pipeline_cache(const std::filesystem::path& path,
+                                              const VkPhysicalDeviceProperties& props) {
+    if (path.empty())
+        return {};
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(path, ec);
+    if (ec || size < sizeof(VkPipelineCacheHeaderVersionOne) || size > kMaxPipelineCacheBytes)
+        return {};
+    std::vector<std::uint8_t> data(static_cast<std::size_t>(size));
+    std::ifstream in(path, std::ios::binary);
+    if (!in.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size())))
+        return {};
+    VkPipelineCacheHeaderVersionOne header{.headerSize = 0,
+                                           .headerVersion = VK_PIPELINE_CACHE_HEADER_VERSION_ONE,
+                                           .vendorID = 0,
+                                           .deviceID = 0,
+                                           .pipelineCacheUUID = {}};
+    std::memcpy(&header, data.data(), sizeof header);
+    if (header.headerSize < sizeof header || header.headerSize > data.size() ||
+        header.headerVersion != VK_PIPELINE_CACHE_HEADER_VERSION_ONE ||
+        header.vendorID != props.vendorID || header.deviceID != props.deviceID ||
+        std::memcmp(header.pipelineCacheUUID, props.pipelineCacheUUID, VK_UUID_SIZE) != 0)
+        return {};
+    return data;
+}
+
+void save_pipeline_cache(VkDevice device, VkPipelineCache cache,
+                         const std::filesystem::path& path) {
+    if (path.empty() || cache == VK_NULL_HANDLE)
+        return;
+    std::size_t size = 0;
+    if (vkGetPipelineCacheData(device, cache, &size, nullptr) != VK_SUCCESS ||
+        size < sizeof(VkPipelineCacheHeaderVersionOne) || size > kMaxPipelineCacheBytes)
+        return;
+    std::vector<std::uint8_t> data(size);
+    if (vkGetPipelineCacheData(device, cache, &size, data.data()) != VK_SUCCESS)
+        return;
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    if (ec)
+        return;
+    std::string tmp = path.string() + ".XXXXXX";
+    const int fd = ::mkstemp(tmp.data());
+    if (fd < 0)
+        return;
+    std::size_t written = 0;
+    while (written < size) {
+        const ssize_t n = ::write(fd, data.data() + written, size - written);
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n <= 0)
+            break;
+        written += static_cast<std::size_t>(n);
+    }
+    const int closed = ::close(fd);
+    const bool complete = written == size && closed == 0;
+    if (!complete || ::rename(tmp.c_str(), path.c_str()) != 0)
+        ::unlink(tmp.c_str());
+}
+
+// Descriptor type of each binding of the composite shader.
+constexpr VkDescriptorType binding_type(std::uint32_t b) {
+    switch (b) {
+    case 0:
+    case 6:
+        return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    case 4:
+        return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    default:
+        return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    }
+}
+
+// Shader passes, selected by push constant.
+enum class Pass : std::uint8_t {
+    Composite = 0,
+    BlurAcross = 1,
+    BlurDown = 2,
+    ReduceDown = 3,
+    ReduceAcross = 4,
+};
 
 Error vk_failure(VkResult r, std::string what) {
-    return {ErrorCode::Internal, Category::Compositor, std::move(what),
+    return {gpu::error_code(r), Category::Compositor, std::move(what),
             "VkResult " + std::to_string(static_cast<int>(r))};
 }
 
@@ -124,6 +249,22 @@ struct Upload {
     gpu::Buffer staging;
 };
 
+// The two blur images of a layer with blur or sharpen (src/look.hpp Detail), reused while their
+// sizes hold: `across` is reduced in width only (it first takes the source reduced across),
+// `down` in both (the reduced source, then the result).
+struct BlurImages {
+    gpu::Image across; // pass 4 output, then pass 1 output
+    gpu::Image down;   // pass 3 output, then pass 2 output: the blurred source
+};
+
+// A LUT uploaded to the GPU, kept while recent graphs use it.
+struct LutImage {
+    std::shared_ptr<const Lut3d> lut; // the cache key; holding it keeps the address unique
+    gpu::Image image;
+    gpu::Buffer staging;    // RGBA rows until the upload has run
+    std::uint64_t used = 0; // the last render that read it
+};
+
 // What one input contributes to this render.
 struct BoundInput {
     std::array<VkImageView, kMaxPlanes> views{};
@@ -131,6 +272,17 @@ struct BoundInput {
     media::SampleLayout layout;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
+
+    // The same images for another input, without a second access: waits, signals and the
+    // foreign release stay with the binding that holds the access.
+    [[nodiscard]] BoundInput alias() const {
+        BoundInput out;
+        out.views = views;
+        out.layout = layout;
+        out.width = width;
+        out.height = height;
+        return out;
+    }
 };
 
 } // namespace
@@ -141,16 +293,30 @@ struct VulkanCompositor::Impl {
     VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
     VkPipelineCache cache = VK_NULL_HANDLE;
+    std::filesystem::path cache_path;
     VkPipeline pipeline = VK_NULL_HANDLE;
     VkSampler sampler = VK_NULL_HANDLE;
     PFN_vkCmdPushDescriptorSetKHR push_descriptors = nullptr;
     VkDeviceSize params_stride = 0;
 
+    // Display transform pass (encode_display).
+    VkDescriptorSetLayout display_set_layout = VK_NULL_HANDLE;
+    VkPipelineLayout display_pipeline_layout = VK_NULL_HANDLE;
+    VkPipeline display_pipeline = VK_NULL_HANDLE;
+    gpu::Image display;
+    gpu::Buffer display_readback;
+
     gpu::Image output;
+    gpu::Image placeholder;     // 1x1 blur image for layers without blur or sharpen
+    gpu::Image lut_placeholder; // 1x1x1 LUT for layers without one
+    std::vector<LutImage> luts;
+    std::uint64_t renders = 0;
+    std::vector<BlurImages> blur_images; // by draw index
     gpu::Buffer params;
     gpu::Buffer readback;
     std::map<std::size_t, Upload> uploads; // by input index
     std::vector<VkImageView> transient_views;
+    std::unique_ptr<detail::Nv12Pass> nv12; // export's NV12 readback, made on first use
 
     Impl() = default;
     Impl(const Impl&) = delete;
@@ -162,8 +328,12 @@ struct VulkanCompositor::Impl {
             return;
         }
         destroy_transient_views();
+        vkDestroyPipeline(device->device(), display_pipeline, nullptr);
+        vkDestroyPipelineLayout(device->device(), display_pipeline_layout, nullptr);
+        vkDestroyDescriptorSetLayout(device->device(), display_set_layout, nullptr);
         vkDestroySampler(device->device(), sampler, nullptr);
         vkDestroyPipeline(device->device(), pipeline, nullptr);
+        save_pipeline_cache(device->device(), cache, cache_path);
         vkDestroyPipelineCache(device->device(), cache, nullptr);
         vkDestroyPipelineLayout(device->device(), pipeline_layout, nullptr);
         vkDestroyDescriptorSetLayout(device->device(), set_layout, nullptr);
@@ -179,9 +349,16 @@ struct VulkanCompositor::Impl {
     [[nodiscard]] Result<VkImageView> make_view(VkImage image, VkFormat format,
                                                 VkImageAspectFlags aspect);
     [[nodiscard]] Result<void> ensure_output(std::uint32_t width, std::uint32_t height);
+    [[nodiscard]] Result<void> create_display_pipeline();
     [[nodiscard]] Result<void> ensure_params(std::size_t layers);
-    [[nodiscard]] Result<Upload*> stage_upload(std::size_t index, const media::VideoFrame& frame);
+    [[nodiscard]] Result<gpu::Image> blur_image(std::uint32_t width, std::uint32_t height) const;
+    // `width` x `height` is the reduced source; `across` keeps the source's `full_height`.
+    [[nodiscard]] Result<BlurImages*> ensure_blur(std::size_t draw, std::uint32_t width,
+                                                  std::uint32_t height, std::uint32_t full_height);
+    [[nodiscard]] Result<Upload*> stage_upload(std::size_t index, const media::VideoFrame& frame,
+                                               RenderTransferStats* transfers);
     [[nodiscard]] Result<BoundInput> bind_gpu_frame(media::VideoFrame& frame);
+    [[nodiscard]] Result<LutImage*> ensure_lut(const std::shared_ptr<const Lut3d>& lut);
 };
 
 Result<VkImageView> VulkanCompositor::Impl::make_view(VkImage image, VkFormat format,
@@ -226,6 +403,106 @@ Result<void> VulkanCompositor::Impl::ensure_output(std::uint32_t width, std::uin
     return {};
 }
 
+// Two storage images (linear in, display out), bound with push descriptors like the compositor.
+Result<void> VulkanCompositor::Impl::create_display_pipeline() {
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
+    for (std::uint32_t i = 0; i < bindings.size(); ++i) {
+        bindings[i] = {.binding = i,
+                       .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                       .descriptorCount = 1,
+                       .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                       .pImmutableSamplers = nullptr};
+    }
+    const VkDescriptorSetLayoutCreateInfo set_info{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
+        .bindingCount = static_cast<std::uint32_t>(bindings.size()),
+        .pBindings = bindings.data()};
+    if (const VkResult r =
+            vkCreateDescriptorSetLayout(device->device(), &set_info, nullptr, &display_set_layout);
+        r != VK_SUCCESS) {
+        return std::unexpected(vk_failure(r, "cannot create the display descriptor layout"));
+    }
+    const VkPushConstantRange display_push{
+        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = 4};
+    const VkPipelineLayoutCreateInfo layout_info{.sType =
+                                                     VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                                                 .pNext = nullptr,
+                                                 .flags = 0,
+                                                 .setLayoutCount = 1,
+                                                 .pSetLayouts = &display_set_layout,
+                                                 .pushConstantRangeCount = 1,
+                                                 .pPushConstantRanges = &display_push};
+    if (const VkResult r = vkCreatePipelineLayout(device->device(), &layout_info, nullptr,
+                                                  &display_pipeline_layout);
+        r != VK_SUCCESS) {
+        return std::unexpected(vk_failure(r, "cannot create the display pipeline layout"));
+    }
+    const VkShaderModuleCreateInfo module_info{.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                                               .pNext = nullptr,
+                                               .flags = 0,
+                                               .codeSize = sizeof(kDisplaySpv),
+                                               .pCode = kDisplaySpv.data()};
+    VkShaderModule module = VK_NULL_HANDLE;
+    if (const VkResult r = vkCreateShaderModule(device->device(), &module_info, nullptr, &module);
+        r != VK_SUCCESS) {
+        return std::unexpected(vk_failure(r, "cannot load the display shader"));
+    }
+    const VkComputePipelineCreateInfo pipe_info{
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                  .pNext = nullptr,
+                  .flags = 0,
+                  .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+                  .module = module,
+                  .pName = "main",
+                  .pSpecializationInfo = nullptr},
+        .layout = display_pipeline_layout,
+        .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex = -1};
+    const VkResult made = vkCreateComputePipelines(device->device(), cache, 1, &pipe_info, nullptr,
+                                                   &display_pipeline);
+    vkDestroyShaderModule(device->device(), module, nullptr);
+    if (made != VK_SUCCESS) {
+        return std::unexpected(vk_failure(made, "cannot create the display pipeline"));
+    }
+    return {};
+}
+
+Result<gpu::Image> VulkanCompositor::Impl::blur_image(std::uint32_t width,
+                                                      std::uint32_t height) const {
+    return gpu::Image::create(*device,
+                              {.width = width,
+                               .height = height,
+                               .format = kBlurFormat,
+                               .usage = static_cast<VkImageUsageFlags>(VK_IMAGE_USAGE_STORAGE_BIT) |
+                                        VK_IMAGE_USAGE_SAMPLED_BIT});
+}
+
+Result<BlurImages*> VulkanCompositor::Impl::ensure_blur(std::size_t draw, std::uint32_t width,
+                                                        std::uint32_t height,
+                                                        std::uint32_t full_height) {
+    if (blur_images.size() <= draw) {
+        blur_images.resize(draw + 1);
+    }
+    BlurImages& b = blur_images[draw];
+    if (b.down.handle() != VK_NULL_HANDLE && b.down.desc().width == width &&
+        b.down.desc().height == height && b.across.desc().height == full_height) {
+        return &b;
+    }
+    auto across = blur_image(width, full_height);
+    auto down = blur_image(width, height);
+    if (!across || !down) {
+        return std::unexpected(!across ? across.error() : down.error());
+    }
+    b.across = std::move(*across);
+    b.down = std::move(*down);
+    return &b;
+}
+
 Result<void> VulkanCompositor::Impl::ensure_params(std::size_t layers) {
     const VkDeviceSize needed = params_stride * std::max<VkDeviceSize>(layers, 1);
     if (params.size() >= needed) {
@@ -242,7 +519,8 @@ Result<void> VulkanCompositor::Impl::ensure_params(std::size_t layers) {
 
 // Copies a software frame's planes into the staging buffer of its upload slot.
 Result<Upload*> VulkanCompositor::Impl::stage_upload(std::size_t index,
-                                                     const media::VideoFrame& frame) {
+                                                     const media::VideoFrame& frame,
+                                                     RenderTransferStats* transfers) {
     const media::SampleLayout layout = frame.layout();
     const auto width = static_cast<std::uint32_t>(frame.width());
     const auto height = static_cast<std::uint32_t>(frame.height());
@@ -278,6 +556,8 @@ Result<Upload*> VulkanCompositor::Impl::stage_upload(std::size_t index,
         up.staging = std::move(*staging);
     }
     auto* base = static_cast<std::uint8_t*>(up.staging.mapped());
+    const auto copy_start = std::chrono::steady_clock::now();
+    std::uint64_t copied_bytes = 0;
     for (int p = 0; p < layout.planes; ++p) {
         const auto i = static_cast<std::size_t>(p);
         const std::size_t row_bytes =
@@ -293,6 +573,14 @@ Result<Upload*> VulkanCompositor::Impl::stage_upload(std::size_t index,
             std::memcpy(base + up.offsets[i] + (y * row_bytes), src.data() + (y * stride),
                         row_bytes);
         }
+        copied_bytes += static_cast<std::uint64_t>(row_bytes) * rows;
+    }
+    if (transfers != nullptr) {
+        ++transfers->staged_inputs;
+        transfers->staged_bytes += copied_bytes;
+        transfers->row_copy_ms +=
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - copy_start)
+                .count();
     }
     up.staging.flush();
     return &up;
@@ -329,6 +617,48 @@ Result<BoundInput> VulkanCompositor::Impl::bind_gpu_frame(media::VideoFrame& fra
     return bound;
 }
 
+// The LUT's image, staged for upload the first time it is seen.
+Result<LutImage*> VulkanCompositor::Impl::ensure_lut(const std::shared_ptr<const Lut3d>& lut) {
+    const auto found =
+        std::ranges::find(luts, lut.get(), [](const LutImage& l) { return l.lut.get(); });
+    if (found != luts.end()) {
+        found->used = renders;
+        return &*found;
+    }
+    if (luts.size() >= kMaxLutImages) {
+        // Never one this render already bound: a graph with more LUTs grows the cache instead.
+        const auto oldest = std::ranges::min_element(luts, {}, &LutImage::used);
+        if (oldest->used != renders) {
+            luts.erase(oldest);
+        }
+    }
+    const std::uint32_t n = lut->size;
+    auto image = gpu::Image::create(
+        *device, {.width = n,
+                  .height = n,
+                  .format = kLutFormat,
+                  .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                  .depth = n});
+    const std::size_t entries = static_cast<std::size_t>(n) * n * n;
+    auto staging = gpu::Buffer::create(*device, entries * 4 * sizeof(float),
+                                       VK_BUFFER_USAGE_TRANSFER_SRC_BIT, gpu::MemoryUse::Upload);
+    if (!image || !staging) {
+        return std::unexpected(!image ? image.error() : staging.error());
+    }
+    // RGB rows to RGBA texels, red fastest as in the .cube file (x is red).
+    auto* rgba = static_cast<float*>(staging->mapped());
+    for (std::size_t i = 0; i < entries; ++i) {
+        rgba[(i * 4) + 0] = lut->rgb[(i * 3) + 0];
+        rgba[(i * 4) + 1] = lut->rgb[(i * 3) + 1];
+        rgba[(i * 4) + 2] = lut->rgb[(i * 3) + 2];
+        rgba[(i * 4) + 3] = 1.0F;
+    }
+    staging->flush();
+    luts.push_back(
+        {.lut = lut, .image = std::move(*image), .staging = std::move(*staging), .used = renders});
+    return &luts.back();
+}
+
 VulkanCompositor::VulkanCompositor(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
 VulkanCompositor::~VulkanCompositor() = default;
 
@@ -358,12 +688,10 @@ Result<std::unique_ptr<VulkanCompositor>> VulkanCompositor::create(const gpu::De
         std::max<VkDeviceSize>(props.limits.minUniformBufferOffsetAlignment, 16);
     impl->params_stride = (sizeof(LayerParams) + align - 1) / align * align;
 
-    std::array<VkDescriptorSetLayoutBinding, 5> bindings{};
+    std::array<VkDescriptorSetLayoutBinding, kBindings> bindings{};
     for (std::uint32_t i = 0; i < bindings.size(); ++i) {
         bindings[i] = {.binding = i,
-                       .descriptorType = i == 0   ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
-                                         : i == 4 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
-                                                  : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                       .descriptorType = binding_type(i),
                        .descriptorCount = 1,
                        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
                        .pImmutableSamplers = nullptr};
@@ -379,30 +707,40 @@ Result<std::unique_ptr<VulkanCompositor>> VulkanCompositor::create(const gpu::De
         r != VK_SUCCESS) {
         return std::unexpected(vk_failure(r, "cannot create the descriptor layout"));
     }
+    const VkPushConstantRange pass_range{
+        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = sizeof(std::int32_t)};
     const VkPipelineLayoutCreateInfo layout_info{.sType =
                                                      VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
                                                  .pNext = nullptr,
                                                  .flags = 0,
                                                  .setLayoutCount = 1,
                                                  .pSetLayouts = &impl->set_layout,
-                                                 .pushConstantRangeCount = 0,
-                                                 .pPushConstantRanges = nullptr};
+                                                 .pushConstantRangeCount = 1,
+                                                 .pPushConstantRanges = &pass_range};
     if (const VkResult r =
             vkCreatePipelineLayout(device.device(), &layout_info, nullptr, &impl->pipeline_layout);
         r != VK_SUCCESS) {
         return std::unexpected(vk_failure(r, "cannot create the pipeline layout"));
     }
-    // TODO(M3): persist the cache under $XDG_CACHE_HOME/omamovie (CLAUDE.md §9.5).
-    const VkPipelineCacheCreateInfo cache_info{.sType =
-                                                   VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
-                                               .pNext = nullptr,
-                                               .flags = 0,
-                                               .initialDataSize = 0,
-                                               .pInitialData = nullptr};
+    impl->cache_path = pipeline_cache_path(props);
+    const auto cached = load_pipeline_cache(impl->cache_path, props);
+    const VkPipelineCacheCreateInfo cache_info{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .initialDataSize = cached.size(),
+        .pInitialData = cached.empty() ? nullptr : cached.data()};
     if (const VkResult r =
             vkCreatePipelineCache(device.device(), &cache_info, nullptr, &impl->cache);
         r != VK_SUCCESS) {
-        return std::unexpected(vk_failure(r, "cannot create the pipeline cache"));
+        // A disposable cache cannot prevent the editor from starting.
+        VkPipelineCacheCreateInfo empty = cache_info;
+        empty.initialDataSize = 0;
+        empty.pInitialData = nullptr;
+        if (const VkResult fallback =
+                vkCreatePipelineCache(device.device(), &empty, nullptr, &impl->cache);
+            fallback != VK_SUCCESS)
+            return std::unexpected(vk_failure(fallback, "cannot create the pipeline cache"));
     }
 
     const VkShaderModuleCreateInfo module_info{.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -458,11 +796,30 @@ Result<std::unique_ptr<VulkanCompositor>> VulkanCompositor::create(const gpu::De
         r != VK_SUCCESS) {
         return std::unexpected(vk_failure(r, "cannot create the sampler"));
     }
+    if (auto r = impl->create_display_pipeline(); !r) {
+        return std::unexpected(r.error());
+    }
+    auto placeholder = impl->blur_image(1, 1);
+    if (!placeholder) {
+        return std::unexpected(placeholder.error());
+    }
+    impl->placeholder = std::move(*placeholder);
+    auto lut_placeholder = gpu::Image::create(device, {.width = 1,
+                                                       .height = 1,
+                                                       .format = kLutFormat,
+                                                       .usage = VK_IMAGE_USAGE_SAMPLED_BIT,
+                                                       .depth = 1});
+    if (!lut_placeholder) {
+        return std::unexpected(lut_placeholder.error());
+    }
+    impl->lut_placeholder = std::move(*lut_placeholder);
     return std::unique_ptr<VulkanCompositor>(new VulkanCompositor(std::move(impl)));
 }
 
-Result<void> VulkanCompositor::render(const RenderGraph& graph,
-                                      std::span<const LayerInput> inputs) {
+Result<void> VulkanCompositor::render(const RenderGraph& graph, std::span<const LayerInput> inputs,
+                                      RenderTransferStats* transfers) {
+    if (transfers != nullptr)
+        *transfers = {};
     Impl& d = *impl_;
     if (auto valid = validate(graph, inputs.size()); !valid) {
         return std::unexpected(valid.error());
@@ -490,9 +847,18 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
         Result<BoundInput> b =
             std::unexpected(Error(ErrorCode::Internal, Category::Compositor, ""));
         if (frame->on_gpu()) {
-            b = d.bind_gpu_frame(*frame);
+            // One GPU frame behind several inputs (a clip stacked over itself) is acquired once:
+            // its lock is not recursive, so a second acquire here would wait on this thread.
+            const auto same = std::ranges::find_if(
+                bound, [&](const auto& entry) { return inputs[entry.first].frame == frame; });
+            b = same != bound.end() ? same->second.alias() : d.bind_gpu_frame(*frame);
         } else {
-            const auto staged = d.stage_upload(layer.input, *frame);
+            const auto stage_start = std::chrono::steady_clock::now();
+            const auto staged = d.stage_upload(layer.input, *frame, transfers);
+            if (transfers != nullptr)
+                transfers->staging_ms += std::chrono::duration<double, std::milli>(
+                                             std::chrono::steady_clock::now() - stage_start)
+                                             .count();
             if (staged) {
                 BoundInput in;
                 in.layout = (*staged)->layout;
@@ -520,7 +886,15 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
         std::size_t input;
         VkDeviceSize offset;
         std::array<std::int32_t, 4> region;
+        // With blur or sharpen: its index in blur_images (an index, since later layers may grow
+        // the vector).
+        std::optional<std::size_t> blur;
+        std::uint32_t blur_width = 0; // the reduced source
+        std::uint32_t blur_height = 0;
+        std::uint32_t source_height = 0;
+        VkImageView lut = VK_NULL_HANDLE; // the layer's LUT, if its grade uses one
     };
+    ++d.renders;
     std::vector<Draw> draws;
     auto* params = static_cast<std::uint8_t*>(d.params.mapped());
     for (const Layer& layer : graph.layers) {
@@ -536,8 +910,36 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
         }
         const VkDeviceSize offset = draws.size() * d.params_stride;
         std::memcpy(params + offset, &prepared->params, sizeof(LayerParams));
-        draws.push_back(
-            {.input = layer.input, .offset = offset, .region = prepared->params.region});
+        std::optional<std::size_t> blur;
+        // Sized for the whole source, so crop changes keep the images.
+        const auto factor = static_cast<std::uint32_t>(prepared->params.detail[3]);
+        const std::uint32_t blur_width = factor == 0 ? 0 : (in.width + factor - 1) / factor;
+        const std::uint32_t blur_height = factor == 0 ? 0 : (in.height + factor - 1) / factor;
+        if (prepared->params.detail[0] != 0.0F) {
+            if (auto images = d.ensure_blur(draws.size(), blur_width, blur_height, in.height);
+                !images) {
+                d.destroy_transient_views();
+                return std::unexpected(images.error());
+            }
+            blur = draws.size();
+        }
+        VkImageView lut_view = VK_NULL_HANDLE;
+        if ((prepared->params.grade[0] & kGradeLut) != 0) {
+            auto lut = d.ensure_lut(layer.grade.lut);
+            if (!lut) {
+                d.destroy_transient_views();
+                return std::unexpected(lut.error());
+            }
+            lut_view = (*lut)->image.view();
+        }
+        draws.push_back({.input = layer.input,
+                         .offset = offset,
+                         .region = prepared->params.region,
+                         .blur = blur,
+                         .blur_width = blur_width,
+                         .blur_height = blur_height,
+                         .source_height = in.height,
+                         .lut = lut_view});
     }
     d.params.flush();
 
@@ -599,54 +1001,56 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
                 }
                 const media::GpuImages& img = in.access->images();
                 for (std::uint32_t i = 0; i < img.image_count; ++i) {
-                    gpu::transition(cmd, img.images[i], img.layouts[i], VK_IMAGE_LAYOUT_GENERAL);
+                    if (img.foreign) {
+                        gpu::acquire_foreign(cmd, img.images[i], d.device->graphics_family());
+                    } else {
+                        gpu::transition(cmd, img.images[i], img.layouts[i],
+                                        VK_IMAGE_LAYOUT_GENERAL);
+                    }
                 }
+            }
+            for (const LutImage& l : d.luts) {
+                if (l.staging.handle() == VK_NULL_HANDLE) {
+                    continue; // already on the GPU
+                }
+                const std::uint32_t n = l.lut->size;
+                gpu::transition(cmd, l.image.handle(), VK_IMAGE_LAYOUT_UNDEFINED,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                const VkBufferImageCopy copy{
+                    .bufferOffset = 0,
+                    .bufferRowLength = 0,
+                    .bufferImageHeight = 0,
+                    .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                         .mipLevel = 0,
+                                         .baseArrayLayer = 0,
+                                         .layerCount = 1},
+                    .imageOffset = {.x = 0, .y = 0, .z = 0},
+                    .imageExtent = {.width = n, .height = n, .depth = n}};
+                vkCmdCopyBufferToImage(cmd, l.staging.handle(), l.image.handle(),
+                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+                gpu::transition(cmd, l.image.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                VK_IMAGE_LAYOUT_GENERAL);
             }
             barrier(cmd, memory_barrier(
                              VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
                              VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                              VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT));
 
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, d.pipeline);
+            // Blur images start undefined every frame: their contents are rewritten before use.
+            gpu::transition(cmd, d.placeholder.handle(), VK_IMAGE_LAYOUT_UNDEFINED,
+                            VK_IMAGE_LAYOUT_GENERAL);
+            gpu::transition(cmd, d.lut_placeholder.handle(), VK_IMAGE_LAYOUT_UNDEFINED,
+                            VK_IMAGE_LAYOUT_GENERAL);
             for (const Draw& draw : draws) {
-                const BoundInput& in = bound.at(draw.input);
-                const VkDescriptorImageInfo target{.sampler = VK_NULL_HANDLE,
-                                                   .imageView = d.output.view(),
-                                                   .imageLayout = VK_IMAGE_LAYOUT_GENERAL};
-                std::array<VkDescriptorImageInfo, kMaxPlanes> planes{};
-                for (std::size_t p = 0; p < kMaxPlanes; ++p) {
-                    // Unused planes alias plane 1 so every binding stays valid.
-                    planes[p] = {.sampler = d.sampler,
-                                 .imageView =
-                                     in.views[p] != VK_NULL_HANDLE ? in.views[p] : in.views[1],
-                                 .imageLayout = VK_IMAGE_LAYOUT_GENERAL};
+                if (draw.blur) {
+                    const BlurImages& images = d.blur_images[*draw.blur];
+                    gpu::transition(cmd, images.across.handle(), VK_IMAGE_LAYOUT_UNDEFINED,
+                                    VK_IMAGE_LAYOUT_GENERAL);
+                    gpu::transition(cmd, images.down.handle(), VK_IMAGE_LAYOUT_UNDEFINED,
+                                    VK_IMAGE_LAYOUT_GENERAL);
                 }
-                const VkDescriptorBufferInfo ubo{.buffer = d.params.handle(),
-                                                 .offset = draw.offset,
-                                                 .range = sizeof(LayerParams)};
-                std::array<VkWriteDescriptorSet, 5> writes{};
-                for (std::uint32_t b = 0; b < writes.size(); ++b) {
-                    writes[b] = {
-                        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                        .pNext = nullptr,
-                        .dstSet = VK_NULL_HANDLE,
-                        .dstBinding = b,
-                        .dstArrayElement = 0,
-                        .descriptorCount = 1,
-                        .descriptorType = b == 0   ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
-                                          : b == 4 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
-                                                   : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                        .pImageInfo = b == 0 ? &target : (b == 4 ? nullptr : &planes[b - 1]),
-                        .pBufferInfo = b == 4 ? &ubo : nullptr,
-                        .pTexelBufferView = nullptr};
-                }
-                d.push_descriptors(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, d.pipeline_layout, 0,
-                                   static_cast<std::uint32_t>(writes.size()), writes.data());
-                const auto w = static_cast<std::uint32_t>(draw.region[2] - draw.region[0]);
-                const auto h = static_cast<std::uint32_t>(draw.region[3] - draw.region[1]);
-                vkCmdDispatch(cmd, (w + kGroupSize - 1) / kGroupSize,
-                              (h + kGroupSize - 1) / kGroupSize, 1);
-                // The next layer reads what this one wrote.
+            }
+            const auto between_passes = [&] {
                 barrier(cmd,
                         memory_barrier(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                                        VK_ACCESS_2_SHADER_WRITE_BIT,
@@ -654,10 +1058,119 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
                                            VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                                        VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT |
                                            VK_ACCESS_2_MEMORY_READ_BIT));
+            };
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, d.pipeline);
+            for (const Draw& draw : draws) {
+                const BoundInput& in = bound.at(draw.input);
+                // Binds the source and the parameters; `sampled` and `written` are the blur
+                // images a pass reads (binding 5) and writes (binding 6).
+                const auto bind = [&](VkImageView sampled, VkImageView written) {
+                    const VkDescriptorImageInfo target{.sampler = VK_NULL_HANDLE,
+                                                       .imageView = d.output.view(),
+                                                       .imageLayout = VK_IMAGE_LAYOUT_GENERAL};
+                    std::array<VkDescriptorImageInfo, kMaxPlanes> planes{};
+                    for (std::size_t p = 0; p < kMaxPlanes; ++p) {
+                        // Unused planes alias plane 1 so every binding stays valid.
+                        planes[p] = {.sampler = d.sampler,
+                                     .imageView =
+                                         in.views[p] != VK_NULL_HANDLE ? in.views[p] : in.views[1],
+                                     .imageLayout = VK_IMAGE_LAYOUT_GENERAL};
+                    }
+                    const VkDescriptorImageInfo blurred{.sampler = d.sampler,
+                                                        .imageView = sampled,
+                                                        .imageLayout = VK_IMAGE_LAYOUT_GENERAL};
+                    const VkDescriptorImageInfo blur_target{.sampler = VK_NULL_HANDLE,
+                                                            .imageView = written,
+                                                            .imageLayout = VK_IMAGE_LAYOUT_GENERAL};
+                    const VkDescriptorImageInfo lut{.sampler = d.sampler,
+                                                    .imageView = draw.lut != VK_NULL_HANDLE
+                                                                     ? draw.lut
+                                                                     : d.lut_placeholder.view(),
+                                                    .imageLayout = VK_IMAGE_LAYOUT_GENERAL};
+                    const VkDescriptorBufferInfo ubo{.buffer = d.params.handle(),
+                                                     .offset = draw.offset,
+                                                     .range = sizeof(LayerParams)};
+                    std::array<VkWriteDescriptorSet, kBindings> writes{};
+                    for (std::uint32_t b = 0; b < writes.size(); ++b) {
+                        const VkDescriptorImageInfo* image = b == 0   ? &target
+                                                             : b == 5 ? &blurred
+                                                             : b == 6 ? &blur_target
+                                                             : b == 7 ? &lut
+                                                             : b == 4 ? nullptr
+                                                             : b == 8 ? &planes[3]
+                                                                      : &planes[b - 1];
+                        writes[b] = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                                     .pNext = nullptr,
+                                     .dstSet = VK_NULL_HANDLE,
+                                     .dstBinding = b,
+                                     .dstArrayElement = 0,
+                                     .descriptorCount = 1,
+                                     .descriptorType = binding_type(b),
+                                     .pImageInfo = image,
+                                     .pBufferInfo = b == 4 ? &ubo : nullptr,
+                                     .pTexelBufferView = nullptr};
+                    }
+                    d.push_descriptors(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, d.pipeline_layout, 0,
+                                       static_cast<std::uint32_t>(writes.size()), writes.data());
+                };
+                const auto run_pass = [&](Pass pass, std::uint32_t w, std::uint32_t h) {
+                    const auto index = static_cast<std::int32_t>(pass);
+                    vkCmdPushConstants(cmd, d.pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                                       sizeof index, &index);
+                    vkCmdDispatch(cmd, (w + kGroupSize - 1) / kGroupSize,
+                                  (h + kGroupSize - 1) / kGroupSize, 1);
+                    between_passes();
+                };
+                VkImageView none = d.placeholder.view();
+                if (draw.blur) {
+                    const BlurImages& images = d.blur_images[*draw.blur];
+                    bind(none, images.across.view());
+                    run_pass(Pass::ReduceAcross, draw.blur_width, draw.source_height);
+                    // Without a reduction (factor 1: every sharpen at 1080p, light blurs) reducing
+                    // down would copy the whole linearized image unchanged; the blur reads it
+                    // where it is, one full-size pass fewer.
+                    const bool reduces = draw.blur_height != draw.source_height;
+                    VkImageView reduced = images.across.view();
+                    VkImageView spare = images.down.view();
+                    if (reduces) {
+                        bind(reduced, spare);
+                        run_pass(Pass::ReduceDown, draw.blur_width, draw.blur_height);
+                        std::swap(reduced, spare);
+                    }
+                    bind(reduced, spare);
+                    run_pass(Pass::BlurAcross, draw.blur_width, draw.blur_height);
+                    bind(spare, reduced);
+                    run_pass(Pass::BlurDown, draw.blur_width, draw.blur_height);
+                    bind(reduced, none);
+                } else {
+                    bind(none, none);
+                }
+                // The next layer reads what this one wrote.
+                run_pass(Pass::Composite,
+                         static_cast<std::uint32_t>(draw.region[2] - draw.region[0]),
+                         static_cast<std::uint32_t>(draw.region[3] - draw.region[1]));
+            }
+            // Imported VA-API surfaces go back to their driver, which reuses them for decoding.
+            for (const auto& [index, in] : bound) {
+                if (in.access && in.access->images().foreign) {
+                    const media::GpuImages& img = in.access->images();
+                    for (std::uint32_t i = 0; i < img.image_count; ++i) {
+                        gpu::release_foreign(cmd, img.images[i], d.device->graphics_family());
+                    }
+                }
             }
         },
         waits, signals);
 
+    // Uploaded LUTs drop their staging; after a failed run they upload again next time.
+    std::erase_if(d.luts,
+                  [&](const LutImage& l) { return !ran && l.staging.handle() != VK_NULL_HANDLE; });
+    if (ran) {
+        for (LutImage& l : d.luts) {
+            l.staging = gpu::Buffer{};
+        }
+    }
     for (auto& [index, in] : bound) {
         if (in.access && ran) {
             in.access->commit(VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_2_SHADER_READ_BIT);
@@ -670,6 +1183,21 @@ Result<void> VulkanCompositor::render(const RenderGraph& graph,
 
 const gpu::Image* VulkanCompositor::output() const noexcept {
     return impl_->output.handle() != VK_NULL_HANDLE ? &impl_->output : nullptr;
+}
+
+std::uint64_t VulkanCompositor::detail_image_bytes() const noexcept {
+    VkDevice device = impl_->device->device();
+    std::uint64_t bytes = 0;
+    for (const BlurImages& images : impl_->blur_images) {
+        for (const gpu::Image* image : {&images.across, &images.down}) {
+            if (image->handle() == VK_NULL_HANDLE)
+                continue;
+            VkMemoryRequirements requirements{};
+            vkGetImageMemoryRequirements(device, image->handle(), &requirements);
+            bytes += requirements.size;
+        }
+    }
+    return bytes;
 }
 
 Result<RgbaImage> VulkanCompositor::read_output() {
@@ -714,6 +1242,149 @@ Result<RgbaImage> VulkanCompositor::read_output() {
         out.pixels[i] = half_to_float(halves[i]);
     }
     return out;
+}
+
+Result<const gpu::Image*> VulkanCompositor::encode_display(Transfer transfer) {
+    Impl& d = *impl_;
+    if (d.output.handle() == VK_NULL_HANDLE) {
+        return make_error(ErrorCode::InvalidArgument, Category::Compositor, "nothing rendered yet");
+    }
+    const std::uint32_t w = d.output.desc().width;
+    const std::uint32_t h = d.output.desc().height;
+    if (d.display.handle() == VK_NULL_HANDLE || d.display.desc().width != w ||
+        d.display.desc().height != h) {
+        auto img = gpu::Image::create(
+            *d.device, {.width = w,
+                        .height = h,
+                        .format = kDisplayFormat,
+                        .usage = static_cast<VkImageUsageFlags>(VK_IMAGE_USAGE_STORAGE_BIT) |
+                                 VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT});
+        if (!img) {
+            return std::unexpected(img.error());
+        }
+        d.display = std::move(*img);
+    }
+    const auto ran = d.runner->run([&](VkCommandBuffer cmd) {
+        // Waits for every earlier command on this queue (a reader of the previous encode) before
+        // the contents are discarded.
+        gpu::transition(cmd, d.display.handle(), VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_GENERAL);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, d.display_pipeline);
+        const VkDescriptorImageInfo source{.sampler = VK_NULL_HANDLE,
+                                           .imageView = d.output.view(),
+                                           .imageLayout = VK_IMAGE_LAYOUT_GENERAL};
+        const VkDescriptorImageInfo target{.sampler = VK_NULL_HANDLE,
+                                           .imageView = d.display.view(),
+                                           .imageLayout = VK_IMAGE_LAYOUT_GENERAL};
+        std::array<VkWriteDescriptorSet, 2> writes{};
+        for (std::uint32_t b = 0; b < writes.size(); ++b) {
+            writes[b] = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                         .pNext = nullptr,
+                         .dstSet = VK_NULL_HANDLE,
+                         .dstBinding = b,
+                         .dstArrayElement = 0,
+                         .descriptorCount = 1,
+                         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                         .pImageInfo = b == 0 ? &source : &target,
+                         .pBufferInfo = nullptr,
+                         .pTexelBufferView = nullptr};
+        }
+        d.push_descriptors(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, d.display_pipeline_layout, 0,
+                           static_cast<std::uint32_t>(writes.size()), writes.data());
+        const std::uint32_t bt709 = transfer == Transfer::Bt709 ? 1U : 0U;
+        vkCmdPushConstants(cmd, d.display_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                           sizeof(bt709), &bt709);
+        vkCmdDispatch(cmd, (w + kGroupSize - 1) / kGroupSize, (h + kGroupSize - 1) / kGroupSize, 1);
+        // Visible to any later reader on the queue (Qt's fragment shader, a copy).
+        barrier(cmd,
+                memory_barrier(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT,
+                               VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_READ_BIT));
+    });
+    if (!ran) {
+        return std::unexpected(ran.error());
+    }
+    return &d.display;
+}
+
+Result<std::vector<std::uint8_t>> VulkanCompositor::read_display() {
+    Impl& d = *impl_;
+    if (d.display.handle() == VK_NULL_HANDLE) {
+        return make_error(ErrorCode::InvalidArgument, Category::Compositor, "nothing encoded yet");
+    }
+    const std::uint32_t w = d.display.desc().width;
+    const std::uint32_t h = d.display.desc().height;
+    const VkDeviceSize bytes = static_cast<VkDeviceSize>(w) * h * 4;
+    if (d.display_readback.size() < bytes) {
+        auto buf = gpu::Buffer::create(*d.device, bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                       gpu::MemoryUse::Readback);
+        if (!buf) {
+            return std::unexpected(buf.error());
+        }
+        d.display_readback = std::move(*buf);
+    }
+    const auto ran = d.runner->run([&](VkCommandBuffer cmd) {
+        const VkBufferImageCopy copy{.bufferOffset = 0,
+                                     .bufferRowLength = 0,
+                                     .bufferImageHeight = 0,
+                                     .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                                          .mipLevel = 0,
+                                                          .baseArrayLayer = 0,
+                                                          .layerCount = 1},
+                                     .imageOffset = {.x = 0, .y = 0, .z = 0},
+                                     .imageExtent = {.width = w, .height = h, .depth = 1}};
+        vkCmdCopyImageToBuffer(cmd, d.display.handle(), VK_IMAGE_LAYOUT_GENERAL,
+                               d.display_readback.handle(), 1, &copy);
+        barrier(cmd, memory_barrier(VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                    VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT));
+    });
+    if (!ran) {
+        return std::unexpected(ran.error());
+    }
+    d.display_readback.invalidate();
+    const auto* data = static_cast<const std::uint8_t*>(d.display_readback.mapped());
+    return std::vector<std::uint8_t>(data, data + bytes);
+}
+
+Result<VulkanCompositor::Nv12Image> VulkanCompositor::read_nv12(Nv12ReadbackTimings* timings) {
+    if (timings != nullptr)
+        *timings = {};
+    Impl& d = *impl_;
+    if (d.output.handle() == VK_NULL_HANDLE) {
+        return make_error(ErrorCode::InvalidArgument, Category::Compositor, "nothing rendered yet");
+    }
+    const std::uint32_t w = d.output.desc().width;
+    const std::uint32_t h = d.output.desc().height;
+    if (w % 2 != 0 || h % 2 != 0) {
+        return make_error(ErrorCode::Unsupported, Category::Compositor, "NV12 needs an even size");
+    }
+    if (!d.nv12) {
+        auto made = detail::Nv12Pass::create(*d.device, d.push_descriptors);
+        if (!made) {
+            return std::unexpected(made.error());
+        }
+        d.nv12 = std::move(*made);
+    }
+    const std::uint32_t stride = (w + 3) & ~3U;
+    detail::Nv12Pass::Timings pass_timings;
+    auto bytes = d.nv12->run(*d.runner, d.output.view(), w, h, stride,
+                             timings != nullptr ? &pass_timings : nullptr);
+    if (!bytes) {
+        return std::unexpected(bytes.error());
+    }
+    const auto copy_start = std::chrono::steady_clock::now();
+    std::vector<std::uint8_t> host_bytes(bytes->begin(), bytes->end());
+    if (timings != nullptr) {
+        timings->record_ms = pass_timings.commands.record_ms;
+        timings->submit_ms = pass_timings.commands.submit_ms;
+        timings->fence_wait_ms = pass_timings.commands.fence_wait_ms;
+        timings->gpu_convert_ms = pass_timings.gpu_convert_ms;
+        timings->gpu_timestamp_available = pass_timings.gpu_timestamp_available;
+        timings->invalidate_ms = pass_timings.invalidate_ms;
+        timings->host_copy_ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - copy_start)
+                .count();
+    }
+    return Nv12Image{.width = w, .height = h, .stride = stride, .bytes = std::move(host_bytes)};
 }
 
 } // namespace oma::compositor
