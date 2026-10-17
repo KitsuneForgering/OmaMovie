@@ -1,8 +1,11 @@
-# M6 manual task sessions
+# M6 task sheet for RC feedback
 
-The M6 items that tests cannot close: task comparisons, the Position-mode decision and the
-"edit a short vlog, including keyboard-only" gate ([M6](implementation-plan-m6-ui.md)).
-Run on Omarchy with a release build; one person, screen recorded if possible.
+The M6 items that automated tests cannot close are task comparisons, the Position-mode
+decision and whether a new user can edit a short vlog, including with the keyboard only
+([M6](implementation-plan-m6-ui.md)). Invite external testers to try these tasks on an
+Omarchy release candidate; a maintainer-run session is not required before publishing
+the RC. Record the app version, hardware, task result and any blocking confusion. A screen
+recording is optional. Use the findings to decide what must be fixed before stable release.
 
 **Setup.** `scripts/m6-task-media.sh` (about 2 minutes) writes dialogue-a/b (20 s, a beep
 every 2 s), cutaway (8 s, silent), phone-clip (6 s portrait) and long-recording (10 min, a

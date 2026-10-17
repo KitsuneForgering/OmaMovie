@@ -9,12 +9,16 @@ memory/GPU use and downgrade reasons; repeat the same fixtures under controlled 
 independent frame/audio fidelity checks. Only then compare a GPU-native encoder-input
 pilot. This remains a baseline task, not a zero-copy claim. See [M12](implementation-plan-m12-gpu-export-architecture.md).
 
-**v1.0 closure order:** settle the bounded [interop scope](implementation-plan-m9-interop-color.md)
-→ [contextual tooltip coverage](implementation-plan-v1-onboarding.md)
-→ [M6 manual workflow from a clean profile](m6-walkthrough.md) → fixes/polish found there
-→ packaging and recovery → required CI gates → final regression/stress pass → feature
-freeze → release candidate. The first-opening tour moved into v0.1 at the maintainer's
-request and now links to a bundled editable demo; its novice M6 walkthrough remains open.
+**v0.1 RC order:** settle the supported Intel/software scope → packaging and recovery
+→ required CI gates on the final SHA → final automated regression/stress pass → feature
+freeze → run [RC validation](implementation-plan-cross-editor-benchmarks.md) on the
+declared machine → publish a release candidate → collect external task feedback and fix
+blockers before a stable release. The first-opening tour moved into v0.1 at the maintainer's
+request and now links to a bundled editable demo. The [M6 task sheet](m6-walkthrough.md)
+is available to RC testers, but a maintainer-run manual session is not an RC gate.
+For v1.0, settle the bounded [interop scope](implementation-plan-m9-interop-color.md)
+and [contextual tooltip coverage](implementation-plan-v1-onboarding.md) with evidence
+from the RC feedback.
 Advanced VFX categories need a separately demonstrated workflow before becoming v1.0 blockers.
 
 M5 and Intel M4 are closed; M7 has working project save/load and four selectable
@@ -49,10 +53,11 @@ regressions in interaction come before new breadth.
    frames and samples are matched to their source by an independent decode. Two-hour 1080p
    exports with cuts, looks and a dissolve pass (2026-10-13; 2026-10-15 with 24 reordered cuts
    checked frame by frame, `tools/bench/long-export/run.sh`).
-3. **Finish one editing path (M6/M8):** exercise import → source marks → exact edit
-   → playback → save/reopen → export on Omarchy. Roll/slip/slide now have keyboard,
-   pointer, menu and two-up paths with tests; the corrections, latency and retimed-audio
-   policy need the [manual sessions](m6-walkthrough.md) before the workflow is called ready.
+3. **Finish one editing path (M6/M8):** keep import → source marks → exact edit
+   → playback → save/reopen → export in the automated app and GUI checks on Omarchy.
+   Roll/slip/slide already have keyboard, pointer, menu and two-up test paths. Use the
+   [M6 task sheet](m6-walkthrough.md) to gather corrections, surprises and missing
+   operations from external RC testers before calling the workflow ready for stable release.
 4. **Prove release packaging and recovery (M7/M10):** the clean Arch package built,
    installed and passed the installed GUI smoke under sway/lavapipe on 2026-10-16
    ([evidence](Research/evidence/2026-10-16-package-release-gate.md)). The release job now
