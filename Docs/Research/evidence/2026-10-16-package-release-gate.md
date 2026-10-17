@@ -38,6 +38,16 @@ eight GCC/Clang build variants, GUI smoke, format, tidy, include rules, eight fu
 the exact two contexts with strict status checks, and GitHub reported the PR merge state
 `CLEAN` at that SHA. Recheck both contexts after the final branch commit.
 
+Run `38996647426` on `7b953e3` then caught one GCC TSan report in the app suite while
+the source-marked edit workflow exported through lavapipe. Its read, write and heap
+allocation were all in `libLLVM.so.23.1` shader workers created by `libvulkan_lvp.so`;
+the application stack only created the Vulkan device. No OmaMovie frame accessed the
+reported block. The other seven compiler/build variants, GUI smoke, lint and fuzz passed;
+`ci` failed because GCC TSan failed, as the ruleset requires. A narrowly scoped
+`race:libLLVM.so` suppression was added beside the existing third-party TSan entries.
+The same focused app test passed locally on lavapipe with LLVM 22; CI with LLVM 23 must
+still verify the suppression and the complete suite on the new SHA.
+
 The host-native Release app was installed to `/tmp/omamovie-host-stage/usr` and launched from
 that staged tree on Intel. Its first GUI smoke attempt failed the play/J/K/L position checks
 with audio running; a second attempt passed. This is an unresolved intermittent native smoke

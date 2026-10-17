@@ -35,9 +35,11 @@ regressions in interaction come before new breadth.
    and required `ci` plus `conventional commits` checks. The `ci` aggregator on this
    branch gates test/GUI/lint/includes/fuzz jobs. Draft PR [#4](https://github.com/KitsuneForgering/OmaMovie/pull/4)
    now exercises both required contexts: `conventional commits` passed, a defective
-   run of `ci` failed as expected, and all checks passed on `041ecb9`. The active ruleset
-   requires the exact contexts with strict status checks; recheck the final SHA after
-   further commits. Session/app tests already run in the ASan/TSan
+   run of `ci` failed as expected, and all checks passed on `041ecb9`. A later GCC TSan
+   report inside lavapipe's LLVM 23 workers failed `ci` again on `7b953e3`; the external
+   library boundary now has a focused suppression ([evidence](Research/evidence/2026-10-16-package-release-gate.md)).
+   The active ruleset requires the exact contexts with strict status checks; recheck
+   the final SHA after this change. Session/app tests already run in the ASan/TSan
    matrix; see [M10](implementation-plan-m10-validation.md). The versioned policy is in
    `.github/rulesets/master.json`.
 2. **Completed-output correctness (M7) — done 2026-10-12:** write failures are injected

@@ -20,6 +20,11 @@ race:libdav1d.so
 # pthread_barrier; the uninstrumented driver's barrier destroy/wait pair looks like a race
 # (seen with Mesa 26.2.2 in tests/compositor/test_lifetime.cpp, both frames inside the driver).
 race:libvulkan_intel.so
+# Lavapipe's LLVM 23 shader workers read/write a heap block allocated inside libLLVM
+# concurrently while creating a device for app export (2026-10-17 CI, test_edit_workflow).
+# Both conflicting frames and the allocation are inside the uninstrumented libLLVM; no
+# OmaMovie frame accesses that block. Keep the suppression at this library boundary.
+race:libLLVM.so
 
 # Application tests (BUILD=tsan app subset). Qt, GLib, libdbus and fontconfig are not built with
 # TSan: the locking inside them is invisible while their malloc/free calls are still seen, so
