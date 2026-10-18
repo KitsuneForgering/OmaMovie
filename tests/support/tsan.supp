@@ -25,6 +25,10 @@ race:libvulkan_intel.so
 # Both conflicting frames and the allocation are inside the uninstrumented libLLVM; no
 # OmaMovie frame accesses that block. Keep the suppression at this library boundary.
 race:libLLVM.so
+# Clang TSan on Mesa 26.2.5 also reports the same shader-worker heap race through
+# libvulkan_lvp's memcpy frames rather than libLLVM (2026-10-18 CI, app export).
+# Both accesses, allocation and worker creation are inside this uninstrumented driver.
+race:libvulkan_lvp.so
 
 # Application tests (BUILD=tsan app subset). Qt, GLib, libdbus and fontconfig are not built with
 # TSan: the locking inside them is invisible while their malloc/free calls are still seen, so
