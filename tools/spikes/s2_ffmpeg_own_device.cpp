@@ -12,7 +12,7 @@
 // for the first frame copies a few luma samples back to compare with a software decode. That
 // single copy is verification only; the hot path never reads frames back.
 //
-// Disposable spike code (Docs/spikes/S2-*.md). What proves useful moves to libs/gpu and libs/media.
+// Disposable spike code (docs/spikes/S2-*.md). What proves useful moves to libs/gpu and libs/media.
 
 // Vulkan-Hpp without exceptions, returning std::expected (needs <expected> first and
 // VULKAN_HPP_USE_STD_EXPECTED; otherwise it falls back to its own ResultValue type).

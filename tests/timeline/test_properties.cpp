@@ -1,5 +1,5 @@
 // Stateful edit properties (M10): seeded command streams over the shared fixture, checked after
-// every step and through a full undo/redo (Docs/implementation-plan-qa-timeline.md).
+// every step and through a full undo/redo (docs/implementation-plan-qa-timeline.md).
 #include "fixture.hpp"
 #include "property_invariants.hpp"
 #include "property_run.hpp"

@@ -5,7 +5,7 @@ import QtQuick.Layouts
 import QtQuick.Shapes
 import OmaMovie 1.0
 
-// Editor shell following Docs/ui-design.md: three fixed areas (library, viewer, timeline),
+// Editor shell following docs/ui-design.md: three fixed areas (library, viewer, timeline),
 // adjustments in a bar and drawer above the viewer, a transport, and every command
 // registered once as an Action with its §8.1 shortcut.
 ApplicationWindow {

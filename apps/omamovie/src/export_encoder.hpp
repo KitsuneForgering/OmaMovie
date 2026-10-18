@@ -12,7 +12,7 @@
 // The export's encoder as its own stage (code review part 5): the export job renders and reads
 // back frame n+1 while this stage encodes frame n, so a frame costs about the slower of the two
 // instead of their sum. Same-machine comparison:
-// Docs/implementation-plan-cross-editor-benchmarks.md.
+// docs/implementation-plan-cross-editor-benchmarks.md.
 //
 // Threading: one worker of its own pool (no ad hoc thread, §13) is the only user of the writer
 // until finish() returns. Frames move in through a queue of two (backpressure); the producer

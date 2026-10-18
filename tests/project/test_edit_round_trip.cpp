@@ -1,6 +1,6 @@
 // Every state the edit properties generate (tests/timeline/property_*.cpp, M10) saves and
 // reloads unchanged: the project format is checked against the test-only canonical state, not
-// used as its own oracle (Docs/implementation-plan-qa-timeline.md).
+// used as its own oracle (docs/implementation-plan-qa-timeline.md).
 #include "oma/project/document.hpp"
 #include "property_checker.hpp"
 #include "property_gen.hpp"

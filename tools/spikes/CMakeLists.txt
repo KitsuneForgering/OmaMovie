@@ -1,4 +1,4 @@
-# Disposable M1 spikes (Docs/spikes/). Opt-in: cmake --preset spikes. They need the Vulkan,
+# Disposable M1 spikes (docs/spikes/). Opt-in: cmake --preset spikes. They need the Vulkan,
 # FFmpeg, libplacebo and Qt development files; the shell scripts (s1, s3) are not built.
 pkg_check_modules(SPIKE_AV REQUIRED libavformat libavcodec libavutil)
 

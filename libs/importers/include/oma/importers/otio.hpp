@@ -4,7 +4,7 @@
 // the schemas (Timeline.1, Stack.1, Track.1, Clip.1/2, Gap.1, Transition.1, ExternalReference.1,
 // MissingReference.1, RationalTime.1, TimeRange.1). Other objects are kept as opaque IR objects
 // and reported. OTIO stores times as floating-point rates and values: exact NTSC rates are
-// recognized, any other rounding is reported as a loss. Docs/interop.md has the support level.
+// recognized, any other rounding is reported as a loss. docs/interop.md has the support level.
 
 #include "oma/base/error.hpp"
 #include "oma/project_ir/ir.hpp"

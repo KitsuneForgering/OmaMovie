@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Spike S1: inventory of the video decode/encode paths this machine actually supports.
-# Usage: tools/spikes/s1-inventory.sh [output-dir]      (report in Docs/spikes/S1-hardware-inventory.md)
+# Usage: tools/spikes/s1-inventory.sh [output-dir]      (report in docs/spikes/S1-hardware-inventory.md)
 #
 # A path counts as hardware only if FFmpeg reports the hardware pixel format as chosen by
 # get_format(); FFmpeg silently falls back to software decoding otherwise, so "no error" is

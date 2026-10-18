@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-// Omarchy screen recordings (Docs/Research/omarchy-integration.md §5). The rules mirror the
+// Omarchy screen recordings (docs/Research/omarchy-integration.md §5). The rules mirror the
 // installed `omarchy-capture-screenrecording`, which is version-sensitive: keep them here, in
 // the app's platform adapter, and fall back to plain defaults.
 namespace omarchy {

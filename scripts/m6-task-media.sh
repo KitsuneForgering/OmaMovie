@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generates the media for the M6 manual task sessions (Docs/m6-walkthrough.md) into a folder
+# Generates the media for the M6 manual task sessions (docs/m6-walkthrough.md) into a folder
 # outside the repository. Everything comes from lavfi: no copyrighted media.
 # Usage: scripts/m6-task-media.sh [directory]   (default: $XDG_VIDEOS_DIR or ~/Videos/omamovie-m6)
 set -euo pipefail

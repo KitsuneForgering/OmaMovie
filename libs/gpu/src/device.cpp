@@ -2,7 +2,7 @@
 
 #include "oma/base/log.hpp"
 
-// Vulkan-Hpp without exceptions, returning std::expected (Docs/spikes/S2-ffmpeg-own-device.md):
+// Vulkan-Hpp without exceptions, returning std::expected (docs/spikes/S2-ffmpeg-own-device.md):
 // <expected> must come first and VULKAN_HPP_USE_STD_EXPECTED must be defined.
 #include <expected>
 #define VULKAN_HPP_NO_EXCEPTIONS
@@ -41,7 +41,7 @@ Error vk_error(vk::Result r, std::string what) {
 }
 
 // Extensions OmaMovie enables when the device has them. Interop and synchronization come first;
-// video extensions are only present on drivers that expose Vulkan Video (Docs/spikes/S1-*.md).
+// video extensions are only present on drivers that expose Vulkan Video (docs/spikes/S1-*.md).
 constexpr std::array kFeaturelessExtensions = {
     VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
     VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,

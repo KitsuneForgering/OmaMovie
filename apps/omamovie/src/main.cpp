@@ -428,7 +428,7 @@ int main(int argc, char** argv) {
         return session.exportedFile() == out ? 0 : 1;
     }
     if (timeline_audit) {
-        // M6 long-form gate (Docs/Research/long-form-editing.md): a storyline of N short clips
+        // M6 long-form gate (docs/Research/long-form-editing.md): a storyline of N short clips
         // built with the timeline's own commands, saved with libs/project and opened in the
         // editor; then routine edits, each timed from the call to the end of the next Qt frame
         // that started after it (model rebuild, QML bindings and rendering included).

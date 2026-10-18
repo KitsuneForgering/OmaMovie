@@ -9,16 +9,16 @@ without copying either interface or promising feature parity.
 ## Source of truth and context loading
 
 For mutable facts, use this order: **code and relevant tests → accepted ADRs → dated
-benchmark/workload evidence → implementation plan → specialized Docs → this guide**.
+benchmark/workload evidence → implementation plan → specialized docs → this guide**.
 An ADR records a decision, not proof that it shipped. Research is provisional. Resolve
 conflicts by checking current code, tests and dated evidence, then correct the stale doc.
 
 Load context progressively: this guide → one relevant skill if useful → the relevant
-[implementation milestone](Docs/implementation-plan.md) and [next step](Docs/implementation-plan-next-step.md)
-→ its [ADR](Docs/adr/README.md) → affected source/tests → evidence. Expand only when the
-question requires it. Use [UI design](Docs/ui-design.md) for UX,
-[format architecture](Docs/format-architecture.md) and [interop matrix](Docs/interop.md)
-for formats, and [QA](Docs/implementation-plan-qa.md) for validation. [CONTRIBUTING.md](CONTRIBUTING.md)
+[implementation milestone](docs/implementation-plan.md) and [next step](docs/implementation-plan-next-step.md)
+→ its [ADR](docs/adr/README.md) → affected source/tests → evidence. Expand only when the
+question requires it. Use [UI design](docs/ui-design.md) for UX,
+[format architecture](docs/format-architecture.md) and [interop matrix](docs/interop.md)
+for formats, and [QA](docs/implementation-plan-qa.md) for validation. [CONTRIBUTING.md](CONTRIBUTING.md)
 contains build commands and contribution process; `make help` lists current targets.
 
 ## Facts, goals, preferences and evidence
@@ -26,9 +26,9 @@ contains build commands and contribution process; `make help` lists current targ
 **Facts** are checked in code: the app uses C++23, Qt Quick/QML, FFmpeg, Vulkan and
 PipeWire; inspect current implementations before describing a path. **Goals** include
 GPU-native export, clearer Session ownership and more explicit QML composition; the
-[M12 plan](Docs/implementation-plan-m12-gpu-export-architecture.md) marks these as planned.
+[M12 plan](docs/implementation-plan-m12-gpu-export-architecture.md) marks these as planned.
 **Maintainer preferences** below guide choices but may be challenged by code or evidence.
-**Evidence** lives in `Docs/Research/evidence/`, tests and workload protocols, not here.
+**Evidence** lives in `docs/Research/evidence/`, tests and workload protocols, not here.
 
 Use status terms precisely: *implemented* = connected code; *tested* = relevant test;
 *measured* = repeatable benchmark; *validated* = declared workload plus recorded result;
@@ -81,13 +81,13 @@ scope.
 | PR, issue, release or repository health | the matching focused audit/resolution/release skill only |
 
 Do not invoke several reviewers for a routine edit. Skills supply reusable method, while
-Docs and code supply OmaMovie's current decisions and facts.
+The docs and code supply OmaMovie's current decisions and facts.
 
 ## Scope and completion
 
 Build the committed workflow before adding effect categories or competitor parity. The
-[v0.1 release decision](Docs/implementation-plan-milestone-overview.md) covers only its
-validated Intel/software scope; the [first-opening tour](Docs/implementation-plan-v1-onboarding.md)
+[v0.1 release decision](docs/implementation-plan-milestone-overview.md) covers only its
+validated Intel/software scope; the [first-opening tour](docs/implementation-plan-v1-onboarding.md)
 and bundled editable demo are in v0.1, while contextual tooltip and novice task gates
 remain open. AMD/NVIDIA, full HDR and other desired capabilities require their
 own evidence. Do not turn aesthetic refactoring into a release gate.
@@ -95,7 +95,7 @@ own evidence. Do not turn aesthetic refactoring into a release gate.
 A change is done when its actual behavior and error/fallback path have proportional
 checks, affected integration/workload gates pass, documentation states the resulting
 scope accurately, and the report names any unverified claim. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for commands and [milestone rules](Docs/implementation-plan-milestones.md)
+[CONTRIBUTING.md](CONTRIBUTING.md) for commands and [milestone rules](docs/implementation-plan-milestones.md)
 for release criteria.
 
 ## Older section references
@@ -103,9 +103,9 @@ for release criteria.
 Older source comments cite sections of the former long guide. Resolve them through the
 sources here: §3–5 build/dependencies → `CONTRIBUTING.md`, ADR-0001/0018 and CMake;
 §6 time → ADR-0002; §7–9 GPU/media/compositor → ADR-0004/0005/0006 and M2/M3/M12;
-§10–11 timeline/UI → M5/M6 and `Docs/ui-design.md`; §12–13 audio/concurrency →
+§10–11 timeline/UI → M5/M6 and `docs/ui-design.md`; §12–13 audio/concurrency →
 ADR-0003/0020 and M4; §14–15 project/cache → ADR-0007/0009 and M7;
-§16 interop → ADR-0008 and `Docs/interop.md`; §18–19 parser/errors → QA and code;
+§16 interop → ADR-0008 and `docs/interop.md`; §18–19 parser/errors → QA and code;
 §20–26 agent/process/performance/tests → ADR index, evidence, milestones and
 `CONTRIBUTING.md`. Update a touched comment to its direct source rather than extending
 this compatibility map.

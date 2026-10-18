@@ -1,6 +1,6 @@
 // S4: offscreen Qt Quick sampling the compositor's RGBA16F image on OmaMovie's device.
 // This diagnostic deliberately runs all queue users sequentially. It is not a UI render loop
-// or a display transform. See Docs/spikes/S4-qt-shared-device.md for scope and reproduction.
+// or a display transform. See docs/spikes/S4-qt-shared-device.md for scope and reproduction.
 #include "oma/compositor/compositor.hpp"
 #include "oma/gpu/device.hpp"
 #include "oma/gpu/resources.hpp"

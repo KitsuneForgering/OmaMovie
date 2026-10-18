@@ -4,7 +4,7 @@
 // Premiere, Avid and others export. Read: TITLE and FCM headers, event lines (cut `C` and
 // dissolve `D` on V, A, A2…, AA, B), `* FROM CLIP NAME:` and `* SOURCE FILE:` comments. Wipes,
 // keys, motion (`M2`) lines and unknown comments are kept as opaque IR objects and reported.
-// Docs/interop.md has the support level; Docs/formats/edl.md the format notes.
+// docs/interop.md has the support level; docs/formats/edl.md the format notes.
 
 #include "oma/base/error.hpp"
 #include "oma/importers/otio.hpp"

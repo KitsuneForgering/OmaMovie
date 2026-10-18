@@ -13,7 +13,7 @@
 #include <string_view>
 #include <vector>
 
-// OmaMovie's Vulkan device (CLAUDE.md §5.1, §7; Docs/spikes/S2-ffmpeg-own-device.md).
+// OmaMovie's Vulkan device (CLAUDE.md §5.1, §7; docs/spikes/S2-ffmpeg-own-device.md).
 //
 // libs/gpu owns the single VkInstance/VkDevice of the process. FFmpeg (libs/media), the
 // compositor and Qt Quick receive its raw handles; they never create their own device. The
