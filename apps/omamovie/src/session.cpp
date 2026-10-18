@@ -698,8 +698,10 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
                         return;
                     --pending_import_callbacks_;
                     addToLibrary(std::move(missing), false);
-                    fail(QStringLiteral("%1 cannot stand in for the missing file: %2. Locate the original in the library")
-                             .arg(QFileInfo(source).fileName(), why));
+                    const QString message = QStringLiteral("%1 cannot stand in for the missing file: %2. Locate the original in the library")
+                                                .arg(QFileInfo(source).fileName(), why);
+                    setNotice(message);
+                    fail(message);
                     importNextQueued(generation);
                 });
                 return oma::Result<void>{};

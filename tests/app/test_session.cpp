@@ -193,7 +193,9 @@ bool mismatched_saved_media_stays_in_project(const char* source, const char* rep
     reopened.openProject(QUrl::fromLocalFile(project));
     if (!wait_until([&] { return reopened.media().size() == 1 && !reopened.importsPending(); }))
         return false;
-    if (!reopened.media().front().toMap().value("missing").toBool() || reopened.clips().size() < 2)
+    if (!reopened.media().front().toMap().value("missing").toBool() ||
+        reopened.clips().size() < 2 ||
+        !reopened.notice().contains(QStringLiteral("cannot stand in")))
         return false;
     reopened.saveProject(QUrl::fromLocalFile(saved_again));
     if (!wait_until([&] { return reopened.projectPath() == saved_again; }))
