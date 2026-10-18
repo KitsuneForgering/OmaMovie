@@ -678,8 +678,11 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
             // past its end. Seconds suffice for this guard; a millisecond absorbs rounding.
             const double needed = known->info.start.seconds_approx() + known->info.duration.seconds_approx();
             const double has = item.media.start.seconds_approx() + item.media.duration.seconds_approx();
-            if (audio_only != known->audio_only || (!item.media.still && has + 0.001 < needed)) {
-                const QString why = audio_only != known->audio_only
+            const bool wrong_kind = audio_only != known->audio_only ||
+                                    item.media.still != known->info.still ||
+                                    (known->info.has_audio && !item.media.has_audio);
+            if (wrong_kind || (!item.media.still && has + 0.001 < needed)) {
+                const QString why = wrong_kind
                                         ? QStringLiteral("it is not the same kind of media")
                                         : QStringLiteral("it is shorter than the part the project uses");
                 LibraryItem missing;

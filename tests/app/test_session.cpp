@@ -164,14 +164,14 @@ bool marked_source_range_survives_project_reopen() {
            std::abs(clip.value("duration").toDouble() - 10.0 / 30.0) < 1e-9;
 }
 
-bool mismatched_saved_media_stays_in_project(const char* replacement) {
+bool mismatched_saved_media_stays_in_project(const char* source, const char* replacement) {
     QTemporaryDir dir;
     if (!dir.isValid())
         return false;
     const QString media = dir.filePath(QStringLiteral("source.mp4"));
     const QString project = dir.filePath(QStringLiteral("edit.omamovie"));
     const QString saved_again = dir.filePath(QStringLiteral("again.omamovie"));
-    if (!QFile::copy(fixture("h264_long_gop.mp4"), media))
+    if (!QFile::copy(fixture(source), media))
         return false;
     Session original;
     original.setSilent(true);
@@ -541,10 +541,24 @@ void run_session_tests() {
            { expect(source_range_works_for_overwrite_and_connect()).toBeTruthy(); });
         it("preserves the placed source range after saving and reopening",
            { expect(marked_source_range_survives_project_reopen()).toBeTruthy(); });
-        it("keeps a shorter replacement locatable across saves",
-           { expect(mismatched_saved_media_stays_in_project("h264_30fps_aac.mp4")).toBeTruthy(); });
-        it("keeps a replacement of the wrong kind locatable across saves",
-           { expect(mismatched_saved_media_stays_in_project("tone_44100.wav")).toBeTruthy(); });
+        it("keeps a shorter replacement locatable across saves", {
+            expect(
+                mismatched_saved_media_stays_in_project("h264_long_gop.mp4", "h264_30fps_aac.mp4"))
+                .toBeTruthy();
+        });
+        it("keeps a replacement of the wrong kind locatable across saves", {
+            expect(mismatched_saved_media_stays_in_project("h264_long_gop.mp4", "tone_44100.wav"))
+                .toBeTruthy();
+        });
+        it("keeps a replacement without the saved audio stream locatable across saves", {
+            expect(mismatched_saved_media_stays_in_project("h264_30fps_aac.mp4",
+                                                           "screenrecording_silent.mp4"))
+                .toBeTruthy();
+        });
+        it("keeps an image replacement for a video locatable across saves", {
+            expect(mismatched_saved_media_stays_in_project("h264_long_gop.mp4", "still.png"))
+                .toBeTruthy();
+        });
         it("drops an out mark that an in mark passes",
            { expect(reversed_marks_reset()).toBeTruthy(); });
         it("keeps the source and sequence playheads apart",
