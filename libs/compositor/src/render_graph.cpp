@@ -48,6 +48,32 @@ Result<void> validate(const RenderGraph& graph, std::size_t input_count) {
         if (std::isnan(l.opacity) || l.opacity < 0.0F || l.opacity > 1.0F) {
             return std::unexpected(invalid("opacity outside [0, 1]", where));
         }
+        const ColorAdjust& a = l.color;
+        const auto within = [](double v, double limit) {
+            return std::isfinite(v) && std::abs(v) <= limit;
+        };
+        if (!within(a.exposure, 4.0) || !within(a.contrast, 1.0) || !within(a.saturation, 1.0) ||
+            !within(a.temperature, 1.0)) {
+            return std::unexpected(invalid("color adjustment out of range", where));
+        }
+        unsigned seen = 0; // one bit per FilterKind
+        for (const Filter& f : l.looks) {
+            const unsigned bit = 1U << static_cast<unsigned>(f.kind);
+            if (!std::isfinite(f.amount) || f.amount < 0.0 || f.amount > 1.0 ||
+                f.kind == FilterKind::None || f.kind > FilterKind::Vignette || (seen & bit) != 0) {
+                return std::unexpected(invalid("invalid look", where));
+            }
+            seen |= bit;
+        }
+        if (!within(l.sharpness, 1.0)) {
+            return std::unexpected(invalid("sharpness outside [-1, 1]", where));
+        }
+        if (!std::isfinite(l.reveal) || l.reveal < 0.0 || l.reveal > 1.0) {
+            return std::unexpected(invalid("reveal outside [0, 1]", where));
+        }
+        if (auto r = validate(l.grade); !r) {
+            return std::unexpected(invalid(r.error().message(), where));
+        }
     }
     return {};
 }
@@ -132,6 +158,27 @@ std::optional<std::array<std::uint32_t, 4>> covered_pixels(const Layer& layer,
         return std::nullopt;
     }
     return std::array<std::uint32_t, 4>{ix0, iy0, ix1, iy1};
+}
+
+RenderGraph scaled(const RenderGraph& graph, double scale) {
+    RenderGraph out = graph;
+    if (scale <= 0.0 || scale >= 1.0 || std::isnan(scale)) {
+        return out;
+    }
+    const auto dim = [&](std::uint32_t v) {
+        return std::max<std::uint32_t>(1, static_cast<std::uint32_t>(std::lround(v * scale)));
+    };
+    out.width = dim(graph.width);
+    out.height = dim(graph.height);
+    for (Layer& layer : out.layers) {
+        layer.transform.offset_x *= scale;
+        layer.transform.offset_y *= scale;
+        if (layer.fit == Fit::Native) {
+            layer.transform.scale_x *= scale;
+            layer.transform.scale_y *= scale;
+        }
+    }
+    return out;
 }
 
 } // namespace oma::compositor

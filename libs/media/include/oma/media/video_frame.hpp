@@ -2,6 +2,7 @@
 
 #include "oma/base/error.hpp"
 #include "oma/base/time.hpp"
+#include "oma/media/probe.hpp"
 
 #include <vulkan/vulkan_core.h>
 
@@ -36,9 +37,13 @@ struct SampleLayout {
     int chroma_shift_y = 0;          // log2 of the vertical chroma subsampling (1 for 4:2:0)
     bool interleaved_chroma = false; // Cb and Cr share one plane (NV12, P010)
     bool yuv = true;                 // false for RGB layouts
+    bool alpha = false;              // a straight-alpha plane follows the colour planes (gbrap)
 
     friend bool operator==(const SampleLayout&, const SampleLayout&) = default;
 };
+
+// Both compositors read planar YUV or GBR(A), with one byte or two bytes per sample.
+[[nodiscard]] bool compositable(const SampleLayout& layout) noexcept;
 
 // The Vulkan images of a GPU frame while it is acquired (VideoFrame::acquire_gpu).
 //
@@ -54,6 +59,9 @@ struct GpuImages {
     std::array<std::uint64_t, kMaxFrameImages> signal_values{};
     // One multi-planar image (Vulkan Video) or one image per plane (VA-API import).
     std::uint32_t image_count = 0;
+    // The images are another driver's memory (VA-API DMA-BUFs): a submission acquires them from
+    // VK_QUEUE_FAMILY_FOREIGN_EXT (layouts are GENERAL) and releases them back when it is done.
+    bool foreign = false;
 };
 
 class VideoFrame;
@@ -68,7 +76,7 @@ public:
     GpuAccess& operator=(const GpuAccess&) = delete;
     ~GpuAccess();
 
-    [[nodiscard]] const GpuImages& images() const noexcept { return images_; }
+    [[nodiscard]] const GpuImages& images() const noexcept;
 
     // Records that a submission waiting on wait_values and signaling signal_values was made, and
     // the state it left the images in. Without a commit the frame's state is left untouched.
@@ -79,7 +87,7 @@ private:
     explicit GpuAccess(void* frame, const GpuImages& images) noexcept;
     void release() noexcept;
 
-    void* frame_ = nullptr; // the AVFrame; libs/media sources only
+    void* frame_ = nullptr; // the VideoFrame::Impl; libs/media sources only
     GpuImages images_;
 };
 
@@ -111,11 +119,31 @@ public:
     [[nodiscard]] std::span<const std::uint8_t> plane(int index) const noexcept;
     [[nodiscard]] int stride(int index) const noexcept;
 
+    // Software preview bridge. Copies a decoded frame into a caller-owned RGBA8 buffer.
+    // The destination has at least `stride * height()` bytes; GPU frames are unsupported.
+    // `read_as` replaces the frame's own YUV matrix and range (a media item's interpretation,
+    // ADR-0019); unspecified values fall back as the compositor does.
+    [[nodiscard]] Result<void> copy_rgba(std::span<std::uint8_t> destination,
+                                         int destination_stride,
+                                         std::optional<ColorInfo> read_as = std::nullopt) const;
+    // The same conversion scaled to `width` x `height` in one pass (an area filter when it
+    // reduces), so a thumbnail never needs a full-size RGBA copy.
+    [[nodiscard]] Result<void>
+    copy_rgba_scaled(std::span<std::uint8_t> destination, int destination_stride, int width,
+                     int height, std::optional<ColorInfo> read_as = std::nullopt) const;
+
     // GPU frames only: locks the frame and returns its images (Unsupported on software frames).
     [[nodiscard]] Result<GpuAccess> acquire_gpu();
 
+    // A software frame from straight (not premultiplied) RGBA8 pixels, stored as planar GBRA so
+    // the compositors read it like other RGB sources plus an alpha plane (ADR-0015 titles).
+    // `stride` is the bytes per source row (at least width * 4).
+    [[nodiscard]] static Result<VideoFrame>
+    from_rgba(int width, int height, std::span<const std::uint8_t> rgba, int stride);
+
 private:
     friend class VideoDecoder;
+    friend class GpuAccess; // reads and updates the frame it was acquired from
     struct Impl;
     explicit VideoFrame(std::unique_ptr<Impl> impl) noexcept;
     std::unique_ptr<Impl> impl_;

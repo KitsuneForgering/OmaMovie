@@ -2,6 +2,7 @@
 
 #include "oma/gpu/device.hpp"
 
+#include <chrono>
 #include <string>
 #include <utility>
 #include <vector>
@@ -11,8 +12,20 @@ namespace oma::gpu {
 namespace {
 
 Error vk_failure(VkResult r, std::string what) {
-    return {r == VK_ERROR_DEVICE_LOST ? ErrorCode::Unsupported : ErrorCode::Internal, Category::Gpu,
-            std::move(what), "VkResult " + std::to_string(static_cast<int>(r))};
+    return {error_code(r), Category::Gpu, std::move(what),
+            "VkResult " + std::to_string(static_cast<int>(r))};
+}
+
+// A failed submission or wait; a lost device is marked so producers stop (Device::lost).
+Error submit_failure(const Device& device, VkResult r, std::string what) {
+    if (r == VK_ERROR_DEVICE_LOST) {
+        device.mark_lost();
+    }
+    return vk_failure(r, std::move(what));
+}
+
+Error lost_device() {
+    return {ErrorCode::DeviceLost, Category::Gpu, "the GPU device was lost"};
 }
 
 std::vector<VkSemaphoreSubmitInfo> to_infos(std::span<const SemaphoreSubmit> in) {
@@ -97,7 +110,17 @@ void CommandRunner::reset() noexcept {
 
 Result<void> CommandRunner::run(const std::function<void(VkCommandBuffer)>& record,
                                 std::span<const SemaphoreSubmit> waits,
-                                std::span<const SemaphoreSubmit> signals) {
+                                std::span<const SemaphoreSubmit> signals, RunTimings* timings) {
+    using Clock = std::chrono::steady_clock;
+    const auto elapsed_ms = [](Clock::time_point start) {
+        return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+    };
+    if (timings != nullptr)
+        *timings = {};
+    if (device_->lost()) {
+        return std::unexpected(lost_device()); // a lost device accepts no more work
+    }
+    const auto record_start = Clock::now();
     vkResetCommandBuffer(cmd_, 0);
     const VkCommandBufferBeginInfo begin{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                                          .pNext = nullptr,
@@ -110,6 +133,8 @@ Result<void> CommandRunner::run(const std::function<void(VkCommandBuffer)>& reco
     if (const VkResult r = vkEndCommandBuffer(cmd_); r != VK_SUCCESS) {
         return std::unexpected(vk_failure(r, "cannot record commands"));
     }
+    if (timings != nullptr)
+        timings->record_ms = elapsed_ms(record_start);
     const auto wait_infos = to_infos(waits);
     const auto signal_infos = to_infos(signals);
     const VkCommandBufferSubmitInfo cbi{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
@@ -126,18 +151,67 @@ Result<void> CommandRunner::run(const std::function<void(VkCommandBuffer)>& reco
         .pCommandBufferInfos = &cbi,
         .signalSemaphoreInfoCount = static_cast<std::uint32_t>(signal_infos.size()),
         .pSignalSemaphoreInfos = signal_infos.data()};
+    const auto submit_start = Clock::now();
     device_->lock_queue(family_, 0);
     const VkResult submitted = vkQueueSubmit2(queue_, 1, &submit, fence_);
     device_->unlock_queue(family_, 0);
+    if (timings != nullptr)
+        timings->submit_ms = elapsed_ms(submit_start);
     if (submitted != VK_SUCCESS) {
-        return std::unexpected(vk_failure(submitted, "queue submission failed"));
+        return std::unexpected(submit_failure(*device_, submitted, "queue submission failed"));
     }
+    const auto wait_start = Clock::now();
     const VkResult waited = vkWaitForFences(device_->device(), 1, &fence_, VK_TRUE, UINT64_MAX);
+    if (timings != nullptr)
+        timings->fence_wait_ms = elapsed_ms(wait_start);
     vkResetFences(device_->device(), 1, &fence_);
     if (waited != VK_SUCCESS) {
-        return std::unexpected(vk_failure(waited, "waiting for the GPU failed"));
+        return std::unexpected(submit_failure(*device_, waited, "waiting for the GPU failed"));
     }
     return {};
+}
+
+namespace {
+
+void foreign_barrier(VkCommandBuffer cmd, VkImage image, std::uint32_t from, std::uint32_t to,
+                     bool acquire) {
+    const VkImageMemoryBarrier2 barrier{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .pNext = nullptr,
+        .srcStageMask = acquire ? VK_PIPELINE_STAGE_2_NONE : VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+        .srcAccessMask = acquire ? VK_ACCESS_2_NONE : VK_ACCESS_2_MEMORY_READ_BIT,
+        .dstStageMask = acquire ? VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT : VK_PIPELINE_STAGE_2_NONE,
+        .dstAccessMask = acquire ? VK_ACCESS_2_MEMORY_READ_BIT : VK_ACCESS_2_NONE,
+        .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+        .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+        .srcQueueFamilyIndex = from,
+        .dstQueueFamilyIndex = to,
+        .image = image,
+        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                             .baseMipLevel = 0,
+                             .levelCount = 1,
+                             .baseArrayLayer = 0,
+                             .layerCount = 1}};
+    const VkDependencyInfo dep{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                               .pNext = nullptr,
+                               .dependencyFlags = 0,
+                               .memoryBarrierCount = 0,
+                               .pMemoryBarriers = nullptr,
+                               .bufferMemoryBarrierCount = 0,
+                               .pBufferMemoryBarriers = nullptr,
+                               .imageMemoryBarrierCount = 1,
+                               .pImageMemoryBarriers = &barrier};
+    vkCmdPipelineBarrier2(cmd, &dep);
+}
+
+} // namespace
+
+void acquire_foreign(VkCommandBuffer cmd, VkImage image, std::uint32_t family) {
+    foreign_barrier(cmd, image, VK_QUEUE_FAMILY_FOREIGN_EXT, family, true);
+}
+
+void release_foreign(VkCommandBuffer cmd, VkImage image, std::uint32_t family) {
+    foreign_barrier(cmd, image, family, VK_QUEUE_FAMILY_FOREIGN_EXT, false);
 }
 
 void transition(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImageLayout to,
@@ -169,6 +243,14 @@ void transition(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImageL
                                .imageMemoryBarrierCount = 1,
                                .pImageMemoryBarriers = &barrier};
     vkCmdPipelineBarrier2(cmd, &dep);
+}
+
+ErrorCode error_code(VkResult r) noexcept {
+    if (r == VK_ERROR_DEVICE_LOST)
+        return ErrorCode::DeviceLost;
+    if (r == VK_ERROR_OUT_OF_DEVICE_MEMORY || r == VK_ERROR_OUT_OF_HOST_MEMORY)
+        return ErrorCode::OutOfMemory;
+    return ErrorCode::Internal;
 }
 
 } // namespace oma::gpu

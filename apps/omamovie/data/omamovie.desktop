@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=OmaMovie
+GenericName=Video Editor
+Comment=Edit videos and screen recordings
+Exec=omamovie %f
+Icon=omamovie
+Terminal=false
+StartupWMClass=omamovie
+Categories=AudioVideo;Video;AudioVideoEditing;
+Keywords=video;editor;movie;timeline;recording;
+MimeType=application/x-omamovie-project;video/mp4;video/x-matroska;video/quicktime;video/webm;

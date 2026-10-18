@@ -1,0 +1,335 @@
+#include "oma/playback/timeline_audio.hpp"
+
+#include "clip_effects.hpp"
+
+#include "oma/audio/mix.hpp"
+#include "oma/timeline/evaluate.hpp"
+
+#include <algorithm>
+#include <filesystem>
+#include <format>
+#include <limits>
+#include <utility>
+
+namespace oma::playback {
+
+namespace tl = oma::timeline;
+
+namespace {
+
+__extension__ using Int128 = __int128;
+
+Int128 floor_div(Int128 a, Int128 b) {
+    const Int128 q = a / b;
+    return (a % b != 0 && ((a < 0) != (b < 0))) ? q - 1 : q;
+}
+
+std::int64_t ceil_div(std::int64_t a, std::int64_t b) {
+    return -static_cast<std::int64_t>(floor_div(-static_cast<Int128>(a), b));
+}
+
+// floor((t + ticks * unit) * rate): the media sample at a time offset, exact (128-bit).
+std::int64_t sample_at(const oma::RationalTime& t, std::int64_t ticks, oma::Rational unit,
+                       std::int32_t rate) {
+    const oma::Rational tb = t.timebase();
+    const Int128 den = static_cast<Int128>(tb.den()) * unit.den();
+    const Int128 num = (static_cast<Int128>(t.value()) * tb.num() * unit.den() +
+                        static_cast<Int128>(ticks) * unit.num() * tb.den()) *
+                       rate;
+    return static_cast<std::int64_t>(floor_div(num, den));
+}
+
+// The sequence timebase holds whole samples (Timeline::default_timebase) unless a project says
+// otherwise; then 0.
+std::int64_t ticks_per_sample(const tl::Timeline& timeline, oma::SampleRate rate) {
+    const auto ticks = timeline.to_ticks(rate.sample_to_time(1));
+    return ticks && *ticks > 0 ? *ticks : 0;
+}
+
+} // namespace
+
+std::optional<oma::SampleRate> retimed_rate(const tl::Clip& clip, oma::SampleRate out) {
+    if (!clip.time_map.is_constant()) {
+        return std::nullopt;
+    }
+    const oma::Rational speed = clip.time_map.speed();
+    const auto hz = static_cast<std::int64_t>(out.hz()) * speed.den();
+    if (speed.num() <= 0 || hz % speed.num() != 0 ||
+        hz / speed.num() > std::numeric_limits<std::int32_t>::max()) {
+        return std::nullopt;
+    }
+    auto r = oma::SampleRate::make(static_cast<std::int32_t>(hz / speed.num()));
+    return r ? std::optional(*r) : std::nullopt;
+}
+
+TimelineAudio::TimelineAudio(tl::Timeline timeline,
+                             std::unordered_map<std::uint64_t, std::string> paths,
+                             oma::SampleRate rate, int channels)
+    : timeline_(std::move(timeline)), paths_(std::move(paths)), rate_(rate), channels_(channels) {
+    // The sequence timebase holds whole samples (Timeline::default_timebase).
+    ticks_per_sample_ = ticks_per_sample(timeline_, rate_);
+}
+
+void TimelineAudio::set_timeline(tl::Timeline timeline,
+                                 std::unordered_map<std::uint64_t, std::string> paths) {
+    timeline_ = std::move(timeline);
+    paths_ = std::move(paths);
+    ticks_per_sample_ = ticks_per_sample(timeline_, rate_);
+    std::erase_if(streams_, [&](auto& entry) {
+        Stream& s = entry.second;
+        const tl::Clip* clip = timeline_.find_clip(tl::ClipId{entry.first});
+        const auto drate = clip != nullptr ? retimed_rate(*clip, rate_) : std::nullopt;
+        if (clip == nullptr || s.failed || s.media != clip->media.value() ||
+            !(s.noise == clip->audio.noise) || !drate || s.rate_hz != drate->hz()) {
+            return true;
+        }
+        configure_effects(s.effects, clip->audio, rate_.hz());
+        return false;
+    });
+}
+
+oma::Result<void> TimelineAudio::render(std::span<float> out, std::int64_t first) {
+    ++pass_;
+    std::ranges::fill(out, 0.0F);
+    if (ticks_per_sample_ == 0) {
+        return oma::make_error(oma::ErrorCode::Unsupported, oma::Category::Audio,
+                               "the sequence timebase cannot address audio samples at this rate",
+                               std::format("timebase {}/{}, {} Hz", timeline_.timebase().num(),
+                                           timeline_.timebase().den(), rate_.hz()));
+    }
+    const auto frames = static_cast<std::int64_t>(out.size() / static_cast<std::size_t>(channels_));
+    oma::Result<void> result;
+    for (const tl::Track& track : timeline_.tracks()) {
+        if (track.muted || track.kind == tl::TrackKind::Caption) {
+            continue;
+        }
+        // Clips are sorted and a transition reaches at most one neighbour's duration past a
+        // cut, so clip i only sounds within [start of clip i - 1, end of clip i + 1): start one
+        // clip before the one at `first` and stop once the previous clip starts after the block.
+        // O(log C + clips in the block) per block instead of every clip of the track.
+        const std::int64_t block_start = first * ticks_per_sample_;
+        const std::int64_t block_end = (first + frames) * ticks_per_sample_;
+        const auto at =
+            std::ranges::upper_bound(track.clips, block_start, {}, &tl::Clip::start_ticks);
+        const auto from =
+            static_cast<std::size_t>(std::max<std::ptrdiff_t>(0, (at - track.clips.begin()) - 2));
+        for (std::size_t i = from; i < track.clips.size(); ++i) {
+            if (i > 0 && track.clips[i - 1].start_ticks() >= block_end) {
+                break;
+            }
+            const tl::Clip& clip = track.clips[i];
+            if (clip.audio.muted || clip.audio_detached) {
+                continue;
+            }
+            const Span span = span_of(track, i);
+            if (span.end + span.tail <= first || span.first - span.lead >= first + frames) {
+                continue;
+            }
+            const tl::MediaInfo* media = timeline_.find_media(clip.media);
+            if (media == nullptr || !media->has_audio) {
+                continue;
+            }
+            if (auto r = mix_clip(clip, span, out, first); !r && result) {
+                result = r; // report the first failure; the rest of the mix still plays
+            }
+        }
+    }
+    std::erase_if(streams_, [&](const auto& entry) { return entry.second.used_in != pass_; });
+    return result;
+}
+
+TimelineAudio::Span TimelineAudio::span_of(const tl::Track& track, std::size_t index) const {
+    const tl::Clip& clip = track.clips[index];
+    // The clip owns the samples whose start lies inside [start, end).
+    Span span{.first = ceil_div(clip.start_ticks(), ticks_per_sample_),
+              .end = ceil_div(clip.end_ticks(), ticks_per_sample_),
+              .lead = 0,
+              .tail = 0};
+    // A transition crossfades over the window around the cut, the same span as the picture.
+    if (const auto in = tl::transition_window(timeline_, track, index)) {
+        span.lead = span.first - ceil_div(in->cut - in->half, ticks_per_sample_);
+    }
+    if (const auto out = tl::transition_window(timeline_, track, index + 1)) {
+        span.tail = ceil_div(out->cut + out->half, ticks_per_sample_) - span.end;
+    }
+    return span;
+}
+
+oma::Result<TimelineAudio::Stream*>
+TimelineAudio::stream(const tl::Clip& clip, std::int64_t media_sample, oma::SampleRate drate) {
+    if (const auto own = streams_.find(clip.id.value()); own != streams_.end()) {
+        own->second.used_in = pass_;
+        return &own->second;
+    }
+    const auto continued = std::ranges::find_if(streams_, [&](const auto& entry) {
+        const Stream& s = entry.second;
+        return s.finished && !s.failed && s.media == clip.media.value() &&
+               s.noise == clip.audio.noise && s.rate_hz == drate.hz() &&
+               s.next_sample == media_sample;
+    });
+    if (continued != streams_.end()) {
+        auto node = streams_.extract(continued);
+        node.key() = clip.id.value();
+        Stream& s = streams_.insert(std::move(node)).position->second;
+        s.finished = false;
+        s.used_in = pass_;
+        // Same settings or not, the effect state carries over: the samples are contiguous.
+        configure_effects(s.effects, clip.audio, rate_.hz());
+        return &s;
+    }
+    Stream& s = streams_[clip.id.value()];
+    s.media = clip.media.value();
+    s.noise = clip.audio.noise;
+    s.rate_hz = drate.hz();
+    configure_effects(s.effects, clip.audio, rate_.hz());
+    s.used_in = pass_;
+    s.next_sample = -1; // forces the first seek
+    const auto path = paths_.find(clip.media.value());
+    if (path == paths_.end()) {
+        s.failed = true;
+        return oma::make_error(oma::ErrorCode::InvalidArgument, oma::Category::Audio,
+                               "clip media has no file");
+    }
+    oma::media::AudioDecoderOptions options;
+    options.sample_rate = drate;
+    options.channels = channels_;
+    options.denoise = clip.audio.noise.amount;
+    options.noise_floor_db = clip.audio.noise.floor_db;
+    auto decoder = oma::media::AudioDecoder::open(std::filesystem::path(path->second), options);
+    if (!decoder) {
+        s.failed = true;
+        return std::unexpected(decoder.error());
+    }
+    s.decoder = std::move(*decoder);
+    return &s;
+}
+
+oma::Result<void> TimelineAudio::mix_clip(const tl::Clip& clip, const Span& span,
+                                          std::span<float> out, std::int64_t first) {
+    const auto drate = retimed_rate(clip, rate_);
+    if (!drate) {
+        return {};
+    }
+    const auto frames = static_cast<std::int64_t>(out.size() / static_cast<std::size_t>(channels_));
+    const std::int64_t a = span.first;
+    const std::int64_t b = span.end;
+    // Transitions play the media past the clip's edges; the window was checked to have it.
+    const std::int64_t from = std::max(a - span.lead, first);
+    const std::int64_t to = std::min(b + span.tail, first + frames);
+    // In decoder samples: (source_in + ticks · timebase · speed) · out / speed.
+    const oma::Rational tb = timeline_.timebase();
+    const oma::Rational speed = clip.time_map.speed();
+    std::int64_t num = 0;
+    std::int64_t den = 0;
+    if (__builtin_mul_overflow(tb.num(), speed.num(), &num) ||
+        __builtin_mul_overflow(tb.den(), speed.den(), &den)) {
+        return oma::make_error(oma::ErrorCode::Overflow, oma::Category::Audio,
+                               "clip speed overflows the sequence timebase");
+    }
+    auto unit = oma::Rational::make(num, den);
+    if (!unit) {
+        return std::unexpected(unit.error());
+    }
+    const std::int64_t media_sample = sample_at(
+        clip.source_in, (from * ticks_per_sample_) - clip.start_ticks(), *unit, drate->hz());
+    auto opened = stream(clip, media_sample, *drate);
+    if (!opened) {
+        return std::unexpected(opened.error());
+    }
+    Stream& s = **opened;
+    if (s.failed) {
+        return {};
+    }
+    if (s.next_sample != media_sample) {
+        // A jump (first block, a seek, or a cut back into this media): reposition exactly.
+        auto t = oma::RationalTime::make(media_sample, drate->timebase());
+        if (!t) {
+            return std::unexpected(t.error());
+        }
+        if (auto r = s.decoder->seek(*t); !r) {
+            s.failed = true;
+            return r;
+        }
+        s.buffer.reset();
+        s.offset = 0;
+        s.ended = false;
+        s.next_sample = media_sample;
+        s.effects.reset();
+    }
+    // Keyed volume in clip samples: a key's source time minus the clip's source start, counted at
+    // the decoder's rate (one decoded sample per sequence sample). Reused buffer: no allocation
+    // once it has grown.
+    gain_points_.clear();
+    if (!clip.audio.gain_keys.empty()) {
+        const std::int64_t base =
+            drate->time_to_sample(clip.source_in, oma::Rounding::Nearest).value_or(0);
+        for (const oma::timeline::ScalarKey& k : clip.audio.gain_keys) {
+            gain_points_.push_back(
+                {.sample = drate->time_to_sample(k.at, oma::Rounding::Nearest).value_or(0) - base,
+                 .gain = static_cast<float>(k.value),
+                 .interpolation = static_cast<std::uint8_t>(k.interpolation)});
+        }
+    }
+    const oma::audio::ClipGain gain{
+        .gain = clip.audio.gain,
+        .length = b - a,
+        .fade_in = rate_.time_to_sample(clip.audio.fade_in, oma::Rounding::Floor).value_or(0),
+        .fade_out = rate_.time_to_sample(clip.audio.fade_out, oma::Rounding::Floor).value_or(0),
+        .lead = span.lead,
+        .tail = span.tail,
+        .automation = gain_points_};
+    std::int64_t pos = from;
+    while (pos < to) {
+        if (!s.buffer || s.offset >= s.buffer->frames) {
+            if (s.ended) {
+                break;
+            }
+            auto next = s.decoder->next();
+            if (!next) {
+                s.failed = true;
+                return std::unexpected(next.error());
+            }
+            if (!*next) {
+                s.ended = true;
+                break;
+            }
+            s.buffer = std::move(*next);
+            s.offset = 0;
+        }
+        const std::int64_t n = std::min(to - pos, s.buffer->frames - s.offset);
+        const auto at = static_cast<std::size_t>((pos - first) * channels_);
+        const auto input = std::span<const float>(s.buffer->samples);
+        if (s.effects.active()) {
+            // Process a copy: the buffer may be mixed again after a seek back into it.
+            const int ch = s.buffer->channels;
+            scratch_.resize(static_cast<std::size_t>(n) * static_cast<std::size_t>(ch));
+            for (int c = 0; c < ch; ++c) {
+                const auto src =
+                    (static_cast<std::size_t>(c) * static_cast<std::size_t>(s.buffer->frames)) +
+                    static_cast<std::size_t>(s.offset);
+                std::copy_n(input.begin() + static_cast<std::ptrdiff_t>(src), n,
+                            scratch_.begin() + (static_cast<std::ptrdiff_t>(c) * n));
+            }
+            s.effects.process(scratch_, ch, n, n);
+            oma::audio::mix_planar(out.subspan(at), channels_, scratch_, ch, n, n, gain, pos - a);
+        } else {
+            oma::audio::mix_planar(out.subspan(at), channels_,
+                                   input.subspan(static_cast<std::size_t>(s.offset)),
+                                   s.buffer->channels, s.buffer->frames, n, gain, pos - a);
+        }
+        s.offset += n;
+        s.next_sample += n;
+        pos += n;
+    }
+    s.finished = to == b + span.tail;
+    return {};
+}
+
+int TimelineAudio::channels() const noexcept {
+    return channels_;
+}
+std::size_t TimelineAudio::open_streams() const noexcept {
+    return streams_.size();
+}
+
+} // namespace oma::playback

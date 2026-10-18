@@ -46,6 +46,7 @@ void h264_aac() {
     expect(v->video->height).toEqual(180);
     expect(v->video->pixel_format).toEqual("yuv420p");
     expect(v->video->bit_depth).toEqual(8);
+    expect(v->video->color.chroma_location).toEqual(1); // H.264 fixture signals left siting
     expect(v->video->rotation).toEqual(0);
     expect(v->video->frame_rate.has_value()).toBeTruthy();
     expect(v->video->frame_rate->fps() == Rational::literal(30, 1)).toBeTruthy();

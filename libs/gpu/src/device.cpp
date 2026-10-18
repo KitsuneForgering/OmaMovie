@@ -9,10 +9,17 @@
 #define VULKAN_HPP_RAII_NO_EXCEPTIONS
 #define VULKAN_HPP_USE_STD_EXPECTED
 #define VULKAN_HPP_NO_CONSTRUCTORS
+// Without exceptions Vulkan-Hpp asserts on every failed result before returning it, so a debug
+// build aborted where a release build returns the error (a driver failing vkCreateDevice when it
+// cannot write its cache). Errors are handled through std::expected in every build.
+#define VULKAN_HPP_ASSERT_ON_RESULT(condition)
 #include <vulkan/vulkan_raii.hpp>
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstring>
 #include <format>
 #include <mutex>
@@ -23,7 +30,11 @@ namespace oma::gpu {
 namespace {
 
 Error vk_error(vk::Result r, std::string what) {
-    return {r == vk::Result::eErrorInitializationFailed || r == vk::Result::eErrorIncompatibleDriver
+    return {r == vk::Result::eErrorDeviceLost ? ErrorCode::DeviceLost
+            : r == vk::Result::eErrorOutOfDeviceMemory || r == vk::Result::eErrorOutOfHostMemory
+                ? ErrorCode::OutOfMemory
+            : r == vk::Result::eErrorInitializationFailed ||
+                    r == vk::Result::eErrorIncompatibleDriver
                 ? ErrorCode::Unsupported
                 : ErrorCode::Internal,
             Category::Gpu, std::move(what), vk::to_string(r)};
@@ -34,6 +45,7 @@ Error vk_error(vk::Result r, std::string what) {
 constexpr std::array kFeaturelessExtensions = {
     VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
     VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
+    VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME, // acquire/release of imported DMA-BUFs
     VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
     VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
     VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME,
@@ -50,18 +62,62 @@ constexpr std::array kFeaturelessExtensions = {
     VK_KHR_VIDEO_ENCODE_AV1_EXTENSION_NAME,
 };
 
+// The DRM render node of a physical device, so VA-API opens the same GPU (hybrid laptops);
+// empty when the driver does not report one (VK_EXT_physical_device_drm).
+std::string render_node(const vk::raii::PhysicalDevice& pd) {
+    const auto exts = pd.enumerateDeviceExtensionProperties();
+    if (!exts || std::ranges::none_of(*exts, [](const vk::ExtensionProperties& e) {
+            return std::strcmp(e.extensionName.data(), VK_EXT_PHYSICAL_DEVICE_DRM_EXTENSION_NAME) ==
+                   0;
+        })) {
+        return {};
+    }
+    const auto chain =
+        pd.getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceDrmPropertiesEXT>();
+    const auto& drm = chain.get<vk::PhysicalDeviceDrmPropertiesEXT>();
+    return drm.hasRender == vk::True ? std::format("/dev/dri/renderD{}", drm.renderMinor)
+                                     : std::string{};
+}
+
 DeviceInfo to_info(const vk::raii::PhysicalDevice& pd) {
     const auto chain =
         pd.getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceDriverProperties>();
     const auto& p = chain.get<vk::PhysicalDeviceProperties2>().properties;
     const auto& drv = chain.get<vk::PhysicalDeviceDriverProperties>();
+    const auto extensions = pd.enumerateDeviceExtensionProperties();
+    const auto has = [&](const char* name) {
+        return extensions &&
+               std::ranges::any_of(*extensions, [&](const vk::ExtensionProperties& e) {
+                   return std::strcmp(e.extensionName.data(), name) == 0;
+               });
+    };
+    bool video_decode_queue = false;
+    VkVideoCodecOperationFlagsKHR advertised_video_codecs = 0;
+    if (has(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME)) {
+        using QueueChain =
+            vk::StructureChain<vk::QueueFamilyProperties2, vk::QueueFamilyVideoPropertiesKHR>;
+        for (const QueueChain& family : pd.getQueueFamilyProperties2<QueueChain>()) {
+            if ((family.get<vk::QueueFamilyProperties2>().queueFamilyProperties.queueFlags &
+                 vk::QueueFlagBits::eVideoDecodeKHR) != vk::QueueFlags{}) {
+                video_decode_queue = true;
+                advertised_video_codecs |= static_cast<VkVideoCodecOperationFlagsKHR>(
+                    family.get<vk::QueueFamilyVideoPropertiesKHR>().videoCodecOperations);
+            }
+        }
+    }
     return DeviceInfo{.name = p.deviceName.data(),
                       .driver_name = drv.driverName.data(),
                       .driver_info = drv.driverInfo.data(),
+                      .render_node = render_node(pd),
                       .vendor_id = p.vendorID,
                       .device_id = p.deviceID,
                       .api_version = p.apiVersion,
-                      .type = static_cast<VkPhysicalDeviceType>(p.deviceType)};
+                      .type = static_cast<VkPhysicalDeviceType>(p.deviceType),
+                      .dma_buf_import = has(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME),
+                      .drm_modifiers = has(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME),
+                      .external_semaphore_fd = has(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME),
+                      .video_decode_queue = video_decode_queue,
+                      .advertised_video_codecs = advertised_video_codecs};
 }
 
 } // namespace
@@ -79,7 +135,16 @@ struct Device::Impl {
     std::vector<const char*> extensions;
     bool internally_synchronized = false;
     // One mutex per queue, indexed [family][index]; only used without internal synchronization.
-    mutable std::vector<std::vector<std::mutex>> queue_mutexes;
+    // Recursive: the Qt bridge holds the graphics queue for a whole frame (ADR-0005), and work
+    // recorded on the render thread inside that frame (the viewer's compositor) submits again.
+    mutable std::vector<std::vector<std::recursive_mutex>> queue_mutexes;
+
+    // Admission (ADR-0005): `closed` blocks new admissions, `admitted` counts work inside.
+    mutable std::mutex admission_mutex;
+    mutable std::condition_variable admission_changed;
+    mutable bool closed = false;
+    mutable int admitted = 0;
+    std::atomic<bool> lost{false};
 
     // Enabled feature chain; FFmpeg keeps pointers into it, so Impl never moves (unique_ptr).
     vk::PhysicalDeviceFeatures2 features2{};
@@ -126,7 +191,22 @@ Result<std::unique_ptr<Device>> Device::create(const DeviceOptions& options) {
                                   .pEngineName = "OmaMovie",
                                   .engineVersion = 1,
                                   .apiVersion = VK_API_VERSION_1_4};
-    auto instance = impl->context.createInstance({.pApplicationInfo = &app});
+    std::vector<const char*> instance_extensions;
+    std::vector<const char*> instance_layers;
+    instance_extensions.reserve(options.instance_extensions.size());
+    instance_layers.reserve(options.instance_layers.size());
+    for (const auto& extension : options.instance_extensions) {
+        instance_extensions.push_back(extension.c_str());
+    }
+    for (const auto& layer : options.instance_layers) {
+        instance_layers.push_back(layer.c_str());
+    }
+    auto instance = impl->context.createInstance(
+        {.pApplicationInfo = &app,
+         .enabledLayerCount = static_cast<uint32_t>(instance_layers.size()),
+         .ppEnabledLayerNames = instance_layers.data(),
+         .enabledExtensionCount = static_cast<uint32_t>(instance_extensions.size()),
+         .ppEnabledExtensionNames = instance_extensions.data()});
     if (!instance) {
         return std::unexpected(vk_error(instance.error(), "cannot create a Vulkan instance"));
     }
@@ -180,7 +260,15 @@ Result<std::unique_ptr<Device>> Device::create(const DeviceOptions& options) {
     for (const char* name : kFeaturelessExtensions) {
         want(name);
     }
-    want(VK_KHR_INTERNALLY_SYNCHRONIZED_QUEUES_EXTENSION_NAME);
+    // Swapchains need VK_KHR_surface on the instance; a headless device has neither.
+    if (std::ranges::contains(options.instance_extensions, VK_KHR_SURFACE_EXTENSION_NAME)) {
+        want(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    }
+    // FFmpeg and libplacebo ask vkGetDeviceQueue2 for internally synchronized queues whenever
+    // this extension is enabled, so it is enabled only when the queues are created that way.
+    if (options.internally_synchronized_queues) {
+        want(VK_KHR_INTERNALLY_SYNCHRONIZED_QUEUES_EXTENSION_NAME);
+    }
     want(VK_KHR_VIDEO_MAINTENANCE_1_EXTENSION_NAME);
     want(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
     for (const auto& s : impl->extension_storage) {
@@ -210,13 +298,14 @@ Result<std::unique_ptr<Device>> Device::create(const DeviceOptions& options) {
     }
     vkGetPhysicalDeviceFeatures2(static_cast<VkPhysicalDevice>(*impl->physical),
                                  &static_cast<VkPhysicalDeviceFeatures2&>(impl->features2));
-    impl->internally_synchronized = impl->isq.internallySynchronizedQueues == vk::True;
+    impl->internally_synchronized = options.internally_synchronized_queues &&
+                                    impl->isq.internallySynchronizedQueues == vk::True;
     if (impl->v12.timelineSemaphore != vk::True || impl->v13.synchronization2 != vk::True) {
         return make_error(ErrorCode::Unsupported, Category::Gpu,
                           "timeline semaphores and synchronization2 are required", impl->info.name);
     }
 
-    // ---- queues: every queue of every family, internally synchronized when supported
+    // ---- queues: every queue of every family; flag them when supported and requested
     using QueueChain =
         vk::StructureChain<vk::QueueFamilyProperties2, vk::QueueFamilyVideoPropertiesKHR>;
     std::vector<QueueChain> qprops;
@@ -277,11 +366,18 @@ Result<std::unique_ptr<Device>> Device::create(const DeviceOptions& options) {
     }
 
     log_info(Category::Gpu,
-             "device: {} ({}, {}), Vulkan {}.{}, {} extensions, internally synchronized queues: {}",
+             "device: {} ({}, {}, {}), Vulkan {}.{}, {} extensions, internally synchronized "
+             "queues: {}",
              impl->info.name, impl->info.driver_name, impl->info.driver_info,
+             impl->info.render_node.empty() ? "no render node" : impl->info.render_node,
              VK_API_VERSION_MAJOR(impl->info.api_version),
              VK_API_VERSION_MINOR(impl->info.api_version), impl->extensions.size(),
              impl->internally_synchronized ? "yes" : "no");
+    log_info(Category::Gpu,
+             "advertised: DMA-BUF {}, DRM modifiers {}, external semaphore fd {}, video decode "
+             "queue {}, video codec operations 0x{:x}",
+             impl->info.dma_buf_import, impl->info.drm_modifiers, impl->info.external_semaphore_fd,
+             impl->info.video_decode_queue, impl->info.advertised_video_codecs);
     return std::unique_ptr<Device>(new Device(std::move(impl)));
 }
 
@@ -349,6 +445,52 @@ void Device::unlock_queue(uint32_t family, uint32_t index) const {
     if (!impl_->internally_synchronized) {
         impl_->queue_mutexes.at(family).at(index).unlock();
     }
+}
+
+bool Device::lost() const noexcept {
+    return impl_->lost.load(std::memory_order_acquire);
+}
+
+void Device::mark_lost() const {
+    if (!impl_->lost.exchange(true, std::memory_order_acq_rel)) {
+        log_error(Category::Gpu, "GPU device lost; GPU work stops until OmaMovie restarts");
+        impl_->admission_changed.notify_all();
+    }
+}
+
+bool Device::admit(const std::function<bool()>& cancelled) const {
+    std::unique_lock lock(impl_->admission_mutex);
+    while (impl_->closed || lost()) {
+        if (lost() || cancelled()) {
+            return false;
+        }
+        // Timed: cancellation is a plain flag nobody notifies us about.
+        impl_->admission_changed.wait_for(lock, std::chrono::milliseconds(5));
+    }
+    ++impl_->admitted;
+    return true;
+}
+
+void Device::leave() const {
+    {
+        const std::scoped_lock lock(impl_->admission_mutex);
+        --impl_->admitted;
+    }
+    impl_->admission_changed.notify_all();
+}
+
+void Device::close_admission() const {
+    std::unique_lock lock(impl_->admission_mutex);
+    impl_->closed = true;
+    impl_->admission_changed.wait(lock, [&] { return impl_->admitted == 0; });
+}
+
+void Device::open_admission() const {
+    {
+        const std::scoped_lock lock(impl_->admission_mutex);
+        impl_->closed = false;
+    }
+    impl_->admission_changed.notify_all();
 }
 
 } // namespace oma::gpu

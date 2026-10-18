@@ -1,0 +1,82 @@
+Kdenlive's own test projects through oma-project import (2026-10-15)
+Source: https://invent.kde.org/multimedia/kdenlive/-/tree/master/tests/dataset (GPL; read
+locally, not copied into this repository). Media are absent here, so clips report as gaps;
+the point is structure: every file must read to ProjectIR and every skipped object be named.
+
+== av.kdenlive (version="7.7.0", 11906 bytes)
+1 format: Kdenlive (MLT XML)
+1 issue: : 13 source objects are not saved in the project; re-import from the source file to recover them
+1 issue: black_track: color generator not imported as a track; left out
+1 issue: filterN: audiolevel master filter not imported; kept in the import
+2 issue: filterN: audiolevel track filter not imported; kept in the import
+1 issue: filterN: panner master filter not imported; kept in the import
+2 issue: filterN: panner track filter not imported; kept in the import
+1 issue: filterN: volume master filter not imported; kept in the import
+2 issue: filterN: volume track filter not imported; kept in the import
+1 issue: /home/six/git/kdenlive/tests/dataset/<producer>: media file not found or not readable; its clips become gaps
+2 issue: <producer>: clip cannot be placed (no media, or outside it); left as a gap of its length
+2 issue: transitionN: frei0r.cairoblend between tracks not imported; kept in the import
+2 issue: transitionN: mix between tracks not imported; kept in the import
+1 level reached: 2
+1 media found: 0 of 1 (not probed)
+1 version: 7.7.0
+
+== test-mix.kdenlive (version="7.9.0", 14262 bytes)
+1 format: Kdenlive (MLT XML)
+1 issue: : 17 source objects are not saved in the project; re-import from the source file to recover them
+1 issue: black_track: color generator not imported as a track; left out
+1 issue: filterN: audiolevel master filter not imported; kept in the import
+2 issue: filterN: audiolevel track filter not imported; kept in the import
+1 issue: filterN: avfilter.fieldorder master filter not imported; kept in the import
+1 issue: filterN: panner master filter not imported; kept in the import
+2 issue: filterN: panner track filter not imported; kept in the import
+1 issue: filterN: volume master filter not imported; kept in the import
+2 issue: filterN: volume track filter not imported; kept in the import
+3 issue: producer0: color generator not imported; left as a gap
+2 issue: producer1: color generator not imported; left as a gap
+2 issue: transitionN: frei0r.cairoblend between tracks not imported; kept in the import
+3 issue: transitionN: luma within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+2 issue: transitionN: mix between tracks not imported; kept in the import
+1 level reached: 2
+1 media found: 0 of 0 (not probed)
+1 version: 7.9.0
+
+== clip-ids.kdenlive (version="7.15.0", 88516 bytes)
+1 format: Kdenlive (MLT XML)
+1 issue: : 12 source objects are not saved in the project; re-import from the source file to recover them
+4 issue: blue.mpg: clip cannot be placed (no media, or outside it); left as a gap of its length
+1 issue: blue.mpg: media file not found or not readable; its clips become gaps
+2 issue: filterN: audiolevel track filter not imported; kept in the import
+3 issue: filterN: panner track filter not imported; kept in the import
+3 issue: filterN: volume track filter not imported; kept in the import
+4 issue: green.mpg: clip cannot be placed (no media, or outside it); left as a gap of its length
+1 issue: green.mpg: media file not found or not readable; its clips become gaps
+1 issue: producer0: color generator not imported as a track; left out
+4 issue: red.mpg: clip cannot be placed (no media, or outside it); left as a gap of its length
+1 issue: red.mpg: media file not found or not readable; its clips become gaps
+2 issue: transitionN: mix within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+2 issue: transitionN: qtblend within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+4 issue: yellow.mpg: clip cannot be placed (no media, or outside it); left as a gap of its length
+1 issue: yellow.mpg: media file not found or not readable; its clips become gaps
+1 level reached: 2
+1 media found: 0 of 4 (not probed)
+1 version: 7.15.0
+
+== test-nesting.kdenlive (version="7.23.0", 30738 bytes)
+1 format: Kdenlive (MLT XML)
+1 issue: : 12 source objects are not saved in the project; re-import from the source file to recover them
+2 issue: filterN: audiolevel track filter not imported; kept in the import
+3 issue: filterN: panner track filter not imported; kept in the import
+3 issue: filterN: volume track filter not imported; kept in the import
+1 issue: producer0: color generator not imported; left as a gap
+1 issue: producer1: color generator not imported as a track; left out
+2 issue: transitionN: mix within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+2 issue: transitionN: qtblend within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+1 level reached: 2
+1 media found: 0 of 0 (not probed)
+1 version: 7.23.0
+
+Found on the way: the report first called Kdenlive's black background track "not a playlist",
+colour clips "not a media clip or a mix", and said nothing about same-track mixes or track
+filters inside per-track tractors; it now names the colour generator, nested sequences,
+same-track luma mixes, track filters, master filters and cross-track transitions.

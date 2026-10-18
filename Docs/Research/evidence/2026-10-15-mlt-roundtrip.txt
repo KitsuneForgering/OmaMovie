@@ -1,0 +1,23 @@
+MLT round trip (2026-10-15): tools/bench/cross-editor/roundtrip.sh
+melt writes an MLT document of two cuts of the BT.709 bench source with a 12-frame luma mix
+(melt SRC in=48 out=119 SRC in=200 out=271 -mix 12 -mixer luma), renders it itself (libx264
+CRF 12); OmaMovie converts the same document (oma-project convert) and exports it (software).
+FFmpeg compares the two movies frame by frame (PSNR, both lossy encodes of a grainy source).
+
+Result: both 132 frames; outside the transition windows (frames 1-60, 80-132) worst 39.7 dB,
+the level two encodes of the same frames reach; frames 61-79 down to 27.3 dB where OmaMovie
+centres the dissolve on its cut (reported by the import) and mixes in linear light.
+An earlier attempt with the untagged 320x180 fixture compared at ~21 dB everywhere although
+the pictures were the same frames: OmaMovie reads untagged SD as BT.601 and writes BT.709-tagged
+video, melt passes the YUV through, so raw Y differs. Round trips need colour-tagged sources.
+
+Raw report:
+MLT round trip 2026-10-15 03:27:47 -0300: OmaMovie 871608a (dirty); melt 7.40.0 (Kdenlive 26.08.0)
+issue: xed_1080p24_bt709.mp4: dissolve is not centred on the cut; centred, same total length
+issue: xed_1080p24_bt709.mp4: 1 source objects are not saved in the project; re-import from the source file to recover them
+level reached: 2
+  result: written
+measure: rc=0 wall_s=5.89 user_s=31.74 sys_s=1.78 peak_rss_mb=1075
+melt: 132 frames
+oma: 132 frames
+outside the mix: 113 frames, worst 39.7 dB; inside: 19 frames, worst 27.3 dB; PASS

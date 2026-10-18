@@ -1,0 +1,31 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "spikes",
+      "displayName": "M1 spikes (opt-in)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/spikes",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "debug",
+        "OMA_BUILD_SPIKES": "ON",
+        "OMA_BUILD_TESTS": "OFF",
+        "OMA_BUILD_APP": "OFF"
+      }
+    },
+    {
+      "name": "fuzz",
+      "displayName": "libFuzzer targets (Clang)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/fuzz",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "debug",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "OMA_BUILD_FUZZ": "ON",
+        "OMA_BUILD_TESTS": "OFF",
+        "OMA_BUILD_APP": "OFF"
+      }
+    }
+
+  ]
+}

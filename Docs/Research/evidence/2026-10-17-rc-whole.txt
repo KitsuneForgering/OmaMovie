@@ -1,0 +1,17 @@
+Cross-editor export 2026-10-17 19:50:29 -0300, 1 repeats, order alternated per round
+CPU: 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz, 8 threads
+GPU: Intel(R) Iris(R) Xe Graphics (TGL GT2)
+VA-API: Driver version: Intel iHD driver for Intel(R) Gen Graphics - 26.3.5 ()
+ffmpeg version n9.0.2 Copyright (c) 2000-2026 the FFmpeg developers
+power online: 1, load: 1.85 1.79 2.59
+editors: OmaMovie 0b2a8ab (dirty); melt 7.42.0 (Kdenlive 26.08.2)
+scene: whole; source: xed_1080p24_bt709_noise-v3.mp4 sha256 b555007fdc2c34c9, 479 frames
+round 1 oma hardware:   encoder: VA-API H.264 (GPU) measure: rc=0 wall_s=5.11 user_s=13.93 sys_s=1.31 peak_rss_mb=416
+PASS frames=479 duration=19.978s worst_psnr_y=44.32dB audio_min_corr=0.995 max_lag=0.0ms min_gain=0.98 bytes=28620000
+round 1 melt hardware: measure: rc=0 wall_s=6.23 user_s=15.55 sys_s=0.39 peak_rss_mb=356
+PASS frames=479 duration=19.978s worst_psnr_y=45.03dB audio_min_corr=0.988 max_lag=0.0ms min_gain=0.70 bytes=30333816
+round 1 oma software:   encoder: libx264 measure: rc=0 wall_s=17.54 user_s=107.02 sys_s=3.86 peak_rss_mb=1012
+PASS frames=479 duration=19.978s worst_psnr_y=41.08dB audio_min_corr=0.995 max_lag=0.0ms min_gain=0.98 bytes=17290827
+round 1 melt software: measure: rc=0 wall_s=17.90 user_s=113.04 sys_s=0.97 peak_rss_mb=944
+PASS frames=479 duration=19.978s worst_psnr_y=41.27dB audio_min_corr=0.988 max_lag=0.0ms min_gain=0.70 bytes=19468714
+load at end: 8.86 4.08 3.32

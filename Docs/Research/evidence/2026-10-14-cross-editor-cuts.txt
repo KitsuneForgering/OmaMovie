@@ -1,0 +1,48 @@
+Cross-editor cuts scene, same machine (2026-10-14): OmaMovie vs MLT melt (Kdenlive 26.08's engine)
+Command: tools/bench/cross-editor/run.sh 5 DIR cuts (raw report below, app log lines removed).
+Edit: five reordered cuts of the BT.709 20 s 1080p source (frames 400+40, 24+72, 200+60, 0+12,
+300+72 = 256 frames), given to OmaMovie as OTIO converted by `oma-project convert` and to melt
+as a playlist of in/out points. Checks by FFmpeg only: frame count, A/V length, and all 256
+output frames against the source trimmed and joined the same way (worst luma PSNR).
+
+Caveat: load average 6-7.5 throughout (another session active); order alternated per round.
+
+Summary (median wall of 5, peak RSS, bytes, worst frame PSNR, frames, all runs passed):
+  OmaMovie VA-API   6.7 s   690 MB  14.7 MB  44.4 dB  256/256
+  melt     VA-API   4.8 s   656 MB  16.1 MB  45.1 dB  256/256
+  OmaMovie x264    12.4 s  1297 MB   8.9 MB  42.0 dB  256/256
+  melt     x264    10.5 s  1246 MB  10.4 MB  42.2 dB  256/256
+Both editors cut on the exact frames (worst frame is the same source frame for both, n 230).
+Unlike the whole-file export, melt adds no frame here. OmaMovie is 1.4x slower on VA-API and
+1.2x on x264; its export renders, reads back and encodes each frame in series (code review
+part 5).
+
+Cross-editor export 2026-10-14 22:04:26 -0300, 5 repeats, order alternated per round
+CPU: 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz, 8 threads
+GPU: Intel(R) Iris(R) Xe Graphics (TGL GT2)
+VA-API: Driver version: Intel iHD driver for Intel(R) Gen Graphics - 26.2.4 ()
+ffmpeg version n9.0.1 Copyright (c) 2000-2026 the FFmpeg developers
+power online: 1, load: 7.37 6.21 4.83
+editors: OmaMovie 0e12ece (dirty); melt 7.40.0 (Kdenlive 26.08.0)
+scene: cuts; source: xed_1080p24_bt709.mp4 sha256 2c18c4d39be559a6, 479 frames
+round 1 oma hardware: measure: rc=0 wall_s=6.43 user_s=15.01 sys_s=1.50 peak_rss_mb=688 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=14652024 verdict=pass cut frames compared=256 worst psnr_y:44.37 at n:230
+round 1 melt hardware: measure: rc=0 wall_s=5.96 user_s=19.18 sys_s=0.58 peak_rss_mb=654 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=16051821 verdict=pass cut frames compared=256 worst psnr_y:45.09 at n:230
+round 1 oma software: measure: rc=0 wall_s=12.24 user_s=72.26 sys_s=2.65 peak_rss_mb=1275 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=8940835 verdict=pass cut frames compared=256 worst psnr_y:42.03 at n:230
+round 1 melt software: measure: rc=0 wall_s=10.41 user_s=68.39 sys_s=0.87 peak_rss_mb=1233 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=10436034 verdict=pass cut frames compared=256 worst psnr_y:42.17 at n:230
+round 2 melt software: measure: rc=0 wall_s=10.35 user_s=68.38 sys_s=0.90 peak_rss_mb=1246 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=10436034 verdict=pass cut frames compared=256 worst psnr_y:42.17 at n:230
+round 2 oma software: measure: rc=0 wall_s=12.69 user_s=72.15 sys_s=2.80 peak_rss_mb=1272 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=8940835 verdict=pass cut frames compared=256 worst psnr_y:42.03 at n:230
+round 2 melt hardware: measure: rc=0 wall_s=4.74 user_s=17.22 sys_s=0.56 peak_rss_mb=654 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=16051821 verdict=pass cut frames compared=256 worst psnr_y:45.09 at n:230
+round 2 oma hardware: measure: rc=0 wall_s=6.77 user_s=16.76 sys_s=1.68 peak_rss_mb=686 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=14652024 verdict=pass cut frames compared=256 worst psnr_y:44.37 at n:230
+round 3 oma hardware: measure: rc=0 wall_s=6.76 user_s=17.07 sys_s=1.54 peak_rss_mb=690 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=14652024 verdict=pass cut frames compared=256 worst psnr_y:44.37 at n:230
+round 3 melt hardware: measure: rc=0 wall_s=4.70 user_s=17.23 sys_s=0.56 peak_rss_mb=654 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=16051821 verdict=pass cut frames compared=256 worst psnr_y:45.09 at n:230
+round 3 oma software: measure: rc=0 wall_s=13.21 user_s=73.42 sys_s=2.91 peak_rss_mb=1297 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=8940835 verdict=pass cut frames compared=256 worst psnr_y:42.03 at n:230
+round 3 melt software: measure: rc=0 wall_s=10.48 user_s=68.07 sys_s=0.81 peak_rss_mb=1231 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=10436034 verdict=pass cut frames compared=256 worst psnr_y:42.17 at n:230
+round 4 melt software: measure: rc=0 wall_s=10.51 user_s=68.67 sys_s=0.85 peak_rss_mb=1245 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=10436034 verdict=pass cut frames compared=256 worst psnr_y:42.17 at n:230
+round 4 oma software: measure: rc=0 wall_s=12.41 user_s=71.65 sys_s=2.80 peak_rss_mb=1293 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=8940835 verdict=pass cut frames compared=256 worst psnr_y:42.03 at n:230
+round 4 melt hardware: measure: rc=0 wall_s=4.84 user_s=17.43 sys_s=0.59 peak_rss_mb=656 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=16051821 verdict=pass cut frames compared=256 worst psnr_y:45.09 at n:230
+round 4 oma hardware: measure: rc=0 wall_s=6.69 user_s=17.00 sys_s=1.66 peak_rss_mb=688 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=14652024 verdict=pass cut frames compared=256 worst psnr_y:44.37 at n:230
+round 5 oma hardware: measure: rc=0 wall_s=6.69 user_s=17.03 sys_s=1.62 peak_rss_mb=686 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=14652024 verdict=pass cut frames compared=256 worst psnr_y:44.37 at n:230
+round 5 melt hardware: measure: rc=0 wall_s=4.75 user_s=17.34 sys_s=0.58 peak_rss_mb=652 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=16051821 verdict=pass cut frames compared=256 worst psnr_y:45.09 at n:230
+round 5 oma software: measure: rc=0 wall_s=12.31 user_s=72.11 sys_s=2.67 peak_rss_mb=1275 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=8940835 verdict=pass cut frames compared=256 worst psnr_y:42.03 at n:230
+round 5 melt software: measure: rc=0 wall_s=10.50 user_s=68.50 sys_s=0.86 peak_rss_mb=1234 | frames=256/256 video_s=10.677333 audio_s=10.688000 bytes=10436034 verdict=pass cut frames compared=256 worst psnr_y:42.17 at n:230
+load at end: 7.43 7.03 5.51

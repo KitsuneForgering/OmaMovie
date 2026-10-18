@@ -1,0 +1,68 @@
+M10 concurrency/lifetime: Vulkan validation layers over the test suites (2026-10-14)
+
+Machine: Intel Iris Xe (TGL GT2), Mesa 26.2.2-arch1.1, Vulkan 1.4.354,
+vulkan-validation-layers 1.4.357.0-1. Debug build at commit 383eb9a.
+The layer was confirmed inserted (VK_LOADER_DEBUG=layer: instance and device layer).
+
+Run 1, core validation:
+  VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation
+  gpu_tests, compositor_tests, app_tests (all, incl. the Session stress tests): exit 0,
+  0 "Validation Error".
+
+Run 2, synchronization validation + best practices, errors/warnings/perf reported:
+  VK_LAYER_ENABLES=VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT:
+                   VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT
+  VK_LAYER_REPORT_FLAGS=error,warn,perf
+  compositor_tests: exit 0, 0 errors, 0 SYNC-HAZARD.
+    26 BestPractices-vkBindImageMemory-small-dedicated-allocation
+    13 BestPractices-vkBindBufferMemory-small-dedicated-allocation
+       (known: VMA evaluated and not adopted, 16 setup-time allocations, M2)
+    20 BestPractices-ImageBarrierAccessLayout
+       (gpu::transition uses ALL_COMMANDS with MEMORY_READ|WRITE for every layout change:
+        conservative and correct; narrowing it is an unmeasured optimization, left as is)
+     3 VALIDATION-SETTINGS (settings given by environment variables)
+  app_tests and gpu_tests with synchronization validation (error,warn): exit 0, 0 errors,
+  0 SYNC-HAZARD; only VALIDATION-SETTINGS notices.
+
+Not covered: the live Qt window (presentation, swapchain resize) under validation, which
+needs the GUI smoke with the layer; NVIDIA/AMD drivers.
+
+Live window (same day), synchronization validation, errors only:
+  make run-gui RUN_GUI_SMOKE=1: PASS, but 7x UNASSIGNED-non-acquired-swapchain-image-used,
+  7x SYNC-HAZARD-WRITE-AFTER-READ and 6x SYNC-HAZARD-WRITE-AFTER-PRESENT, all on Qt's own
+  swapchain frame (a layout transition / render pass on a presentable image whose acquire
+  semaphore the submit did not wait on). OmaMovie never writes swapchain images.
+  - Same counts with OMA_PREVIEW_HARDWARE=0: not the hardware-decode producer thread.
+  - A temporary marker before each smoke grabWindow() call: every error triple follows one of
+    the 7 grabWindow() calls, and nothing else in the run reports.
+  - omamovie --m4-audit on a 36 s recording, 10 s of playback, hardware decode on: 0 errors.
+  - Qt-only controls (qml6 with an animation; a QQuickView calling grabWindow() every 400 ms,
+    also while resizing every 150 ms), Vulkan RHI: 0 errors.
+  So the hazards come from grabWindow() in this app's window: Qt's grab path combined with
+  OmaMovie's frame hooks (queue hold from afterRendering to afterFrameEnd, compositor work in
+  sync), which the controls do not have. Normal use never calls grabWindow(); main.cpp already
+  notes that it disturbed validation. Attribution between Qt and the hooks is not settled.
+
+Attribution narrowed (same day):
+  - The smoke with OmaMovie's frame hooks disabled (no queue hold, admission left open): the same
+    20 errors. Not the hooks.
+  - Qt-only controls under the threaded and the basic render loop: 0 errors.
+  - A minimal control with only oma::gpu::Device adopted by Qt (QVulkanInstance::setVkInstance +
+    QQuickGraphicsDevice::fromDeviceObjects, as main.cpp does), an animated QML item and
+    grabWindow() every 400 ms: 10 grabs, 10 error triples. The same program with Qt's own device:
+    0. Telling Qt the instance is Vulkan 1.1 instead of 1.4 changes nothing.
+  Conclusion: grabWindow() on a window whose Vulkan device Qt adopted from OmaMovie (ADR-0005)
+  submits Qt's swapchain frame without waiting for the acquire semaphore, per the validation
+  layer. Normal frames on that device are clean. Not yet known whether a device property
+  (OmaMovie enables every supported feature and its interop/video extensions, which Qt cannot
+  see on an adopted device) or Qt's grab path for adopted devices is the trigger; the next step
+  is bisecting DeviceOptions/extensions in that control, or a Qt bug report with it.
+
+Bisect in that control (temporary, uncommitted switches in device.cpp, reverted):
+  default device: 27 errors; without the optional interop/video/descriptor-buffer extensions: 30;
+  with every optional feature off (core, 1.1-1.4; only timelineSemaphore and synchronization2,
+  which gpu::Device requires): 31; both: 30 (counts vary with how many frames a grab overlaps).
+  Extensions and features are ruled out. Left: OmaMovie's VkInstance (Qt adopts it too), the two
+  required features, and creating every queue of every family; or Qt's grab path for adopted
+  devices. Not pursued further: normal frames are clean and only grabWindow() triggers it.
+

@@ -1,0 +1,1858 @@
+
+== base_tests (debug)
+
+[1m● Rational[0m
+  normalizes sign and common factors
+  [32m✓[0m r.has_value() to be truthy
+  [32m✓[0m r->num() to equal -3
+  [32m✓[0m r->den() to equal 4
+  rejects a zero denominator
+  [32m✓[0m r.has_value() to be falsy
+  [32m✓[0m static_cast<int>(r.error().code()) to equal static_cast<int>(ErrorCode::InvalidArgument)
+  rejects INT64_MIN because it cannot be negated
+  [32m✓[0m Rational::make(kMin, 1).has_value() to be falsy
+  [32m✓[0m Rational::make(1, kMin).has_value() to be falsy
+  orders fractions exactly
+  [32m✓[0m Rational::literal(1, 3) < Rational::literal(1, 2) to be truthy
+  [32m✓[0m Rational::literal(-1, 2) < Rational::literal(1, 3) to be truthy
+  [32m✓[0m Rational::literal(30000, 1001) > Rational::literal(29, 1) to be truthy
+  [32m✓[0m Rational::literal(kMax, 1) > Rational::literal(kMax - 1, 1) to be truthy
+  [32m✓[0m Rational::literal(kMax, kMax - 1) > Rational::literal(kMax - 1, kMax - 2) to be falsy
+  inverts and refuses to invert zero
+  [32m✓[0m Rational::literal(1001, 30000).inverse()->num() to equal 30000
+  [32m✓[0m Rational::literal(0, 1).inverse().has_value() to be falsy
+
+[1m● rescale[0m
+  converts seconds to a 90 kHz timebase exactly
+  [32m✓[0m rescale_ok(1, kSecond, kTb90k, Rounding::Floor) to equal 90000
+  converts one 29.97 fps frame to 90 kHz exactly (3003 ticks)
+  [32m✓[0m rescale_ok(1, kFrame2997, kTb90k, Rounding::Floor) to equal 3003
+  rounds one 23.976 fps frame (3753.75 ticks) as requested
+  [32m✓[0m rescale_ok(1, kFrame23976, kTb90k, Rounding::Floor) to equal 3753
+  [32m✓[0m rescale_ok(1, kFrame23976, kTb90k, Rounding::Ceil) to equal 3754
+  [32m✓[0m rescale_ok(1, kFrame23976, kTb90k, Rounding::Nearest) to equal 3754
+  rounds negative values toward the right direction
+  [32m✓[0m rescale_ok(-1, kFrame23976, kTb90k, Rounding::Floor) to equal -3754
+  [32m✓[0m rescale_ok(-1, kFrame23976, kTb90k, Rounding::Ceil) to equal -3753
+  [32m✓[0m rescale_ok(-1, kFrame23976, kTb90k, Rounding::Nearest) to equal -3754
+  breaks ties away from zero with Nearest
+  [32m✓[0m rescale_ok(1, Rational::literal(1, 2), kSecond, Rounding::Nearest) to equal 1
+  [32m✓[0m rescale_ok(-1, Rational::literal(1, 2), kSecond, Rounding::Nearest) to equal -1
+  [32m✓[0m rescale_ok(3, Rational::literal(1, 2), kSecond, Rounding::Nearest) to equal 2
+  maps video frames to audio samples (29.97 fps at 48 kHz = 1601.6 samples)
+  [32m✓[0m rescale_ok(1, kFrame2997, kTb48k, Rounding::Nearest) to equal 1602
+  [32m✓[0m rescale_ok(5, kFrame2997, kTb48k, Rounding::Nearest) to equal 8008
+  [32m✓[0m rescale_ok(1, kFrame2997, Rational::literal(1, 44100), Rounding::Floor) to equal 1471
+  handles ten hours of media in a 90 kHz timebase
+  [32m✓[0m rescale_ok(ten_hours, kTb90k, kTb48k, Rounding::Floor) to equal 10LL * 3600 * 48000
+  [32m✓[0m rescale_ok(ten_hours, kTb90k, kFrame2997, Rounding::Floor) to equal 1078921
+  reports overflow instead of truncating
+  [32m✓[0m static_cast<int>(rescale_error(kMax, kSecond, kTb90k)) to equal static_cast<int>(ErrorCode::Overflow)
+  [32m✓[0m rescale_ok(kMax, kTb90k, kSecond, Rounding::Floor) to equal kMax / 90000
+  rejects non-positive units
+  [32m✓[0m static_cast<int>(rescale_error(1, Rational::literal(0, 1), kSecond)) to equal static_cast<int>(ErrorCode::InvalidArgument)
+  [32m✓[0m static_cast<int>(rescale_error(1, kSecond, Rational::literal(-1, 25))) to equal static_cast<int>(ErrorCode::InvalidArgument)
+
+[1m● RationalTime[0m
+  compares instants exactly across timebases
+  [32m✓[0m t(3003, kTb90k) == t(1001, kTb30k) to be truthy
+  [32m✓[0m t(48000, kTb48k) == t(90000, kTb90k) to be truthy
+  [32m✓[0m t(1, kTb48k) < t(2, kTb90k) to be truthy
+  [32m✓[0m t(-1, kTb48k) < t(0, kTb90k) to be truthy
+  compares extreme values without overflowing
+  [32m✓[0m t(max, kSecond) > t(max, Rational::literal(1, 2)) to be truthy
+  [32m✓[0m t(max, kTb90k) < t(max, kTb48k) to be truthy
+  [32m✓[0m t(max - 1, Rational::literal(1, max)) < t(1, kSecond) to be truthy
+  rejects a non-positive timebase
+  [32m✓[0m RationalTime::make(1, Rational::literal(0, 1)).has_value() to be falsy
+  [32m✓[0m RationalTime::make(1, Rational::literal(-1, 25)).has_value() to be falsy
+  rescales with explicit rounding
+  [32m✓[0m r->value() to equal 3754
+  [32m✓[0m r->timebase() == kTb90k to be truthy
+  adds only within one timebase
+  [32m✓[0m t(10, kTb90k).plus(t(5, kTb90k))->value() to equal 15
+  [32m✓[0m code_of(bad.error()) to equal static_cast<int>(ErrorCode::InvalidArgument)
+  detects overflow in addition
+  [32m✓[0m code_of(r.error()) to equal static_cast<int>(ErrorCode::Overflow)
+
+[1m● TimeRange[0m
+  is half-open
+  [32m✓[0m range->contains(t(100, kTb90k)) to be truthy
+  [32m✓[0m range->contains(t(149, kTb90k)) to be truthy
+  [32m✓[0m range->contains(t(150, kTb90k)) to be falsy
+  [32m✓[0m range->contains(t(99, kTb90k)) to be falsy
+  [32m✓[0m range->end().value() to equal 150
+  checks membership across timebases
+  [32m✓[0m range->contains(t(89999, kTb90k)) to be truthy
+  [32m✓[0m range->contains(t(90000, kTb90k)) to be falsy
+  detects overlap
+  [32m✓[0m a->overlaps(*b) to be falsy
+  [32m✓[0m a->overlaps(*c) to be truthy
+  rejects negative durations and mixed timebases
+  [32m✓[0m TimeRange::make(t(0, kTb90k), t(-1, kTb90k)).has_value() to be falsy
+  [32m✓[0m TimeRange::make(t(0, kTb90k), t(1, kTb48k)).has_value() to be falsy
+
+[1m● FrameRate[0m
+  represents NTSC rates as exact fractions
+  [32m✓[0m fr::k29_97.fps() == Rational::literal(30000, 1001) to be truthy
+  [32m✓[0m fr::k59_94.frame_duration() == Rational::literal(1001, 60000) to be truthy
+  maps frame 300 at 29.97 fps to 10.01 s
+  [32m✓[0m at == t(1001, Rational::literal(1, 100)) to be truthy
+  maps a time back to a frame with explicit rounding
+  [32m✓[0m *fr::k29_97.time_to_frame(t(10, kSecond), Rounding::Floor) to equal 299
+  [32m✓[0m *fr::k29_97.time_to_frame(t(10, kSecond), Rounding::Nearest) to equal 300
+  [32m✓[0m *fr::k25.time_to_frame(t(10, kSecond), Rounding::Floor) to equal 250
+  rejects non-positive rates
+  [32m✓[0m FrameRate::make(Rational::literal(0, 1)).has_value() to be falsy
+
+[1m● SampleRate[0m
+  addresses audio in samples
+  [32m✓[0m *sr->time_to_sample(t(1, kSecond), Rounding::Floor) to equal 48000
+  [32m✓[0m sr->sample_to_time(24000) == t(1, Rational::literal(1, 2)) to be truthy
+  converts 44.1 kHz positions to 96 kHz
+  [32m✓[0m *sr96->time_to_sample(pos, Rounding::Floor) to equal 96000
+  rejects non-positive rates
+  [32m✓[0m SampleRate::make(0).has_value() to be falsy
+  [32m✓[0m SampleRate::make(-48000).has_value() to be falsy
+
+[1m● Error and Result[0m
+  carries code, category, message and context
+  [32m✓[0m static_cast<int>(e.code()) to equal static_cast<int>(ErrorCode::InvalidData)
+  [32m✓[0m static_cast<int>(e.category()) to equal static_cast<int>(Category::Importer)
+  [32m✓[0m e.message() to equal "truncated header"
+  [32m✓[0m e.context() to equal "clip.prproj"
+  describes itself for logs and UI warnings
+  [32m✓[0m e.summary() to equal "[timeline] overflow: trim too long (clip 4)"
+  [32m✓[0m bare.summary() to equal "[base] cancelled: stopped"
+  propagates through Result
+  [32m✓[0m *parse_positive(3) to equal 3
+  [32m✓[0m r.has_value() to be falsy
+  [32m✓[0m r.error().context() to equal "field 'duration'"
+
+[1m● Logging[0m
+  formats messages and records category and call site
+  [32m✓[0m record_count() to equal 1
+  [32m✓[0m c.message to equal "opened clip.mp4 (2 streams)"
+  [32m✓[0m static_cast<int>(c.category) to equal static_cast<int>(Category::Decode)
+  [32m✓[0m static_cast<int>(c.level) to equal static_cast<int>(LogLevel::Info)
+  [32m✓[0m c.line to be greater than 0
+  drops records below the category level
+  [32m✓[0m record_count() to equal 0
+  [32m✓[0m record_count() to equal 1
+  reports enabled levels without formatting
+  [32m✓[0m oma::log_enabled(Category::Cache, LogLevel::Info) to be falsy
+  [32m✓[0m oma::log_enabled(Category::Cache, LogLevel::Error) to be truthy
+  [32m✓[0m oma::log_enabled(Category::Cache, LogLevel::Off) to be falsy
+
+[1m● JobPool[0m
+  runs a job and reports success with full progress
+  [32m✓[0m h.wait().has_value() to be truthy
+  [32m✓[0m value.load() to equal 42
+  [32m✓[0m state_of(h) to equal st(JobState::Succeeded)
+  [32m✓[0m h.progress() to be close to 1 (precision 0.0001)
+  keeps the error of a failed job
+  [32m✓[0m wait_code(h) to equal static_cast<int>(ErrorCode::InvalidData)
+  [32m✓[0m state_of(h) to equal st(JobState::Failed)
+  never starts a pending job that was cancelled
+  [32m✓[0m first.wait().has_value() to be truthy
+  [32m✓[0m wait_code(second) to equal static_cast<int>(ErrorCode::Cancelled)
+  [32m✓[0m state_of(second) to equal st(JobState::Cancelled)
+  [32m✓[0m second_ran.load() to be falsy
+  cancels a running job cooperatively
+  [32m✓[0m wait_code(h) to equal static_cast<int>(ErrorCode::Cancelled)
+  [32m✓[0m state_of(h) to equal st(JobState::Cancelled)
+  shuts down with running and pending jobs
+  [32m✓[0m state_of(running) to equal st(JobState::Cancelled)
+  [32m✓[0m state_of(pending) to equal st(JobState::Cancelled)
+  [32m✓[0m pending_ran.load() to be falsy
+  refuses work after shutdown
+  [32m✓[0m state_of(h) to equal st(JobState::Cancelled)
+  turns an escaping exception into an internal error
+  [32m✓[0m wait_code(h) to equal static_cast<int>(ErrorCode::Internal)
+  [32m✓[0m state_of(h) to equal st(JobState::Failed)
+  runs many jobs across workers
+  [32m✓[0m counter.load() to equal 200
+
+[1m● BoundedQueue[0m
+  keeps order between a producer and a consumer thread
+  [32m✓[0m stream_in_order(5000) to equal -1LL
+  blocks the producer while full
+  [32m✓[0m push_waits_for_room() to be truthy
+  releases a blocked producer on close
+  [32m✓[0m close_releases_producer() to be truthy
+  pops only what the predicate accepts
+  [32m✓[0m q.try_pop_if([](int v) { return v > 5; }).has_value() to be falsy
+  [32m✓[0m q.try_pop_if([](int v) { return v == 5; }).value_or(0) to equal 5
+  [32m✓[0m q.size() to equal 1U
+  drops everything on clear and keeps accepting
+  [32m✓[0m q.size() to equal 0U
+  [32m✓[0m q.push(3) to be truthy
+  treats a zero capacity as one
+  [32m✓[0m q.capacity() to equal 1U
+
+[1mTest Suites Summary:[0m
+  [32mAll 118 tests passed![0m
+
+
+== gpu_tests (debug)
+
+[1m● gpu::Device[0m
+14:26:55.535 INFO  gpu        device: llvmpipe (LLVM 22.1.8, 256 bits) (llvmpipe, Mesa 26.2.2-arch1.1 (LLVM 22.1.8)), Vulkan 1.4, 6 extensions, internally synchronized queues: no (device.cpp:306)
+  reports the selected device
+  [32m✓[0m d->info().name.empty() to be falsy
+  [32m✓[0m d->info().api_version >= VK_API_VERSION_1_3 to be truthy
+    device: llvmpipe (LLVM 22.1.8, 256 bits) (Mesa 26.2.2-arch1.1 (LLVM 22.1.8))
+  exposes valid raw handles for interop
+  [32m✓[0m d->instance() != VK_NULL_HANDLE to be truthy
+  [32m✓[0m d->physical_device() != VK_NULL_HANDLE to be truthy
+  [32m✓[0m d->device() != VK_NULL_HANDLE to be truthy
+  [32m✓[0m d->instance_proc_addr() != nullptr to be truthy
+  has a graphics and compute queue family
+  [32m✓[0m family_has(*d, g, VK_QUEUE_GRAPHICS_BIT) to be truthy
+  [32m✓[0m family_has(*d, g, VK_QUEUE_COMPUTE_BIT) to be truthy
+  [32m✓[0m d->queue(g, 0) != VK_NULL_HANDLE to be truthy
+  enables timeline semaphores and synchronization2
+  [32m✓[0m timeline to be truthy
+  [32m✓[0m sync2 to be truthy
+  only reports extensions it enabled
+  [32m✓[0m d->has_extension(e) to be truthy
+  [32m✓[0m d->has_extension(e) to be truthy
+  [32m✓[0m d->has_extension(e) to be truthy
+  [32m✓[0m d->has_extension(e) to be truthy
+  [32m✓[0m d->has_extension(e) to be truthy
+  [32m✓[0m d->has_extension(e) to be truthy
+  [32m✓[0m d->has_extension("VK_NOT_A_REAL_extension") to be falsy
+  matches the queue creation flags to internal synchronization
+  [32m✓[0m flagged == d->internally_synchronized_queues() to be truthy
+  locks and unlocks every queue it created
+  [32m✓[0m true to be truthy
+  can create zero-flag queues for consumers using vkGetDeviceQueue
+14:26:55.604 INFO  gpu        device: llvmpipe (LLVM 22.1.8, 256 bits) (llvmpipe, Mesa 26.2.2-arch1.1 (LLVM 22.1.8)), Vulkan 1.4, 6 extensions, internally synchronized queues: no (device.cpp:306)
+  [32m✓[0m compatible.has_value() to be truthy
+  [32m✓[0m c.internally_synchronized_queues() to be falsy
+  [32m✓[0m c.queue_create_flags() to equal VkDeviceQueueCreateFlags{0}
+  [32m✓[0m retrieved != VK_NULL_HANDLE to be truthy
+  [32m✓[0m retrieved == c.queue(c.graphics_family(), 0) to be truthy
+  [32m✓[0m queue_lock_is_recursive_and_exclusive(c) to be truthy
+
+[1m● gpu::enumerate_devices[0m
+  lists the device that was created
+  [32m✓[0m all.has_value() to be truthy
+  [32m✓[0m found to be truthy
+  rejects a device name that does not exist
+  [32m✓[0m r.has_value() to be falsy
+  [32m✓[0m static_cast<int>(r.error().code()) to equal static_cast<int>(ErrorCode::Unsupported)
+
+[1m● gpu::Buffer and gpu::CommandRunner[0m
+  round-trips bytes through device-local memory
+  [32m✓[0m upload && local && readback && runner to be truthy
+  [32m✓[0m upload->mapped() != nullptr to be truthy
+  [32m✓[0m local->mapped() == nullptr to be truthy
+  [32m✓[0m ran.has_value() to be truthy
+  [32m✓[0m std::memcmp(readback->mapped(), pattern.data(), pattern.size()) == 0 to be truthy
+  creates images with views and moves them
+  [32m✓[0m img.has_value() to be truthy
+  [32m✓[0m img->handle() != VK_NULL_HANDLE to be truthy
+  [32m✓[0m img->view() != VK_NULL_HANDLE to be truthy
+  [32m✓[0m img->desc().width to equal 64
+  [32m✓[0m moved.handle() != VK_NULL_HANDLE to be truthy
+  [32m✓[0m img->handle() == VK_NULL_HANDLE to be truthy
+
+[1mTest Suites Summary:[0m
+  [32mAll 41 tests passed![0m
+
+
+== media_tests (debug)
+
+[1m● media::probe[0m
+  describes an H.264 + AAC file
+  [32m✓[0m info.has_value() to be truthy
+  [32m✓[0m info->container to contain "mp4"
+  [32m✓[0m info->streams.size() to equal 2
+  [32m✓[0m info->duration.has_value() to be truthy
+  [32m✓[0m info->duration->seconds_approx() to be close to 1 (precision 0.1)
+  [32m✓[0m v != nullptr to be truthy
+  [32m✓[0m v->kind == StreamKind::Video to be truthy
+  [32m✓[0m v->codec to equal "h264"
+  [32m✓[0m v->video->width to equal 320
+  [32m✓[0m v->video->height to equal 180
+  [32m✓[0m v->video->pixel_format to equal "yuv420p"
+  [32m✓[0m v->video->bit_depth to equal 8
+  [32m✓[0m v->video->rotation to equal 0
+  [32m✓[0m v->video->frame_rate.has_value() to be truthy
+  [32m✓[0m v->video->frame_rate->fps() == Rational::literal(30, 1) to be truthy
+  [32m✓[0m v->video->variable_frame_rate to be falsy
+  [32m✓[0m v->video->still_image to be falsy
+  [32m✓[0m v->frame_count.value_or(0) to equal 30
+  [32m✓[0m a != nullptr to be truthy
+  [32m✓[0m a->codec to equal "aac"
+  [32m✓[0m a->audio->sample_rate.has_value() to be truthy
+  [32m✓[0m a->audio->sample_rate->hz() to equal 48000
+  [32m✓[0m a->audio->channels to equal 1
+  [32m✓[0m a->audio->channel_layout to equal "mono"
+  keeps NTSC frame rates exact
+  [32m✓[0m info.has_value() to be truthy
+  [32m✓[0m rate.has_value() to be truthy
+  [32m✓[0m rate && rate->fps() == Rational::literal(30000, 1001) to be truthy
+  detects variable frame rate from timestamps
+  [32m✓[0m info.has_value() to be truthy
+  [32m✓[0m best_video(*info)->video->variable_frame_rate to be truthy
+  reads the display rotation
+  [32m✓[0m info.has_value() to be truthy
+  [32m✓[0m best_video(*info)->video->rotation to equal 90
+  reports 10-bit HEVC
+  [32m✓[0m info.has_value() to be truthy
+  [32m✓[0m v.codec to equal "hevc"
+  [32m✓[0m v.profile to equal "Main 10"
+  [32m✓[0m v.video->bit_depth to equal 10
+  [32m✓[0m v.video->color.range == ColorRange::Full to be falsy
+  describes audio-only files
+  [32m✓[0m info.has_value() to be truthy
+  [32m✓[0m info->best_video.has_value() to be falsy
+  [32m✓[0m a != nullptr to be truthy
+  [32m✓[0m a->audio->sample_rate->hz() to equal 44100
+  [32m✓[0m a->duration.has_value() to be truthy
+  [32m✓[0m a->duration->seconds_approx() to be close to 2 (precision 0.05)
+  marks still images
+  [32m✓[0m info.has_value() to be truthy
+  [32m✓[0m best_video(*info)->video->still_image to be truthy
+  [32m✓[0m best_video(*info)->video->width to equal 640
+  rejects a truncated file as invalid data
+  [32m✓[0m info.has_value() to be falsy
+  [32m✓[0m code_of(info.error()) to equal static_cast<int>(ErrorCode::InvalidData)
+  reports a missing file as an I/O error
+  [32m✓[0m info.has_value() to be falsy
+  [32m✓[0m code_of(info.error()) to equal static_cast<int>(ErrorCode::IoError)
+  [32m✓[0m info.error().context() to contain "does-not-exist.mp4"
+
+[1m● media format boundary[0m
+  uses the existing probe DTO for imported media
+  [32m✓[0m result.has_value() to be truthy
+  [32m✓[0m result->best_video.has_value() to be truthy
+  [32m✓[0m result->best_audio.has_value() to be truthy
+  accepts a muxer and installed video encoder that fit together
+  [32m✓[0m output.check_output(format).has_value() to be truthy
+  rejects missing and incompatible output formats
+  [32m✓[0m code_of(output.check_output(missing).error()) to equal static_cast<int>(oma::ErrorCode::Unsupported)
+  [32m✓[0m code_of(output.check_output(wrong_kind).error()) to equal static_cast<int>(oma::ErrorCode::Unsupported)
+  [32m✓[0m code_of(output.check_output(incompatible).error()) to equal static_cast<int>(oma::ErrorCode::Unsupported)
+
+[1m● media::VideoDecoder (software)[0m
+  decodes every frame in presentation order
+  [32m✓[0m d.has_value() to be truthy
+  [32m✓[0m d->path() == DecodePath::Software to be truthy
+  [32m✓[0m d->stream().codec to equal "h264"
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.on_gpu() to be falsy
+  [32m✓[0m frame.width() to equal 320
+  [32m✓[0m frame.height() to equal 180
+  [32m✓[0m std::string(frame.pixel_format()) to equal "yuv420p"
+  [32m✓[0m frame.plane_count() to equal 3
+  [32m✓[0m frame.layout().chroma_shift_x to equal 1
+  [32m✓[0m frame.layout().chroma_shift_y to equal 1
+  [32m✓[0m frame.layout().interleaved_chroma to be falsy
+  [32m✓[0m frame.layout().container_bits to equal 8
+  [32m✓[0m frame.stride(0) >= 320 to be truthy
+  [32m✓[0m frame.plane(0).size() >= static_cast<std::size_t>(frame.stride(0)) * 180 to be truthy
+  [32m✓[0m frame.pts().has_value() to be truthy
+  [32m✓[0m frame.pts()->value() to equal 0
+  [32m✓[0m frame.acquire_gpu().has_value() to be falsy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m count to equal 30
+  [32m✓[0m increasing to be truthy
+  [32m✓[0m after_end.has_value() && !after_end->has_value() to be truthy
+  keeps 10-bit samples
+  [32m✓[0m d.has_value() to be truthy
+  [32m✓[0m f.has_value() && f->has_value() to be truthy
+  [32m✓[0m std::string((*f)->pixel_format()) to equal "yuv420p10le"
+  [32m✓[0m (*f)->bit_depth() to equal 10
+  [32m✓[0m (*f)->layout().container_bits to equal 16
+  [32m✓[0m (*f)->layout().lsb_shift to equal 0
+  seeks to the frame on screen on VFR media
+  [32m✓[0m d.has_value() to be truthy
+  [32m✓[0m pts.size() > 10 to be truthy
+  [32m✓[0m d->seek(ticks(*d, target)).has_value() to be truthy
+  [32m✓[0m f.has_value() && f->has_value() to be truthy
+  [32m✓[0m (*f)->pts()->value() to equal pts[i]
+  [32m✓[0m following.has_value() && following->has_value() to be truthy
+  [32m✓[0m (*following)->pts()->value() to equal pts[i + 1]
+  [32m✓[0m d->seek(ticks(*d, target)).has_value() to be truthy
+  [32m✓[0m f.has_value() && f->has_value() to be truthy
+  [32m✓[0m (*f)->pts()->value() to equal pts[i]
+  [32m✓[0m following.has_value() && following->has_value() to be truthy
+  [32m✓[0m (*following)->pts()->value() to equal pts[i + 1]
+  [32m✓[0m d->seek(ticks(*d, target)).has_value() to be truthy
+  [32m✓[0m f.has_value() && f->has_value() to be truthy
+  [32m✓[0m (*f)->pts()->value() to equal pts[i]
+  [32m✓[0m following.has_value() && following->has_value() to be truthy
+  [32m✓[0m (*following)->pts()->value() to equal pts[i + 1]
+  seeks to exact frames, before the start and past the end
+  [32m✓[0m d.has_value() to be truthy
+  [32m✓[0m d->seek(ticks(*d, pts[5])).has_value() to be truthy
+  [32m✓[0m on && *on && (*on)->pts()->value() == pts[5] to be truthy
+  [32m✓[0m d->seek(ticks(*d, -1000)).has_value() to be truthy
+  [32m✓[0m first && *first && (*first)->pts()->value() == pts.front() to be truthy
+  [32m✓[0m d->seek(ticks(*d, pts.back() + 10000)).has_value() to be truthy
+  [32m✓[0m last && *last && (*last)->pts()->value() == pts.back() to be truthy
+  [32m✓[0m end.has_value() && !end->has_value() to be truthy
+  seeks with a time in another timebase
+  [32m✓[0m d.has_value() to be truthy
+  [32m✓[0m d->seek(t).has_value() to be truthy
+  [32m✓[0m f && *f && (*f)->pts().has_value() to be truthy
+  [32m✓[0m *(*f)->pts() == t to be truthy
+  fails without a usable path
+  [32m✓[0m d.has_value() to be falsy
+  [32m✓[0m code_of(d.error()) to equal static_cast<int>(ErrorCode::Unsupported)
+  rejects damaged files and non-video streams
+  [32m✓[0m truncated.has_value() to be falsy
+  [32m✓[0m wrong.has_value() to be falsy
+  [32m✓[0m code_of(wrong.error()) to equal static_cast<int>(ErrorCode::InvalidArgument)
+
+[1m● media::VideoDecoder (GPU paths)[0m
+  decodes H.264 onto OmaMovie's device
+  [32m✓[0m d.has_value() to be truthy
+  [32m✓[0m consumer.ok() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+    h264_30fps_aac.mp4: software, 30 frames, 0 on the GPU
+  [32m✓[0m frames to equal 30
+  [32m✓[0m on_gpu to equal 0
+  decodes 10-bit HEVC onto OmaMovie's device
+  [32m✓[0m d.has_value() to be truthy
+  [32m✓[0m consumer.ok() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+    hevc_10bit.mp4: software, 30 frames, 0 on the GPU
+  [32m✓[0m frames to equal 30
+  [32m✓[0m on_gpu to equal 0
+  decodes AV1 onto OmaMovie's device
+  [32m✓[0m d.has_value() to be truthy
+  [32m✓[0m consumer.ok() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m frame.path() == (*d)->path() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+    av1_opus.mkv: software, 30 frames, 0 on the GPU
+  [32m✓[0m frames to equal 30
+  [32m✓[0m on_gpu to equal 0
+  falls back to software when the driver refuses a stream
+  [32m✓[0m d.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+  [32m✓[0m f.has_value() to be truthy
+    h264_444.mp4: software
+  [32m✓[0m frames to equal 30
+  [32m✓[0m first_pts to equal 0
+  reports a refusal when software is not allowed
+  [32m✓[0m code_of(d.error()) to equal static_cast<int>(oma::ErrorCode::Unsupported)
+
+[1m● media::AudioDecoder[0m
+  decodes PCM to planar float with contiguous timestamps
+  [32m✓[0m d.has_value() to be truthy
+  [32m✓[0m (*d)->sample_rate().hz() to equal 44100
+  [32m✓[0m (*d)->channels() to equal 1
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m t.frames to equal 88200
+  [32m✓[0m t.first_pts to equal 0
+  [32m✓[0m t.contiguous to be truthy
+  [32m✓[0m static_cast<double>(t.peak) to be close to 0.125 (precision 0.01)
+  resamples and changes the channel count
+  [32m✓[0m d.has_value() to be truthy
+  [32m✓[0m (*d)->sample_rate().hz() to equal 48000
+  [32m✓[0m (*d)->channels() to equal 2
+  [32m✓[0m first && *first && (*first)->channel(1).size() == (*first)->channel(0).size() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m total to equal 96000
+  upmixes mono to both channels at full level
+  [32m✓[0m d.has_value() to be truthy
+  [32m✓[0m std::abs(left - 0.125F) < 0.002F && std::abs(right - 0.125F) < 0.002F to be truthy
+  decodes AAC and Opus
+  [32m✓[0m aac.has_value() to be truthy
+  [32m✓[0m (*aac)->stream().codec to equal "aac"
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m std::llabs(t.frames - 48000) <= 2048 to be truthy
+  [32m✓[0m t.contiguous to be truthy
+  [32m✓[0m opus.has_value() to be truthy
+  [32m✓[0m (*opus)->stream().codec to equal "opus"
+  [32m✓[0m (*opus)->sample_rate().hz() to equal 48000
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m std::llabs(t.frames - 48000) <= 2048 to be truthy
+  seeks to an exact sample
+  [32m✓[0m (*d)->seek(t).has_value() to be truthy
+  [32m✓[0m b && *b to be truthy
+  [32m✓[0m (*b)->pts.value() to equal 30000
+  [32m✓[0m static_cast<double>((*b)->channel(0)[0]) to be close to 0.113194 (precision 0.001)
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m first_frames + rest.frames to equal 88200 - 30000
+  fails on files without audio
+  [32m✓[0m d.has_value() to be falsy
+  [32m✓[0m code_of(d.error()) to equal static_cast<int>(ErrorCode::InvalidArgument)
+  reduces steady hiss and keeps the tone
+  [32m✓[0m plain.has_value() && clean.has_value() to be truthy
+    hiss -38.8 dB -> -64.8 dB
+  [32m✓[0m hiss - reduced > 15.0 to be truthy
+  [32m✓[0m std::abs(tone - kept) < 1.0 to be truthy
+  lands on the exact sample after a denoised seek
+  [32m✓[0m d.has_value() to be truthy
+  [32m✓[0m (*d)->seek(*RationalTime::make(100000, oma::Rational::literal(1, 48000))).has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m b.has_value() to be truthy
+  [32m✓[0m t.first_pts to equal 100000
+  [32m✓[0m t.contiguous to be truthy
+  [32m✓[0m t.frames to equal 144000 - 100000
+  rejects a denoise amount outside [0, 1]
+  [32m✓[0m AudioDecoder::open(fixture("noisy_tone.wav"), o).has_value() to be falsy
+
+[1mTest Suites Summary:[0m
+  [32mAll 652 tests passed![0m
+
+
+== compositor_tests (debug)
+
+[1m● compositor geometry[0m
+  composes and inverts affine transforms
+  [32m✓[0m maps(m, 1, 0, 10, 22) to be truthy
+  [32m✓[0m inv.has_value() to be truthy
+  [32m✓[0m maps(*inv, 10, 22, 1, 0) to be truthy
+  [32m✓[0m maps(m.then(*inv), 5, -7, 5, -7, 1e-12) to be truthy
+  [32m✓[0m Affine::scale(0, 1).inverse().has_value() to be falsy
+  fits, fills and places sources natively
+  [32m✓[0m maps(m, 0, 0, 0, 0) && maps(m, 320, 180, 1920, 1080) to be truthy
+  [32m✓[0m maps(m, 0, 0, 240, 0) && maps(m, 640, 480, 1680, 1080) to be truthy
+  [32m✓[0m maps(m, 0, 0, 0, -180) && maps(m, 640, 480, 1920, 1260) to be truthy
+  [32m✓[0m maps(m, 0, 0, 800, 450) to be truthy
+  applies display rotation and pixel aspect
+  [32m✓[0m box.has_value() to be truthy
+  [32m✓[0m (*box)[0] to equal 656
+  [32m✓[0m (*box)[2] to equal 1264
+  [32m✓[0m (*box)[1] to equal 0
+  [32m✓[0m (*box)[3] to equal 1080
+  [32m✓[0m maps(m, 0, 0, 656.25, 1080) to be truthy
+  [32m✓[0m maps(w, 160, 180, 1920, 1080) to be truthy
+  crops, scales and offsets layers
+  [32m✓[0m maps(m, 200, 100, 600, 450) to be truthy
+  [32m✓[0m maps(m, 100, 100, 400, 450) to be truthy
+  [32m✓[0m box && (*box)[0] == 400 && (*box)[2] == 800 && (*box)[1] == 250 && (*box)[3] == 650 to be truthy
+  [32m✓[0m oma::compositor::covered_pixels(layer, src, 1000, 1000).has_value() to be falsy
+  validates render graphs
+  [32m✓[0m oma::compositor::validate(g, 1).has_value() to be truthy
+  [32m✓[0m oma::compositor::validate(g, 0).has_value() to be falsy
+  [32m✓[0m oma::compositor::validate(g, 1).has_value() to be falsy
+  [32m✓[0m oma::compositor::validate(g, 1).has_value() to be falsy
+  [32m✓[0m !r && r.error().code() == ErrorCode::InvalidArgument to be truthy
+  [32m✓[0m oma::compositor::validate(g, 1).has_value() to be falsy
+  [32m✓[0m oma::compositor::validate(g, 1).has_value() to be truthy
+  [32m✓[0m oma::compositor::validate(g, 1).has_value() to be falsy
+  [32m✓[0m oma::compositor::validate(g, 1).has_value() to be falsy
+
+[1m● compositor color[0m
+  converts limited, full and 10-bit YUV
+  [32m✓[0m rgb_near(rgb(m8, 16.0 / 255, 128.0 / 255, 128.0 / 255), 0, 0, 0) to be truthy
+  [32m✓[0m rgb_near(rgb(m8, 235.0 / 255, 128.0 / 255, 128.0 / 255), 1, 1, 1) to be truthy
+  [32m✓[0m rgb_near(rgb(m8, 63.0 / 255, 102.0 / 255, 240.0 / 255), 1, 0, 0, 0.01) to be truthy
+  [32m✓[0m rgb_near(rgb(m10, 64.0 / 1023, 512.0 / 1023, 512.0 / 1023), 0, 0, 0) to be truthy
+  [32m✓[0m rgb_near(rgb(m10, 940.0 / 1023, 512.0 / 1023, 512.0 / 1023), 1, 1, 1) to be truthy
+  [32m✓[0m rgb_near(rgb(full, 1.0, 128.0 / 255, 128.0 / 255), 1, 1, 1) to be truthy
+  [32m✓[0m near(sd.matrix.at(0, 2), hd.matrix.at(0, 2), 1e-3) to be falsy
+  converts primaries and decodes transfers
+  [32m✓[0m near(same.at(0, 0), 1, 1e-9) && near(same.at(0, 1), 0, 1e-9) && near(same.at(2, 2), 1, 1e-9) to be truthy
+  [32m✓[0m near(m.at(0, 0), 1.6605, 1e-3) && near(m.at(0, 1), -0.5876, 1e-3) && near(m.at(0, 2), -0.0728, 1e-3) to be truthy
+  [32m✓[0m near(m.at(1, 0), -0.1246, 1e-3) && near(m.at(1, 1), 1.1329, 1e-3) to be truthy
+  [32m✓[0m near(m.at(2, 1), -0.1006, 1e-3) && near(m.at(2, 2), 1.1187, 1e-3) to be truthy
+  [32m✓[0m near(oma::compositor::to_linear(0.5, Transfer::Srgb), 0.214041, 1e-6) to be truthy
+  [32m✓[0m near(oma::compositor::to_linear(0.5, Transfer::Bt1886), std::pow(0.5, 2.4)) to be truthy
+  [32m✓[0m near(oma::compositor::to_linear(1.7, Transfer::Linear), 1.0) to be truthy
+  [32m✓[0m oma::compositor::resolve_transfer(16, &hdr) == Transfer::Bt1886 && hdr to be truthy
+  [32m✓[0m oma::compositor::resolve_transfer(13, &hdr) == Transfer::Srgb && !hdr to be truthy
+
+[1m● compositor::CpuCompositor[0m
+  fills the background premultiplied
+  [32m✓[0m out.has_value() to be truthy
+  [32m✓[0m static_cast<double>(px[0]) to be close to 0.5 (precision 1e-06)
+  [32m✓[0m static_cast<double>(px[1]) to be close to 0.25 (precision 1e-06)
+  [32m✓[0m static_cast<double>(px[3]) to be close to 0.5 (precision 1e-06)
+  draws opaque layers and moves them by exact pixels
+  [32m✓[0m src.frame.has_value() to be truthy
+  [32m✓[0m a && b to be truthy
+  [32m✓[0m static_cast<double>(a->at(0, 0)[3]) to be close to 1 (precision 1e-06)
+  [32m✓[0m shifted to be truthy
+  [32m✓[0m static_cast<double>(b->at(5, 100)[1]) to be close to 0 (precision 1e-06)
+  [32m✓[0m static_cast<double>(b->at(5, 100)[2]) to be close to 1 (precision 1e-06)
+  applies opacity and blend modes
+  [32m✓[0m full && half && doubled to be truthy
+  [32m✓[0m static_cast<double>(h[0]) to be close to 0.0250907 (precision 1e-06)
+  [32m✓[0m static_cast<double>(h[3]) to be close to 0.5 (precision 1e-06)
+  [32m✓[0m static_cast<double>(d[1]) to be close to 1.93159 (precision 1e-06)
+  [32m✓[0m static_cast<double>(d[3]) to be close to 1 (precision 1e-06)
+  rejects missing inputs
+  [32m✓[0m CpuCompositor{}.render(g, empty).has_value() to be falsy
+  [32m✓[0m CpuCompositor{}.render(g, {}).has_value() to be falsy
+  adjusts exposure, saturation, temperature, contrast and filters
+  [32m✓[0m static_cast<double>(twice[c]) to be close to 0.319598 (precision 1e-05)
+  [32m✓[0m static_cast<double>(twice[c]) to be close to 0.319598 (precision 1e-05)
+  [32m✓[0m static_cast<double>(twice[c]) to be close to 0.319598 (precision 1e-05)
+  [32m✓[0m w[0] > base[0] && w[2] < base[2] to be truthy
+  [32m✓[0m luma(w) to be close to 0.159799 (precision 0.0001)
+  [32m✓[0m luma(at(dark, punchy, {})) < luma(at(dark, {}, {})) to be truthy
+  [32m✓[0m luma(at(280, punchy, {})) > luma(at(280, {}, {})) to be truthy
+  [32m✓[0m std::abs(g[0] - g[1]) < 1e-6F && std::abs(g[1] - g[2]) < 1e-6F to be truthy
+  [32m✓[0m static_cast<double>(g[0]) to be close to 0.152737 (precision 1e-05)
+  [32m✓[0m static_cast<double>(bw[0]) to be close to 0.152737 (precision 1e-06)
+  [32m✓[0m static_cast<double>(half[0]) to be close to 0.34568 (precision 1e-05)
+  darkens the corners with a vignette
+  [32m✓[0m center == looked(in, {}, {}, 160, 90) to be truthy
+  [32m✓[0m luma(corner) < 0.3 * luma(looked(in, {}, {}, 2, 2)) to be truthy
+  blurs and sharpens edges, leaving flat areas
+  [32m✓[0m luma(detailed_at(in, -0.5, 78)) > edge + 0.005 to be truthy
+  [32m✓[0m luma(detailed_at(in, -0.5, 40)) to be close to 0.0179314 (precision 0.0001)
+  [32m✓[0m luma(detailed_at(in, 1.0, 79)) < luma(detailed_at(in, 0.0, 79)) - 0.002 to be truthy
+  [32m✓[0m luma(detailed_at(in, 1.0, 40)) to be close to 0.0179314 (precision 0.0001)
+  reveals the left part of a layer for wipes
+  [32m✓[0m out.has_value() to be truthy
+  [32m✓[0m static_cast<double>(out->at(79, 90)[3]) to be close to 1 (precision 1e-06)
+  [32m✓[0m static_cast<double>(out->at(80, 90)[3]) to be close to 0 (precision 1e-06)
+  [32m✓[0m half && std::abs(half->at(80, 90)[3] - 0.5F) < 1e-5F to be truthy
+
+[1m● compositor::VulkanCompositor[0m
+  matches the CPU reference on uploaded frames
+  [32m✓[0m vk.has_value() to be truthy
+  [32m✓[0m rendered.has_value() to be truthy
+  [32m✓[0m cpu && gpu to be truthy
+    max difference 0.00178, 0 of 230400 pixels over tolerance
+  [32m✓[0m diff.over_tolerance <= cpu->pixels.size() / 4 / 500 to be truthy
+  matches the CPU reference with color adjustments and filters
+  [32m✓[0m vk.has_value() to be truthy
+  [32m✓[0m (*vk)->render(g, inputs).has_value() to be truthy
+  [32m✓[0m cpu && gpu to be truthy
+    max difference 0.00447, 0 of 230400 pixels over tolerance
+  [32m✓[0m diff.over_tolerance <= cpu->pixels.size() / 4 / 500 to be truthy
+  matches the CPU reference with a reduced blur
+  [32m✓[0m vk.has_value() to be truthy
+  [32m✓[0m (*vk)->render(g, inputs).has_value() to be truthy
+  [32m✓[0m cpu && gpu to be truthy
+    max difference 0.00166, 0 of 230400 pixels over tolerance
+  [32m✓[0m diff.over_tolerance <= cpu->pixels.size() / 4 / 500 to be truthy
+  matches the CPU reference on zero-copy GPU frames
+    (skipped: no hardware decode here)
+  encodes the output for an SDR display
+  [32m✓[0m vk.has_value() to be truthy
+  [32m✓[0m (*vk)->render(g, inputs).has_value() to be truthy
+  [32m✓[0m encoded.has_value() to be truthy
+  [32m✓[0m linear && display to be truthy
+  [32m✓[0m display->size() == linear->pixels.size() to be truthy
+    worst difference 0 of 255
+  [32m✓[0m worst <= 1 to be truthy
+  draws RGB images as sRGB
+  [32m✓[0m png.frame->layout().yuv to be falsy
+  [32m✓[0m png.frame->copy_rgba(rgba, static_cast<int>(w) * 4).has_value() to be truthy
+  [32m✓[0m cpu.has_value() to be truthy
+    worst difference from the PNG 0.000000
+  [32m✓[0m worst < 1e-4 to be truthy
+  [32m✓[0m vk.has_value() to be truthy
+  [32m✓[0m (*vk)->render(g, inputs).has_value() to be truthy
+  [32m✓[0m gpu.has_value() to be truthy
+  [32m✓[0m compare(*gpu, *cpu, kTolerance).over_tolerance == 0U to be truthy
+  measures three 1080p layers
+  [32m✓[0m (*vk)->render(g, inputs).has_value() to be truthy
+    1080p, 3 layers (uploaded inputs): 105.48 ms per frame, submit to completion
+
+[1m● compositor grading[0m
+  parses Adobe and Resolve .cube files
+  [32m✓[0m adobe.has_value() to be truthy
+  [32m✓[0m static_cast<int>(adobe->size) to equal 3
+  [32m✓[0m static_cast<int>(adobe->rgb.size()) to equal 27 * 3
+  [32m✓[0m static_cast<double>(adobe->domain_max[2]) to equal 2.0
+  [32m✓[0m static_cast<double>(adobe->rgb[3]) to be close to 0.5 (precision 1e-06)
+  [32m✓[0m resolve.has_value() to be truthy
+  [32m✓[0m static_cast<double>(resolve->domain_max[0]) to equal 1.5
+  refuses malformed .cube files
+  [32m✓[0m parses(good) to be truthy
+  [32m✓[0m parses("0 0 0\n") to be falsy
+  [32m✓[0m parses(cube(2, "").substr(0, good.size() - 9)) to be falsy
+  [32m✓[0m parses(good + "1 1 1\n") to be falsy
+  [32m✓[0m parses(good + "TITLE \"late\"\n") to be falsy
+  [32m✓[0m parses("LUT_3D_SIZE 1\n0 0 0\n") to be falsy
+  [32m✓[0m parses("LUT_3D_SIZE 66\n") to be falsy
+  [32m✓[0m parses("LUT_3D_SIZE 2.5\n") to be falsy
+  [32m✓[0m parses("LUT_3D_SIZE 2\n0 0 nan\n") to be falsy
+  [32m✓[0m parses("LUT_3D_SIZE 2\n0 0 0 0\n") to be falsy
+  [32m✓[0m parses("LUT_3D_SIZE 2\n0 0x\n") to be falsy
+  [32m✓[0m parses("DOMAIN_MIN 1 1 1\nDOMAIN_MAX 0 0 0\n" + good) to be falsy
+  [32m✓[0m !one_d && one_d.error().code() == oma::ErrorCode::Unsupported to be truthy
+  [32m✓[0m parses(std::string(oma::compositor::kMaxCubeBytes + 1, '#')) to be falsy
+  passes curves through their points without overshoot
+  [32m✓[0m oma::compositor::evaluate_curve(crush, p.x) to be close to 0 (precision 1e-12)
+  [32m✓[0m oma::compositor::evaluate_curve(crush, p.x) to be close to 0 (precision 1e-12)
+  [32m✓[0m oma::compositor::evaluate_curve(crush, p.x) to be close to 0.6 (precision 1e-12)
+  [32m✓[0m oma::compositor::evaluate_curve(crush, p.x) to be close to 1 (precision 1e-12)
+  [32m✓[0m monotone to be truthy
+  [32m✓[0m oma::compositor::evaluate_curve(inner, 0.05) to be close to 0.3 (precision 1e-12)
+  [32m✓[0m oma::compositor::evaluate_curve({}, 0.42) to be close to 0.42 (precision 1e-12)
+  validates grades
+  [32m✓[0m oma::compositor::validate(g).has_value() to be truthy
+  [32m✓[0m oma::compositor::validate(g).has_value() to be falsy
+  [32m✓[0m oma::compositor::validate(g).has_value() to be falsy
+  [32m✓[0m oma::compositor::validate(g).has_value() to be falsy
+  keeps the image under an identity LUT
+  [32m✓[0m static_cast<double>(max_difference(graded_row(in, identity), graded_row(in, {}))) to be less than 2e-5
+  keeps greys grey under a creative LUT
+  [32m✓[0m static_cast<double>(std::abs(row[x][0] - row[x][1])) to be less than 1e-6
+  [32m✓[0m static_cast<double>(std::abs(row[x][1] - row[x][2])) to be less than 1e-6
+  [32m✓[0m static_cast<double>(std::abs(row[x][0] - row[x][1])) to be less than 1e-6
+  [32m✓[0m static_cast<double>(std::abs(row[x][1] - row[x][2])) to be less than 1e-6
+  [32m✓[0m std::abs(row[200][0] - plain[200][0]) > 0.01F to be truthy
+  [32m✓[0m static_cast<double>(max_difference(graded_row(src.input(), g), plain)) to be less than 1e-6
+  applies the CDL and curves to code values
+  [32m✓[0m static_cast<double>(encode(graded[120][0])) to be close to 0.232877 (precision 0.0001)
+  [32m✓[0m static_cast<double>(encode(graded[120][1])) to be close to 0.565753 (precision 0.0001)
+  [32m✓[0m static_cast<double>(encode(graded[120][2])) to be close to 0.216926 (precision 0.0001)
+  [32m✓[0m static_cast<double>(negative[280][1]) to be less than 1e-4
+  [32m✓[0m static_cast<double>(encode(negative[40][1])) to be close to 0.812785 (precision 0.0001)
+  matches the CPU reference on the GPU
+  [32m✓[0m vk.has_value() to be truthy
+  [32m✓[0m (*vk)->render(g, inputs).has_value() to be truthy
+  [32m✓[0m cpu && gpu to be truthy
+    CDL, curves and LUT: max difference 0.00068, 0 of 230400 pixels over tolerance
+  [32m✓[0m diff.over_tolerance <= cpu->pixels.size() / 4 / 500 to be truthy
+  [32m✓[0m (*vk)->render(g, inputs).has_value() to be truthy
+  [32m✓[0m cpu && gpu to be truthy
+    same LUT again (cached): max difference 0.00068, 0 of 230400 pixels over tolerance
+  [32m✓[0m diff.over_tolerance <= cpu->pixels.size() / 4 / 500 to be truthy
+  [32m✓[0m (*vk)->render(g, inputs).has_value() to be truthy
+  [32m✓[0m cpu && gpu to be truthy
+    another LUT: max difference 0.00068, 0 of 230400 pixels over tolerance
+  [32m✓[0m diff.over_tolerance <= cpu->pixels.size() / 4 / 500 to be truthy
+
+[1mTest Suites Summary:[0m
+  [32mAll 164 tests passed![0m
+
+
+== audio_tests (debug)
+
+[1m● SampleRing[0m
+  rounds the capacity up to a power of two frames
+  [32m✓[0m ring.capacity() to equal 128U
+  [32m✓[0m ring.writable() to equal 128U
+  [32m✓[0m ring.readable() to equal 0U
+  writes and reads whole interleaved frames in order
+  [32m✓[0m ring.write(in) to equal 3U
+  [32m✓[0m ring.read(out) to equal 3U
+  [32m✓[0m out[0] to equal 0.0F
+  [32m✓[0m out[5] to equal 5.0F
+  ignores a trailing partial frame
+  [32m✓[0m ring.write(in) to equal 2U
+  [32m✓[0m ring.readable() to equal 2U
+  accepts only what fits and keeps the rest for later
+  [32m✓[0m ring.write(in) to equal 4U
+  [32m✓[0m ring.writable() to equal 0U
+  [32m✓[0m ring.read(out) to equal 2U
+  [32m✓[0m out[1] to equal 11.0F
+  [32m✓[0m ring.write(more) to equal 2U
+  [32m✓[0m ring.read(rest) to equal 4U
+  [32m✓[0m rest[0] to equal 12.0F
+  [32m✓[0m rest[3] to equal 21.0F
+  drops everything readable on discard
+  [32m✓[0m ring.readable() to equal 0U
+  [32m✓[0m ring.writable() to equal 8U
+  keeps order between a producer and a consumer thread
+  [32m✓[0m stream_through_ring(20000) to equal -1LL
+
+[1m● PlaybackClock[0m
+  starts at the anchor and advances with consumed frames
+  [32m✓[0m clock.anchor(at(0, 1, 1), 0).has_value() to be truthy
+  [32m✓[0m clock.position(0, 0) == at(0, 1, 1) to be truthy
+  [32m✓[0m clock.position(48000, 0) == at(1, 1, 1) to be truthy
+  subtracts the device latency
+  [32m✓[0m clock.anchor(at(10, 1, 1), 1000).has_value() to be truthy
+  [32m✓[0m clock.position(49000, 2400) == at(10 * 48000 + 45600, 1, 48000) to be truthy
+  never reports a position before the anchor
+  [32m✓[0m clock.anchor(at(5, 1, 1), 500).has_value() to be truthy
+  [32m✓[0m clock.position(600, 1024) == at(5, 1, 1) to be truthy
+  rounds a video anchor to the nearest sample
+  [32m✓[0m clock.anchor(at(1, 1001, 30000), 0).has_value() to be truthy
+  [32m✓[0m clock.anchor_sample() to equal 1471LL
+  re-anchors after a seek relative to the new consumed count
+  [32m✓[0m clock.anchor(at(0, 1, 1), 0).has_value() to be truthy
+  [32m✓[0m clock.anchor(at(3600, 1, 1), 192000).has_value() to be truthy
+  [32m✓[0m clock.position(288000, 0) == at(3601, 1, 1) to be truthy
+  reports overflow for an anchor beyond the sample range
+  [32m✓[0m clock.anchor(huge, 0).has_value() to be falsy
+
+[1m● NullOutput[0m
+  rejects an invalid format
+  [32m✓[0m oma::audio::make_null_output(bad).has_value() to be falsy
+  consumes everything written
+  [32m✓[0m null_consumes_everything_written() to be truthy
+  counts underruns and stalls the clock without data
+  [32m✓[0m null_counts_underruns_without_advancing() to be truthy
+  drops queued frames on flush
+  [32m✓[0m null_flush_drops_queued_frames() to be truthy
+  consumes frames no faster than real time
+  [32m✓[0m null_consumes_at_the_device_rate() to be truthy
+  flushes and stops safely when never started
+  [32m✓[0m out->ring().readable() to equal 0U
+
+[1m● PipeWireOutput[0m
+  plays silence through the daemon when one answers
+  (skipping PipeWire test: [audio] unsupported: no PipeWire output available (Operation not permitted))
+
+[1m● ClipGain[0m
+  is constant between the fades
+  [32m✓[0m faded().at(50) to equal 0.5F
+  [32m✓[0m faded().at(10) to equal 0.5F
+  [32m✓[0m faded().at(79) to equal 0.5F
+  ramps linearly in from silence
+  [32m✓[0m faded().at(0) to equal 0.0F
+  [32m✓[0m faded().at(5) to equal 0.25F
+  ramps out to silence at the last sample
+  [32m✓[0m faded().at(99) to equal 0.0F
+  [32m✓[0m faded().at(89) to equal 0.25F
+  is silent outside the clip
+  [32m✓[0m faded().at(-1) to equal 0.0F
+  [32m✓[0m faded().at(100) to equal 0.0F
+
+[1m● mix_planar[0m
+  interleaves planar stereo and adds to what is there
+  [32m✓[0m out[0] to equal 2.0F
+  [32m✓[0m out[1] to equal 11.0F
+  [32m✓[0m out[6] to equal 5.0F
+  [32m✓[0m out[7] to equal 41.0F
+  feeds mono to every output channel
+  [32m✓[0m out[0] == 3.0F && out[1] == 3.0F to be truthy
+  [32m✓[0m out[2] == 5.0F && out[3] == 5.0F to be truthy
+  applies the gain at the clip position of each sample
+  [32m✓[0m out[0] to equal 0.025F
+  [32m✓[0m out[2] == 0.0F && out[4] == 0.0F && out[6] == 0.0F to be truthy
+  never writes past the output
+  [32m✓[0m out[0] == 1.0F && out[1] == 10.0F to be truthy
+
+[1m● audio::ClipGain crossfades[0m
+  plays before and after the clip under equal-power ramps
+  [32m✓[0m g.at(-101) to equal 0.0F
+  [32m✓[0m g.at(-100) to equal 0.0F
+  [32m✓[0m std::abs(g.at(0) - 0.70710678F) < 1e-6F to be truthy
+  [32m✓[0m g.at(500) to equal 1.0F
+  [32m✓[0m g.at(1100) to equal 0.0F
+  [32m✓[0m std::abs((out * out) + (in * in) - 1.0F) < 1e-5F to be truthy
+  [32m✓[0m std::abs((out * out) + (in * in) - 1.0F) < 1e-5F to be truthy
+  [32m✓[0m std::abs((out * out) + (in * in) - 1.0F) < 1e-5F to be truthy
+  [32m✓[0m std::abs((out * out) + (in * in) - 1.0F) < 1e-5F to be truthy
+  [32m✓[0m std::abs((out * out) + (in * in) - 1.0F) < 1e-5F to be truthy
+  [32m✓[0m std::abs((out * out) + (in * in) - 1.0F) < 1e-5F to be truthy
+
+[1m● audio::Equalizer[0m
+  leaves samples untouched when flat
+  [32m✓[0m eq.active() to be falsy
+  [32m✓[0m x[0] == 0.1F && x[1] == -0.2F && x[2] == 0.3F to be truthy
+  boosts and cuts each band where it acts
+  [32m✓[0m near(gain_db(bands(6.0F, 0.0F, 0.0F), 30.0), 6.0, 0.3) to be truthy
+  [32m✓[0m near(gain_db(bands(6.0F, 0.0F, 0.0F), 4000.0), 0.0, 0.2) to be truthy
+  [32m✓[0m near(gain_db(bands(0.0F, -6.0F, 0.0F), 1000.0), -6.0, 0.2) to be truthy
+  [32m✓[0m near(gain_db(bands(0.0F, -6.0F, 0.0F), 60.0), 0.0, 0.3) to be truthy
+  [32m✓[0m near(gain_db(bands(0.0F, 0.0F, 6.0F), 18000.0), 6.0, 0.4) to be truthy
+  [32m✓[0m near(gain_db(bands(0.0F, 0.0F, 6.0F), 200.0), 0.0, 0.2) to be truthy
+  filters each channel with its own state
+  [32m✓[0m right to equal 0.0F
+  [32m✓[0m x[0] != 1.0F to be truthy
+
+[1m● audio::EffectChain[0m
+  lets samples through untouched while no effect is active
+  [32m✓[0m chain.active() to be falsy
+  [32m✓[0m x == samples() to be truthy
+  runs the active effects in slot order
+  [32m✓[0m chain.active() to be truthy
+  [32m✓[0m x == samples() to be truthy
+  [32m✓[0m x[3] to equal 2.0F
+  keeps an effect of the same kind and replaces one of another kind
+  [32m✓[0m &chain.at<Scale>(0) == first to be truthy
+  [32m✓[0m chain.at<Scale>(0).factor to equal 3.0F
+  [32m✓[0m chain.at<oma::audio::Equalizer>(0).active() to be truthy
+  resets every effect and drops slots past a size
+  [32m✓[0m static_cast<int>(chain.size()) to equal 3
+  [32m✓[0m chain.at<Scale>(0).resets to equal 1
+  [32m✓[0m static_cast<int>(chain.size()) to equal 1
+
+[1mTest Suites Summary:[0m
+  [32mAll 89 tests passed![0m
+
+
+== timeline_tests (debug)
+
+[1m● Timeline model[0m
+  picks a timebase that holds frames and samples
+  [32m✓[0m default_den(oma::frame_rates::k29_97, 48000) to equal 240000LL
+  [32m✓[0m default_den(oma::frame_rates::k23_976, 44100) to equal 3528000LL
+  [32m✓[0m default_den(oma::frame_rates::k59_94, 96000) to equal 480000LL
+  [32m✓[0m default_den(oma::frame_rates::k25, 48000) to equal 48000LL
+  [32m✓[0m tl->to_ticks(oma::frame_rates::k29_97.frame_to_time(1)).value() to equal 8008LL
+  [32m✓[0m tl->to_ticks(oma::SampleRate::make(48000).value().sample_to_time(1)).value() to equal 5LL
+  rejects a timebase that does not hold whole frames
+  [32m✓[0m Timeline::create(oma::frame_rates::k29_97, q(1, 30)).has_value() to be falsy
+  [32m✓[0m Timeline::create(oma::frame_rates::k30, q(1, 30)).has_value() to be truthy
+  converts exact times from other timebases and rejects inexact ones
+  [32m✓[0m tl.to_ticks(exact).value() to equal 2LL
+  [32m✓[0m tl.to_ticks(inexact).has_value() to be falsy
+  finds clips by half-open ranges
+  [32m✓[0m tl.clip_at(fx.video, 9)->id == a to be truthy
+  [32m✓[0m tl.clip_at(fx.video, 10)->id == b to be truthy
+  [32m✓[0m tl.clip_at(fx.video, 20) == nullptr to be truthy
+  [32m✓[0m tl.track_of(b)->id == fx.video to be truthy
+  [32m✓[0m tl.duration() == f(20) to be truthy
+  [32m✓[0m tl.validate().has_value() to be truthy
+  rejects non-positive speeds
+  [32m✓[0m TimeMap::constant(q(0, 1)).has_value() to be falsy
+  [32m✓[0m TimeMap::constant(q(-1, 1)).has_value() to be falsy
+  [32m✓[0m TimeMap::constant(q(1, 2)).has_value() to be truthy
+  edits audio at sample positions between frames
+  [32m✓[0m ed.execute(edit::overwrite(a, id, ed.timeline().at(0), edit::ClipSource{.media = kMusic, .source_in = zero, .duration = second, .time_map = {}, .video = {}, .audio = {}})) .has_value() to be truthy
+  [32m✓[0m ed.execute(edit::split(id, sample)).has_value() to be truthy
+  [32m✓[0m tail->source_in == sample to be truthy
+  keeps source positions exact through trims on a non-matching media grid
+  [32m✓[0m trim_round_trip_is_exact(1) to be truthy
+  [32m✓[0m trim_round_trip_is_exact(10010) to be truthy
+  rounds media times down to the media grid only on evaluation
+  [32m✓[0m at_one->video.front().media_time.value() to equal 15360LL
+  [32m✓[0m at_frame->video.front().media_time.value() to equal 16000LL
+
+[1m● timeline edits: placing clips[0m
+  appends clips back to back
+  [32m✓[0m ok(fx, edit::append(v, fx.editor.new_clip_id(), camera(0, 10))) to be truthy
+  [32m✓[0m ok(fx, edit::append(v, fx.editor.new_clip_id(), camera(30, 5))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+5@30"
+  overwrites the middle of a clip by splitting it
+  [32m✓[0m place(fx, fx.video, 10, 100, 5).valid() to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+5@100 15+15@15"
+  overwrites across an edit point by trimming both sides
+  [32m✓[0m layout(fx) to equal "0+5@0 5+10@200 15+5@55"
+  inserts inside a clip by splitting it and pushing the rest
+  [32m✓[0m ok(fx, edit::insert(fx.video, id, f(10), camera(100, 5))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+5@100 15+20@10 45+5@200"
+  inserts at an edit point without splitting
+  [32m✓[0m ok(fx, edit::insert(fx.video, fx.editor.new_clip_id(), f(10), camera(200, 5))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+5@200 15+10@50 25+10@100"
+  rejects media of the wrong kind and leaves the timeline unchanged
+  [32m✓[0m ok(fx, overwrite_music(fx.video, fx.editor.new_clip_id(), 0)) to be falsy
+  [32m✓[0m layout(fx) to equal before
+  [32m✓[0m fx.editor.revision() to equal revision
+  [32m✓[0m std::string(fx.editor.undo_name()) to equal "Overwrite"
+  accepts audio-only media on an audio track
+  [32m✓[0m ok(fx, overwrite_music(fx.audio, fx.editor.new_clip_id(), 0)) to be truthy
+  [32m✓[0m fx.editor.timeline().find_track(fx.audio)->clips.size() to equal 1U
+  rejects a source range beyond the media
+  [32m✓[0m place(fx, fx.video, 0, 295, 10).valid() to be falsy
+  [32m✓[0m place(fx, fx.video, 0, 290, 10).valid() to be truthy
+  rejects reusing a clip ID
+  [32m✓[0m ok(fx, edit::overwrite(fx.video, id, f(0), camera(0, 5))) to be truthy
+  [32m✓[0m ok(fx, edit::overwrite(fx.overlay, id, f(0), camera(0, 5))) to be falsy
+  rejects times off the sequence grid
+  [32m✓[0m ok(fx, edit::overwrite(fx.video, fx.editor.new_clip_id(), half_frame, camera(0, 5))) to be falsy
+
+[1m● timeline edits: deleting and splitting[0m
+  deletes a clip and leaves a gap
+  [32m✓[0m ok(fx, edit::remove_clip(clip_at(fx, 10))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 20+10@100"
+  ripple deletes a clip and closes the gap
+  [32m✓[0m ok(fx, edit::ripple_delete(clip_at(fx, 10))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+10@100"
+  ripple deletes a range across clips
+  [32m✓[0m ok(fx, edit::ripple_delete_range(fx.video, f(5), f(25))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+5@0 5+5@105"
+  ripple deletes a range inside one clip
+  [32m✓[0m ok(fx, edit::ripple_delete_range(fx.video, f(10), f(20))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+10@20"
+  splits a clip and gives the right part a new ID
+  [32m✓[0m ok(fx, edit::split(id, f(12))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+12@0 12+18@12"
+  [32m✓[0m clip_at(fx, 0) == id to be truthy
+  [32m✓[0m clip_at(fx, 12) != id && clip_at(fx, 12).valid() to be truthy
+  refuses to split at a clip edge
+  [32m✓[0m ok(fx, edit::split(id, f(0))) to be falsy
+  [32m✓[0m ok(fx, edit::split(id, f(30))) to be falsy
+
+[1m● timeline edits: trimming[0m
+  trims the start in place, moving the source in
+  [32m✓[0m ok(fx, edit::remove_clip(clip_at(fx, 0))) to be truthy
+  [32m✓[0m ok(fx, edit::trim_start(clip_at(fx, 10), f(13), false)) to be truthy
+  [32m✓[0m layout(fx) to equal "13+7@53 20+10@100"
+  [32m✓[0m ok(fx, edit::trim_start(clip_at(fx, 13), f(4), false)) to be truthy
+  [32m✓[0m layout(fx) to equal "4+16@44 20+10@100"
+  ripple trims the start, pulling the following clips
+  [32m✓[0m ok(fx, edit::trim_start(clip_at(fx, 10), f(13), true)) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+7@53 17+10@100"
+  ripple trims the end outward, pushing the following clips
+  [32m✓[0m ok(fx, edit::trim_end(clip_at(fx, 10), f(25), true)) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+15@50 25+10@100"
+  refuses to trim into a neighbour without ripple
+  [32m✓[0m ok(fx, edit::trim_end(clip_at(fx, 10), f(25), false)) to be falsy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+10@50 20+10@100"
+  refuses to trim before the start of the media
+  [32m✓[0m ok(fx, edit::trim_start(id, f(6), false)) to be falsy
+  [32m✓[0m ok(fx, edit::trim_start(id, f(7), false)) to be truthy
+  [32m✓[0m layout(fx) to equal "7+13@0"
+  rolls an edit point both ways
+  [32m✓[0m ok(fx, edit::roll(left, f(13))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+13@0 13+7@53 20+10@100"
+  [32m✓[0m ok(fx, edit::roll(left, f(8))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+8@0 8+12@48 20+10@100"
+  refuses to roll without an adjacent clip
+  [32m✓[0m ok(fx, edit::roll(id, f(11))) to be falsy
+  slips the source under a fixed range
+  [32m✓[0m ok(fx, edit::slip(clip_at(fx, 10), f(5))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+10@55 20+10@100"
+  [32m✓[0m ok(fx, edit::slip(clip_at(fx, 0), f(-1))) to be falsy
+  slides a clip between its neighbours
+  [32m✓[0m ok(fx, edit::slide(clip_at(fx, 10), f(3))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+13@0 13+10@50 23+7@103"
+  [32m✓[0m ok(fx, edit::slide(clip_at(fx, 13), f(-5))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+8@0 8+10@50 18+12@98"
+  slides into a gap without touching the far clip
+  [32m✓[0m ok(fx, edit::slide(id, f(4))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+14@0 14+10@50 25+10@100"
+  [32m✓[0m ok(fx, edit::slide(id, f(2))) to be falsy
+
+[1m● timeline edits: moving, speed and properties[0m
+  moves a clip to a free spot on another track
+  [32m✓[0m ok(fx, edit::move_clip(id, fx.overlay, f(40))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 20+10@100"
+  [32m✓[0m layout(fx.editor.timeline(), fx.overlay) to equal "40+10@50"
+  refuses to move onto another clip or onto a track of another kind
+  [32m✓[0m ok(fx, edit::move_clip(id, fx.video, f(15))) to be falsy
+  [32m✓[0m ok(fx, edit::move_clip(id, fx.audio, f(40))) to be falsy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+10@50 20+10@100"
+  reorders a clip along its track, closing and opening gaps
+  [32m✓[0m ok(fx, edit::ripple_move(clip_at(fx, 0), f(20))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@50 10+10@100 20+10@0"
+  [32m✓[0m ok(fx, edit::ripple_move(clip_at(fx, 20), f(10))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@50 10+10@0 20+10@100"
+  [32m✓[0m ok(fx, edit::ripple_move(clip_at(fx, 20), f(0))) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@100 10+10@50 20+10@0"
+  refuses a reorder that lands inside another clip
+  [32m✓[0m ok(fx, edit::ripple_move(clip_at(fx, 0), f(5))) to be falsy
+  [32m✓[0m ok(fx, edit::ripple_move(clip_at(fx, 0), f(-10))) to be falsy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+10@50 20+10@100"
+  drops the transitions whose clip pairs a reorder separates
+  [32m✓[0m ok(fx, edit::set_transition(clip_at(fx, 10), dissolve())) to be truthy
+  [32m✓[0m ok(fx, edit::set_transition(clip_at(fx, 20), dissolve())) to be truthy
+  [32m✓[0m ok(fx, edit::ripple_move(first, f(10))) to be truthy
+  [32m✓[0m tl.find_clip(clip_at(fx, 0))->transition_in.has_value() to be falsy
+  [32m✓[0m tl.find_clip(first)->transition_in.has_value() to be falsy
+  [32m✓[0m tl.find_clip(clip_at(fx, 20))->transition_in.has_value() to be falsy
+  [32m✓[0m fx.editor.undo().has_value() to be truthy
+  [32m✓[0m fx.editor.timeline().find_clip(clip_at(fx, 20))->transition_in.has_value() to be truthy
+  undoes and redoes a reorder exactly
+  [32m✓[0m undo_redo_round_trip(fx, std::move(commands)) to be truthy
+  doubles the speed, halving the duration and pulling later clips
+  [32m✓[0m ok(fx, edit::set_speed(clip_at(fx, 10), q(2, 1), true)) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+5@50 15+10@100"
+  halves the speed, doubling the duration and pushing later clips
+  [32m✓[0m ok(fx, edit::set_speed(clip_at(fx, 10), q(1, 2), true)) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+20@50 30+10@100"
+  [32m✓[0m ok(fx, edit::trim_start(clip_at(fx, 10), f(14), true)) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+16@52 26+10@100"
+  rounds an uneven speed down to the sequence grid
+  [32m✓[0m ok(fx, edit::set_speed(clip_at(fx, 10), q(3, 1), true)) to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+3@50 13+10@100"
+  rejects a non-positive speed
+  [32m✓[0m ok(fx, edit::set_speed(clip_at(fx, 10), q(0, 1), true)) to be falsy
+  changes video and audio properties, rejecting invalid ones
+  [32m✓[0m ok(fx, edit::set_video(id, v)) to be truthy
+  [32m✓[0m fx.editor.timeline().find_clip(id)->video == v to be truthy
+  [32m✓[0m ok(fx, edit::set_video(id, v)) to be falsy
+  [32m✓[0m ok(fx, edit::set_video(id, v)) to be truthy
+  [32m✓[0m ok(fx, edit::set_video(id, v)) to be falsy
+  [32m✓[0m ok(fx, edit::set_video(id, v)) to be falsy
+  [32m✓[0m ok(fx, edit::set_video(id, v)) to be truthy
+  [32m✓[0m ok(fx, edit::set_video(id, v)) to be falsy
+  [32m✓[0m ok(fx, edit::set_audio(id, a)) to be truthy
+  [32m✓[0m ok(fx, edit::set_audio(id, a)) to be falsy
+  [32m✓[0m ok(fx, edit::set_audio(id, a)) to be truthy
+  [32m✓[0m ok(fx, edit::set_audio(id, a)) to be falsy
+  [32m✓[0m ok(fx, edit::set_audio(id, a)) to be falsy
+  [32m✓[0m ok(fx, edit::set_audio(id, a)) to be falsy
+  grades a clip with a registered LUT, refusing unknown ones and bad curves
+  [32m✓[0m ok(fx, edit::set_video(id, v)) to be falsy
+  [32m✓[0m fx.editor.add_lut(LutInfo{.id = LutId(77), .name = "Film"}).has_value() to be truthy
+  [32m✓[0m fx.editor.add_lut(LutInfo{.id = LutId(77), .name = "Again"}).has_value() to be falsy
+  [32m✓[0m ok(fx, edit::set_video(id, v)) to be truthy
+  [32m✓[0m fx.editor.timeline().find_clip(id)->video.grade == v.grade to be truthy
+  [32m✓[0m fx.editor.undo().has_value() to be truthy
+  [32m✓[0m fx.editor.timeline().find_clip(id)->video.grade == ColorGrade{} to be truthy
+  [32m✓[0m ok(fx, edit::set_video(id, v)) to be falsy
+  [32m✓[0m ok(fx, edit::set_video(id, v)) to be falsy
+
+[1m● timeline edits: history[0m
+  undoes and redoes every operation exactly
+  [32m✓[0m undo_redo_round_trip(fx, std::move(commands)) to be truthy
+  records each compound operation as one history entry
+  [32m✓[0m std::string(fx.editor.undo_name()) to equal "Overwrite"
+  [32m✓[0m fx.editor.undo().has_value() to be truthy
+  [32m✓[0m layout(fx) to equal "0+30@0"
+  groups commands in a transaction and rolls all back on failure
+  [32m✓[0m ok(fx, edit::transaction("Delete Selection", std::move(good))) to be truthy
+  [32m✓[0m layout(fx) to equal "10+10@50"
+  [32m✓[0m fx.editor.undo().has_value() to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+10@50 20+10@100"
+  [32m✓[0m ok(fx, edit::transaction("Broken", std::move(bad))) to be falsy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+10@50 20+10@100"
+  clears the redo stack on a new edit
+  [32m✓[0m ok(fx, edit::remove_clip(clip_at(fx, 0))) to be truthy
+  [32m✓[0m fx.editor.undo().has_value() to be truthy
+  [32m✓[0m fx.editor.can_redo() to be truthy
+  [32m✓[0m ok(fx, edit::remove_clip(clip_at(fx, 20))) to be truthy
+  [32m✓[0m fx.editor.can_redo() to be falsy
+  [32m✓[0m fx.editor.redo().has_value() to be falsy
+  restores a removed track with its clips
+  [32m✓[0m ok(fx, edit::remove_track(fx.video)) to be truthy
+  [32m✓[0m fx.editor.timeline().find_track(fx.video) == nullptr to be truthy
+  [32m✓[0m fx.editor.undo().has_value() to be truthy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+10@50 20+10@100"
+  [32m✓[0m fx.editor.timeline().tracks().front().id == fx.video to be truthy
+  registers media outside the history
+  [32m✓[0m ed.add_media(cam).has_value() to be truthy
+  [32m✓[0m ed.can_undo() to be falsy
+  [32m✓[0m ed.add_media(cam).has_value() to be falsy
+  [32m✓[0m ed.timeline().find_media(kCamera) != nullptr to be truthy
+  forgets the history but keeps the timeline
+  [32m✓[0m fx.editor.can_undo() to be truthy
+  [32m✓[0m fx.editor.can_undo() || fx.editor.can_redo() to be falsy
+  [32m✓[0m layout(fx) to equal "0+10@0 10+10@50 20+10@100"
+  never reuses an ID after undo
+  [32m✓[0m ok(fx, edit::split(id, f(10))) to be truthy
+  [32m✓[0m fx.editor.undo().has_value() to be truthy
+  [32m✓[0m ok(fx, edit::split(id, f(10))) to be truthy
+  [32m✓[0m clip_at(fx, 10) != first_tail to be truthy
+  bumps the revision on execute, undo and redo
+  [32m✓[0m ok(fx, edit::remove_clip(clip_at(fx, 0))) to be truthy
+  [32m✓[0m fx.editor.undo().has_value() to be truthy
+  [32m✓[0m fx.editor.redo().has_value() to be truthy
+  [32m✓[0m fx.editor.revision() - r0 to equal 3U
+  adds, sorts and removes markers through the history
+  [32m✓[0m ok(fx, edit::add_marker(late, f(90), "chorus")) to be truthy
+  [32m✓[0m ok(fx, edit::add_marker(early, f(30), "intro")) to be truthy
+  [32m✓[0m fx.editor.timeline().markers().front().name to equal "intro"
+  [32m✓[0m ok(fx, edit::remove_marker(early)) to be truthy
+  [32m✓[0m fx.editor.timeline().markers().size() to equal 1U
+  [32m✓[0m fx.editor.undo().has_value() to be truthy
+  [32m✓[0m fx.editor.timeline().markers().size() to equal 2U
+  [32m✓[0m ok(fx, edit::add_marker(fx.editor.new_marker_id(), off_grid, "x")) to be falsy
+
+[1m● timeline edits: detaching audio[0m
+  moves a video clip's sound to an audio clip of its own
+  [32m✓[0m ok(fx, edit::detach_audio(video, fx.audio, sound)) to be truthy
+  [32m✓[0m a != nullptr && tl.track_of(sound)->id == fx.audio to be truthy
+  [32m✓[0m a->start == f(10) && a->duration == f(30) && a->source_in == mf(5) to be truthy
+  [32m✓[0m tl.find_clip(video)->audio_detached to be truthy
+  [32m✓[0m c.audio.size() to equal 1U
+  [32m✓[0m c.audio.front().clip == sound to be truthy
+  [32m✓[0m c.video.size() to equal 1U
+  lets the two parts be trimmed apart and joins them on undo
+  [32m✓[0m ok(fx, edit::detach_audio(video, fx.audio, sound)) to be truthy
+  [32m✓[0m ok(fx, edit::trim_start(sound, f(7), false)) to be truthy
+  [32m✓[0m layout(fx.editor.timeline(), fx.audio) to equal "7+33@2"
+  [32m✓[0m layout(fx) to equal "10+30@5"
+  [32m✓[0m fx.editor.undo().has_value() to be truthy
+  [32m✓[0m fx.editor.undo().has_value() to be truthy
+  [32m✓[0m fx.editor.timeline().find_clip(sound) == nullptr to be truthy
+  [32m✓[0m fx.editor.timeline().find_clip(video)->audio_detached to be falsy
+  [32m✓[0m evaluate(fx.editor.timeline(), f(20)).value().audio.size() to equal 1U
+  refuses clips without sound, occupied lanes and a second detach
+  [32m✓[0m fx.editor .execute(edit::overwrite(fx.overlay, picture, f(0), edit::ClipSource{.media = kPicture, .source_in = {}, .duration = f(10), .time_map = {}, .video = {}, .audio = {}})) .has_value() to be truthy
+  [32m✓[0m ok(fx, edit::detach_audio(picture, fx.audio, fx.editor.new_clip_id())) to be falsy
+  [32m✓[0m ok(fx, overwrite_music(fx.audio, fx.editor.new_clip_id(), 5)) to be truthy
+  [32m✓[0m ok(fx, edit::detach_audio(video, fx.audio, fx.editor.new_clip_id())) to be falsy
+  [32m✓[0m ok(fx, edit::detach_audio(video, fx.video, fx.editor.new_clip_id())) to be falsy
+  [32m✓[0m fx.editor.undo().has_value() to be truthy
+  [32m✓[0m ok(fx, edit::detach_audio(video, fx.audio, fx.editor.new_clip_id())) to be truthy
+  [32m✓[0m ok(fx, edit::detach_audio(video, fx.audio, fx.editor.new_clip_id())) to be falsy
+  keeps the detached state when the video clip is split
+  [32m✓[0m ok(fx, edit::detach_audio(video, fx.audio, fx.editor.new_clip_id())) to be truthy
+  [32m✓[0m ok(fx, edit::split(video, f(10))) to be truthy
+  [32m✓[0m fx.editor.timeline().find_clip(clip_at(fx, 20))->audio_detached to be truthy
+
+[1m● timeline evaluation[0m
+  is empty where nothing plays
+  [32m✓[0m c.video.empty() && c.audio.empty() to be truthy
+  maps timeline time to media time through the source in
+  [32m✓[0m c.video.size() to equal 1U
+  [32m✓[0m layer_frame(c, 0) to equal 55LL
+  [32m✓[0m c.video[0].media_time.timebase() == q(1, 90000) to be truthy
+  stacks video tracks bottom first and skips hidden tracks
+  [32m✓[0m c.video.size() to equal 2U
+  [32m✓[0m c.video[0].clip == base && c.video[1].clip == top to be truthy
+  [32m✓[0m fx.editor.execute(edit::set_track_flags(fx.overlay, false, true)).has_value() to be truthy
+  [32m✓[0m c.video.size() to equal 1U
+  [32m✓[0m c.video[0].clip == base to be truthy
+  applies the clip speed
+  [32m✓[0m fx.editor.execute(edit::set_speed(id, q(2, 1), false)).has_value() to be truthy
+  [32m✓[0m layer_frame(at(fx, 10), 0) to equal 60LL
+  [32m✓[0m at(fx, 10).audio.front().speed == q(2, 1) to be truthy
+  carries the clip's visual properties
+  [32m✓[0m fx.editor.execute(edit::set_video(id, v)).has_value() to be truthy
+  [32m✓[0m at(fx, 0).video[0].video == v to be truthy
+  plays the audio of video clips and audio tracks unless muted
+  [32m✓[0m fx.editor .execute(edit::overwrite( fx.audio, music, f(0), edit::ClipSource{.media = kMusic, .source_in = oma::RationalTime::make(0, q(1, 48000)).value(), .duration = f(30), .time_map = {}, .video = {}, .audio = {}})) .has_value() to be truthy
+  [32m✓[0m c.audio.size() to equal 2U
+  [32m✓[0m m.clip == music to be truthy
+  [32m✓[0m m.media_time.value() to equal 24000LL
+  [32m✓[0m m.clip_offset == f(15) && m.clip_duration == f(30) to be truthy
+  [32m✓[0m fx.editor.execute(edit::set_audio(cam, muted)).has_value() to be truthy
+  [32m✓[0m fx.editor.execute(edit::set_track_flags(fx.audio, true, false)).has_value() to be truthy
+  [32m✓[0m c.audio.empty() to be truthy
+  [32m✓[0m c.video.size() to equal 1U
+  shows a still image at any time
+  [32m✓[0m fx.editor .execute(edit::overwrite(fx.overlay, id, f(0), edit::ClipSource{.media = kPicture, .source_in = {}, .duration = f(900), .time_map = {}, .video = {}, .audio = {}})) .has_value() to be truthy
+  [32m✓[0m c.video.size() == 1U && c.audio.empty() to be truthy
+  rejects a time off the sequence grid
+  [32m✓[0m evaluate(fx.editor.timeline(), half).has_value() to be falsy
+
+[1m● timeline transitions[0m
+  dissolves across the cut, both clips playing past it
+  [32m✓[0m at(fx, 24).video.size() to equal 1U
+  [32m✓[0m early.video.size() to equal 2U
+  [32m✓[0m layer_frame(early, 0) to equal 27LL
+  [32m✓[0m layer_frame(early, 1) to equal 97LL
+  [32m✓[0m near(early.video[0].opacity, 1.0) && near(early.video[1].opacity, 0.2) to be truthy
+  [32m✓[0m layer_frame(late, 0) to equal 34LL
+  [32m✓[0m layer_frame(late, 1) to equal 104LL
+  [32m✓[0m near(late.video[1].opacity, 0.9) to be truthy
+  [32m✓[0m at(fx, 35).video.size() to equal 1U
+  dips through black and wipes from the left
+  [32m✓[0m out.video.size() to equal 1U
+  [32m✓[0m layer_frame(out, 0) to equal 27LL
+  [32m✓[0m near(out.video[0].opacity, 0.6) to be truthy
+  [32m✓[0m in.video.size() to equal 1U
+  [32m✓[0m layer_frame(in, 0) to equal 103LL
+  [32m✓[0m near(in.video[0].opacity, 0.6) to be truthy
+  [32m✓[0m half.video.size() to equal 2U
+  [32m✓[0m near(half.video[1].reveal, 0.5) && near(half.video[1].opacity, 1.0) to be truthy
+  shortens to the media the clips have to spare
+  [32m✓[0m at(fx, 28).video.size() to equal 1U
+  [32m✓[0m c.video.size() to equal 2U
+  [32m✓[0m layer_frame(c, 1) to equal 1LL
+  [32m✓[0m near(c.video[1].opacity, 0.25) to be truthy
+  [32m✓[0m at(fx, 32).video.size() to equal 1U
+  is a plain cut without a clip ending at the start
+  [32m✓[0m fx.editor .execute(edit::set_transition( b, Transition{.kind = TransitionKind::Dissolve, .duration = f(10)})) .has_value() to be truthy
+  [32m✓[0m at(fx, 31).video.size() to equal 1U
+  [32m✓[0m transition_window(fx.editor.timeline(), track, 1).has_value() to be falsy
+  rejects empty transitions and keeps them off new cuts
+  [32m✓[0m fx.editor .execute(edit::set_transition( b, Transition{.kind = TransitionKind::Dissolve, .duration = f(0)})) .has_value() to be falsy
+  [32m✓[0m fx.editor.execute(edit::split(b, f(45))).has_value() to be truthy
+  [32m✓[0m fx.editor.timeline().clip_at(fx.video, 50)->transition_in.has_value() to be falsy
+  [32m✓[0m fx.editor.timeline().find_clip(b)->transition_in.has_value() to be truthy
+  [32m✓[0m fx.editor.execute(edit::set_transition(b, std::nullopt)).has_value() to be truthy
+  [32m✓[0m at(fx, 31).video.size() to equal 1U
+  [32m✓[0m fx.editor.undo().has_value() to be truthy
+  [32m✓[0m at(fx, 31).video.size() to equal 2U
+
+[1m● timeline keyframes[0m
+  interpolates the transform between keys and holds it outside them
+  [32m✓[0m near(x_at(fx, 0), 0.0) to be truthy
+  [32m✓[0m near(x_at(fx, 10), 25.0) to be truthy
+  [32m✓[0m near(x_at(fx, 50), 100.0) to be truthy
+  [32m✓[0m near(half.scale_x, 2.0) && near(half.scale_y, 2.0) to be truthy
+  [32m✓[0m at(fx, 20).video.at(0).video.transform_keys.empty() to be truthy
+  eases and holds
+  [32m✓[0m near(x_at(eased, 10), 100.0 * 0.15625) to be truthy
+  [32m✓[0m near(x_at(eased, 20), 50.0) to be truthy
+  [32m✓[0m near(x_at(held, 39), 0.0) && near(x_at(held, 40), 100.0) to be truthy
+  keeps the motion on the picture through split, trim and slip
+  [32m✓[0m fx.editor.execute(edit::split(id, f(20))).has_value() to be truthy
+  [32m✓[0m near(x_at(fx, 30), before) to be truthy
+  [32m✓[0m fx.editor.execute(edit::trim_start(id, f(10), false)).has_value() to be truthy
+  [32m✓[0m near(x_at(fx, 10), 25.0) to be truthy
+  [32m✓[0m fx.editor.execute(edit::slip(id, f(8))).has_value() to be truthy
+  [32m✓[0m near(x_at(fx, 10), 45.0) to be truthy
+  rejects keys out of order or with an invalid transform
+  [32m✓[0m fx.editor.execute(edit::set_video(id, v)).has_value() to be falsy
+  [32m✓[0m fx.editor.execute(edit::set_video(id, v)).has_value() to be falsy
+
+[1mTest Suites Summary:[0m
+  [32mAll 292 tests passed![0m
+
+
+== playback_tests (debug)
+
+[1m● playback::TimelineAudio[0m
+  plays a clip's audio only inside the clip
+  [32m✓[0m place(seq, 4800, 0, 24000).valid() to be truthy
+  [32m✓[0m out.empty() to be falsy
+  [32m✓[0m peak(out, 0, 4800) to equal 0.0F
+  [32m✓[0m near_tone(peak(out, 4800, 28800), 1.0F) to be truthy
+  [32m✓[0m peak(out, 28800, 48000) to equal 0.0F
+  applies the clip's gain and mute
+  [32m✓[0m place(seq, 0, 0, 24000, with_gain(0.5F)).valid() to be truthy
+  [32m✓[0m place(seq, 24000, 0, 24000, muted()).valid() to be truthy
+  [32m✓[0m near_tone(peak(out, 0, 24000), 0.5F) to be truthy
+  [32m✓[0m peak(out, 24000, 48000) to equal 0.0F
+  plays a split clip exactly like the unsplit clip
+  [32m✓[0m place(whole, 0, 0, 48000).valid() to be truthy
+  [32m✓[0m place(split, 0, 0, 20000).valid() to be truthy
+  [32m✓[0m place(split, 20000, 18375, 28000).valid() to be truthy
+  [32m✓[0m a.size() == b.size() && !a.empty() to be truthy
+  [32m✓[0m a == b to be truthy
+  plays detached sound exactly like the video clip's own
+  [32m✓[0m place_camera(joined, 4800).valid() to be truthy
+  [32m✓[0m detached.editor .execute(tl::edit::detach_audio(video, detached.audio, detached.editor.new_clip_id())) .has_value() to be truthy
+  [32m✓[0m peak(a, 4800, 52800) > 0.05F to be truthy
+  [32m✓[0m a == b to be truthy
+  equalizes a clip's sound
+  [32m✓[0m place_noisy(flat).valid() to be truthy
+  [32m✓[0m place_noisy(cut, mid_cut()).valid() to be truthy
+  [32m✓[0m drop > 3.0 && drop < 12.0 to be truthy
+  reduces steady noise when asked
+  [32m✓[0m place_noisy(plain).valid() to be truthy
+  [32m✓[0m place_noisy(clean, denoised()).valid() to be truthy
+  [32m✓[0m level_db(a, 24000, 48000) - level_db(b, 24000, 48000) > 15.0 to be truthy
+  [32m✓[0m std::abs(level_db(a, 96000, 144000) - level_db(b, 96000, 144000)) < 1.0 to be truthy
+  crossfades sound across a transition, both clips playing past the cut
+  [32m✓[0m peak(outgoing, 24000, 28000) > 0.01F to be truthy
+  [32m✓[0m peak(outgoing, 28800, 48000) to equal 0.0F
+  [32m✓[0m near_tone(peak(outgoing, 0, 19000), 1.0F) to be truthy
+  [32m✓[0m peak(incoming, 0, 19200) to equal 0.0F
+  [32m✓[0m peak(incoming, 20000, 24000) > 0.01F to be truthy
+  [32m✓[0m near_tone(peak(incoming, 29000, 48000), 1.0F) to be truthy
+  renders the same samples from a later start as in one pass
+  [32m✓[0m place(seq, 0, 0, 48000).valid() to be truthy
+  [32m✓[0m worst < 0.02F to be truthy
+
+[1m● playback::compute_waveform[0m
+  keeps one peak per hundredth of a second
+  [32m✓[0m w.has_value() to be truthy
+  [32m✓[0m w->sample_rate to equal 44100
+  [32m✓[0m w->bucket_frames to equal 441LL
+  [32m✓[0m static_cast<long long>(w->peaks.size()) to equal 200LL
+  [32m✓[0m range.min > 0.12F && range.max < 0.13F to be truthy
+  answers peaks over a time range for drawing
+  [32m✓[0m w.has_value() to be truthy
+  [32m✓[0m w->peak_between(0.5, 0.6) > 0.12F to be truthy
+  [32m✓[0m w->peak_between(2.5, 3.0) to equal 0.0F
+  [32m✓[0m w->peak_between(0.6, 0.5) to equal 0.0F
+  estimates the noise floor from the quietest buckets
+  [32m✓[0m w.has_value() to be truthy
+  [32m✓[0m floor.has_value() to be truthy
+    noise floor -38.9 dB
+  [32m✓[0m floor && std::abs(*floor + 38.7F) < 2.0F to be truthy
+  [32m✓[0m w->noise_floor_db(1.0, 1.0).has_value() to be falsy
+  stops when the job is cancelled
+  [32m✓[0m w.has_value() to be falsy
+  [32m✓[0m !w && w.error().code() == oma::ErrorCode::Cancelled to be truthy
+  fails on files without audio
+  [32m✓[0m waveform_of("still.png").has_value() to be falsy
+
+[1mTest Suites Summary:[0m
+  [32mAll 49 tests passed![0m
+
+
+== project_tests (debug)
+
+[1m● project::Document[0m
+  round-trips every saved field exactly
+  [32m✓[0m text.has_value() to be truthy
+  [32m✓[0m back.has_value() to be truthy
+  [32m✓[0m *oma::project::to_json(*back, dir) to equal *text
+  [32m✓[0m t.tracks().size() to equal 2U
+  [32m✓[0m t.tracks()[0].clips.size() to equal 2U
+  [32m✓[0m a.video == doc.timeline->tracks()[0].clips[0].video to be truthy
+  [32m✓[0m a.audio == doc.timeline->tracks()[0].clips[0].audio to be truthy
+  [32m✓[0m a.audio_detached to be truthy
+  [32m✓[0m t.tracks()[0].clips[1].transition_in.has_value() to be truthy
+  [32m✓[0m t.markers()[0].name to equal std::string("Intro, \"take 2\"\n")
+  [32m✓[0m back->media[0].path.string() to equal std::string("/projects/vlog/media/clip one.mp4")
+  [32m✓[0m back->media[0].fingerprint == doc.media[0].fingerprint to be truthy
+  [32m✓[0m static_cast<int>(back->canvas_height) to equal 1920
+  [32m✓[0m text->find("\"path\": \"media/clip one.mp4\"") != std::string::npos to be truthy
+  continues IDs after the saved ones
+  [32m✓[0m ed.new_clip_id().value() > largest to be truthy
+  refuses newer versions and keeps unknown fields
+  [32m✓[0m !r && r.error().code() == oma::ErrorCode::Unsupported to be truthy
+  [32m✓[0m doc.has_value() to be truthy
+  [32m✓[0m again->find(R"("future": {"a":[1,2.5,"x"]})") != std::string::npos to be truthy
+  rejects truncated, mistyped and inconsistent files
+  [32m✓[0m rejected(good.substr(0, good.size() / 2)) to be truthy
+  [32m✓[0m rejected("[]") to be truthy
+  [32m✓[0m rejected(R"({"format": "something else", "format_version": 1})") to be truthy
+  [32m✓[0m rejected(replace("\"fit\": \"fit\"", "\"fit\": \"zoom\"")) to be truthy
+  [32m✓[0m rejected(replace("\"timebase\": \"1/30\"", "\"timebase\": \"1/0\"")) to be truthy
+  [32m✓[0m rejected(replace("\"media\": 7", "\"media\": 8")) to be truthy
+  [32m✓[0m rejected(replace("\"start\": {\n              \"value\": 40,", "\"start\": {\n              \"value\": 20,")) to be truthy
+  [32m✓[0m rejected(deep + std::string(100, ']')) to be truthy
+  saves atomically and leaves the old file on failure
+  [32m✓[0m oma::project::save(doc, file).has_value() to be truthy
+  [32m✓[0m loaded.has_value() to be truthy
+  [32m✓[0m oma::project::save(changed, file).has_value() to be truthy
+  [32m✓[0m std::distance(fs::directory_iterator(dir), fs::directory_iterator()) to equal 1L
+  [32m✓[0m refused to be truthy
+  [32m✓[0m read_file(file) != first && read_file(file).find("\"width\": 1280") != std::string::npos to be truthy
+  finds media next to a moved project
+  [32m✓[0m oma::project::save(doc, root / "before" / "vlog.omamovie").has_value() to be truthy
+  [32m✓[0m loaded.has_value() to be truthy
+  [32m✓[0m loaded->media[0].path == (root / "after" / "media" / "clip one.mp4") to be truthy
+  fingerprints files
+  [32m✓[0m a && b && c to be truthy
+  [32m✓[0m *a == *c && !(*a == *b) to be truthy
+  [32m✓[0m oma::project::fingerprint_file(dir / "missing").has_value() to be falsy
+
+[1mTest Suites Summary:[0m
+  [32mAll 38 tests passed![0m

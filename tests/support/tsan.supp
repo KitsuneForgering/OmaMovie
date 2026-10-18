@@ -8,6 +8,46 @@ race:libavcodec.so
 race:libavutil.so
 race:libavformat.so
 race:libswresample.so
+# libavfilter's slice threads (afftdn, the noise reduction AudioDecoder builds) end the same
+# way: the filter graph freed by the caller after its threads wrote it (seen 2026-10-14 in
+# tests/playback/test_block_partition.cpp, the racing frames inside libavfilter).
+race:libavfilter.so
 
 # Codec libraries FFmpeg drives with their own worker threads (dav1d decodes AV1 in software).
 race:libdav1d.so
+
+# Mesa's Intel Vulkan driver joins its shader disk-cache threads ("disk$N") with a
+# pthread_barrier; the uninstrumented driver's barrier destroy/wait pair looks like a race
+# (seen with Mesa 26.2.2 in tests/compositor/test_lifetime.cpp, both frames inside the driver).
+race:libvulkan_intel.so
+# Lavapipe's LLVM 23 shader workers read/write a heap block allocated inside libLLVM
+# concurrently while creating a device for app export (2026-10-17 CI, test_edit_workflow).
+# Both conflicting frames and the allocation are inside the uninstrumented libLLVM; no
+# OmaMovie frame accesses that block. Keep the suppression at this library boundary.
+race:libLLVM.so
+# Clang TSan on Mesa 26.2.5 also reports the same shader-worker heap race through
+# libvulkan_lvp's memcpy frames rather than libLLVM (2026-10-18 CI, app export).
+# Both accesses, allocation and worker creation are inside this uninstrumented driver.
+race:libvulkan_lvp.so
+
+# Application tests (BUILD=tsan app subset). Qt, GLib, libdbus and fontconfig are not built with
+# TSan: the locking inside them is invisible while their malloc/free calls are still seen, so
+# hand-offs between their own threads (gdbus, QDBusConnection) look racy. Only libraries whose
+# frames never carry OmaMovie's own work are listed: not libQt6Core or libglib, which every
+# UI-thread stack passes through. (called_from_lib was tried and dropped: it hides the pthread
+# calls of those libraries' threads and corrupts TSan's thread registry.) Measured 2026-10-13
+# with the app tests isolated from the desktop's Qt theme (tests/app/main.cpp).
+race:libgio-2.0.so
+race:libQt6DBus.so
+race:libdbus-1.so
+race:libfontconfig.so
+deadlock:libdbus-1.so
+# QImage's smooth scaling (thumbnails, in an import job) spreads over Qt's global QThreadPool,
+# whose threads free what Qt Gui allocated on the job's thread. Qt Gui starts no threads itself,
+# so ignoring only its own malloc/free calls keeps TSan's thread tracking intact.
+called_from_lib:libQt6Gui.so.6
+# That pool shutting down at exit.
+race:QWaitCondition::~QWaitCondition
+# Qt's own threads (the D-Bus connection, the global pool QImage scales on) end with the
+# process; OmaMovie's threads are joined by their owners (jobs.cpp).
+thread:QThread::start

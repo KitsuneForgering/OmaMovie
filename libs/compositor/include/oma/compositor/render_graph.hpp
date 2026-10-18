@@ -3,6 +3,7 @@
 #include "oma/base/error.hpp"
 #include "oma/base/rational.hpp"
 #include "oma/compositor/geometry.hpp"
+#include "oma/compositor/grade.hpp"
 
 #include <array>
 #include <cstddef>
@@ -46,6 +47,31 @@ struct Transform {
     double rotation = 0.0; // degrees, clockwise
 };
 
+// Color adjustments of a layer (ui-design §6, Color), applied to the source in linear light
+// before blending, in this order: white balance and exposure, contrast, saturation.
+struct ColorAdjust {
+    double exposure = 0.0;    // stops, in [-4, 4]
+    double contrast = 0.0;    // in [-1, 1]: a power of 2^contrast around 18% grey
+    double saturation = 0.0;  // in [-1, 1]: -1 grey, 0 unchanged, 1 twice the chroma
+    double temperature = 0.0; // in [-1, 1]: cooler (bluer) to warmer, luminance kept
+};
+
+// A look applied after the color adjustments (ADR-0016): a layer's looks compose in order.
+enum class FilterKind : std::uint8_t {
+    None,
+    BlackAndWhite,
+    Sepia,
+    Vintage, // faded, warm and less saturated
+    Cool,
+    Warm,
+    Vignette, // darkened corners
+};
+
+struct Filter {
+    FilterKind kind = FilterKind::None;
+    double amount = 1.0; // in [0, 1]: blend between the original and the full look
+};
+
 struct Layer {
     std::size_t input = 0; // index into the inputs given to the compositor
     Fit fit = Fit::Fit;
@@ -53,6 +79,18 @@ struct Layer {
     Transform transform;
     float opacity = 1.0F;
     BlendMode blend = BlendMode::Normal;
+    ColorAdjust color;
+    // In order, at most one per kind and never None; their matrices multiply in this order and
+    // the vignette applies after them (src/look.hpp).
+    std::vector<Filter> looks;
+    // In [-1, 1]: below 0 a gaussian blur (up to 2% of the source height in standard
+    // deviation), above 0 an unsharp mask that sharpens edges; 0 leaves detail alone.
+    double sharpness = 0.0;
+    // The fraction of the output width the layer shows, from the left (a wipe transition); the
+    // edge is anti-aliased over one pixel. 1 shows the whole layer.
+    double reveal = 1.0;
+    // CDL, curves and LUT after the look (grade.hpp, ADR-0012).
+    Grade grade;
 };
 
 struct RenderGraph {
@@ -62,8 +100,13 @@ struct RenderGraph {
     std::vector<Layer> layers;                               // bottom first
 };
 
-// Checks sizes, input indices, crops, scales and opacity.
+// Checks sizes, input indices, crops, scales, opacity, color adjustments and filters.
 [[nodiscard]] Result<void> validate(const RenderGraph& graph, std::size_t input_count);
+
+// The same picture at `scale` (0, 1] times the output size, for a reduced-resolution preview:
+// the output size and pixel offsets scale, and native-size layers shrink with the output so
+// the framing is unchanged. Never used for export, which renders the project's size.
+[[nodiscard]] RenderGraph scaled(const RenderGraph& graph, double scale);
 
 // What the compositor knows about a source when it renders.
 struct SourceGeometry {

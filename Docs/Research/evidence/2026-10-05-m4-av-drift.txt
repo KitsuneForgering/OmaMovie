@@ -1,0 +1,49 @@
+M4 10-minute A/V drift audit (2026-10-05)
+
+Machine: Intel Iris Xe (TigerLake), Mesa 26.2.2; environment below. Build: BUILD=release,
+working tree on top of the commit shown (uncommitted M3/M4 work, including decoder reuse
+across playback restarts).
+Command: build/release/omamovie --m4-audit drift_1080p30.mp4 600
+Source (generated, not committed, 1.2 GB):
+  ffmpeg -f lavfi -i "testsrc2=size=1920x1080:rate=30,format=yuv420p" \
+         -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 620 \
+         -c:v libx264 -preset ultrafast -g 60 -c:a aac -b:a 128k drift_1080p30.mp4
+Path: software decode + upload (default viewer), PipeWire output muted at the device.
+Error = audible sample time - time of the last composited frame, sampled every 10 ms after
+2 s; drift = |mean error of the first minute - mean error of the last minute|. Composition
+time precedes Qt's presentation, so presentation latency is not included.
+
+Environment:
+Mon Oct  5 09:37:48 PM -03 2026
+7.2.5-4-omarchy
+ffmpeg version n9.0.1 Copyright (c) 2000-2026 the FFmpeg developers
+Server Name: PulseAudio (on PipeWire 1.6.8)
+980dcbe
+
+Result (one run):
+M4 audit: PASS, 600 s, PipeWire audio, 58807 samples, 17996 composites, p99 33.33 ms, max 33.33 ms, first/last mean delta 2.23 ms, signed range -33.33..20.00 ms, underruns 0 (first -1.00 s), dropped video 1, frame interval 33.33 ms
+
+Seek restart latency (2026-10-05, same machine and source, BUILD=release)
+Command: build/release/omamovie --m4-seek-audit drift_1080p30.mp4 60
+Plays, then every 500 ms seeks to a pseudo-random position (fixed seed, same positions in
+every run). "UI blocked" is Session::startPlayback's duration on the UI thread; "first
+composited frame" runs from the seek to the first composited frame within 30 frames after the
+target (composition, not presentation). GOP is 60 frames, so a seek decodes up to 2 s.
+Two runs each; no noise control beyond that.
+
+Decoders reused across restarts (current tree):
+M4 seek audit: 60 seeks, PipeWire audio, UI blocked p50 16.18 p95 23.83 max 24.09 ms, first composited frame p50 77.25 p95 127.82 max 141.91 ms, 0 without a frame in 500 ms
+M4 seek audit: 60 seeks, PipeWire audio, UI blocked p50 15.94 p95 23.80 max 26.20 ms, first composited frame p50 79.38 p95 117.36 max 145.27 ms, 0 without a frame in 500 ms
+
+Baseline, decoders reopened on every restart (video_scheduler/audio_player at HEAD 980dcbe):
+M4 seek audit: 60 seeks, PipeWire audio, UI blocked p50 29.77 p95 39.02 max 40.27 ms, first composited frame p50 81.67 p95 110.41 max 116.69 ms, 0 without a frame in 500 ms
+M4 seek audit: 60 seeks, PipeWire audio, UI blocked p50 31.08 p95 39.94 max 41.08 ms, first composited frame p50 79.95 p95 104.19 max 106.34 ms, 0 without a frame in 500 ms
+
+Restart blocking broken down (2026-10-06, h264_1080p60.mp4 from the hardware gate, hardware
+decode, 31 seeks, temporary probe): audio stop 12.0 ms mean (max 25.4), scheduler stop
+1.0 ms, audio start 2.1 ms. The audio stop waited for PipeWire's next callback (a quantum,
+~21 ms) to flush the ring. The flush is now asynchronous: it records the ring's write position
+and the consumer drops frames up to it at its next pull, keeping what the restart writes.
+After the change (two runs of --m4-seek-audit h264_1080p60.mp4 40):
+M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 2.39 p95 6.10 max 6.54 ms, first composited frame p50 124.31 p95 255.32 max 276.76 ms, 0 without a frame in 500 ms
+M4 seek audit: 40 seeks, PipeWire audio, UI blocked p50 3.55 p95 8.12 max 8.66 ms, first composited frame p50 124.88 p95 270.54 max 275.28 ms, 0 without a frame in 500 ms

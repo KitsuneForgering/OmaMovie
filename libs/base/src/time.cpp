@@ -16,6 +16,13 @@ std::string format_time(const RationalTime& t) {
 
 // ---------------------------------------------------------------- RationalTime
 
+RationalTime::RationalTime(std::int64_t value, Rational timebase) noexcept
+    : value_(value), timebase_(timebase) {}
+
+bool operator==(const RationalTime& a, const RationalTime& b) noexcept {
+    return std::is_eq(a <=> b);
+}
+
 Result<RationalTime> RationalTime::make(std::int64_t value, Rational timebase) {
     if (!timebase.is_positive()) {
         return make_error(ErrorCode::InvalidArgument, Category::Base, "timebase must be positive",
@@ -65,16 +72,19 @@ double RationalTime::seconds_approx() const noexcept {
 }
 
 std::strong_ordering operator<=>(const RationalTime& a, const RationalTime& b) noexcept {
-    using detail::i128;
+    using detail::Int128;
     // value * num fits in 126 bits; compare_fractions never forms larger products.
     const int c = detail::compare_fractions(
-        static_cast<i128>(a.value_) * a.timebase_.num(), a.timebase_.den(),
-        static_cast<i128>(b.value_) * b.timebase_.num(), b.timebase_.den());
+        static_cast<Int128>(a.value_) * a.timebase_.num(), a.timebase_.den(),
+        static_cast<Int128>(b.value_) * b.timebase_.num(), b.timebase_.den());
     return c < 0 ? std::strong_ordering::less
                  : (c > 0 ? std::strong_ordering::greater : std::strong_ordering::equal);
 }
 
 // ---------------------------------------------------------------- TimeRange
+
+TimeRange::TimeRange(RationalTime start, RationalTime duration, RationalTime end) noexcept
+    : start_(start), duration_(duration), end_(end) {}
 
 Result<TimeRange> TimeRange::make(RationalTime start, RationalTime duration) {
     if (start.timebase() != duration.timebase()) {
@@ -126,6 +136,8 @@ Result<std::int64_t> FrameRate::time_to_frame(const RationalTime& t, Rounding ro
 
 // ---------------------------------------------------------------- SampleRate
 
+SampleRate::SampleRate(std::int32_t hz) noexcept : hz_(hz) {}
+
 Result<SampleRate> SampleRate::make(std::int32_t hz) {
     if (hz <= 0) {
         return make_error(ErrorCode::InvalidArgument, Category::Base,
@@ -144,6 +156,19 @@ RationalTime SampleRate::sample_to_time(std::int64_t sample) const {
 
 Result<std::int64_t> SampleRate::time_to_sample(const RationalTime& t, Rounding rounding) const {
     return rescale(t.value(), t.timebase(), timebase(), rounding);
+}
+
+const RationalTime& TimeRange::start() const noexcept {
+    return start_;
+}
+const RationalTime& TimeRange::duration() const noexcept {
+    return duration_;
+}
+const RationalTime& TimeRange::end() const noexcept {
+    return end_;
+}
+bool TimeRange::empty() const noexcept {
+    return duration_.value() == 0;
 }
 
 } // namespace oma

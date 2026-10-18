@@ -1,0 +1,83 @@
+GPU effects research, local evidence (2026-10-04)
+Machine: Intel Iris Xe (TGL GT2), Mesa 26.2.2-arch1.1, Vulkan 1.4.
+vulkaninfo: subTexelPrecisionBits = 8, maxImageDimension3D = 2048, maxUniformBufferRange = 1073741824.
+
+Numerics recheck (2026-10-04): ran
+  python3 Docs/Research/evidence/2026-10-04-grading-numerics.py
+with NumPy 2.5.3. It exited 0 and reproduced every printed figure in section 2 below
+to the shown precision, including the no-overshoot and neutral-grey checks. This
+rechecks the synthetic numerical model, not grading against an independent color oracle.
+The broader recheck and current `make test` log are recorded in
+2026-10-04-verification.md and 2026-10-04-make-test.txt.
+
+1. Compositor render time (2026-10-04-compositor-bench.cpp, release libs, 25 renders, first 5
+   dropped, median/p90). One layer, output 1920x1080, software-decoded yuv420p testsrc2 frame,
+   so every render includes the upload. Two runs; ranges cover both.
+
+   case                      1080p source        2160p source
+   off-screen (upload only)  0.81-2.41 ms        3.42-5.80 ms
+   plain                     2.62-3.47 ms        4.92-5.62 ms
+   look + vignette           2.96-3.10 ms        5.24-5.29 ms
+   blur 10% (sharpness -0.1) 10.12-10.48 ms      57.09-58.09 ms
+   blur max (sharpness -1)   52.63-52.65 ms      208.96-214.07 ms
+   sharpen max               8.77-8.94 ms        42.44-45.13 ms
+
+2. Grading numerics (2026-10-04-grading-numerics.py, numpy, synthetic data)
+   (a) lift/gamma/gain vs ASC CDL (slope = gain*(1-lift), offset = gain*lift, power = gamma),
+       1000 random grades x 100000 inputs: max abs diff 6.43e-15.
+   (b) monotone cubic curve sampled into a table, read with linear interpolation:
+       S-curve   256 entries 1.59e-05, 1024 entries 9.92e-07
+       steep     256 entries 2.25e-03, 1024 entries 1.58e-04   (10-bit step 9.78e-04)
+       no overshoot outside [0, 1] for either curve.
+   (c) synthetic nonlinear 3D transform (saturation 1.6, gamma 0.8, hue twist), max abs error:
+       17^3 trilinear 3.99e-02 tetrahedral 3.54e-02
+       33^3 trilinear 2.44e-02 tetrahedral 2.12e-02
+       65^3 trilinear 1.30e-02 tetrahedral 1.19e-02
+       33^3 on greys, max channel spread: trilinear 2.91e-03, tetrahedral 0 (exact 0).
+
+3. Grading after implementation (same benchmark, grading cases added; two runs, medians).
+   CDL: slope/power per channel + saturation 1.2. Curves: master 5 points, red/green/blue 3.
+   LUT: 33^3 channel rotation.
+
+   case                      1080p source        2160p source
+   plain                     2.79-3.02 ms        4.33-5.38 ms
+   grade: CDL                2.99-3.03 ms        4.75-5.03 ms
+   grade: curves             3.88-3.98 ms        5.59-5.61 ms
+   grade: LUT 33             3.27-4.26 ms        4.85-4.86 ms
+   grade: all three          3.85-4.03 ms        5.50-5.73 ms
+
+   Target "under +1 ms at 1080p": +0.83 ms in run 1, +1.24 ms in run 2 (noise of about 0.5 ms
+   from the synchronous upload). Borderline; curves are the costliest stage (a loop over the
+   points per channel, master then channel).
+
+4. Tests (make test, debug): GPU vs CPU with CDL + curves + LUT on two layers: max difference
+   6.8e-4, 0 of 230400 pixels over the 4e-3 tolerance. Mutation check: swapping two tetrahedral
+   weights in the shader only made the same test fail (24538 and 170661 pixels over tolerance).
+
+5. Blur after the rework (same benchmark, release libs, two runs, medians). The source is
+   linearized and box-reduced by a factor f = max(sigma / 3, source px per output px), the
+   gaussian runs on the reduced image (radius <= 18), the composite reads it back bilinearly;
+   intermediates RGBA16F (were RGBA32F at the full source size).
+
+   case                      1080p source        2160p source (shown at 1080p)
+   plain                     2.69-2.71 ms        4.75-4.84 ms
+   blur 10% (sharpness -0.1) 7.87-8.28 ms        10.96-11.59 ms    (was 10.1-10.5 / 57-58)
+   blur max (sharpness -1)   3.51-3.59 ms        14.38-14.72 ms    (was 52.6 / 209-214)
+   sharpen max               8.53-8.58 ms        11.61-11.72 ms    (was 8.8-8.9 / 42-45)
+
+   Intermediate steps, 2160p source: the reduction alone (RGBA32F) gave blur max 13.2-14.1 ms
+   but left blur 10% at 45-52 ms and sharpen at 46 ms (factor 1, full-size float images);
+   RGBA16F brought those to 36-38 and 29-30 ms; the display factor to the numbers above.
+   Blur max at 2160p (f = 14) costs more than blur 10% (f = 2): each reduce thread averages
+   196 decoded texels serially. Done afterwards: a separable reduce (across into a
+   width-reduced image, then down), two runs, 2160p source: blur max 5.65-5.83 ms (plain
+   4.73-5.65), blur 10% 12.0-12.5 ms, sharpen 12.0-12.3 ms; 1080p: blur max 2.80-3.13 ms.
+   GPU vs CPU on the factor-2 test: max difference 2.5e-3 (the across image is half float).
+   Left as is: with factor 1 the reduce-down pass is a plain copy (one full-size read and write);
+   blur 10% at 1080p costs 8.5-10.2 ms against 2.7 ms plain.
+   Strength: sigma = 2% of the source height per unit at any resolution (it was clamped to
+   21.3 px, half the relative blur for a 2160p source).
+
+   Tests: GPU vs CPU with a factor-2 blur and a crop on a 640x360 still: max difference 9.7e-4.
+   With RGBA16F intermediates the looks test (blur + sharpen layers) rose from 2.3e-3 to
+   4.5e-3 maximum, 0 of 230400 pixels over the 4e-3 tolerance.

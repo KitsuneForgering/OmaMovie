@@ -25,14 +25,11 @@ namespace oma {
 class CancellationToken {
 public:
     CancellationToken() = default;
-    [[nodiscard]] bool is_cancelled() const noexcept {
-        return flag_ && flag_->load(std::memory_order_acquire);
-    }
+    [[nodiscard]] bool is_cancelled() const noexcept;
 
 private:
     friend class CancellationSource;
-    explicit CancellationToken(std::shared_ptr<const std::atomic<bool>> flag)
-        : flag_(std::move(flag)) {}
+    explicit CancellationToken(std::shared_ptr<const std::atomic<bool>> flag);
 
     // Shared because the owner and the running job have independent lifetimes.
     std::shared_ptr<const std::atomic<bool>> flag_;
@@ -40,13 +37,11 @@ private:
 
 class CancellationSource {
 public:
-    CancellationSource() : flag_(std::make_shared<std::atomic<bool>>(false)) {}
+    CancellationSource();
 
-    [[nodiscard]] CancellationToken token() const { return CancellationToken(flag_); }
-    void cancel() noexcept { flag_->store(true, std::memory_order_release); }
-    [[nodiscard]] bool is_cancelled() const noexcept {
-        return flag_->load(std::memory_order_acquire);
-    }
+    [[nodiscard]] CancellationToken token() const;
+    void cancel() noexcept;
+    [[nodiscard]] bool is_cancelled() const noexcept;
 
 private:
     std::shared_ptr<std::atomic<bool>> flag_;
@@ -63,11 +58,10 @@ enum class JobState : std::uint8_t {
 // What a running job sees: its cancellation token and a way to report progress.
 class JobContext {
 public:
-    JobContext(CancellationToken token, std::atomic<double>& progress) noexcept
-        : token_(std::move(token)), progress_(progress) {}
+    JobContext(CancellationToken token, std::atomic<double>& progress) noexcept;
 
-    [[nodiscard]] const CancellationToken& token() const noexcept { return token_; }
-    [[nodiscard]] bool is_cancelled() const noexcept { return token_.is_cancelled(); }
+    [[nodiscard]] const CancellationToken& token() const noexcept;
+    [[nodiscard]] bool is_cancelled() const noexcept;
 
     // Fraction in [0, 1]; values outside are clamped.
     void report_progress(double fraction) noexcept;
@@ -89,7 +83,7 @@ class JobHandle {
 public:
     JobHandle() = default;
 
-    [[nodiscard]] bool valid() const noexcept { return shared_ != nullptr; }
+    [[nodiscard]] bool valid() const noexcept;
     [[nodiscard]] const std::string& name() const noexcept;
     [[nodiscard]] JobState state() const;
     [[nodiscard]] double progress() const noexcept;
@@ -103,7 +97,7 @@ public:
 
 private:
     friend class JobPool;
-    explicit JobHandle(std::shared_ptr<detail::JobShared> shared) : shared_(std::move(shared)) {}
+    explicit JobHandle(std::shared_ptr<detail::JobShared> shared);
 
     std::shared_ptr<detail::JobShared> shared_;
 };
@@ -126,7 +120,7 @@ public:
     // Must not be called from inside a job.
     void shutdown() noexcept;
 
-    [[nodiscard]] std::size_t worker_count() const noexcept { return worker_count_; }
+    [[nodiscard]] std::size_t worker_count() const noexcept;
 
 private:
     void worker_loop(const std::stop_token& stop);

@@ -10,9 +10,14 @@
 #include "oma_test.hpp"
 
 void run_probe_tests();
+void run_format_tests();
 void run_video_decoder_tests();
 void run_gpu_decode_tests();
 void run_audio_decoder_tests();
+void run_audio_gap_tests();
+void run_video_writer_tests();
+void run_probe_regression_tests();
+void run_copy_rgba_tests();
 
 namespace {
 
@@ -62,9 +67,14 @@ int main(int argc, char* argv[]) {
     oma::set_log_level(oma::Category::Media, oma::LogLevel::Off);
     cest_init(argc, argv);
     run_probe_tests();
+    run_format_tests();
     run_video_decoder_tests();
     run_gpu_decode_tests();
     run_audio_decoder_tests();
+    run_audio_gap_tests();
+    run_video_writer_tests();
+    run_probe_regression_tests();
+    run_copy_rgba_tests();
     release_media_test_device();
     return cest_result();
 }

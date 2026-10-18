@@ -1,0 +1,65 @@
+M7 — export speed, picture fidelity and A/V offset (2026-10-07)
+
+Machine: Intel Iris Xe (TGL GT2), Mesa 26.2.2, Arch/Omarchy. Build: release.
+Tool: build/release/omamovie --export-audit SOURCE OUT (imports SOURCE onto the storyline,
+exports it, prints per-phase time). Sources are generated with ffmpeg (lavfi), not committed.
+
+Speed, 1920x1080 30 fps H.264 + AAC source, 300 frames (10 s), libx264 defaults:
+  before  float readback (RGBA32F) + CPU BT.709 conversion:   19.6 fps
+          per frame: build 0.17, render+readback 23.24, convert 19.51, encode 5.75, audio 0.97 ms
+  after   BT.709 encoded on the GPU into RGBA8, 8-bit readback, RGBA into swscale:   51.4-52.9 fps
+          per frame: build 0.20, render+readback 9.1-9.5, convert 0, encode 7.1-7.3, audio 1.1-1.3 ms
+  (two runs each; the GPU encode matches the BT.709 OETF within one 8-bit level, compositor test)
+
+Picture fidelity: PSNR of the export against its source (ffmpeg psnr filter, all 300 frames)
+  source tagged BT.709 (scale=out_color_matrix=bt709, -colorspace bt709, crf 12):
+      Y 36.3 dB, U 35.5, V 33.8, average 35.7 (libx264 default crf 23 on a busy test pattern)
+  untagged source encoded by ffmpeg with BT.601: 25.8 dB average, with the hue shift of a
+      BT.601/BT.709 mismatch: OmaMovie reads untagged HD as BT.709 (the common convention),
+      ffmpeg had encoded BT.601. A policy question for untagged input, not an export defect.
+
+A/V offset: 1280x720 29.97 fps source with a one-frame white flash and a 1 kHz beep at 2 s and
+5 s (beep onsets quantized by lavfi to 2.0201 s and 5.0156 s). Flash frames found with
+signalstats, beep onsets as the first sample above 0.05.
+  before  export beeps 23.2 ms early at both marks, flashes unchanged: one AAC frame at 44.1 kHz.
+          Cause: AudioDecoder::seek started output after the target (the first packet after a
+          seek decodes short: AAC priming/MDCT overlap); the mixer trusted the seek's promise and
+          placed that audio at the target. The same mixer drives playback.
+  after   seek demuxes 200 ms early and trims to the target: export beeps at 2.0201 s and
+          5.0156 s, equal to the source; flashes at 2.002 s and 5.005 s in both.
+          Regression tests: AAC seeks are sample-exact; Opus in Matroska still lands 24 samples
+          (0.5 ms) late after a seek (open).
+
+Not measured: long exports (two hours), hardware encoders, export while playing back.
+
+Two-hour export (2026-10-07)
+  Source: 320x180 30 fps testsrc2, BT.709-tagged H.264 (ultrafast, GOP 300) + AAC 48 kHz, 7200 s,
+  with a one-frame white flash and a 50 ms 1 kHz beep at 10 s, 3600 s and 7190 s.
+  Export: --export-audit to /var/tmp (disk, not tmpfs), automatic encoder (VA-API H.264).
+    216,000 frames in 522 s (413.7 fps; 8 min 43 s wall), output 461 MB,
+    video 216,000 frames / 7200.000 s, AAC 7200.000 s.
+  Independent check (ffmpeg seeks to each mark, signalstats for the flash, first sample above
+  0.05 for the beep), source and export:
+    mark 10 s:    flash 10.0000   beep 10.0000   (both files)
+    mark 3600 s:  flash 3600.0000 beep 3600.0000 (both files)
+    mark 7190 s:  flash 7190.0000 beep 7190.0000 (both files)
+  No drift over two hours at frame and sample resolution. Not covered: cuts, transitions and
+  effects along a long timeline, 1080p at this length (~70 min at the measured 52-68 fps).
+
+Across a cut and a transition (2026-10-07)
+  Project (built with libs/project): sync.mp4 (29.97 fps, flash+beep at 2 s and 5 s) as clip A
+  = source [0, 3.003 s) and clip B = source from 3.5 s, placed at 3.003 s, with a 15-frame
+  dissolve centred on the cut; exported with --export-audit PROJECT.
+  Expected: A keeps its markers (flash frame 2.002 s, beep 2.0201 s); B maps source t to
+  3.003 + (t - 3.5): beep 5.0156 -> 4.5186 s, flash in the frame whose source time first
+  reaches the source flash frame (5.005 s) -> timeline frame 4.5379 s.
+  Found: bright frames 2.002 / 2.035 s (the source's two) and 4.5379 s; beeps 2.0201 s and
+  4.5186 s. Exact at sample resolution.
+  Found on the way: exporting right after opening a project rendered gaps (black, silent):
+  the library re-import had not delivered its results yet. Export now refuses until every
+  clip's media is loaded ("Wait for the media to finish loading").
+
+Effects through export (2026-10-07, ADR-0016)
+  Project: src709.mp4 as clip A with oma.look.black-and-white and clip B without effects.
+  Decoded export (ffmpeg signalstats): t = 1 s (clip A) SATAVG 0, U 128, V 128; t = 4.5 s
+  (clip B) SATAVG 115.6. The stack reaches the exported pixels.

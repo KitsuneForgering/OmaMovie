@@ -1,49 +1,135 @@
 name: Release
 
-# Tag vX.Y.Z (or vX.Y.Z-rc.N) → release build + tests → GitHub Release with notes generated
-# from Conventional Commits and the source tarball. App binaries are added once the app
-# exists (M6/M7), as <app>-<version>-<arch>-linux.tar.gz, the layout OmaStore expects.
+# Tag vX.Y.Z (or vX.Y.Z-rc.N) → a GitHub Release with notes generated from Conventional Commits,
+# the source tarball and the app as omamovie-<version>-x86_64-linux.tar.gz (the tree
+# `make install` lays out under usr/, which omastore.toml points OmaStore at). Qt 6, FFmpeg and
+# Vulkan stay system libraries (Arch packages, PKGBUILD depends).
+#
+# A tag is checked before the full CI, source, and app jobs run. `publish` starts a draft,
+# verifies its assets, and makes it public only after every prerequisite succeeds.
 on:
   push:
     tags: ['v*.*.*']
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
+  validate:
+    name: release tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Accept only version or release-candidate tags
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          [[ $TAG =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.[1-9][0-9]*)?$ ]]
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Require the tagged commit on master
+        run: |
+          git fetch origin master --no-tags
+          bash scripts/require-release-commit.sh HEAD origin/master
+
+  ci:
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+
+  source:
+    name: notes and source tarball
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-
-      - name: Build and test (release)
-        run: |
-          docker run --rm -v "$PWD:/src" -w /src archlinux:latest bash -euo pipefail -c '
-            pacman -Syu --noconfirm >/dev/null
-            scripts/deps.sh --install --no-dev --noconfirm >/dev/null
-            make -j"$(nproc)" BUILD=release test
-          '
-
       - name: Release notes and source tarball
         run: |
           tag="${GITHUB_REF_NAME}"
           version="${tag#v}"
-          scripts/changelog.sh "$tag" > release-notes.md
-          git archive --format=tar.gz --prefix="oma-movie-${version}/" -o "oma-movie-${version}-src.tar.gz" "$tag"
-          sha256sum "oma-movie-${version}-src.tar.gz" > "oma-movie-${version}-src.tar.gz.sha256"
-          cat release-notes.md
+          mkdir dist
+          scripts/changelog.sh "$tag" > dist/release-notes.md
+          git archive --format=tar.gz --prefix="oma-movie-${version}/" -o "dist/oma-movie-${version}-src.tar.gz" "$tag"
+          (cd dist && sha256sum "oma-movie-${version}-src.tar.gz" > "oma-movie-${version}-src.tar.gz.sha256")
+          cat dist/release-notes.md
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-source
+          path: dist/
+          if-no-files-found: error
 
+  app:
+    name: app tarball (release build, tested)
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build, test and install (release)
+        run: bash scripts/ci-run.sh release
+      - name: App tarball
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          app="omamovie-${version}-x86_64-linux.tar.gz"
+          mkdir dist
+          tar --owner=0 --group=0 -C stage -czf "dist/$app" usr
+          (cd dist && sha256sum "$app" > "$app.sha256")
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-app
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: publish
+    needs: [validate, ci, source, app]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Verify release archives
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          (cd dist && sha256sum -c "oma-movie-${version}-src.tar.gz.sha256" \
+                                  "omamovie-${version}-x86_64-linux.tar.gz.sha256")
+      - name: Attest release archives
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/*.tar.gz
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           tag="${GITHUB_REF_NAME}"
           version="${tag#v}"
           prerelease=""
           if [[ $tag == *-* ]]; then prerelease="--prerelease"; fi
-          gh release create "$tag" $prerelease \
+          gh release create "$tag" --draft --verify-tag $prerelease \
             --title "OmaMovie ${version}" \
-            --notes-file release-notes.md \
-            "oma-movie-${version}-src.tar.gz" "oma-movie-${version}-src.tar.gz.sha256"
+            --notes-file dist/release-notes.md \
+            dist/oma-movie-${version}-src.tar.gz dist/oma-movie-${version}-src.tar.gz.sha256 \
+            dist/omamovie-${version}-x86_64-linux.tar.gz dist/omamovie-${version}-x86_64-linux.tar.gz.sha256
+          assets="$(gh release view "$tag" --json assets,isDraft)"
+          jq -e --arg version "$version" '
+            .isDraft == true and
+            ([.assets[].name] | sort) == ([
+              "oma-movie-\($version)-src.tar.gz",
+              "oma-movie-\($version)-src.tar.gz.sha256",
+              "omamovie-\($version)-x86_64-linux.tar.gz",
+              "omamovie-\($version)-x86_64-linux.tar.gz.sha256"
+            ] | sort)
+          ' <<<"$assets"
+          gh release edit "$tag" --draft=false

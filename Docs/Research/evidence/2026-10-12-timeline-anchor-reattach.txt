@@ -1,0 +1,19 @@
+Timeline: edit cost with many connected clips (2026-10-12)
+
+Bench (scratch, not versioned): tests/timeline/fixture.hpp's 30 fps fixture, 5,000 storyline
+clips of 5 frames, the sound of every second clip detached (connected to its picture since
+ADR-0014's 2026-10-12 note), then 20 splits near the end; mean per split, release libs.
+
+Every edit on a timeline with connected clips runs detail::reattach, which looked up each
+connected clip's primary with Timeline::find_clip / track_of: a scan of every track per
+connected clip, O(connected × clips). It now builds one ID index per reattach.
+
+  connected   before      after
+        0     4.27 ms     3.94 ms
+      500     6.27 ms     6.65 ms
+    2,000    19.72 ms    14.05 ms
+
+The quadratic term is gone but most of the cost remains: the before/after place maps, the
+pass over every clip and the exact source arithmetic per connected clip are linear and were
+not profiled further (no perf on this machine). Both stay under the long-form gate's p95 of
+100 ms; revisit with a profile if connected clips grow past a few thousand.

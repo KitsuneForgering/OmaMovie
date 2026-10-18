@@ -1,0 +1,14 @@
+TITLE: OMA EDL TEST
+FCM: NON-DROP FRAME
+
+001  AX       V     C        00:00:01:00 00:00:03:00 01:00:00:00 01:00:02:00
+* FROM CLIP NAME: camera.mov
+* SOURCE FILE: /media/camera.mov
+002  AX       V     C        00:00:10:00 00:00:10:00 01:00:02:00 01:00:02:00
+002  BX       V     D    012 00:00:20:00 00:00:22:00 01:00:02:00 01:00:04:00
+* FROM CLIP NAME: broll.mov
+003  AX       AA    C        00:00:05:00 00:00:06:00 01:00:05:00 01:00:06:00
+* FROM CLIP NAME: camera.mov
+* SOURCE FILE: /media/camera.mov
+M2   AX       050.0                01:00:05:00
+004  CX       V     W001 015 00:00:00:00 00:00:01:00 01:00:06:00 01:00:07:00

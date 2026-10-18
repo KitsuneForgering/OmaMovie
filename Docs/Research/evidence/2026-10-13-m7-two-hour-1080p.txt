@@ -1,0 +1,25 @@
+M7 — two-hour 1080p export with cuts, looks and a dissolve (2026-10-12/13)
+
+Machine: Intel Iris Xe (TGL GT2), Arch/Omarchy, btrfs on NVMe. Build: release omamovie.
+Source (lavfi, not versioned, /var/tmp): 1920x1080 30 fps testsrc2, BT.709-tagged H.264
+(ultrafast, GOP 300) + AAC 48 kHz, 7200 s, 13.4 GB, with a one-frame white flash and a 50 ms
+1 kHz beep at 10 s, 3600 s and 7190 s. Generation took 15 min.
+Project (built through Session in a temporary harness, saved with libs/project): the source
+cut into six contiguous 20-minute storyline clips; Black & White look on clips 2, 4 and 6;
+a 1 s dissolve centred on the cut at 2400 s (clip 2 Black & White into clip 3 colour).
+Export: build/release/omamovie --export-audit long.omamovie out.mp4, automatic encoder.
+  216,000 frames in 3,165 s (68.2 fps, 52 min 45 s), VA-API H.264, Vulkan compositor.
+  per frame: build 0.06, render+readback 8.03, encode 6.12, audio 0.44 ms.
+  Output 8.27 GB: video 216,000 frames / 7200.000 s, AAC 7200.000 s; stage directory gone.
+Independent check (ffmpeg only: signalstats per frame, first sample above 0.05), same script
+on source and export:
+  mark 10 s:    flash 10.0000   beep 10.0000   (both files)
+  mark 3600 s:  flash 3600.0000 beep 3600.0000 (both files; clip 4, Black & White)
+  mark 7190 s:  flash 7190.0000 beep 7190.0000 (both files; clip 6, Black & White)
+  SATAVG   source everywhere ~117 (99.5-117 around the cut: test-pattern motion)
+           export 600 s 115.7 | 1800 s 0.00 | 3000 s 115.7 | 3605 s 0.00 | 5400 s 115.7 |
+           7000 s 0.00; dissolve 2399.5 s 0.00, 2399.8 27.9, 2400.0 47.1, 2400.2 66.8,
+           2400.5 115.2 (monotonic over exactly its 1 s window)
+Reading: no A/V drift over two hours at 1080p through cuts, a dissolve and looks at frame and
+sample resolution; each look covers exactly its clip and the dissolve exactly its window.
+Not covered: software encoding at this length, blur/detail and grading along a long timeline.

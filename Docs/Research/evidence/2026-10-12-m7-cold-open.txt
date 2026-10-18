@@ -1,0 +1,25 @@
+M7 — cold and warm project open in the app, with library re-import (2026-10-12)
+
+Machine: Intel Core (Tiger Lake) laptop, NVMe, btrfs. Build: release app_tests (-O2).
+Harness: a temporary Session test (not in the repository; kept in the session scratchpad)
+run offscreen with private XDG folders. It writes 50 distinct media files (the 1 s
+h264_30fps_aac.mp4 fixture plus i+1 trailing bytes, so each has its own fingerprint), imports
+them, appends clips round-robin to 5,000 storyline clips and saves (11.7 MB). Then six opens
+in fresh Sessions, alternating cold and warm. Cold: fdatasync + posix_fadvise(DONTNEED) on
+the project file and every media file before opening; fincore confirmed eviction on this
+btrfs volume (a first attempt under /tmp measured nothing: tmpfs cannot be evicted).
+
+"clips shown": openProject until Session::clips() holds 5,000 clips (read, parse, restore,
+clip list). "re-imported": until no import is pending and all 50 media are in the library
+(one probe per media item on the job workers; thumbnails come from the disk cache).
+
+         clips shown        library re-imported    peak RSS
+cold     74.2 / 80.7 / 80.4 ms    355 / 490 / 423 ms     237-242 MB
+warm     60.2 / 60.4 / 57.6 ms    369 / 385 / 304 ms     237-242 MB
+
+Reading: a cold read adds about 20 ms to showing the clips; re-importing 50 media takes
+0.3-0.5 s on the workers whatever the cache state, during which the timeline is already
+editable and export is refused until every clip's media is loaded. Both stay within an
+interactive budget at the long-form gate, so JSON/simdjson and per-item probing stay.
+Not measured: a cold thumbnail cache, slow or network storage, and more than 50 media items.
+UI materialization is in 2026-10-06-m6-long-timeline.txt.
