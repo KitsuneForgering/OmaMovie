@@ -80,6 +80,7 @@ public:
         const char* name;
         std::function<bool()> ready;
         std::function<void()> act;
+        qint64 timeout_ms = 8000;
     };
 
     SmokeRun(QGuiApplication& app, std::vector<Step> steps) : app_(app), steps_(std::move(steps)) {
@@ -96,7 +97,7 @@ private:
         if (index_ >= steps_.size()) return;
         Step& step = steps_[index_];
         if (!step.ready()) {
-            if (since_.elapsed() > 8000) {
+            if (since_.elapsed() > step.timeout_ms) {
                 std::printf("GUI smoke: FAIL (timed out at '%s')\n", step.name);
                 timer_.stop();
                 app_.exit(1);
@@ -476,7 +477,13 @@ int run_gui_smoke(const SmokeContext& context) {
         {"sound import", after(100), [&] {
              session.open(QStringLiteral("tests/fixtures/generated/tone_44100.wav"));
          }},
-        {"audio lanes", [&] { return lane_count() == 1; }, [&] {
+        {"audio lanes", [&] {
+             if (lane_count() != 1) return false;
+             // Noise reduction and normalization below need the asynchronous waveform. Wait for
+             // that result explicitly instead of relying on earlier edit steps taking long enough.
+             const auto media = static_cast<std::uint64_t>(lane_clip(0).value("media").toDouble());
+             return qobject_cast<WaveformStore*>(session.waveforms())->get(media) != nullptr;
+         }, [&] {
              // Appended sound lands on the first lane; a connected sound at an occupied time gets a
              // new lane, and deleting the lane's only clip removes the lane again.
              bool ok = std::abs(lane_clip(0).value("start").toDouble()) < 1e-9 &&
@@ -511,7 +518,7 @@ int run_gui_smoke(const SmokeContext& context) {
              session.undo();
              ok = ok && lane_count() == 1 && session.clips().front().toMap().value("hasAudio").toBool();
              // Volume "More" on the sound: equalizer preset, noise reduction from the measured
-             // floor (the waveform is ready by now), and normalize (the quiet tone hits the
+             // floor (the waveform is ready), and normalize (the quiet tone hits the
              // maximum volume).
              session.selectClip(id);
              session.setClipEq(-6, 3, 2);
@@ -529,7 +536,7 @@ int run_gui_smoke(const SmokeContext& context) {
              window->setProperty("drawer", QStringLiteral("volume"));
              window->setProperty("volumeMore", true);
              r.lanes = ok;
-         }},
+         }, 30000},
         {"volume more", after(300), [&] {
              screenshot(window, "OMA_GUI_SMOKE_LANES_SCREENSHOT");
              window->setProperty("drawer", QString());
