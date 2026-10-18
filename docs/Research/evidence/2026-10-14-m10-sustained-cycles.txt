@@ -14,9 +14,16 @@ OMA_SUSTAINED_CYCLES=30, debug build (every third cycle shown):
 Descriptors constant; resident memory settles near 150 MB after about nine cycles (allocator,
 Mesa and FFmpeg pools warming), then wanders within ~3 MB: no growth per cycle.
 
-Default 8 cycles in the suite (fails on any descriptor growth after two warm-up cycles, or
+At the time, the default was 8 cycles (failed on descriptor growth after two warm-up cycles, or
 64 MiB of resident growth): debug 3.9 s, TSan 5 s (379 -> 424 MiB, tapering), ASan 7.8 s
 (resident bound skipped: quarantine grows ~40 MiB per cycle by design; LSan checks leaks).
+
+The suite now defaults to 16 cycles: it still checks descriptors after cycle two, but compares
+the median resident size of cycles 9–11 with cycles 14–16, requiring no more than 64 MiB of
+growth. A local llvmpipe run held five descriptors through all 16 cycles; post-warm RSS
+samples ranged from 311 to 389 MiB, while the early and late medians were 370 and 364 MiB.
+This follows the observed cache warm-up and measures a trend despite allocator swings; the
+new CI run supplies its own result.
 
 Not covered: the long-form gate (hours of media, interaction latency percentiles, VRAM, cache
 and disk use) and a committed per-machine baseline.

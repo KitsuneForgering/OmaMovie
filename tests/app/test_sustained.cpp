@@ -10,9 +10,12 @@
 #include <QFileInfo>
 #include <QTemporaryDir>
 
+#include <algorithm>
+#include <array>
 #include <cstdio>
 #include <filesystem>
 #include <iterator>
+#include <vector>
 
 #include "oma_test.hpp"
 
@@ -75,10 +78,13 @@ bool cycles_hold_their_resources() {
         return false;
     const int kCycles = qEnvironmentVariableIntValue("OMA_SUSTAINED_CYCLES") > 0
                             ? qEnvironmentVariableIntValue("OMA_SUSTAINED_CYCLES")
-                            : 8;
-    constexpr int kWarm = 2; // caches, thread pools and the driver settle in the first cycles
+                            : 16;
+    constexpr int kFdWarm = 2;
+    // The measured Mesa/FFmpeg pools can settle around cycle nine; begin the RSS bound there,
+    // then watch seven more cycles for continuing growth. FDs should settle much sooner.
+    constexpr int kRssWarm = 9;
     long fds = 0;
-    long rss = 0;
+    std::vector<long> rss_after_warm;
     for (int n = 0; n < kCycles; ++n) {
         if (!cycle(dir, n))
             return false;
@@ -86,12 +92,23 @@ bool cycles_hold_their_resources() {
         const long f = open_fds();
         const long r = rss_kib();
         std::printf("    cycle %d: %ld fds, %ld KiB resident\n", n, f, r);
-        if (n == kWarm - 1) {
+        if (n == kFdWarm - 1) {
             fds = f;
-            rss = r;
-        } else if (n >= kWarm && (f > fds || (kRssMeaningful && r > rss + (64 * 1024)))) {
+        }
+        if (n >= kRssWarm - 1) rss_after_warm.push_back(r);
+        if (n >= kFdWarm && f > fds) {
             return false;
         }
+    }
+    // The software Vulkan driver's allocator can release tens of MiB between adjacent cycles.
+    // Compare windows instead of treating one RSS spike as sustained growth.
+    if (kRssMeaningful && rss_after_warm.size() >= 6) {
+        std::array<long, 3> first{rss_after_warm[0], rss_after_warm[1], rss_after_warm[2]};
+        const std::size_t end = rss_after_warm.size();
+        std::array<long, 3> last{rss_after_warm[end - 3], rss_after_warm[end - 2], rss_after_warm[end - 1]};
+        std::sort(first.begin(), first.end());
+        std::sort(last.begin(), last.end());
+        if (last[1] > first[1] + (64 * 1024)) return false;
     }
     return true;
 }
