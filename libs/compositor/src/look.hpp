@@ -38,7 +38,7 @@ struct Look {
 // `factor` (a factor x factor box average per texel), then a separable gaussian runs across and
 // down on the reduced image, its taps clamped to it; the composite reads it back bilinearly.
 // The gaussian's sigma shrinks with the factor, so the cost no longer grows with the blur radius
-// (Docs/Research/gpu-effects.md). Blur shows the blurred image; sharpen adds
+// (docs/Research/gpu-effects.md). Blur shows the blurred image; sharpen adds
 // amount * (original - blurred).
 // The factor is at least the source pixels per output pixel (a 2160p source shown at 1080p
 // blurs at 1080p), else the reduced sigma stays below 2 * kReducedSigma, so 3 sigma fits the

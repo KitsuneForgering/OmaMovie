@@ -5,7 +5,7 @@
 // 1.8, `media-rep` from 1.9) with their start and duration, the first sequence's spine
 // (`asset-clip`, `clip`, `gap`, `transition`) and connected clips (`lane`) as further tracks.
 // Titles, generators, effects and other projects are kept as opaque objects and reported.
-// Docs/formats/fcpxml.md has the format notes; Docs/interop.md the support level.
+// docs/formats/fcpxml.md has the format notes; docs/interop.md the support level.
 
 #include "oma/base/error.hpp"
 #include "oma/importers/otio.hpp"

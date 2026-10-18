@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Spike S3: decode throughput and CPU cost per path (software, VA-API, QSV, flagged Vulkan
 # Video) and FFv1 vs ProRes as proxy intermediates.
-# Usage: tools/spikes/s3-decode-paths.sh [output-dir]   (report in Docs/spikes/S3-decode-paths.md)
+# Usage: tools/spikes/s3-decode-paths.sh [output-dir]   (report in docs/spikes/S3-decode-paths.md)
 #
 # Decoding keeps hardware frames on the GPU (-hwaccel_output_format) and discards them, so
 # the numbers are decoder throughput only: no mapping into OmaMovie's device, no compositing,

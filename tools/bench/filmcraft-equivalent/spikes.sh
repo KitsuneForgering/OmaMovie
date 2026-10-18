@@ -1,4 +1,4 @@
-# The M1 hardware spikes (Docs/spikes/), rerun to see whether drivers or code moved them.
+# The M1 hardware spikes (docs/spikes/), rerun to see whether drivers or code moved them.
 # Sourced by run.sh ($repo, $spikes set there). The report gets each spike's summary; the full
 # output goes to <run folder>/spikes/<name>.log. Test media the scripts generate is deleted.
 

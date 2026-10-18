@@ -1,7 +1,7 @@
 #pragma once
 
 // Seeded runs, exact replay and shrinking for the edit properties
-// (Docs/implementation-plan-qa-timeline.md). A run's log replays with no random choices.
+// (docs/implementation-plan-qa-timeline.md). A run's log replays with no random choices.
 
 #include "property_checker.hpp"
 

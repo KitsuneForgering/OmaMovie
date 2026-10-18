@@ -51,7 +51,7 @@ void Session::previewCommand(std::unique_ptr<tl::Command> command) {
     if (!editor_ || !command)
         return clearEditScope();
     // One timeline copy per preview, O(clips): within the long-form gate at 5,000 clips
-    // (Docs/Research/evidence/2026-10-12-m6-trim-drag.txt).
+    // (docs/Research/evidence/2026-10-12-m6-trim-drag.txt).
     tl::Editor trial{tl::Timeline(editor_->timeline())};
     if (!trial.execute(std::move(command)))
         return clearEditScope();

@@ -1,5 +1,5 @@
 // Three-source decode and composition stress diagnostic. It does not measure presentation,
-// audio, export, RAW debayering or HDR tone mapping. See Docs/spikes/professional-workload.md.
+// audio, export, RAW debayering or HDR tone mapping. See docs/spikes/professional-workload.md.
 #include "oma/compositor/compositor.hpp"
 #include "oma/gpu/device.hpp"
 #include "oma/media/video_decoder.hpp"

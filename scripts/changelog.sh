@@ -8,8 +8,8 @@ tag="${1:?usage: scripts/changelog.sh <tag>}"
 previous="$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || true)"
 # The first release has no previous tag. Use its reviewed product notes instead of
 # publishing the entire development history as hundreds of commit subjects.
-if [[ -z $previous && -f Docs/releases/$tag.md ]]; then
-    cat "Docs/releases/$tag.md"
+if [[ -z $previous && -f docs/releases/$tag.md ]]; then
+    cat "docs/releases/$tag.md"
     exit 0
 fi
 range="${previous:+$previous..}$tag"

@@ -5,7 +5,7 @@
 // (resource, in point, length), playlists of entries and blanks, the main (last) tractor's tracks,
 // and melt's mixes (a nested tractor of two producers with a luma/mix transition) as dissolves.
 // Filters, cross-track transitions and generators (colour, black) are kept as opaque objects and
-// reported. Docs/formats/mlt.md has the format notes; Docs/interop.md the support level.
+// reported. docs/formats/mlt.md has the format notes; docs/interop.md the support level.
 
 #include "oma/base/error.hpp"
 #include "oma/importers/otio.hpp"

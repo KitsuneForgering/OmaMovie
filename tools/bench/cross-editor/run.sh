@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Same-machine export comparison of OmaMovie and MLT's melt (Kdenlive's engine): one scene of a
 # BT.709 source through hardware and software H.264, every output checked by FFmpeg (protocol:
-# Docs/implementation-plan-cross-editor-benchmarks.md). Opens OmaMovie's window; run it idle.
+# docs/implementation-plan-cross-editor-benchmarks.md). Opens OmaMovie's window; run it idle.
 # Usage: tools/bench/cross-editor/run.sh [repeats=5] [report-dir] [scene=whole|cuts] (scenes.sh)
 set -euo pipefail
 

@@ -15,7 +15,7 @@
 
 namespace oma::media {
 
-// How a frame was decoded (Docs/spikes/S1-*.md, S2-*.md). Hardware paths deliver Vulkan images
+// How a frame was decoded (docs/spikes/S1-*.md, S2-*.md). Hardware paths deliver Vulkan images
 // on OmaMovie's device without a CPU copy; software is the correctness reference and fallback.
 enum class DecodePath : std::uint8_t {
     Software,

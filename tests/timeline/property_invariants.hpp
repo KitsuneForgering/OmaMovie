@@ -1,7 +1,7 @@
 #pragma once
 
 // Invariants checked after every successful step, written apart from Timeline::validate() so
-// they are an independent oracle (Docs/implementation-plan-qa-timeline.md). Each returns an
+// they are an independent oracle (docs/implementation-plan-qa-timeline.md). Each returns an
 // empty string when the state holds, or what broke.
 
 #include "oma/timeline/model.hpp"

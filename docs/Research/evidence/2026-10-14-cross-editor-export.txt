@@ -1,0 +1,51 @@
+Cross-editor export, same machine (2026-10-14): OmaMovie vs MLT melt (Kdenlive 26.08's engine)
+Command: tools/bench/cross-editor/run.sh 5 (raw report below, unedited except the app's log lines).
+Workload: one 20 s 1080p 23.976 H.264/AAC file (FilmCraft's grain recipe, tagged BT.709 limited)
+exported whole to MP4 H.264 + AAC 192k; each editor's encoder defaults (libx264 CRF 23 medium,
+h264_vaapi CQP), no B-frames. Wall time is the whole process: start, import/probe, export, exit.
+Checks by FFmpeg only: frame count, A/V length, luma PSNR against the source.
+
+Caveat: the 1-minute load average stayed 6.5-8.5 during the run (another session was active),
+so absolute times are noisy; the order alternated each round. Rate control differs between the
+editors (sizes and PSNR below), so these are separate profiles, not one quality target.
+
+Summary (median wall of completed runs, peak RSS, bytes, luma PSNR, frames):
+  OmaMovie VA-API  9.9 s (4 of 5; 1 hang)  420 MB  27.7 MB  47.7 dB  479/479
+  melt     VA-API  6.5 s (5 of 5)          351 MB  30.3 MB  48.7 dB  480/479
+  OmaMovie x264   20.1 s (5 of 5)        1014 MB  16.7 MB  44.4 dB  479/479
+  melt     x264   17.7 s (5 of 5)         940 MB  19.5 MB  44.8 dB  480/479
+Findings: melt appends one frame (a near-copy of the last, 52.9 dB to it) to reach 20.02 s;
+OmaMovie keeps the source's 479. OmaMovie's round 2 VA-API run wrote a complete file and then
+hung: the viewer composited one GPU frame on two layers and the render thread deadlocked on the
+frame lock it already held (core analysed; docs/implementation-plan-code-review-4.md).
+OmaMovie spends ~2 s of system time per export against melt's ~0.4-0.9 s; not yet explained.
+
+Cross-editor export 2026-10-14 21:24:20 -0300, 5 repeats, order alternated per round
+CPU: 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz, 8 threads
+GPU: Intel(R) Iris(R) Xe Graphics (TGL GT2)
+VA-API: Driver version: Intel iHD driver for Intel(R) Gen Graphics - 26.2.4 ()
+ffmpeg version n9.0.1 Copyright (c) 2000-2026 the FFmpeg developers
+power online: 1, load: 8.51 5.86 3.39
+editors: OmaMovie 0e12ece (dirty); melt 7.40.0 (Kdenlive 26.08.0)
+source: xed_1080p24_bt709.mp4 sha256 2c18c4d39be559a6, 479 frames
+round 1 oma hardware: measure: rc=0 wall_s=12.94 user_s=23.34 sys_s=2.51 peak_rss_mb=419 | frames=479/479 video_s=19.978292 audio_s=19.989333 bytes=27685017 psnr_y:47.711786 verdict=pass
+round 1 melt hardware: measure: rc=0 wall_s=7.98 user_s=20.22 sys_s=0.52 peak_rss_mb=351 | frames=480/479 video_s=20.020000 audio_s=20.032000 bytes=30340364 psnr_y:48.748531 verdict=FAIL(frames 480 != 479)
+round 1 oma software: measure: rc=0 wall_s=21.76 user_s=131.69 sys_s=4.68 peak_rss_mb=1014 | frames=479/479 video_s=19.978292 audio_s=19.989333 bytes=16686227 psnr_y:44.420869 verdict=pass
+round 1 melt software: measure: rc=0 wall_s=20.07 user_s=120.51 sys_s=1.22 peak_rss_mb=940 | frames=480/479 video_s=20.020000 audio_s=20.032000 bytes=19490894 psnr_y:44.774165 verdict=FAIL(frames 480 != 479)
+round 2 melt software: measure: rc=0 wall_s=19.97 user_s=119.34 sys_s=1.11 peak_rss_mb=938 | frames=480/479 video_s=20.020000 audio_s=20.032000 bytes=19490894 psnr_y:44.774165 verdict=FAIL(frames 480 != 479)
+round 2 oma software: measure: rc=0 wall_s=21.01 user_s=132.41 sys_s=4.55 peak_rss_mb=1005 | frames=479/479 video_s=19.978292 audio_s=19.989333 bytes=16686227 psnr_y:44.420869 verdict=pass
+round 2 melt hardware: measure: rc=0 wall_s=7.36 user_s=19.51 sys_s=0.46 peak_rss_mb=350 | frames=480/479 video_s=20.020000 audio_s=20.032000 bytes=30340364 psnr_y:48.748531 verdict=FAIL(frames 480 != 479)
+round 2 oma hardware: measure: rc=-6 wall_s=461.68 user_s=13.84 sys_s=0.78 peak_rss_mb=430 | frames=479/479 video_s=19.978292 audio_s=19.989333 bytes=27685017 psnr_y:47.711786 verdict=pass
+round 3 oma hardware: measure: rc=0 wall_s=9.91 user_s=19.36 sys_s=2.11 peak_rss_mb=418 | frames=479/479 video_s=19.978292 audio_s=19.989333 bytes=27685017 psnr_y:47.711786 verdict=pass
+round 3 melt hardware: measure: rc=0 wall_s=6.46 user_s=16.27 sys_s=0.41 peak_rss_mb=351 | frames=480/479 video_s=20.020000 audio_s=20.032000 bytes=30340364 psnr_y:48.748531 verdict=FAIL(frames 480 != 479)
+round 3 oma software: measure: rc=0 wall_s=20.07 user_s=125.92 sys_s=4.39 peak_rss_mb=1008 | frames=479/479 video_s=19.978292 audio_s=19.989333 bytes=16686227 psnr_y:44.420869 verdict=pass
+round 3 melt software: measure: rc=0 wall_s=16.39 user_s=114.16 sys_s=0.91 peak_rss_mb=942 | frames=480/479 video_s=20.020000 audio_s=20.032000 bytes=19490894 psnr_y:44.774165 verdict=FAIL(frames 480 != 479)
+round 4 melt software: measure: rc=0 wall_s=17.70 user_s=114.77 sys_s=0.92 peak_rss_mb=928 | frames=480/479 video_s=20.020000 audio_s=20.032000 bytes=19490894 psnr_y:44.774165 verdict=FAIL(frames 480 != 479)
+round 4 oma software: measure: rc=0 wall_s=19.82 user_s=125.88 sys_s=4.03 peak_rss_mb=1028 | frames=479/479 video_s=19.978292 audio_s=19.989333 bytes=16686227 psnr_y:44.420869 verdict=pass
+round 4 melt hardware: measure: rc=0 wall_s=6.53 user_s=17.12 sys_s=0.39 peak_rss_mb=351 | frames=480/479 video_s=20.020000 audio_s=20.032000 bytes=30340364 psnr_y:48.748531 verdict=FAIL(frames 480 != 479)
+round 4 oma hardware: measure: rc=0 wall_s=9.63 user_s=20.16 sys_s=2.03 peak_rss_mb=420 | frames=479/479 video_s=19.978292 audio_s=19.989333 bytes=27685017 psnr_y:47.711786 verdict=pass
+round 5 oma hardware: measure: rc=0 wall_s=9.67 user_s=20.22 sys_s=2.05 peak_rss_mb=419 | frames=479/479 video_s=19.978292 audio_s=19.989333 bytes=27685017 psnr_y:47.711786 verdict=pass
+round 5 melt hardware: measure: rc=0 wall_s=6.46 user_s=16.52 sys_s=0.38 peak_rss_mb=351 | frames=480/479 video_s=20.020000 audio_s=20.032000 bytes=30340364 psnr_y:48.748531 verdict=FAIL(frames 480 != 479)
+round 5 oma software: measure: rc=0 wall_s=19.96 user_s=126.41 sys_s=3.88 peak_rss_mb=1017 | frames=479/479 video_s=19.978292 audio_s=19.989333 bytes=16686227 psnr_y:44.420869 verdict=pass
+round 5 melt software: measure: rc=0 wall_s=16.46 user_s=114.35 sys_s=0.85 peak_rss_mb=942 | frames=480/479 video_s=20.020000 audio_s=20.032000 bytes=19490894 psnr_y:44.774165 verdict=FAIL(frames 480 != 479)
+load at end: 6.95 5.85 4.74

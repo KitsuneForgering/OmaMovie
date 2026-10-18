@@ -5,7 +5,7 @@
 // 3. Wraps a VA-API frame's planes (FFmpeg's timeline semaphores) and renders YUV->RGB with a
 //    downscale to 1280x720 at libplacebo's fast/default/high-quality presets; compares the cost
 //    with the compositor doing the same.
-// Disposable; see Docs/spikes/S6-libplacebo.md.
+// Disposable; see docs/spikes/S6-libplacebo.md.
 #include "oma/compositor/compositor.hpp"
 #include "oma/gpu/device.hpp"
 #include "oma/gpu/resources.hpp"

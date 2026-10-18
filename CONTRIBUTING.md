@@ -26,11 +26,11 @@ make fuzz
 `scripts/check-includes.sh` verifies dependency boundaries not expressed by CMake.
 `scripts/package-check.sh` exercises the package in disposable containers. Benchmark
 and spike commands, their fixtures and measurement protocols live beside each task in
-`Docs/Research/evidence/`, `Docs/spikes/` and `tools/bench/`; run only the relevant ones.
+`docs/Research/evidence/`, `docs/spikes/` and `tools/bench/`; run only the relevant ones.
 
 Commit messages use Conventional Commits in English, with an imperative description
 under 100 characters. Check a range with `scripts/check-commits.sh`. Do not create a
-release tag as part of normal implementation work; the [release plan](Docs/implementation-plan-m10-validation.md)
+release tag as part of normal implementation work; the [release plan](docs/implementation-plan-m10-validation.md)
 and CI define its separate gates.
 
 ## Change protocol
@@ -47,6 +47,6 @@ and CI define its separate gates.
 5. Report what ran and what remains unverified. Do not silently ignore a relevant warning
    or failure.
 
-Key sources: [implementation plan](Docs/implementation-plan.md), [ADR index](Docs/adr/README.md),
-[UI design](Docs/ui-design.md), [format architecture](Docs/format-architecture.md),
-[interop support levels](Docs/interop.md), and [QA plan](Docs/implementation-plan-qa.md).
+Key sources: [implementation plan](docs/implementation-plan.md), [ADR index](docs/adr/README.md),
+[UI design](docs/ui-design.md), [format architecture](docs/format-architecture.md),
+[interop support levels](docs/interop.md), and [QA plan](docs/implementation-plan-qa.md).

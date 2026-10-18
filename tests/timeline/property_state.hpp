@@ -1,6 +1,6 @@
 #pragma once
 
-// The test-only canonical state of a timeline (Docs/implementation-plan-qa-timeline.md): every
+// The test-only canonical state of a timeline (docs/implementation-plan-qa-timeline.md): every
 // persisted edit field, exact times with their timebases, and nothing transient. Independent of
 // the project format, which round trips are checked against separately.
 

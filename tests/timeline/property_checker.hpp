@@ -1,7 +1,7 @@
 #pragma once
 
 // Applies property steps to the shared fixture and checks each one
-// (Docs/implementation-plan-qa-timeline.md). It keeps the expected history: the canonical
+// (docs/implementation-plan-qa-timeline.md). It keeps the expected history: the canonical
 // states an undo must return to and the ones a redo must bring back.
 
 #include "fixture.hpp"

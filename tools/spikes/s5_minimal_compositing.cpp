@@ -2,7 +2,7 @@
 // drive it. Usage: s5_minimal_compositing <video-a> <video-b> <image> [software|hardware] [frames]
 // Decode and composite run sequentially on one thread, so the two times are separable; a real
 // scheduler overlaps them. render() waits for the GPU, so composite time is submit to completion.
-// No presentation. See Docs/spikes/S5-minimal-compositing.md.
+// No presentation. See docs/spikes/S5-minimal-compositing.md.
 #include "oma/compositor/compositor.hpp"
 #include "oma/gpu/device.hpp"
 #include "oma/media/video_decoder.hpp"

@@ -1,6 +1,6 @@
 #pragma once
 
-// Stateful edit properties (M10, Docs/implementation-plan-qa-timeline.md): one generated step. It
+// Stateful edit properties (M10, docs/implementation-plan-qa-timeline.md): one generated step. It
 // names clips by position, not ID, so a shrunk log still replays; an empty position is rejected.
 
 #include "oma/timeline/editor.hpp"

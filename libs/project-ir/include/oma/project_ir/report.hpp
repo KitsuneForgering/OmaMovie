@@ -9,7 +9,7 @@
 
 namespace oma::ir {
 
-// Support levels (CLAUDE.md §16.5), declared per format and version in Docs/interop.md.
+// Support levels (CLAUDE.md §16.5), declared per format and version in docs/interop.md.
 enum class SupportLevel : std::uint8_t {
     Recognized = 0, // file recognized and version identified
     Media = 1,      // referenced media and clips
