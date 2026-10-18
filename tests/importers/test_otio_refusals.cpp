@@ -48,6 +48,10 @@ void run_otio_path_tests() {
             using oma::importers::otio_local_path;
             expect(otio_local_path("file:///a%20b/c.mov", "/x") == "/a b/c.mov").toBeTruthy();
             expect(otio_local_path("file:///bad%zz.mov", "/x") == "/bad%zz.mov").toBeTruthy();
+            expect(otio_local_path("file://localhost/a%20b/c.mov", "/x") == "/a b/c.mov")
+                .toBeTruthy();
+            expect(otio_local_path("file://otherhost/a.mov", "/x").empty()).toBeTruthy();
+            expect(otio_local_path("file://otherhost", "/x").empty()).toBeTruthy();
             expect(otio_local_path("media/c.mov", "/x") == "/x/media/c.mov").toBeTruthy();
         });
     });

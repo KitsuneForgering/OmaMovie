@@ -31,6 +31,18 @@ Result<const Track*> get_track(const Timeline& tl, TrackId id) {
     return t;
 }
 
+// Keep only the part of a fade that overlaps a retained clip range. This also bounds the
+// surviving fade when a cut lands inside it, so the shortened clip remains valid.
+Result<RationalTime> retained_fade(const Timeline& tl, RationalTime fade, std::int64_t removed,
+                                   std::int64_t length) {
+    if (fade <= tl.at(removed))
+        return tl.at(0);
+    auto left = detail::add_exact(fade, tl.at(-removed));
+    if (!left)
+        return std::unexpected(left.error());
+    return std::min(*left, tl.at(length));
+}
+
 // The clip with its first instant moved to `new_start` and its end kept: the source in moves
 // by the same amount of timeline time, mapped exactly through the clip's speed.
 Result<Clip> with_start(const Timeline& tl, Clip c, std::int64_t new_start) {
@@ -70,6 +82,13 @@ Result<Clip> with_start(const Timeline& tl, Clip c, std::int64_t new_start) {
         return std::unexpected(source_in.error());
     }
     c.source_in = *source_in;
+    if (moved > 0) {
+        auto fade = retained_fade(tl, c.audio.fade_in, moved, end - new_start);
+        if (!fade)
+            return std::unexpected(fade.error());
+        c.audio.fade_in = *fade;
+        c.audio.fade_out = std::min(c.audio.fade_out, tl.at(end - new_start));
+    }
     c.start = tl.at(new_start);
     c.duration = tl.at(end - new_start);
     return c;
@@ -89,6 +108,13 @@ Result<Clip> with_end(const Timeline& tl, Clip c, std::int64_t new_end) {
             return std::unexpected(resized.error());
         }
         c.time_map = *resized;
+    }
+    if (new_end < c.end_ticks()) {
+        auto fade = retained_fade(tl, c.audio.fade_out, c.end_ticks() - new_end, length);
+        if (!fade)
+            return std::unexpected(fade.error());
+        c.audio.fade_out = *fade;
+        c.audio.fade_in = std::min(c.audio.fade_in, tl.at(length));
     }
     c.duration = tl.at(length);
     return c;
@@ -131,6 +157,7 @@ Result<Steps> clear_range(Timeline& tl, const Track& track, std::int64_t from, s
             if (!tail) {
                 return std::unexpected(tail.error());
             }
+            tail->transition_in.reset(); // its original incoming cut was overwritten
             steps.push_back(detail::replace_clip(*tail));
         }
     }
@@ -259,6 +286,7 @@ std::unique_ptr<Command> insert(TrackId track, ClipId id, RationalTime at, ClipS
                 }
                 moved->start = tl.at(*start + length);
                 moved->id = ClipId(detail::Mutation(tl).allocate_id());
+                moved->transition_in.reset(); // the inserted clip creates a plain cut
                 tail = *moved;
                 steps.push_back(detail::replace_clip(*head));
             }

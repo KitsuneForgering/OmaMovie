@@ -29,7 +29,8 @@ inline constexpr std::size_t kMaxOtioBytes = std::size_t{64} << 20;
 [[nodiscard]] Result<Imported> import_otio(std::string_view json);
 
 // A media target as a local path: a file:// URL with %XX escapes (a malformed escape is kept as
-// text), or a path relative to `dir`, the folder of the OTIO file.
+// text), or a path relative to `dir`, the folder of the OTIO file. Returns an empty path for
+// unsupported remote file:// hosts; callers treat them as unavailable media.
 [[nodiscard]] std::filesystem::path otio_local_path(const std::string& target,
                                                     const std::filesystem::path& dir);
 

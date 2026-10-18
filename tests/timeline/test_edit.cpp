@@ -133,6 +133,27 @@ void run_edit_tests() {
             expect(layout(fx)).toEqual("0+10@0 10+5@100 15+20@10 45+5@200");
         });
 
+        it("does not copy an incoming transition onto an inserted clip's tail", {
+            auto fx = three_clips();
+            expect(ok(fx, edit::set_transition(clip_at(fx, 10), dissolve()))).toBeTruthy();
+            expect(ok(fx, edit::insert(fx.video, fx.editor.new_clip_id(), f(15), camera(200, 5))))
+                .toBeTruthy();
+            expect(fx.editor.timeline().find_clip(clip_at(fx, 10))->transition_in.has_value())
+                .toBeTruthy();
+            expect(fx.editor.timeline().find_clip(clip_at(fx, 20))->transition_in.has_value())
+                .toBeFalsy();
+        });
+
+        it("drops an incoming transition when overwrite removes its original cut", {
+            auto fx = three_clips();
+            expect(ok(fx, edit::set_transition(clip_at(fx, 10), dissolve()))).toBeTruthy();
+            expect(
+                ok(fx, edit::overwrite(fx.video, fx.editor.new_clip_id(), f(10), camera(200, 5))))
+                .toBeTruthy();
+            expect(fx.editor.timeline().find_clip(clip_at(fx, 15))->transition_in.has_value())
+                .toBeFalsy();
+        });
+
         it("inserts at an edit point without splitting", {
             auto fx = three_clips();
             expect(ok(fx, edit::insert(fx.video, fx.editor.new_clip_id(), f(10), camera(200, 5))))
@@ -211,6 +232,46 @@ void run_edit_tests() {
             expect(layout(fx)).toEqual("0+12@0 12+18@12");
             expect(clip_at(fx, 0) == id).toBeTruthy();
             expect(clip_at(fx, 12) != id && clip_at(fx, 12).valid()).toBeTruthy();
+        });
+
+        it("splits inside a fade without rejecting a short half or adding fades at a plain cut", {
+            auto fx = make_fixture();
+            const ClipId id = place(fx, fx.video, 0, 0, 10);
+            AudioProperties audio;
+            audio.fade_in = f(2);
+            audio.fade_out = f(2);
+            expect(ok(fx, edit::set_audio(id, audio))).toBeTruthy();
+            expect(ok(fx, edit::split(id, f(1)))).toBeTruthy();
+            const auto& timeline = fx.editor.timeline();
+            const Clip* head = timeline.find_clip(id);
+            const Clip* tail = timeline.clip_at(fx.video, 1);
+            expect(head->audio.fade_in == f(1) && head->audio.fade_out == f(0)).toBeTruthy();
+            expect(tail->audio.fade_in == f(1) && tail->audio.fade_out == f(2)).toBeTruthy();
+            expect(ok(fx, edit::split(tail->id, f(5)))).toBeTruthy();
+            const auto& after = fx.editor.timeline();
+            expect(after.clip_at(fx.video, 1)->audio.fade_out == f(0)).toBeTruthy();
+            expect(after.clip_at(fx.video, 5)->audio.fade_in == f(0)).toBeTruthy();
+        });
+
+        it("keeps fades at their original ends around an inserted or overwritten range", {
+            for (const bool insert : {true, false}) {
+                auto fx = make_fixture();
+                const ClipId id = place(fx, fx.video, 0, 0, 10);
+                AudioProperties audio;
+                audio.fade_in = f(2);
+                audio.fade_out = f(2);
+                expect(ok(fx, edit::set_audio(id, audio))).toBeTruthy();
+                auto change =
+                    insert
+                        ? edit::insert(fx.video, fx.editor.new_clip_id(), f(5), camera(100, 2))
+                        : edit::overwrite(fx.video, fx.editor.new_clip_id(), f(5), camera(100, 2));
+                expect(ok(fx, std::move(change))).toBeTruthy();
+                const auto& timeline = fx.editor.timeline();
+                const Clip* head = timeline.find_clip(id);
+                const Clip* tail = timeline.clip_at(fx.video, 7);
+                expect(head->audio.fade_in == f(2) && head->audio.fade_out == f(0)).toBeTruthy();
+                expect(tail->audio.fade_in == f(0) && tail->audio.fade_out == f(2)).toBeTruthy();
+            }
         });
 
         it("refuses to split at a clip edge", {

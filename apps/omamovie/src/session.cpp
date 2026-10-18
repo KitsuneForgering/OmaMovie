@@ -682,11 +682,22 @@ void Session::importFile(const QString& path, bool append, std::optional<oma::pr
                 const QString why = audio_only != known->audio_only
                                         ? QStringLiteral("it is not the same kind of media")
                                         : QStringLiteral("it is shorter than the part the project uses");
-                post_to_ui(this, [this, generation, source, why] {
+                LibraryItem missing;
+                missing.media = known->info;
+                missing.path = requested;
+                missing.name = QString::fromStdString(known->name);
+                missing.audio_only = known->audio_only;
+                missing.fingerprint = known->fingerprint;
+                missing.details.insert("decodePath", QStringLiteral("missing file"));
+                missing.missing = true;
+                post_to_ui(this, [this, generation, source, why, missing = std::move(missing)]() mutable {
                     if (generation != generation_)
                         return;
                     --pending_import_callbacks_;
-                    setNotice(QStringLiteral("%1 cannot stand in for the missing file: %2").arg(QFileInfo(source).fileName(), why));
+                    addToLibrary(std::move(missing), false);
+                    fail(QStringLiteral("%1 cannot stand in for the missing file: %2. Locate the original in the library")
+                             .arg(QFileInfo(source).fileName(), why));
+                    importNextQueued(generation);
                 });
                 return oma::Result<void>{};
             }

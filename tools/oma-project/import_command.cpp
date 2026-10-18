@@ -19,7 +19,7 @@ int run_import(const std::filesystem::path& file, oma::Rational edl_rate) {
     const auto resolve = [&](const oma::ir::MediaRef& m) -> std::optional<oma::project::MediaRef> {
         const auto path = oma::importers::otio_local_path(m.target, dir);
         std::error_code ec;
-        if (!m.available || !std::filesystem::exists(path, ec))
+        if (path.empty() || !m.available || !std::filesystem::exists(path, ec))
             return std::nullopt;
         oma::project::MediaRef found;
         found.info = {.id = {},

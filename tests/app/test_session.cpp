@@ -164,6 +164,47 @@ bool marked_source_range_survives_project_reopen() {
            std::abs(clip.value("duration").toDouble() - 10.0 / 30.0) < 1e-9;
 }
 
+bool mismatched_saved_media_stays_in_project(const char* replacement) {
+    QTemporaryDir dir;
+    if (!dir.isValid())
+        return false;
+    const QString media = dir.filePath(QStringLiteral("source.mp4"));
+    const QString project = dir.filePath(QStringLiteral("edit.omamovie"));
+    const QString saved_again = dir.filePath(QStringLiteral("again.omamovie"));
+    if (!QFile::copy(fixture("h264_long_gop.mp4"), media))
+        return false;
+    Session original;
+    original.setSilent(true);
+    original.open(media);
+    if (!wait_until([&] { return original.media().size() == 1 && !original.importsPending(); }))
+        return false;
+    original.openSource(0);
+    original.appendSelected();
+    if (original.clips().size() < 2)
+        return false;
+    original.saveProject(QUrl::fromLocalFile(project));
+    if (!wait_until([&] { return original.projectPath() == project && !original.dirty(); }))
+        return false;
+    if (!QFile::remove(media) || !QFile::copy(fixture(replacement), media))
+        return false;
+
+    Session reopened;
+    reopened.setSilent(true);
+    reopened.openProject(QUrl::fromLocalFile(project));
+    if (!wait_until([&] { return reopened.media().size() == 1 && !reopened.importsPending(); }))
+        return false;
+    if (!reopened.media().front().toMap().value("missing").toBool() || reopened.clips().size() < 2)
+        return false;
+    reopened.saveProject(QUrl::fromLocalFile(saved_again));
+    if (!wait_until([&] { return reopened.projectPath() == saved_again; }))
+        return false;
+    Session again;
+    again.setSilent(true);
+    again.openProject(QUrl::fromLocalFile(saved_again));
+    return wait_until([&] { return again.media().size() == 1 && !again.importsPending(); }) &&
+           again.media().front().toMap().value("missing").toBool() && again.clips().size() >= 2;
+}
+
 // Marks that leave nothing (out at or before in) never produce an empty clip.
 bool reversed_marks_reset() {
     Session s;
@@ -500,6 +541,10 @@ void run_session_tests() {
            { expect(source_range_works_for_overwrite_and_connect()).toBeTruthy(); });
         it("preserves the placed source range after saving and reopening",
            { expect(marked_source_range_survives_project_reopen()).toBeTruthy(); });
+        it("keeps a shorter replacement locatable across saves",
+           { expect(mismatched_saved_media_stays_in_project("h264_30fps_aac.mp4")).toBeTruthy(); });
+        it("keeps a replacement of the wrong kind locatable across saves",
+           { expect(mismatched_saved_media_stays_in_project("tone_44100.wav")).toBeTruthy(); });
         it("drops an out mark that an in mark passes",
            { expect(reversed_marks_reset()).toBeTruthy(); });
         it("keeps the source and sequence playheads apart",

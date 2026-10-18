@@ -25,6 +25,8 @@ Result<project::Document> import_timeline_file(const std::filesystem::path& path
     std::uint32_t height = 0;
     const auto resolve = [&](const ir::MediaRef& m) -> std::optional<project::MediaRef> {
         const auto file = importers::otio_local_path(m.target, dir);
+        if (file.empty())
+            return std::nullopt;
         auto probed = importer.inspect_input(file);
         auto entry = probed ? media_entry(*probed, {}) : std::nullopt;
         if (!entry) {
