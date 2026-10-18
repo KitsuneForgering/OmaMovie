@@ -95,7 +95,8 @@ bool cycles_hold_their_resources() {
         if (n == kFdWarm - 1) {
             fds = f;
         }
-        if (n >= kRssWarm - 1) rss_after_warm.push_back(r);
+        if (n >= kRssWarm - 1)
+            rss_after_warm.push_back(r);
         if (n >= kFdWarm && f > fds) {
             return false;
         }
@@ -105,10 +106,12 @@ bool cycles_hold_their_resources() {
     if (kRssMeaningful && rss_after_warm.size() >= 6) {
         std::array<long, 3> first{rss_after_warm[0], rss_after_warm[1], rss_after_warm[2]};
         const std::size_t end = rss_after_warm.size();
-        std::array<long, 3> last{rss_after_warm[end - 3], rss_after_warm[end - 2], rss_after_warm[end - 1]};
+        std::array<long, 3> last{rss_after_warm[end - 3], rss_after_warm[end - 2],
+                                 rss_after_warm[end - 1]};
         std::sort(first.begin(), first.end());
         std::sort(last.begin(), last.end());
-        if (last[1] > first[1] + (64 * 1024)) return false;
+        if (last[1] > first[1] + (64 * 1024))
+            return false;
     }
     return true;
 }
