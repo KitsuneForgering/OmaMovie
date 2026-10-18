@@ -4,20 +4,22 @@ Rule: async in execution, not in semantics. Time, `TimeMap`, timeline commands, 
 composition evaluation, `RenderGraph` and migrations stay synchronous and deterministic; only
 the execution of work they describe moves, and its result is published on the UI thread.
 
-**Problem (measured):** paused hardware scrub freezes the UI ([evidence status](implementation-plan-evidence-2026-10-14.md)).
-**Location:** `Session::requestFrame` → `PreviewItem::setRequest` → `composite()` runs
-`build_viewer_frame` in `updatePaintNode`, Qt's sync phase, while the GUI thread is blocked.
-Waits inside it: VA-API decode-forward from the keyframe (decoder + CPU parsing, up to a GOP),
-DMA-BUF import (object creation, no queue use) and the composite's submission (queue).
+**Original problem (measured, now resolved for the declared UI gates):** paused hardware scrub
+froze the UI ([before/after evidence](Research/evidence/2026-10-14-async-scrub.txt)). Before
+the change, `Session::requestFrame` led to `build_viewer_frame` in Qt's blocked sync phase:
+VA-API decode-forward from the keyframe, DMA-BUF import and compositor submission all ran
+there. Today `Session::requestFrame` submits decode/import to `viewer_pool_`, publishes only
+the current result, and `PreviewItem::composite` still runs during Qt sync. The remaining
+4K composite cost is measured separately below; it has not failed the UI gate.
 
-**Ownership today**
+**Current ownership**
 
 | Object | Owner / thread |
 |---|---|
 | `gpu::Device`, its one graphics queue | `main` (outlives `Session`); queue under `Device`'s recursive lock, held by the Qt bridge from `afterRendering` to `afterFrameEnd` (ADR-0005) |
 | Playback `FrameSource` + decoders | `VideoScheduler`'s one-thread pipeline pool; decode admitted per frame |
-| Paused software `FrameSource` | `Session::workers_` (one thread shared with imports, saves, previews) |
-| Paused hardware `FrameSource` | `PreviewItem`, Qt render thread |
+| Paused software `FrameSource` | `Session::viewer_frames_`, dedicated `viewer_pool_` worker (the former shared worker was the measured contention baseline) |
+| Paused hardware `FrameSource` | `Session::hardware_frames_`, dedicated `viewer_pool_` worker; `PreviewItem` composites on the Qt render thread |
 | GPU frames | `shared_ptr<VideoFrame>` in `ViewerFrame`; imported surfaces keep their DMA-BUF and semaphores until released |
 
 **Three semantics**

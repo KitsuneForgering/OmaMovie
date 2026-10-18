@@ -2,12 +2,14 @@
 
 **First executable action for M12 (post-v0.1 architecture): finish the transfer baseline.**
 The [first instrumented run](Research/evidence/2026-10-15-export-transfer-baseline.md)
-already counts software compositor inputs, NV12 readbacks, writer row copies and VA-API
-uploads on 1080p60 and 4K Intel exports. Next split `read_nv12()` into GPU conversion,
-queue wait and host-copy timings; measure actual compositor staging, process CPU/frame,
-memory/GPU use and downgrade reasons; repeat the same fixtures under controlled load with
-independent frame/audio fidelity checks. Only then compare a GPU-native encoder-input
-pilot. This remains a baseline task, not a zero-copy claim. See [M12](implementation-plan-m12-gpu-export-architecture.md).
+counted software compositor inputs, NV12 readbacks, writer row copies and VA-API uploads.
+The [newer phase split](Research/evidence/2026-10-16-export-transfer-phases.md) now also
+records GPU conversion timestamps, fence wait, mapped host copy, staging rows, process CPU
+and downgrade path on one 1080p60 and one 4K23.976 Intel run. Complete peak memory/GPU-use
+measurements, process CPU/frame, transfer counts and controlled repetitions on the same
+fixtures with independent frame/audio checks. Then define and pilot GPU-native
+compositor-output → VA-API encoder input. This remains a post-v0.1 baseline task, not a
+zero-copy or speedup claim; see [M12](implementation-plan-m12-gpu-export-architecture.md).
 
 **v0.1 RC order:** settle the supported Intel/software scope → packaging and recovery
 → required CI gates on the final SHA → final automated regression/stress pass → feature

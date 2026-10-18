@@ -5,7 +5,7 @@ scoped Intel/software v0.1 decision. Correctness or reliability failures discove
 may require a v0.1 fix through M7/M10; architectural preference alone does not. M11 keeps
 its existing targeted UI/ownership and responsiveness checks. Do not reopen closed work.
 
-**Problem and code evidence (2026-10-15).** `export_timeline_on` constructs
+**Problem and code evidence (2026-10-16).** `export_timeline_on` constructs
 `FrameSource(nullptr)`, so export decodes in software. Its Vulkan branch composites those
 frames, then calls `read_nv12()` for the VA-API writer or `read_display()` for software
 encoding (`apps/omamovie/src/exporter.cpp`). `EncodedFrame` owns CPU pixels in a vector;
@@ -13,10 +13,29 @@ the current NV12 compute pass writes a host-visible readback buffer, not an expo
 NV12 image (`libs/compositor/src/nv12_pass.cpp`).
 `EncodeStage` passes NV12 bytes to `VideoWriter::write_nv12`, which copies rows into an
 AVFrame and calls `av_hwframe_transfer_data` to upload to a VA-API surface
-(`libs/media/src/video_writer.cpp`). The original `--export-audit` grouped composition and
-readback in one timing; the first transfer counters below expose several boundaries but
-still combine NV12 conversion, GPU wait and host copy. They cannot prove a zero-copy claim. Preview's
-GPU decode and image import are separate implemented paths, not export validation.
+(`libs/media/src/video_writer.cpp`). The H.264 encode itself can use VA-API; the current
+4K export bottleneck is the measured pixel round-trip around its encoder input, not
+"CPU encoding." On the 4K23.976/240-frame fixture, about 2.986 GB crosses each
+explicit software-input/staging, Vulkan → CPU NV12, row-copy and CPU → VA-API upload
+boundary. The [first baseline](Research/evidence/2026-10-15-export-transfer-baseline.md)
+and [newer phase split](Research/evidence/2026-10-16-export-transfer-phases.md) measure
+GPU conversion, fence wait, mapped host copy, row copy, upload and process CPU; the
+newer run exported 240 frames in 8.85 s. Stages overlap, so their timings must not
+be added as export wall time. Each is a single-run diagnostic, not an A/B speedup
+estimate. The explicit avoidable movement establishes architectural headroom; driver
+internal copies remain unknown. Preview's VA-API → Vulkan input import is an
+implemented, validated Intel viewer boundary, not export validation.
+
+The missing export boundary is **GPU-native compositor output → hardware-encoder input**:
+
+```text
+software decode → Vulkan compositor → GPU NV12 conversion
+    → GPU-to-CPU readback → CPU row copy into AVFrame
+    → CPU-to-VA-API surface upload → VA-API H.264 encode
+```
+
+This is distinct from decoder → compositor input, where the Intel viewer already
+imports VA-API surfaces without mandatory CPU pixel readback.
 
 `Session` owns export jobs/progress and other project, edit, playback, viewer, media and
 recovery state (`session.hpp`); `TimelineView.qml` and `Main.qml` still use ancestor context
@@ -27,19 +46,17 @@ transport owner would need too many shared inputs, so it is not an automatic ext
 
 #### Sequence: one vertical change at a time
 
-1. **Transfer baseline, first task.** Instrument the present export at decode output,
-   compositor input/upload, color conversion, readback, writer CPU copy and VA-API upload.
-   Count frames and bytes per boundary and time GPU waits/readbacks separately from render
-   and encode. Record path and downgrade reason. Run the same pinned 1080p60 Intel fixture
-   and at least one 4K fixture, with driver, codec, profile, resolution, rate, effects,
-   hardware/software choice and repeat count in `Docs/Research/evidence/`. Preserve the
-   existing independent output decode. *Partial (2026-10-15):* explicit software-input,
-   NV12 readback, writer row-copy and VA-API upload counts/bytes/timings are instrumented;
-   a [single-run 1080p60/4K baseline](Research/evidence/2026-10-15-export-transfer-baseline.md)
-   and independent decodability/frame-count checks exist. The readback call still combines
-   conversion, wait and host copy; software input bytes are source payload, not bus traffic.
-   Separate those stages, process CPU/frame, memory/GPU use and repeat runs before using
-   this as a before/after performance comparison. Avoid claiming driver-internal copy freedom.
+1. **Complete and repeat the transfer baseline, first task.** The [2026-10-16 phase
+   split](Research/evidence/2026-10-16-export-transfer-phases.md) already records software
+   decode output, staging row copies, GPU NV12 timestamps, fence wait, mapped host copy,
+   writer row copies, VA-API upload, process CPU, path and downgrade reason on one 1080p60
+   and one 4K23.976 run. Keep counts/bytes for each explicit boundary and independent
+   output checks. Pin fixtures, build, driver, codec/profile, resolution/rate, effects,
+   hardware/software choice, load and repeat count; add process CPU/frame, peak RAM/VRAM
+   where available and GPU activity. Repeat under comparable conditions before any A/B.
+   GPU dispatch and fence wait overlap queued work, and source-plane bytes are payload
+   presented to staging, not measured bus traffic. Do not add phase totals or infer
+   absence of driver-internal copies.
 2. Define a GPU-native encoder input contract at the media/encoder boundary: image or
    surface handle, format (NV12 now; P010-capable design), color metadata, rational PTS,
    ready/reuse synchronization and explicit lifetime. Keep the CPU-frame contract for
@@ -51,10 +68,12 @@ transport owner would need too many shared inputs, so it is not an automatic ext
    constraints in a new ADR before replacing the writer path. Do not infer AMD/NVIDIA support.
 4. Keep working-space → NV12 conversion on GPU for the first path. Specify P010 planes,
    color tags and synchronization in the contract, but do not make P010 or HDR a v0.1 gate
-   or claim HDR without a separately validated color pipeline. Compare frames against the
-   existing independent decoder/oracle before removing the NV12 readback from this path.
-5. Evaluate hardware decode during export using the existing `VideoDecoder`/`FrameSource`
-   mechanism only after the encoder input works. Profile surface lifetime, device admission,
+   or claim HDR without a separately validated color pipeline. Compare decoded output frames,
+   color, audio and timing against the independent oracle before removing the mandatory
+   compositor readback. Remeasure the *same* fixtures after that removal and record transfer
+   counts, process CPU/frame, peak memory and GPU use; no speedup factor is assumed.
+5. Only then evaluate hardware decode during export using the existing
+   `VideoDecoder`/`FrameSource` mechanism. Profile surface lifetime, device admission,
    queue contention and throughput; retain software decode if reuse serializes the pipeline.
 6. Extract export ownership from `Session` only where its job lifecycle, pinned snapshot,
    progress, cancellation and publication/recovery state have a clear owner. Preserve
@@ -95,16 +114,18 @@ without cycles. Record lifetime order for jobs, FrameSources, pooled surfaces an
 
 #### Acceptance, evidence and fallback
 
-- Report **zero-copy decode**, **compositor input**, **compositor output**, **encoder input**
-  and **end-to-end** separately. End-to-end requires an instrumented Intel path with no
-  mandatory CPU pixel readback/upload from decode through encode. A CPU-side audio mix or
-  mux metadata does not by itself negate the video claim; hidden video readback does.
+- Report **zero-copy decode**, **zero-copy compositor input**, **zero-copy compositor output**,
+  **zero-copy encoder input** and **end-to-end zero-copy video path** separately, with the
+  hardware, codec, negotiated path and measured boundary named. End-to-end requires
+  instrumentation showing no mandatory CPU pixel readback/upload from decode through encode
+  on that path. CPU-side audio, timestamps, mux metadata and control logic do not by
+  themselves negate a *video* claim. Treat unknown driver-internal copies as unknown.
 - Validate decoded output frames and frame count, color/frame fidelity, audio samples and
   A/V sync, cancellation, device loss, export publication/recovery and software fallback.
   Run 1080p60 and at least one 4K workload on available Intel hardware. Record throughput,
   CPU time per frame, GPU use where measurable, stage latency, peak memory and transfer
   counts/bytes against the baseline on the same fixtures and machine.
-- Select a path explicitly: Intel zero-copy where negotiated and validated → current GPU
+- Select a path explicitly: Intel compositor-output → encoder-input path where negotiated and validated → current GPU
   staged path → CPU reference/software encoder. Log each downgrade with the failed boundary
   and reason. A device loss must preserve the current completed-output/recovery contract.
 - For QML, rerun GUI smoke and manual keyboard/pointer/context-menu/source-viewer,
