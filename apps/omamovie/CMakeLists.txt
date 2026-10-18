@@ -12,7 +12,7 @@ set_target_properties(omamovie PROPERTIES
     AUTOMOC ON
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 target_include_directories(omamovie PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_compile_options(omamovie PRIVATE ${OMA_TEST_WARNINGS})
+target_compile_options(omamovie PRIVATE ${OMA_APP_WARNINGS})
 target_link_libraries(omamovie PRIVATE
     oma_ingest oma_project oma_importers oma_project-ir oma_playback oma_timeline oma_audio oma_compositor oma_media oma_gpu oma_base
     Qt6::Quick Qt6::Test Qt6::DBus Qt6::GuiPrivate)

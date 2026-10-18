@@ -287,7 +287,8 @@ int main(int argc, char** argv) {
     });
     window->setVulkanInstance(&instance);
     window->setGraphicsDevice(QQuickGraphicsDevice::fromDeviceObjects(
-        device->physical_device(), device->device(), device->graphics_family(), 0));
+        device->physical_device(), device->device(), static_cast<int>(device->graphics_family()),
+        0));
     // ADR-0005: Qt creates, resizes and destroys its swapchain and waits for the device to
     // idle between frames, so other threads are admitted to the device only within a frame.
     // Qt's own queue operations in a frame are endFrame's submit and present, so it holds the

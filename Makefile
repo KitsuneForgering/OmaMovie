@@ -6,6 +6,8 @@ MAKEFLAGS += --no-builtin-rules
 
 BUILD        ?= debug
 WERROR       ?= 1
+RELEASE_OPT_LEVEL ?= 2
+RELEASE_IPO  ?= 0
 PREFIX       ?= /usr/local
 DESTDIR      ?=
 LICENSE_NAME ?= omamovie
@@ -34,6 +36,8 @@ PACKAGER_ARG  := $(if $(strip $(CXXFLAGS)$(CPPFLAGS)),-DCMAKE_CXX_FLAGS='$(CPPFL
                  $(if $(strip $(LDFLAGS)),-DCMAKE_EXE_LINKER_FLAGS='$(LDFLAGS)')
 CMAKE_EXTRA   := $(CMAKE_CXX_ARG) $(PACKAGER_ARG) \
                  -DOMA_WERROR=$(if $(filter 1,$(WERROR)),ON,OFF) \
+                 -DOMA_RELEASE_OPT_LEVEL=$(RELEASE_OPT_LEVEL) \
+                 -DOMA_ENABLE_RELEASE_IPO=$(if $(filter 1,$(RELEASE_IPO)),ON,OFF) \
                  -DOMA_LICENSE_NAME=$(LICENSE_NAME)
 
 BUILD_DIR  := build/$(BUILD)

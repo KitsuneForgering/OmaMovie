@@ -1381,7 +1381,7 @@ void set_scalar(std::vector<tl::ScalarKey>& keys, float& constant, const std::op
 // Adds a key at `at` holding the value shown there, or removes the one there; the last one
 // removed leaves its value as the constant, so nothing jumps.
 void toggle_scalar(std::vector<tl::ScalarKey>& keys, float& constant, const oma::RationalTime& at) {
-    const double shown = keys.empty() ? constant : tl::scalar_at(keys, at);
+    const double shown = keys.empty() ? static_cast<double>(constant) : tl::scalar_at(keys, at);
     const auto it = std::ranges::lower_bound(keys, at, std::less{}, &tl::ScalarKey::at);
     if (it != keys.end() && it->at == at) {
         if (keys.size() == 1) constant = static_cast<float>(it->value);
@@ -1404,7 +1404,9 @@ void Session::setClipAudio(double gain, double fadeIn, double fadeOut, bool mute
     // The drawer sends the volume with every fade or mute change: an unchanged volume must not
     // add a key at the playhead (dB round trips through the slider are not exact).
     const auto at = keyTime(*c);
-    const double shown = audio.gain_keys.empty() || !at ? audio.gain : tl::scalar_at(audio.gain_keys, *at);
+    const double shown = audio.gain_keys.empty() || !at
+                             ? static_cast<double>(audio.gain)
+                             : tl::scalar_at(audio.gain_keys, *at);
     if (std::abs(gain - shown) > 1e-4) set_scalar(audio.gain_keys, audio.gain, at, std::clamp(gain, 0.0, 4.0));
     audio.fade_in = editor_->timeline().at(in * ticksPerFrame());
     audio.fade_out = editor_->timeline().at(out * ticksPerFrame());

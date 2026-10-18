@@ -27,6 +27,7 @@ one as superseded.
 | [0018](0018-cmake-build.md) | CMake as the build system, GNU Make as a thin front-end | Accepted |
 | [0019](0019-media-color-interpretation.md) | Media color interpretation override (matrix, range) | Accepted |
 | [0020](0020-async-execution-boundary.md) | Async execution boundary for interactive work; libuv not adopted | Accepted (paused viewer; amends ADR-0005's viewer section) |
+| [0021](0021-clang-diagnostics-and-release-optimization.md) | Clang diagnostics and measured Release optimization | Accepted (amends ADR-0001/0018) |
 
 Template: copy the structure of an existing ADR (Context, Decision, Alternatives, Consequences).
 

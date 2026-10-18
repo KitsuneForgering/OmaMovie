@@ -54,3 +54,4 @@ help:
 	@echo '  deps          install the dependencies declared in the PKGBUILD (uses sudo pacman)'
 	@echo '  clean         remove build/$$BUILD   | distclean     remove all of build/'
 	@echo 'Variables: BUILD=debug|release|asan|tsan  CXX=g++|clang++  WERROR=1|0  V=1 (verbose)'
+	@echo 'Release trials: RELEASE_OPT_LEVEL=2|3  RELEASE_IPO=0|1 (default: -O2, IPO off)'

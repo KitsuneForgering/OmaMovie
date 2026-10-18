@@ -96,6 +96,9 @@ target_link_libraries(fuzz_probe PRIVATE oma_media)
 
 set_target_properties(fuzz_cube fuzz_project fuzz_subtitles fuzz_otio fuzz_edl fuzz_mlt fuzz_fcpxml fuzz_probe PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+foreach(target fuzz_cube fuzz_project fuzz_subtitles fuzz_otio fuzz_edl fuzz_mlt fuzz_fcpxml fuzz_probe)
+    target_compile_options(${target} PRIVATE ${OMA_TEST_WARNINGS})
+endforeach()
 file(MAKE_DIRECTORY
     ${CMAKE_BINARY_DIR}/cube-corpus
     ${CMAKE_BINARY_DIR}/project-corpus

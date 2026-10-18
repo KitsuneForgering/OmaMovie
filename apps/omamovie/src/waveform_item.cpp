@@ -143,7 +143,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData* /*data
         const double half = std::max(
             0.5, bar_height(waveform_->peak_between(t, t + seconds_per_bar), gain_) * middle);
         const auto x0 = static_cast<float>(static_cast<double>(i) * kBarStep);
-        const auto x1 = static_cast<float>(std::min(w, x0 + kBarStep - 0.5));
+        const auto x1 = static_cast<float>(std::min(w, static_cast<double>(x0) + kBarStep - 0.5));
         const auto y0 = static_cast<float>(middle - half);
         const auto y1 = static_cast<float>(middle + half);
         v[((i - span.first) * 6) + 0].set(x0, y0);

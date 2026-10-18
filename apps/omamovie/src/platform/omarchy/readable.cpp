@@ -13,14 +13,18 @@ double luminance(const QColor& c) {
     const auto channel = [](double v) {
         return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
     };
-    return (0.2126 * channel(c.redF())) + (0.7152 * channel(c.greenF())) +
-           (0.0722 * channel(c.blueF()));
+    return (0.2126 * channel(static_cast<double>(c.redF()))) +
+           (0.7152 * channel(static_cast<double>(c.greenF()))) +
+           (0.0722 * channel(static_cast<double>(c.blueF())));
 }
 
 QColor mix(const QColor& from, const QColor& to, double t) {
-    return QColor::fromRgbF(static_cast<float>(from.redF() + ((to.redF() - from.redF()) * t)),
-                            static_cast<float>(from.greenF() + ((to.greenF() - from.greenF()) * t)),
-                            static_cast<float>(from.blueF() + ((to.blueF() - from.blueF()) * t)));
+    return QColor::fromRgbF(static_cast<float>(static_cast<double>(from.redF()) +
+                                               (static_cast<double>(to.redF() - from.redF()) * t)),
+                            static_cast<float>(static_cast<double>(from.greenF()) +
+                                               (static_cast<double>(to.greenF() - from.greenF()) * t)),
+                            static_cast<float>(static_cast<double>(from.blueF()) +
+                                               (static_cast<double>(to.blueF() - from.blueF()) * t)));
 }
 
 constexpr double kTextContrast = 4.5; // WCAG 1.4.3 AA for text at the UI's 11-13 px

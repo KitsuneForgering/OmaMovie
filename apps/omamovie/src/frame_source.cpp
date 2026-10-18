@@ -302,7 +302,8 @@ oma::Result<QImage> FrameSource::image_at(const std::string& path, const oma::Ra
     }
     auto copied =
         frame.copy_rgba_scaled({image.bits(), static_cast<std::size_t>(image.sizeInBytes())},
-                               image.bytesPerLine(), size.width(), size.height(), read_as);
+                               static_cast<int>(image.bytesPerLine()), size.width(), size.height(),
+                               read_as);
     if (!copied) {
         return std::unexpected(copied.error());
     }

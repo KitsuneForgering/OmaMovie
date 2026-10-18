@@ -5,6 +5,10 @@
   -Wconversion -Wsign-conversion -Wnull-dereference -Wdouble-promotion -Wformat=2
   -Wimplicit-fallthrough -Werror`.
 - Tests: `-Wall -Wextra -Wshadow -Werror` (Cest macros use C-style casts).
+- Current Clang builds also use `-Weverything -Werror` for project targets, with documented
+  diagnostic exclusions for C++23 compatibility, existing external buffer boundaries and
+  Cest macros ([ADR-0021](0021-clang-diagnostics-and-release-optimization.md)). Production
+  Qt app sources now receive the library warning set; GCC keeps the explicit flags above.
 - `.clang-format` (LLVM base, 4 spaces, 100 columns); `make format` / `make format-check`.
 - `.clang-tidy` with `WarningsAsErrors: '*'`; `make tidy` runs on the libs.
 

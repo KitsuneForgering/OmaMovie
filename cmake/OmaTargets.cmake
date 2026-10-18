@@ -11,6 +11,42 @@ if(CMAKE_BUILD_TYPE STREQUAL "tsan")
     list(REMOVE_ITEM OMA_LIB_WARNINGS -Wnull-dereference)
 endif()
 set(OMA_TEST_WARNINGS -Wall -Wextra -Wshadow)
+# Qt application sources use the same diagnostics as the engine.
+set(OMA_APP_WARNINGS ${OMA_LIB_WARNINGS})
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # -Weverything covers production sources. Keep Werror for actionable diagnostics; these
+    # categories report C++98/pre-C++23 compatibility, ABI layout, optimization hints or
+    # existing FFmpeg/Vulkan raw-buffer and lifetime patterns rather than new regressions.
+    # Review this debt list separately when those boundaries change.
+    set(OMA_CLANG_EVERYTHING
+        -Weverything
+        -Wno-c++98-compat -Wno-c++98-compat-pedantic
+        -Wno-c++98-compat-local-type-template-args
+        -Wno-pre-c++14-compat -Wno-pre-c++17-compat
+        -Wno-pre-c++20-compat -Wno-pre-c++20-compat-pedantic -Wno-pre-c++23-compat
+        -Wno-padded -Wno-weak-vtables -Wno-ctad-maybe-unsupported
+        -Wno-nrvo -Wno-float-equal -Wno-shadow-uncaptured-local
+        -Wno-switch-default -Wno-switch-enum -Wno-covered-switch-default
+        -Wno-comma -Wno-global-constructors -Wno-exit-time-destructors
+        -Wno-unused-macros -Wno-cast-function-type-strict
+        -Wno-unsafe-buffer-usage -Wno-unsafe-buffer-usage-in-container
+        -Wno-unsafe-buffer-usage-in-libc-call
+        -Wno-lifetime-safety-cross-tu-suggestions
+        -Wno-lifetime-safety-intra-tu-suggestions
+        -Wno-lifetime-safety-intra-tu-constructor-suggestions
+        -Wno-lifetime-safety-invalidation
+        -Wno-lifetime-safety-return-stack-addr-moved)
+    list(APPEND OMA_LIB_WARNINGS ${OMA_CLANG_EVERYTHING})
+    list(APPEND OMA_APP_WARNINGS ${OMA_CLANG_EVERYTHING})
+    # Cest's assertion macros, including the app test target, need these additional exclusions.
+    list(APPEND OMA_TEST_WARNINGS ${OMA_CLANG_EVERYTHING}
+        -Wno-used-but-marked-unused -Wno-disabled-macro-expansion
+        -Wno-reserved-identifier -Wno-reserved-macro-identifier
+        -Wno-old-style-cast -Wno-missing-variable-declarations
+        -Wno-missing-prototypes -Wno-double-promotion
+        -Wno-missing-noreturn -Wno-unreachable-code-loop-increment
+        -Wno-conversion -Wno-sign-conversion)
+endif()
 # GCC 16 at -O2 reports -Wstringop-overflow and -Warray-bounds inside libstdc++'s
 # uninitialized_copy / destroy_at for small vectors in two tests (test_video_writer.cpp,
 # test_waveform.cpp; false positives, present before 2026-10-14). Tests only; the libraries keep
@@ -21,6 +57,7 @@ endif()
 if(OMA_WERROR)
     list(APPEND OMA_LIB_WARNINGS -Werror)
     list(APPEND OMA_TEST_WARNINGS -Werror)
+    list(APPEND OMA_APP_WARNINGS -Werror)
 endif()
 
 # Both sanitizer builds also run offline and on open drivers only: the symbolizer must not fetch

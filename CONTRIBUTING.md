@@ -28,6 +28,20 @@ make fuzz
 and spike commands, their fixtures and measurement protocols live beside each task in
 `Docs/Research/evidence/`, `Docs/spikes/` and `tools/bench/`; run only the relevant ones.
 
+Clang builds use `-Weverything -Werror` on project targets. The exclusions for C++23
+compatibility, existing media/GPU buffer patterns and Cest macros are listed in
+[`cmake/OmaTargets.cmake`](cmake/OmaTargets.cmake) and explained in [ADR-0021](Docs/adr/0021-clang-diagnostics-and-release-optimization.md).
+
+Release defaults to `-O2 -g -DNDEBUG`. To test stronger compiler optimization, configure
+separate build directories with `cmake -S . -B build/release-o3-ipo -G Ninja
+-DCMAKE_BUILD_TYPE=release -DOMA_RELEASE_OPT_LEVEL=3 -DOMA_ENABLE_RELEASE_IPO=ON` and
+compare against the default on the same fixtures and machine. `make BUILD=release
+RELEASE_OPT_LEVEL=3 RELEASE_IPO=1` exposes the same options in the ordinary Release
+directory.
+IPO is checked by CMake before it is enabled. Keep the default until repeated workload
+measurements and correctness checks justify changing it; `-march=native` is unsuitable
+for a portable release artifact.
+
 Commit messages use Conventional Commits in English, with an imperative description
 under 100 characters. Check a range with `scripts/check-commits.sh`. Do not create a
 release tag as part of normal implementation work; the [release plan](Docs/implementation-plan-m10-validation.md)

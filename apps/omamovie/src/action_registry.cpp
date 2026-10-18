@@ -160,8 +160,8 @@ QVariantList ActionRegistry::search(const QString& query) const {
     std::ranges::stable_sort(hits, [this, &words](const Hit& a, const Hit& b) {
         if (a.score != b.score) return a.score < b.score;
         if (words.isEmpty()) {
-            const int a_recent = recent_.indexOf(a.entry->id);
-            const int b_recent = recent_.indexOf(b.entry->id);
+            const qsizetype a_recent = recent_.indexOf(a.entry->id);
+            const qsizetype b_recent = recent_.indexOf(b.entry->id);
             if (a_recent != b_recent) {
                 if (a_recent < 0) return false;
                 if (b_recent < 0) return true;
@@ -205,7 +205,8 @@ QString ActionRegistry::sequenceOf(int key, int modifiers) const {
         break;
     }
     // Keypad is a location, not a different shortcut.
-    const auto mods = Qt::KeyboardModifiers::fromInt(modifiers) & ~Qt::KeypadModifier;
+    const auto mods = Qt::KeyboardModifiers::fromInt(static_cast<unsigned int>(modifiers)) &
+                      ~Qt::KeypadModifier;
     return QKeySequence(QKeyCombination(mods, static_cast<Qt::Key>(key))).toString(QKeySequence::PortableText);
 }
 
