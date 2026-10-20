@@ -104,6 +104,8 @@ GCC/Clang × Debug/Release/ASan/TSan test matrix was built and run natively on t
 `53fa67b` (clean apart from documentation): all eight cells passed all 14 suites, including
 the clang++ TSan cell that `ad276a9` had broken (fixed in `25659fb`). CI itself has not run
 on these commits, because it triggers only on pull requests and `master`; the matrix there,
-GUI smoke, tidy, fuzz and include jobs remain the RC gate.
+GUI smoke, tidy, fuzz and include jobs remain the RC gate. Locally at `d99a7f6`, `make tidy`
+processed all 105 library files with no diagnostic, `make format-check` and
+`scripts/check-includes.sh` passed, and the fuzz campaign is recorded under the fuzzing item.
 
 [← Implementation plan](implementation-plan.md)
