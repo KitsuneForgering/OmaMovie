@@ -7,3 +7,4 @@
 /pkg/
 /omamovie-git/
 /*.pkg.tar.*
+__pycache__/
