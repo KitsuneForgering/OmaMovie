@@ -34,6 +34,7 @@ linear-light scaling (ADR-0006).
 
 **Not comparable / not measured.** Kdenlive's own compositing (`qtblend`/movit): a melt
 `qtblend` reconstruction drew only the background, so no number. Playback, seek and
-interactive latency: no shared task yet. Other machines, other GPU vendors, FilmCraft's
+interactive latency: no shared task yet; melt's `sdl2` consumer exposes no dropped or
+skipped frame count to set against OmaMovie's player-drop audit. Other machines, other GPU vendors, FilmCraft's
 published figures: different hardware or method, so outside this table. Three rounds give
 ranges, not confidence intervals; no cell supports a general speed claim about either editor.

@@ -31,6 +31,11 @@ failure or a passing gate. Reconfigure and rebuild against the installed depende
 then run the required checks on the final SHA in the declared graphical/hardware
 environment. Do not use that partial local run as RC evidence. After rebuilding against
 `.so.34` the same day, the Debug run passed all 14 suites (app 42 s, compositor 19 s) on
-a dirty `ad276a9` tree; that is a local check, not the final-SHA RC gate.
+a dirty `ad276a9` tree; that is a local check, not the final-SHA RC gate. On 2026-10-20 the whole
+GCC/Clang × Debug/Release/ASan/TSan test matrix was built and run natively on this host at
+`53fa67b` (clean apart from documentation): all eight cells passed all 14 suites, including
+the clang++ TSan cell that `ad276a9` had broken (fixed in `25659fb`). CI itself has not run
+on these commits, because it triggers only on pull requests and `master`; the matrix there,
+GUI smoke, tidy, fuzz and include jobs remain the RC gate.
 
 [← Implementation plan](implementation-plan.md)
