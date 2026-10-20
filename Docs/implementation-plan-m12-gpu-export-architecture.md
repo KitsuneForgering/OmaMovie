@@ -13,9 +13,10 @@ the current NV12 compute pass writes a host-visible readback buffer, not an expo
 NV12 image (`libs/compositor/src/nv12_pass.cpp`).
 `EncodeStage` passes NV12 bytes to `VideoWriter::write_nv12`, which copies rows into an
 AVFrame and calls `av_hwframe_transfer_data` to upload to a VA-API surface
-(`libs/media/src/video_writer.cpp`). The H.264 encode itself can use VA-API; the current
-4K export bottleneck is the measured pixel round-trip around its encoder input, not
-"CPU encoding." On the 4K23.976/240-frame fixture, about 2.986 GB crosses each
+(`libs/media/src/video_writer.cpp`). The H.264 encode itself can use VA-API; the
+pixel round-trip around its encoder input is a measured, avoidable 4K export cost,
+not evidence of CPU-only encoding or proof that this cost dominates wall time.
+On the 4K23.976/240-frame fixture, about 2.986 GB crosses each
 explicit software-input/staging, Vulkan → CPU NV12, row-copy and CPU → VA-API upload
 boundary. The [first baseline](Research/evidence/2026-10-15-export-transfer-baseline.md)
 and [newer phase split](Research/evidence/2026-10-16-export-transfer-phases.md) measure
@@ -62,10 +63,18 @@ transport owner would need too many shared inputs, so it is not an automatic ext
    ready/reuse synchronization and explicit lifetime. Keep the CPU-frame contract for
    fallback. Choose the concrete API only after tracing current `VideoFrame`, compositor
    output and `VideoWriter` ownership; do not add a universal backend interface.
-3. Prove an Intel Vulkan output → exportable memory/DMA-BUF → VA-API surface import pilot.
-   Check DRM modifiers, device identity, plane layout, ownership transfer, ready/reuse
-   synchronization, pool capacity, cancellation and device loss. Record actual driver/API
-   constraints in a new ADR before replacing the writer path. Do not infer AMD/NVIDIA support.
+3. Compare the smallest Intel Vulkan output → VA-API input pilot using two concrete routes:
+   FFmpeg 9's existing [Vulkan → DRM PRIME → VA-API frame mapping](https://ffmpeg.org/doxygen/9.0/hwcontext__vulkan_8c_source.html)
+   and direct exportable memory/DMA-BUF surface import. FFmpeg's mapping operates on its
+   `AVVkFrame`; the current compositor owns its own Vulkan resources, so adopting that
+   route may cost more than a direct import. Neither route has been integrated or measured
+   here. Check format and DRM modifiers, device identity, plane layout, ownership transfer,
+   ready/reuse synchronization, pool capacity, cancellation and device loss on the same
+   fixture. Use [Vulkan's modifier requirements](https://docs.vulkan.org/refpages/latest/refpages/source/VK_EXT_image_drm_format_modifier.html)
+   and the [FFmpeg 9 VA-API DRM mapping](https://ffmpeg.org/doxygen/9.0/hwcontext__vaapi_8c_source.html)
+   to define the pilot's compatibility checks, not to assume it will work on this driver.
+   Record actual driver/API constraints and the simpler working route in a new ADR before
+   replacing the writer path. Do not infer AMD/NVIDIA support.
 4. Keep working-space → NV12 conversion on GPU for the first path. Specify P010 planes,
    color tags and synchronization in the contract, but do not make P010 or HDR a v0.1 gate
    or claim HDR without a separately validated color pipeline. Compare decoded output frames,
