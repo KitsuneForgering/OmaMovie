@@ -40,7 +40,11 @@ void items_of(Builder& b, const Playlist& playlist, ir::Track& track);
 // A media clip of `p` from entry point `in` to `out`; none for a generator (colour, black).
 [[nodiscard]] std::optional<ir::Clip> clip_of(Builder& b, const Producer& p, std::int64_t in,
                                               std::int64_t out);
-[[nodiscard]] RationalTime at(const Builder& b, std::int64_t frames);
+// `frames` of the profile rate; with `speed`, the source time of that many timewarp frames.
+[[nodiscard]] RationalTime at(const Builder& b, std::int64_t frames,
+                              Rational speed = Rational::literal(1, 1));
+// A timewarp's warp_speed, exactly; none when it is not a decimal number.
+[[nodiscard]] std::optional<Rational> speed_of(std::string_view value);
 // Why `id` cannot be a clip or track: a colour/black generator, a nested sequence, or unknown.
 [[nodiscard]] std::string why_not(const Builder& b, const std::string& id);
 [[nodiscard]] ir::Opaque opaque(const xml::Element& e);

@@ -98,7 +98,6 @@ QString timingLabel(const tl::TimeMap& map) {
 
 constexpr int kNoticeMs = 3500;
 constexpr std::int64_t kStillSeconds = 4; // default length of a picture on the storyline
-const auto kSequenceAudioRate = oma::SampleRate::make(48000).value();
 
 struct ExportChoice {
     const char* id;

@@ -44,6 +44,9 @@
 
 class PreviewItem;
 
+// The sequence's audio rate: the mixer, the audio device and export all run at it.
+inline const auto kSequenceAudioRate = oma::SampleRate::make(48000).value();
+
 // The bridge between QML and the editing engine (CLAUDE.md §10–§11): the media library, the
 // M5 timeline Editor (every edit a command, with undo/redo), the playhead and the viewer.
 // QML reads properties and calls intents; it holds no timeline state of its own.

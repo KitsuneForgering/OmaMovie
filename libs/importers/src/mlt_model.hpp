@@ -19,6 +19,10 @@ struct Producer {
     std::int64_t in = 0;      // entry points count from here
     std::int64_t length = -1; // frames, when the producer says
     std::vector<ir::Opaque> filters;
+    // A timewarp's warp_speed: its frames (in, length, entry points) are source frames / speed;
+    // zero when the speed is reverse or unreadable, which the importer does not place.
+    Rational speed = Rational::literal(1, 1);
+    bool keep_pitch = false; // warp_pitch: compensated sound, which the importer reports
 };
 
 struct Entry {

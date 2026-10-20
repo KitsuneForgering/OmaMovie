@@ -23,7 +23,7 @@ void Session::importTimeline(const QUrl& url, const QString& edlRate) {
         QStringList issues;
         QString why;
         auto shared = std::make_shared<std::optional<oma::project::Document>>(
-            import_timeline(path.toStdString(), *importer_, issues, why, rate));
+            import_timeline(path.toStdString(), *importer_, issues, why, rate, kSequenceAudioRate));
         post_to_ui(this, [this, generation, path, issues, why, shared] {
             if (generation != generation_)
                 return;

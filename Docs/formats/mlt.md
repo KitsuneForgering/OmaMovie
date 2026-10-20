@@ -11,6 +11,7 @@ MLT is the engine behind Kdenlive and Shotcut; `melt` reads and writes its XML, 
 | `<mlt version title root>` | the version (report), the timeline name, the folder relative resources join |
 | `<profile frame_rate_num frame_rate_den>` | the timeline's rate (25 fps when absent, reported) |
 | `<producer id in>` / `<chain id in>` with `resource`, `mlt_service`, `length`, `kdenlive:clipname` | a media file, its in point, its length (the IR's available range) and name |
+| `<producer mlt_service="timewarp">` with `warp_speed`, `warp_resource` | a constant speed change, as Kdenlive writes one: the clip plays `warp_resource` at `warp_speed` (read exactly as a decimal); reverse and unreadable speeds stay gaps, reported |
 | `<filter>` inside a producer | kept opaque on each of its clips; reported |
 | `<playlist id>` with `<entry producer in out>` and `<blank length>` | an IR track: clips and gaps |
 | `<tractor id in out>` with `<track producer hide>` and `<transition>` | the last tractor is the main one; its tracks are playlists or, as Kdenlive writes them, tractors of playlists |
@@ -33,6 +34,13 @@ start at 0, where both readings agree.
 - Transitions and filters on the main tractor (compositing, audio mixing between tracks) are kept
   opaque on the timeline and reported.
 - Clips of one resource share one media reference.
+- A timewarp's frames (its in point, length and entry points) are source frames divided by the
+  speed: `timewarp:2` frames 1-5 are source frames 2-10. The imported clip keeps the entry's
+  length at the profile rate and its source range in source time. At half speed melt shows the
+  source frame nearest each half position, rounding halves up (4 5 5 6 6 7 for source 4-6.5);
+  OmaMovie keeps the frame already on screen (4 4 5 5 6 6). Sound follows the speed with its
+  pitch, as in melt's default; a speed the mixer cannot play with sound (0.7×: no whole audio
+  rate) gets an import note.
 
 ## Safety (§18)
 
@@ -43,6 +51,9 @@ million elements, 64 MiB. `fuzz_mlt` runs in CI.
 ## Evidence
 
 `tests/importers/fixtures/melt_mix.mlt` is melt 7.40's own output (root path replaced);
+`melt_timewarp_23976.mlt` is melt 7.42's speed change at 2×, ½× and 1×, exported by OmaMovie
+after save and reopen and compared with melt's render frame by frame
+(`tests/app/test_shared_speed.cpp`, [evidence](../Research/evidence/2026-10-20-mlt-timewarp.md));
 `tools/bench/cross-editor/roundtrip.sh` makes a document with melt, renders it with melt and
 with OmaMovie after `oma-project convert`, and compares the movies frame by frame. Kdenlive's own
 test projects (MLT 7.7-7.23: av, test-mix, clip-ids, test-nesting) read to ProjectIR with every

@@ -27,16 +27,17 @@ Result<void> place_items(tl::Editor& ed, tl::TrackId track, const ir::Track& sou
         const auto* clip = std::get_if<ir::Clip>(&item);
         if (clip == nullptr)
             continue;
-        const std::int64_t length = ticks_of(ed.timeline(), clip->source.duration(), clip->name, r);
+        const std::int64_t length = ticks_of(ed.timeline(), played(*clip), clip->name, r);
         const auto m = media.find(clip->media);
         const tl::ClipId id = ed.new_clip_id();
+        const auto map = tl::TimeMap::constant(clip->speed);
         const tl::edit::ClipSource placed{.media = m != media.end() ? m->second : tl::MediaId{},
                                           .source_in = clip->source.start(),
                                           .duration = ed.timeline().at(length),
-                                          .time_map = {},
+                                          .time_map = map ? *map : tl::TimeMap(),
                                           .video = {},
                                           .audio = {}};
-        if (m == media.end() ||
+        if (m == media.end() || !map ||
             !ed.execute(tl::edit::overwrite(track, id, ed.timeline().at(at), placed)))
             issue(r, clip->name, "clip cannot be placed (no media, or outside it)",
                   "left as a gap of its length");

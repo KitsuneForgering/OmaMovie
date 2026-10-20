@@ -16,6 +16,15 @@ std::int64_t ticks_of(const tl::Timeline& t, const RationalTime& d, const std::s
     return on_grid ? on_grid->value() : 0;
 }
 
+RationalTime played(const ir::Clip& c) {
+    const RationalTime& d = c.source.duration();
+    const auto timebase = Rational::make(d.timebase().num(), d.timebase().den() * c.speed.num());
+    if (!timebase)
+        return d;
+    const auto t = RationalTime::make(d.value() * c.speed.den(), *timebase);
+    return t ? *t : d;
+}
+
 void transition_into(tl::Editor& ed, tl::ClipId clip, const ir::Transition& t,
                      const std::string& who, ir::ImportReport& r) {
     if (t.kind != "SMPTE_Dissolve") {

@@ -37,6 +37,20 @@ bool imports_an_mlt_file() {
            s.canvasWidth() == 320;
 }
 
+// speeds.mlt: a Kdenlive speed with sound the mixer can follow (2x) and one it cannot (0.7x).
+bool notes_a_speed_that_plays_silent() {
+    Session s;
+    s.setSilent(true);
+    s.importTimeline(fixture("speeds.mlt"));
+    if (!wait_for([&] { return s.clips().size() == 2 && !s.importsPending(); }))
+        return false;
+    const QVariantList clips = s.clips();
+    return std::abs(clips[0].toMap().value("duration").toDouble() - (5.0 / 30)) < 1e-9 &&
+           std::abs(clips[1].toMap().value("duration").toDouble() - (10.0 / 30)) < 1e-9 &&
+           s.importReport() == QStringList{"h264_30fps_aac.mp4: speed 7/10 plays without sound; "
+                                           "the picture keeps it"};
+}
+
 // basic.otio refers to a file that does not exist: it opens with notes instead of clips.
 bool reports_what_an_import_could_not_place() {
     Session s;
@@ -53,6 +67,8 @@ void run_import_timeline_tests() {
         it("imports an OTIO file as an unsaved project",
            { expect(imports_an_otio_file_as_an_unsaved_project()).toBeTruthy(); });
         it("imports an MLT file the same way", { expect(imports_an_mlt_file()).toBeTruthy(); });
+        it("notes an imported speed that plays without sound",
+           { expect(notes_a_speed_that_plays_silent()).toBeTruthy(); });
         it("reports what an import could not place",
            { expect(reports_what_an_import_could_not_place()).toBeTruthy(); });
     });

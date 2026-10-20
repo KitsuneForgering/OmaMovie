@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The generated camera clip with sound at Kdenlive speeds: 2x (frames 0-9, five frames) plays
+     with sound; 0.7x (frames 10-16, ten frames) has no whole audio rate and plays silent. -->
+<mlt LC_NUMERIC="C" version="7.42.0" title="speeds">
+  <profile width="320" height="180" frame_rate_num="30" frame_rate_den="1"/>
+  <producer id="fast" in="0" out="14">
+    <property name="length">15</property>
+    <property name="resource">2:../../fixtures/generated/h264_30fps_aac.mp4</property>
+    <property name="warp_speed">2</property>
+    <property name="warp_resource">../../fixtures/generated/h264_30fps_aac.mp4</property>
+    <property name="mlt_service">timewarp</property>
+  </producer>
+  <producer id="slow" in="0" out="41">
+    <property name="length">42</property>
+    <property name="resource">0.7:../../fixtures/generated/h264_30fps_aac.mp4</property>
+    <property name="warp_speed">0.7</property>
+    <property name="warp_resource">../../fixtures/generated/h264_30fps_aac.mp4</property>
+    <property name="mlt_service">timewarp</property>
+  </producer>
+  <playlist id="playlist0">
+    <entry producer="fast" in="0" out="4"/>
+    <entry producer="slow" in="14" out="23"/>
+  </playlist>
+  <tractor id="tractor0" in="0" out="14">
+    <track producer="playlist0"/>
+  </tractor>
+</mlt>

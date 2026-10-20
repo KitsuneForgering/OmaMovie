@@ -26,6 +26,7 @@ struct Clip {
     std::string media; // a MediaRef id
     TimeRange source;  // the media range the clip plays
     std::vector<Opaque> unsupported;
+    Rational speed = Rational::literal(1, 1); // constant; the clip lasts source / speed
 };
 
 struct Gap {

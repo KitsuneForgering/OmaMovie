@@ -26,6 +26,8 @@ void report_unsaved(const ir::Timeline& timeline, ir::ImportReport& report);
 // Sequence ticks for a source length, reporting when it is not on the sequence grid.
 [[nodiscard]] std::int64_t ticks_of(const timeline::Timeline& t, const RationalTime& length,
                                     const std::string& who, ir::ImportReport& report);
+// The sequence time a clip lasts: its source range at its speed (MLT's timewarp frames).
+[[nodiscard]] RationalTime played(const ir::Clip& clip);
 // The IR transition before `clip` as its transition in, or a reported hard cut.
 void transition_into(timeline::Editor& editor, timeline::ClipId clip, const ir::Transition& t,
                      const std::string& who, ir::ImportReport& report);

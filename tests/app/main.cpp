@@ -52,6 +52,7 @@ void run_marker_tests();
 void run_effect_preset_app_tests();
 void run_import_timeline_tests();
 void run_shared_cuts_tests();
+void run_shared_speed_tests();
 void run_export_decode_path_tests();
 void run_import_edl_tests();
 void run_import_fcpxml_tests();
@@ -129,6 +130,7 @@ int main(int argc, char* argv[]) {
     run_effect_preset_app_tests();
     run_import_timeline_tests();
     run_shared_cuts_tests();
+    run_shared_speed_tests();
     run_export_decode_path_tests();
     run_import_edl_tests();
     run_import_fcpxml_tests();

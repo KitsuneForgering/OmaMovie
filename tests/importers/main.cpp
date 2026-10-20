@@ -9,6 +9,8 @@ void run_edl_refusal_tests();
 void run_xml_tests();
 void run_xml_bounds_tests();
 void run_mlt_tests();
+void run_mlt_timewarp_tests();
+void run_mlt_timewarp_report_tests();
 void run_fcpxml_tests();
 void run_fcpxml_refusal_tests();
 
@@ -23,6 +25,8 @@ int main(int argc, char* argv[]) {
     run_xml_tests();
     run_xml_bounds_tests();
     run_mlt_tests();
+    run_mlt_timewarp_tests();
+    run_mlt_timewarp_report_tests();
     run_fcpxml_tests();
     run_fcpxml_refusal_tests();
     return cest_result();

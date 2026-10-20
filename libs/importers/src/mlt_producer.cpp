@@ -11,6 +11,12 @@ Producer producer_of(const xml::Element& e, const Document& doc, std::string_vie
                .in = 0,
                .length = -1,
                .filters = {}};
+    if (p.service == "timewarp") { // Kdenlive's speed change: resource is "speed:file"
+        p.resource = property(e, "warp_resource");
+        const auto speed = speed_of(property(e, "warp_speed"));
+        p.speed = speed && speed->is_positive() ? *speed : Rational();
+        p.keep_pitch = property(e, "warp_pitch") == "1";
+    }
     const std::filesystem::path file(p.resource);
     if (!p.resource.empty() && file.is_relative() && !root.empty() && p.service != "color" &&
         p.service != "colour")
