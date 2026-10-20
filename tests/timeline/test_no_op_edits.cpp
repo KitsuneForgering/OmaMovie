@@ -20,6 +20,22 @@ bool leaves_no_trace(Make edit) {
     return ok && !fx.editor.can_undo() && fx.editor.revision() == revision;
 }
 
+// Setting a caption to what it already is, or replacing the list with an identical one (seed 1522
+// of generator v7: two captions, then the later one set to its own times and text).
+bool unchanged_captions_leave_no_trace() {
+    Fixture fx = make_fixture();
+    Editor& ed = fx.editor;
+    const Caption late{.id = ed.new_caption_id(), .start = f(54), .duration = f(8), .text = "a"};
+    const Caption early{.id = ed.new_caption_id(), .start = f(6), .duration = f(18), .text = "b"};
+    if (!ed.execute(edit::add_caption(late)) || !ed.execute(edit::add_caption(early)))
+        return false;
+    ed.clear_history();
+    const auto revision = ed.revision();
+    const bool set = ed.execute(edit::set_caption(late)).has_value();
+    const bool replaced = ed.execute(edit::replace_captions({early, late})).has_value();
+    return set && replaced && !ed.can_undo() && ed.revision() == revision;
+}
+
 // A no-op after an undo keeps the redo it would otherwise discard.
 bool keeps_redo() {
     Fixture fx = make_fixture();
@@ -76,6 +92,8 @@ void run_no_op_edit_tests() {
                 return edit::move_clip(id, tl.track_of(id)->id, f(10));
             })).toBeTruthy();
         });
+        it("setting or replacing captions with the same ones",
+           { expect(unchanged_captions_leave_no_trace()).toBeTruthy(); });
         it("refuses a connection on the clip's own track",
            { expect(refuses_same_track_connection()).toBeTruthy(); });
         it("keeps the redo stack", { expect(keeps_redo()).toBeTruthy(); });

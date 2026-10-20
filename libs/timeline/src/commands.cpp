@@ -506,6 +506,9 @@ public:
 
     void revert(Timeline& timeline) noexcept override { Mutation(timeline).captions() = previous_; }
 
+    // The same list (setting a caption to itself, re-importing it) records no Undo entry.
+    [[nodiscard]] bool changed_nothing() const noexcept override { return next_ == previous_; }
+
 private:
     std::vector<Caption> next_;
     std::vector<Caption> previous_;
