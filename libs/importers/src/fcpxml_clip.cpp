@@ -13,6 +13,11 @@ std::optional<ir::Clip> clip_of(Context& c, const xml::Element& e) {
             if ((child.name == "video" || child.name == "audio") && media == &e)
                 media = &child;
     const std::string name(e.attribute("name"));
+    if (e.attribute("enabled") == "0") { // Final Cut's disabled clip: it shows and sounds nothing
+        issue(c.out.report, name, "clip disabled in the source",
+              "left as a gap on the spine, left out when connected");
+        return std::nullopt;
+    }
     const auto id = media_of(c, media->attribute("ref"));
     if (!id) {
         issue(c.out.report, name, "clip without a readable asset", "left as a gap");

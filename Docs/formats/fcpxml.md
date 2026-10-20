@@ -26,6 +26,8 @@ value off the grid is rounded to the nearest frame and reported.
 - Spine offsets count from the first item's offset (a sequence's `tcStart` such as `3600s`
   becomes timeline zero).
 - `filter-*` and `adjust-*` children of a clip are kept opaque on it and reported.
+- A clip with `enabled="0"` (disabled in Final Cut) becomes a gap on the spine and is left out
+  when connected, reported; before 2026-10-20 it imported as a playing clip.
 - Retiming (`timeMap`, `conform-rate`) is kept opaque and reported; the clip plays its
   `start`/`duration` at normal speed. Until 2026-10-20 it was dropped without a note. Constant
   speed is not mapped yet: without Final Cut here, which time the clip's `start` counts in
