@@ -13,7 +13,7 @@
 namespace property {
 
 // Bumped whenever a seed starts producing different steps, so reports name the generator.
-inline constexpr int kGeneratorVersion = 4;
+inline constexpr int kGeneratorVersion = 5;
 
 class Rng {
 public:

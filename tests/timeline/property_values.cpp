@@ -45,6 +45,8 @@ void choose_values(Rng& rng, Op& op, const Extent& e) {
     } else if (op.kind == Kind::Transition) {
         op.a = rng.between(-1, 40); // a duration of 0 or less is refused
         op.b = rng.between(0, 3);   // 3 names no transition kind
+    } else if (op.kind == Kind::Detach) {
+        op.b = rng.between(0, e.tracks - 1); // a video lane is refused
     } else if (op.kind == Kind::Connect) {
         op.b = rng.between(0, e.tracks - 1);
         op.c = rng.between(0, 3);

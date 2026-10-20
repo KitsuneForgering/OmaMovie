@@ -10,7 +10,7 @@ std::string to_string(const Op& op) {
         "Append",       "Insert",     "Overwrite", "Split",  "TrimStart", "TrimEnd",
         "RippleDelete", "Remove",     "Roll",      "Slip",   "Slide",     "Move",
         "RippleMove",   "Speed",      "Reverse",   "Freeze", "Connect",   "Disconnect",
-        "Ramp",         "Transition", "Undo",      "Redo"};
+        "Ramp",         "Transition", "Detach",    "Undo",   "Redo"};
     return std::format("{{Kind::{}, {}, {}, {}, {}, {}}}",
                        kNames.at(static_cast<std::size_t>(op.kind)), op.track, op.clip, op.a, op.b,
                        op.c);

@@ -26,6 +26,8 @@ std::string broken_clip(const Timeline& tl, const Track& track, const Clip& c) {
         tr && (track.kind == TrackKind::Caption || tr->kind > TransitionKind::Wipe ||
                !on_grid(tl, tr->duration) || tr->duration.value() <= 0))
         return std::format("clip {}: invalid transition", c.id.value());
+    if (c.audio_detached && track.kind != TrackKind::Video)
+        return std::format("clip {}: detached audio off a video track", c.id.value());
     if (c.anchor) {
         const Clip* primary = tl.find_clip(c.anchor->primary);
         if (!primary || tl.track_of(primary->id) == &track || primary->anchor)

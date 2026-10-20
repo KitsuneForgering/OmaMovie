@@ -45,6 +45,8 @@ std::unique_ptr<Command> to_command(const Op& op, Editor& editor) {
         return edit::reverse(id);
     case Kind::Freeze:
         return edit::freeze_frame(id, f(start + op.a), f(op.b), ripple);
+    case Kind::Detach:
+        return edit::detach_audio(id, track_id(tl, op.b), editor.new_clip_id());
     case Kind::Connect:
         return edit::connect(id, clip_id(tl, op.b, op.c));
     case Kind::Disconnect:
