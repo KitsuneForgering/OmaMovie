@@ -2,6 +2,8 @@
 
 #include "oma/project_ir/validate.hpp"
 
+#include <algorithm>
+
 namespace oma::importers {
 
 Result<Imported> import_mlt(std::string_view text) {
@@ -27,8 +29,16 @@ Result<Imported> import_mlt(std::string_view text) {
         return std::unexpected(built.error());
     for (auto& track : out.timeline.tracks)
         for (auto& item : track.items)
-            if (const auto* c = std::get_if<ir::Clip>(&item); c && !c->unsupported.empty())
-                mlt::issue(out.report, c->name, "filters not imported", "kept in the import");
+            if (const auto* c = std::get_if<ir::Clip>(&item)) {
+                const auto remaps = std::ranges::count_if(c->unsupported, [](const ir::Opaque& o) {
+                    return mlt::is_a(o, "link") && o.schema == "timeremap";
+                });
+                if (std::ssize(c->unsupported) > remaps)
+                    mlt::issue(out.report, c->name, "filters not imported", "kept in the import");
+                if (remaps > 0)
+                    mlt::issue(out.report, c->name, "time remap not imported",
+                               "plays at normal speed for its length");
+            }
     if (auto valid = ir::validate(out.timeline); !valid)
         return std::unexpected(valid.error());
     out.report.reached =

@@ -12,7 +12,7 @@ MLT is the engine behind Kdenlive and Shotcut; `melt` reads and writes its XML, 
 | `<profile frame_rate_num frame_rate_den>` | the timeline's rate (25 fps when absent, reported) |
 | `<producer id in>` / `<chain id in>` with `resource`, `mlt_service`, `length`, `kdenlive:clipname` | a media file, its in point, its length (the IR's available range) and name |
 | `<producer mlt_service="timewarp">` with `warp_speed`, `warp_resource` | a constant speed change, as Kdenlive writes one: the clip plays `warp_resource` at `warp_speed` (read exactly as a decimal); reverse and unreadable speeds stay gaps, reported |
-| `<filter>` inside a producer | kept opaque on each of its clips; reported |
+| `<filter>` inside a producer, `<link>` inside a chain | kept opaque on each of its clips; reported. A `timeremap` link (Kdenlive's time remap) gets its own note: the clip plays at normal speed for its length. Until 2026-10-20 links were dropped without a note |
 | `<playlist id>` with `<entry producer in out>` and `<blank length>` | an IR track: clips and gaps |
 | `<tractor id in out>` with `<track producer hide>` and `<transition>` | the last tractor is the main one; its tracks are playlists or, as Kdenlive writes them, tractors of playlists |
 

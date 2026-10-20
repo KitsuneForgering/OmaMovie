@@ -26,7 +26,7 @@ Producer producer_of(const xml::Element& e, const Document& doc, std::string_vie
     p.in = frames_of(e.attribute("in"), doc).value_or(0);
     p.length = frames_of(property(e, "length"), doc).value_or(-1);
     for (const xml::Element& c : e.children)
-        if (c.name == "filter")
+        if (c.name == "filter" || c.name == "link") // a chain's links: Kdenlive's time remap
             p.filters.push_back(opaque(c));
     return p;
 }
