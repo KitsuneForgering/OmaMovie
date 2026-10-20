@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Written by melt 7.42 (`melt SRC in=0 out=13 SRC in=12 out=23 -mix 4 -mixer luma -consumer xml:`)
+     from this directory; root and meta.* properties removed so the resource resolves next to
+     this file. melt renders 22 frames: source 0-9, a 4-frame mix of 10-13 into 12-15, 16-23. -->
+<mlt LC_NUMERIC="C" version="7.42.0" title="h264_23.976fps.mp4">
+  <profile description="automatic" width="320" height="180" progressive="1" sample_aspect_num="1" sample_aspect_den="1" display_aspect_num="16" display_aspect_den="9" frame_rate_num="24000" frame_rate_den="1001" colorspace="601"/>
+  <producer id="producer0" in="0" out="13">
+    <property name="length">24</property>
+    <property name="resource">../../fixtures/generated/h264_23.976fps.mp4</property>
+    <property name="mlt_service">avformat</property>
+  </producer>
+  <producer id="producer1" in="12" out="23">
+    <property name="length">24</property>
+    <property name="resource">../../fixtures/generated/h264_23.976fps.mp4</property>
+    <property name="mlt_service">avformat</property>
+  </producer>
+  <tractor id="tractor0" in="0" out="3">
+    <track producer="producer0" in="10" out="13"/>
+    <track producer="producer1" in="0" out="3"/>
+    <transition id="transition0" out="3">
+      <property name="a_track">0</property>
+      <property name="b_track">1</property>
+      <property name="factory">loader</property>
+      <property name="mlt_service">luma</property>
+    </transition>
+  </tractor>
+  <playlist id="playlist0">
+    <entry producer="producer0" in="0" out="9"/>
+    <entry producer="tractor0" in="0" out="3"/>
+    <entry producer="producer1" in="4" out="11"/>
+  </playlist>
+  <tractor id="tractor1" title="h264_23.976fps.mp4" in="0" out="21">
+    <track producer="playlist0"/>
+  </tractor>
+</mlt>

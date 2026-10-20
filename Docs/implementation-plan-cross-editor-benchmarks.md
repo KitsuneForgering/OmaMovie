@@ -88,6 +88,13 @@ source for one editor. A famous name alone does not make a useful comparator.
   runner. Add a three-layer OmaMovie audit and instrument input-to-visible-frame,
   dropped/missed frames and end-to-end export verification where current audits lack
   them. Keep instrumented paths equivalent to normal editing.
+  *Review (2026-10-19)*: the runners already print fixture sha256, scene semantics, editor,
+  FFmpeg and VA-API versions, hardware path, alternated order and load per report, so a
+  separate manifest file would duplicate them and is not added. The missing field was the
+  CPU frequency policy, which moved one benchmark's medians by up to 1.9×: every
+  `tools/bench/*/run.sh` now prints it through `tools/bench/host-power.sh` (driver,
+  governor, EPP, power profile, AC). A machine-readable result schema stays open until two
+  reports actually need automated comparison.
 - [ ] Pilot one simple and one intermediate Linux editor, then Kdenlive/Shotcut and a
   professional Linux candidate if it runs the shared case on the reference host. Run
   the task sheet once to find semantic mismatches before gathering timed repetitions.
@@ -113,6 +120,28 @@ source for one editor. A famous name alone does not make a useful comparator.
   independently decoded export. Retain long-form and lifetime stress from
   [M10](implementation-plan-m10-validation.md); benchmark runs are evidence, not CI
   pass/fail tests against another product.
+  *Cuts scene in `app_tests` (2026-10-19)*: `tests/app/test_shared_cuts.cpp` imports the
+  bench's five-reordered-cuts shape at fixture scale (24-frame 23.976 fps source) from
+  `cuts.otio` and from `cuts.mlt` as melt writes it (melt renders that document as 19 frames),
+  saves, reopens in a fresh Session, exports in software and matches all 19 frames to their
+  expected source frames by an ffmpeg decode. Reordering two expected cuts makes both cases
+  fail. A third case imports `melt_mix_23976.mlt`, written by melt 7.42 itself
+  (`roundtrip.sh` at fixture scale): 22 frames, and outside both dissolve windows (melt
+  10–13, OmaMovie centred 12–15) output 0–9 and 16–21 must be source 0–9 and 18–23; an
+  off-by-one expectation fails it. The dissolve frames themselves are not checked.
+  `cuts_steps.otio`/`.mlt` cut the 30 fps steps clip the same way and also check each output
+  frame's sound by its loudness step over a whole-cycle window (11 cycles of 440 Hz);
+  a one-frame sound shift fails both cases with the picture check disabled. melt renders
+  the same MLT document with frame-exact sound at a constant −3.0 dB (0.705: its equal-power
+  mono → stereo upmix), where OmaMovie copies mono to both channels at unity; loudness
+  comparisons must account for that. A sixth case exports `cuts_steps.mlt` on the hardware
+  route and requires the reported encoder to be VA-API or the libx264 fallback with its
+  reason; on the reference Intel host it ran `VA-API H.264 (GPU)`, and with
+  `LIBVA_DRIVER_NAME=oma_bogus` the fallback, both with every frame and sound step right.
+  CI without VA-API covers only the fallback branch. On that untagged 320×180 source OmaMovie's RGB differs
+  from melt's by design, not as a defect: ADR-0006 reads untagged SD as SMPTE 170M primaries
+  and converts them to BT.709 (pure green → (73, 250, 0), matching the matrix), while melt
+  keeps the samples. Pixel-level comparisons need tagged BT.709 fixtures.
 - [ ] Store raw results, commands, versions, fixture hashes and deviations under
   `Docs/Research/evidence/`; publish a concise comparison with uncertainty, output
   correctness and explicit `not comparable` cells. Recheck candidate support when the

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Five reordered cuts of the 30 fps steps clip (its loudness names each source frame), as
+     melt and Kdenlive write a single-track project with picture and sound. Same edit as
+     cuts_steps.otio. -->
+<mlt LC_NUMERIC="C" version="7.40.0" title="cuts_steps">
+  <profile width="320" height="180" frame_rate_num="30" frame_rate_den="1"/>
+  <producer id="producer0" in="0" out="29">
+    <property name="length">30</property>
+    <property name="resource">../../fixtures/generated/h264_30fps_steps.mkv</property>
+    <property name="mlt_service">avformat</property>
+  </producer>
+  <playlist id="playlist0">
+    <entry producer="producer0" in="20" out="23"/>
+    <entry producer="producer0" in="3" out="8"/>
+    <entry producer="producer0" in="12" out="14"/>
+    <entry producer="producer0" in="0" out="1"/>
+    <entry producer="producer0" in="25" out="29"/>
+  </playlist>
+  <tractor id="tractor0" in="0" out="19">
+    <track producer="playlist0"/>
+  </tractor>
+</mlt>

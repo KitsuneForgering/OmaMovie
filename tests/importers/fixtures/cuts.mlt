@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The cross-editor cuts scene at fixture scale: five reordered cuts of the generated
+     23.976 fps clip, as melt and Kdenlive write a single-track project. Same edit as cuts.otio. -->
+<mlt LC_NUMERIC="C" version="7.40.0" title="cuts">
+  <profile width="320" height="180" frame_rate_num="24000" frame_rate_den="1001"/>
+  <producer id="producer0" in="0" out="23">
+    <property name="length">24</property>
+    <property name="resource">../../fixtures/generated/h264_23.976fps.mp4</property>
+    <property name="mlt_service">avformat</property>
+  </producer>
+  <playlist id="playlist0">
+    <entry producer="producer0" in="16" out="19"/>
+    <entry producer="producer0" in="2" out="7"/>
+    <entry producer="producer0" in="10" out="12"/>
+    <entry producer="producer0" in="0" out="1"/>
+    <entry producer="producer0" in="20" out="23"/>
+  </playlist>
+  <tractor id="tractor0" in="0" out="18">
+    <track producer="playlist0"/>
+  </tractor>
+</mlt>
