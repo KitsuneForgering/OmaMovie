@@ -170,6 +170,7 @@ public:
     void setNotifications(bool on);
     // From Settings: "auto", "hardware" or "software" for the next exports.
     void setExportEncoder(const QString& choice);
+    void setExportDecode(const QString& choice); // auto, hardware or software (Settings, per run)
     void setOutputMuted(bool muted);
     [[nodiscard]] float takeAudioPeak();
     [[nodiscard]] bool audioRunning() const;
@@ -820,6 +821,7 @@ private:
     bool warned_silent_ = false;
     bool notifications_ = false; // the app opts in (main.cpp); tests and audits stay quiet
     QString export_encoder_ = QStringLiteral("auto");
+    QString export_decode_ = QStringLiteral("auto");
     QVariantList filter_previews_;
     unsigned previews_ = 0; // filter preview requests, so a stale result is dropped
     oma::JobHandle previews_job_;

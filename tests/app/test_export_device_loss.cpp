@@ -18,7 +18,7 @@ constexpr std::int64_t kFrames = 30; // the whole camera fixture
 constexpr std::int64_t kLostAt = 10;
 
 QString export_camera(const QTemporaryDir& dir, const char* name, oma::gpu::Device* device,
-                      std::int64_t lose_at) {
+                      std::int64_t lose_at, ExportStats* stats = nullptr) {
     pt::Sequence seq = pt::make_sequence();
     if (!pt::place_camera(seq, 0).valid())
         return {};
@@ -38,11 +38,13 @@ QString export_camera(const QTemporaryDir& dir, const char* name, oma::gpu::Devi
             device->mark_lost(); // what a failed submission records on VK_ERROR_DEVICE_LOST
         return true;
     };
-    return export_timeline_on(request, device, lose) ? movie : QString();
+    return export_timeline_on(request, device, lose, stats) ? movie : QString();
 }
 
 // Frames composited before the loss on the GPU and after it on the CPU reference match an
-// export rendered entirely on the CPU, frame for frame (independent ffmpeg decode).
+// export rendered entirely on the CPU, frame for frame (independent ffmpeg decode). Where the
+// export decoded in hardware (Intel), its pictures lived on the lost device: it must have
+// switched to software decode at the loss.
 bool export_continues_after_device_loss() {
     auto device = oma::gpu::Device::create();
     if (!device) {
@@ -50,9 +52,13 @@ bool export_continues_after_device_loss() {
         return true;
     }
     QTemporaryDir dir;
-    const QString lost = export_camera(dir, "lost.mp4", device->get(), kLostAt);
+    ExportStats stats;
+    const QString lost = export_camera(dir, "lost.mp4", device->get(), kLostAt, &stats);
     const QString cpu = export_camera(dir, "cpu.mp4", nullptr, -1);
     if (lost.isEmpty() || cpu.isEmpty() || !(*device)->lost() || decoded_frames(lost) != kFrames)
+        return false;
+    if (stats.decode_path.starts_with("hardware") &&
+        !stats.decode_path.contains("software after device loss at frame 10"))
         return false;
     const QByteArray a = gray_frames(lost);
     const QByteArray b = gray_frames(cpu);

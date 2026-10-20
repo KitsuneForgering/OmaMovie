@@ -185,6 +185,7 @@ Session::~Session() {
 void Session::setSilent(bool silent) { audio_.set_silent(silent); }
 void Session::setNotifications(bool on) { notifications_ = on; }
 void Session::setExportEncoder(const QString& choice) { export_encoder_ = choice; }
+void Session::setExportDecode(const QString& choice) { export_decode_ = choice; }
 void Session::setOutputMuted(bool muted) { audio_.set_muted(muted); }
 float Session::takeAudioPeak() { return audio_.take_peak(); }
 bool Session::audioRunning() const { return audio_.running(); }
@@ -1869,6 +1870,9 @@ void Session::exportMovie(const QUrl& url, const QString& profile) {
                           .encoder = export_encoder_ == QLatin1String("hardware")   ? ExportRequest::Encoder::Hardware
                                      : export_encoder_ == QLatin1String("software") ? ExportRequest::Encoder::Software
                                                                                     : ExportRequest::Encoder::Auto,
+                          .decode = export_decode_ == QLatin1String("hardware")   ? ExportRequest::Decode::Hardware
+                                    : export_decode_ == QLatin1String("software") ? ExportRequest::Decode::Software
+                                                                                  : ExportRequest::Decode::Auto,
                           .profile = choice->profile};
     const auto cues = caption_io::cues(request.timeline);
     const std::optional<std::string> captions = cues.empty() ? std::nullopt

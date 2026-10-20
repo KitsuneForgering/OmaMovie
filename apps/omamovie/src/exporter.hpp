@@ -28,6 +28,9 @@ struct ExportRequest {
     // Auto: the GPU's encoder where OmaMovie has validated it (Intel VA-API), else software;
     // a failure to open it falls back to software and says why (ExportStats::encoder).
     enum class Encoder : std::uint8_t { Auto, Software, Hardware } encoder = Encoder::Auto;
+    // Auto: hardware decode where OmaMovie has validated it (Intel VA-API, as the viewer), else
+    // software; a stream whose hardware decoder cannot open falls back to software per file.
+    enum class Decode : std::uint8_t { Auto, Software, Hardware } decode = Decode::Auto;
     oma::media::OutputProfile profile = oma::media::OutputProfile::Mp4H264Aac;
 };
 

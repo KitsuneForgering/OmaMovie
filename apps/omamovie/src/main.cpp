@@ -251,6 +251,7 @@ int main(int argc, char** argv) {
         decode == QLatin1String("hardware")   ? PreviewItem::DecodePreference::Hardware
         : decode == QLatin1String("software") ? PreviewItem::DecodePreference::Software
                                               : PreviewItem::DecodePreference::Auto);
+    session.setExportDecode(decode);
     session.setPreview(preview);
     const auto apply_settings = [&] {
         session.setPreviewQuality(app_settings.previewQuality());

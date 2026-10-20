@@ -10,7 +10,9 @@ use](Research/evidence/2026-10-19-export-transfer-repeats.md) (2026-10-19) add p
 process CPU/frame, DRM engine busy time and GPU-resident memory: the 4K median is 9.5 s,
 the render engine is busy about 56% of wall time and the process uses about five cores,
 so the staged 4K export is mostly CPU-bound. Decode and upload, not render, drove the
-1.5× spread. Then define and pilot GPU-native
+1.5× spread. Hardware decode for export ([A/B](Research/evidence/2026-10-19-export-hardware-decode.md),
+proposed [ADR-0022](adr/0022-export-hardware-decode.md)) then cut 4K CPU per frame from
+272 to 43 ms with pixel-identical output. Then define and pilot GPU-native
 compositor-output → VA-API encoder input, comparing FFmpeg 9's existing frame mapping
 with direct DMA-BUF import under the same correctness and transfer checks. This remains
 a post-v0.1 baseline task, not a zero-copy or speedup claim; see

@@ -116,10 +116,23 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
         mark = now;
     };
     const oma::FrameRate rate = request.timeline.frame_rate();
-    // Software decode: export does not compete with the viewer's hardware decoder, and every
-    // frame needs a CPU readback for the software encoder anyway.
-    FrameSource frames(nullptr, &st.decoded);
-    st.decode_path = "software (export FrameSource has no GPU device)";
+    // Hardware decode keeps 4K source pictures off the CPU and out of the staging copies
+    // (Docs/Research/evidence/2026-10-19-export-hardware-decode.md); the policy matches the
+    // viewer's and the encoder's below. The export's own decoders do not share the viewer's.
+    constexpr std::uint32_t kIntel = 0x8086;
+    const bool validated = device != nullptr && device->info().vendor_id == kIntel;
+    using Decode = ExportRequest::Decode;
+    const bool hardware_decode =
+        device != nullptr &&
+        (request.decode == Decode::Hardware || (request.decode == Decode::Auto && validated));
+    // Replaced by a software source if the device is lost: its pictures live on that device.
+    std::optional<FrameSource> frames;
+    frames.emplace(hardware_decode ? device : nullptr, &st.decoded);
+    st.decode_path = hardware_decode     ? "hardware first, software per file if it cannot open"
+                     : device == nullptr ? "software (no GPU device)"
+                     : request.decode == Decode::Software
+                         ? "software (chosen in Settings)"
+                         : "software (hardware decode not validated on this GPU)";
     st.compositor_path = "CPU reference (no Vulkan device)";
     std::unique_ptr<oma::compositor::VulkanCompositor> gpu;
     if (device != nullptr) {
@@ -131,15 +144,15 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
         }
     }
     if (gpu)
-        st.compositor_path = "Vulkan (software frames staged to GPU)";
+        st.compositor_path = hardware_decode
+                                 ? "Vulkan (hardware frames imported, software frames staged)"
+                                 : "Vulkan (software frames staged to GPU)";
     if (!gpu)
         oma::log_warn(oma::Category::Encode, "export: {}", st.compositor_path);
     // Encoder: the GPU's where validated (M7 gate on Intel, 2026-10-07), else libx264. Both keep
     // the requested resolution, rate, colour tags and audio; only speed and the encoder's own
     // quality differ.
     using Encoder = ExportRequest::Encoder;
-    constexpr std::uint32_t kIntel = 0x8086;
-    const bool validated = device != nullptr && device->info().vendor_id == kIntel;
     const bool h264 = request.profile == oma::media::OutputProfile::Mp4H264Aac ||
                       request.profile == oma::media::OutputProfile::MatroskaH264Aac;
     const bool try_hardware = h264 && (request.encoder == Encoder::Hardware ||
@@ -191,19 +204,25 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
                 oma::Error(oma::ErrorCode::Cancelled, oma::Category::Encode, "export cancelled"));
         }
         mark = Clock::now();
-        auto view = build_viewer_frame(request.timeline, request.paths, request.luts, request.width,
-                                       request.height, k, request.ticks_per_frame, frames);
+        const auto build = [&] {
+            return build_viewer_frame(request.timeline, request.paths, request.luts, request.width,
+                                      request.height, k, request.ticks_per_frame, *frames);
+        };
+        auto view = build();
         if (!view)
             return stop(view.error());
         lap(st.build);
         std::vector<oma::compositor::LayerInput> inputs;
-        inputs.reserve((*view)->pictures.size());
-        for (const Picture& p : (*view)->pictures) {
-            inputs.push_back({.frame = p.frame.get(),
-                              .color = p.color,
-                              .rotation = p.rotation,
-                              .sample_aspect = p.sample_aspect});
-        }
+        const auto collect = [&] {
+            inputs.clear();
+            for (const Picture& p : (*view)->pictures) {
+                inputs.push_back({.frame = p.frame.get(),
+                                  .color = p.color,
+                                  .rotation = p.rotation,
+                                  .sample_aspect = p.sample_aspect});
+            }
+        };
+        collect();
         EncodedFrame out;
         if (gpu) {
             // The GPU encodes BT.709 RGBA8 and the encoder reads it back: one 8-bit readback per
@@ -221,6 +240,15 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
                 st.compositor_path +=
                     "; CPU reference after device loss at frame " + std::to_string(k);
                 gpu.reset();
+                if (hardware_decode) {
+                    // This frame's pictures were decoded onto the lost device; decode it again.
+                    frames.emplace(nullptr, &st.decoded);
+                    st.decode_path += "; software after device loss at frame " + std::to_string(k);
+                    view = build();
+                    if (!view)
+                        return stop(view.error());
+                    collect();
+                }
             } else if (!pixels) {
                 return stop(pixels.error());
             } else {

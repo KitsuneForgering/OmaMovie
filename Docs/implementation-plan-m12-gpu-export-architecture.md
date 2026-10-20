@@ -5,8 +5,9 @@ scoped Intel/software v0.1 decision. Correctness or reliability failures discove
 may require a v0.1 fix through M7/M10; architectural preference alone does not. M11 keeps
 its existing targeted UI/ownership and responsiveness checks. Do not reopen closed work.
 
-**Problem and code evidence (2026-10-16).** `export_timeline_on` constructs
-`FrameSource(nullptr)`, so export decodes in software. Its Vulkan branch composites those
+**Problem and code evidence (2026-10-16).** `export_timeline_on` constructed
+`FrameSource(nullptr)`, so export decoded in software (changed 2026-10-19 by proposed
+[ADR-0022](adr/0022-export-hardware-decode.md): hardware decode where validated). Its Vulkan branch composites those
 frames, then calls `read_nv12()` for the VA-API writer or `read_display()` for software
 encoding (`apps/omamovie/src/exporter.cpp`). `EncodedFrame` owns CPU pixels in a vector;
 the current NV12 compute pass writes a host-visible readback buffer, not an exportable
@@ -81,9 +82,11 @@ transport owner would need too many shared inputs, so it is not an automatic ext
    color, audio and timing against the independent oracle before removing the mandatory
    compositor readback. Remeasure the *same* fixtures after that removal and record transfer
    counts, process CPU/frame, peak memory and GPU use; no speedup factor is assumed.
-5. Only then evaluate hardware decode during export using the existing
-   `VideoDecoder`/`FrameSource` mechanism. Profile surface lifetime, device admission,
-   queue contention and throughput; retain software decode if reuse serializes the pipeline.
+5. Hardware decode during export, moved ahead of steps 2–4 on evidence (2026-10-19,
+   proposed [ADR-0022](adr/0022-export-hardware-decode.md)): the existing
+   `VideoDecoder`/`FrameSource` mechanism cut 4K process CPU per frame from 272 to 43 ms
+   with pixel-identical output ([A/B](Research/evidence/2026-10-19-export-hardware-decode.md)).
+   Still open: export beside live viewer decode, other vendors, multi-stream and long scenes.
 6. Extract export ownership from `Session` only where its job lifecycle, pinned snapshot,
    progress, cancellation and publication/recovery state have a clear owner. Preserve
    `Session`'s QML properties/signals and the existing export/recovery tests. Do not make
