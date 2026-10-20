@@ -60,5 +60,15 @@ staging copies; peak GPU-resident memory 1,050 MB. Different days and starting l
 9.3), so the wall time is indicative; only a peak memory value was sampled, so this run does
 not exclude slow GPU-memory growth.
 
+**Memory over time** ([series](2026-10-20-long-25min-memory-series.txt)). A repeat of the same 25-minute export with `MEASURE_SERIES` (one
+sample per second; PASS, identical size and checks) shows GPU-resident memory stepping
+369 → 447 → 531/650 → 851 MB at about 61, 119–120 and 178 s, i.e. at the edit's first cuts
+(each cut is 9,000 frames, about 58 s of wall time; the dissolve sits at the second), then
+flat at 847–851 MB through the fourth cut and the last 115 s. Process RSS rose 320 → 356 MB.
+The steps match the frame source opening or reseeking decoders (at most two per file,
+`kStreamsPerFile`), so the growth is bounded in this run rather than a leak; whether about
+850 MB, roughly 280 NV12 1080p surfaces, is a necessary pool or retained imports is an open
+question, not a measured defect.
+
 Not covered: AMD/NVIDIA (not validated, so `Auto` stays software there), multi-stream 4K
-scenes, two-hour exports and memory pressure.
+scenes, two-hour exports, several source files and memory pressure.
