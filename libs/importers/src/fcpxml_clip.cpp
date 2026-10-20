@@ -29,11 +29,21 @@ std::optional<ir::Clip> clip_of(Context& c, const xml::Element& e) {
                   .media = *id,
                   .source = *TimeRange::make(source, on_grid(c, e.attribute("duration"), name)),
                   .unsupported = {}};
-    for (const xml::Element& child : e.children)
-        if (child.name.starts_with("filter-") || child.name.starts_with("adjust-"))
+    bool effects = false;
+    bool retimed = false; // a speed change, ramp or rate conform: its timing is not read
+    for (const xml::Element& child : e.children) {
+        const bool effect = child.name.starts_with("filter-") || child.name.starts_with("adjust-");
+        const bool timing = child.name == "timeMap" || child.name == "conform-rate";
+        if (effect || timing)
             clip.unsupported.push_back(opaque(child));
-    if (!clip.unsupported.empty())
+        effects = effects || effect;
+        retimed = retimed || timing;
+    }
+    if (effects)
         issue(c.out.report, name, "effects and adjustments not imported", "kept in the import");
+    if (retimed)
+        issue(c.out.report, name, "retiming (timeMap, conform-rate) not imported",
+              "plays at normal speed for its length");
     return clip;
 }
 
