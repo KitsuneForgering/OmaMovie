@@ -47,6 +47,10 @@ void choose_values(Rng& rng, Op& op, const Extent& e) {
         op.b = rng.between(0, 3);   // 3 names no transition kind
     } else if (op.kind == Kind::Detach) {
         op.b = rng.between(0, e.tracks - 1); // a video lane is refused
+    } else if (op.kind == Kind::AddMarker) {
+        op.a = rng.between(-2, e.timeline + 30); // before the start is refused
+    } else if (op.kind == Kind::RemoveMarker) {
+        op.b = rng.between(0, 4); // an index past the last marker is refused
     } else if (op.kind == Kind::Connect) {
         op.b = rng.between(0, e.tracks - 1);
         op.c = rng.between(0, 3);

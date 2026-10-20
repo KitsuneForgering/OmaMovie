@@ -2,6 +2,8 @@
 #include "property_lookup.hpp"
 #include "property_ops.hpp"
 
+#include <utility>
+
 namespace property {
 
 using namespace timeline_test;
@@ -47,6 +49,14 @@ std::unique_ptr<Command> to_command(const Op& op, Editor& editor) {
         return edit::freeze_frame(id, f(start + op.a), f(op.b), ripple);
     case Kind::Detach:
         return edit::detach_audio(id, track_id(tl, op.b), editor.new_clip_id());
+    case Kind::AddMarker:
+        return edit::add_marker(editor.new_marker_id(), f(op.a), "m");
+    case Kind::RemoveMarker: {
+        const auto markers = tl.markers();
+        return edit::remove_marker(std::cmp_less(op.b, markers.size())
+                                       ? markers[static_cast<std::size_t>(op.b)].id
+                                       : MarkerId{});
+    }
     case Kind::Connect:
         return edit::connect(id, clip_id(tl, op.b, op.c));
     case Kind::Disconnect:

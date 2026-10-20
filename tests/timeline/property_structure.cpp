@@ -55,9 +55,17 @@ std::string broken_structure(const Timeline& tl) {
                 return broken;
         }
     }
-    for (const Marker& m : tl.markers())
+    std::set<std::uint64_t> markers;
+    oma::RationalTime previous;
+    for (const Marker& m : tl.markers()) {
         if (!on_grid(tl, m.time))
             return std::format("marker {}: off the grid", m.id.value());
+        if (!m.id.valid() || !markers.insert(m.id.value()).second || m.time.value() < 0)
+            return std::format("marker {}: invalid, duplicate or before the start", m.id.value());
+        if (markers.size() > 1 && m.time < previous)
+            return std::format("marker {}: out of time order", m.id.value());
+        previous = m.time;
+    }
     return {};
 }
 

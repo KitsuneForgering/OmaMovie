@@ -18,6 +18,7 @@ namespace property {
 //   Move          b=track index a=start      RippleMove    a=at
 //   Speed   a/b c=ripple   Ramp   a/2 to b/2   Connect   b=track index c=clip index
 //   Transition   a=duration b=kind (3 is none) c=0 removes it   Detach   b=lane track index
+//   AddMarker   a=at   RemoveMarker   b=marker index
 enum class Kind {
     Append,
     Insert,
@@ -40,10 +41,12 @@ enum class Kind {
     Ramp,
     Transition,
     Detach,
+    AddMarker,
+    RemoveMarker,
     Undo,
     Redo
 };
-inline constexpr int kKinds = 23;
+inline constexpr int kKinds = 25;
 
 struct Op {
     Kind kind = Kind::Undo;
