@@ -116,6 +116,18 @@ source for one editor. A famous name alone does not make a useful comparator.
   `roundtrip.sh` has melt write an MLT document (two cuts, a luma mix), render it, and OmaMovie
   import and export the same document: 132/132 frames, cuts frame for frame (worst 39.7 dB
   outside the dissolve, which OmaMovie centres on the cut).
+  *Three layers (2026-10-20, [evidence](Research/evidence/2026-10-20-cross-editor-layers.txt))*:
+  `layers.sh` stacks three distinct 1080p23.976 BT.709 clips, two scaled by half into
+  opposite quadrants. MLT compositing is not imported by OmaMovie, so each editor gets its
+  native form (an OmaMovie project from `layers.py`; melt `affine` transitions) and both are
+  compared with FFmpeg's own scale+overlay of the sources. Three alternated rounds, all 240
+  frames, PSNR identical per editor across rounds: OmaMovie 41.9 dB (VA-API) / 41.4 dB
+  (x264), melt 44.2 / 44.5 dB. Median wall time 4.2 vs 15.5 s on the hardware route and
+  4.9 vs 17.7 s on the software route; melt used 40 s of CPU where OmaMovie used 5.6 s.
+  melt's `affine` composites on the CPU and Kdenlive's `qtblend`/GPU (movit) paths were not
+  tried, and OmaMovie also decoded in hardware (ADR-0022), so this is not a ranking of the
+  editors' best routes. The 3 dB gap is consistent with OmaMovie scaling in linear light
+  (ADR-0006).
 - [ ] Add deterministic OmaMovie tests for the shared scene's edit, save/reopen and
   independently decoded export. Retain long-form and lifetime stress from
   [M10](implementation-plan-m10-validation.md); benchmark runs are evidence, not CI
