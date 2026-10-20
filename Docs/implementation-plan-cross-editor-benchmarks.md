@@ -116,6 +116,12 @@ source for one editor. A famous name alone does not make a useful comparator.
   `roundtrip.sh` has melt write an MLT document (two cuts, a luma mix), render it, and OmaMovie
   import and export the same document: 132/132 frames, cuts frame for frame (worst 39.7 dB
   outside the dissolve, which OmaMovie centres on the cut).
+  *2× speed (2026-10-20, [evidence](Research/evidence/2026-10-20-cross-editor-speed.txt))*:
+  `run.sh 5 DIR speed` renders source frames 0-399 at 2× from melt's `timewarp` producer and
+  from OmaMovie's import of the document melt writes for it; `assert_output.py speed` checks
+  every second source frame and the sound against the source played at twice its rate (a 1×
+  file fails at 18.8 dB). All 20 exports passed; VA-API 3.16 vs 3.48 s with 4.3 vs 11.0 CPU s,
+  libx264 8.83 vs 8.71 s (a tie). Load 5-8 during the run.
   *Three layers (2026-10-20, [evidence](Research/evidence/2026-10-20-cross-editor-layers.txt))*:
   `layers.sh` stacks three distinct 1080p23.976 BT.709 clips, two scaled by half into
   opposite quadrants. MLT compositing is not imported by OmaMovie, so each editor gets its

@@ -17,6 +17,16 @@ Three alternated rounds per cell (`tools/bench/cross-editor/run.sh 3 … whole|c
 | Five reordered cuts | libx264 | 9.33 (9.32–9.44) | 10.33 (9.92–12.23) | 55.3 / 66.7 |
 | Three layers, two scaled | VA-API H.264 | 4.17 (3.85–4.37) | 15.5 (14.9–16.3) | 5.6 / 40.2 |
 | Three layers, two scaled | libx264 | 4.94 (4.86–5.56) | 17.7 (17.5–18.2) | 21.7 / 54.8 |
+| 2× speed (MLT timewarp)* | VA-API H.264 | 3.16 (3.15–4.54) | 3.48 (3.09–3.69) | 4.3 / 11.0 |
+| 2× speed (MLT timewarp)* | libx264 | 8.83 (7.43–10.02) | 8.71 (8.19–9.03) | 48.0 / 52.8 |
+
+\* Added later the same day: five rounds (`run.sh 5 … speed`) at `a087075` plus the scene
+itself, load average 5–8 during the run ([speed](../Research/evidence/2026-10-20-cross-editor-speed.txt)).
+Source frames 0-399 at 2× as Kdenlive saves it; melt renders its `timewarp` producer and
+OmaMovie imports the document melt writes for it. All 20 exports passed: 200 frames, every
+second source frame in order (worst luma PSNR OmaMovie 41.1/44.4, melt 41.2/45.0 dB), sound
+correlating at zero lag with the source played at twice its rate (pitch follows speed in both).
+The libx264 cell is a tie; with VA-API OmaMovie used 2.6× less CPU, its wall time within melt's range.
 
 **Correctness (all 36 exports passed).** Frame counts exact (479, 256, 240); every frame of
 the cuts scene matches its planned source frame; output bytes identical across rounds for

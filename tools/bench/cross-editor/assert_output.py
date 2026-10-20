@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 
 CUTS = [(400, 40), (24, 72), (200, 60), (0, 12), (300, 72)]
+SPEED_SOURCE = 400  # the speed scene: source frames 0-399 at 2x, 200 output frames
 RATE = 24000 / 1001
 
 
@@ -32,6 +33,9 @@ def frame_count(video):
 def expected_filter(scene, count):
     if scene == "whole":
         return f"[1:v]trim=end_frame={count},setpts=PTS-STARTPTS[e]"
+    if scene == "speed":  # every second source frame, in order
+        return (f"[1:v]trim=end_frame={SPEED_SOURCE},select='not(mod(n,2))',"
+                "setpts=N/(24000/1001)/TB[e]")
     pieces = []
     labels = []
     for i, (start, length) in enumerate(CUTS):
@@ -62,9 +66,11 @@ def assert_picture(source, output, scene, count):
     return worst
 
 
-def decoded_audio(path):
+def decoded_audio(path, speed=1):
+    # At 2x both editors resample, so pitch follows speed: the source read at twice its rate.
+    rate = ["-af", f"asetrate={48000 * speed},aresample=48000"] if speed != 1 else []
     pcm = command("ffmpeg", "-v", "error", "-i", str(path), "-map", "0:a:0",
-                  "-ac", "1", "-ar", "48000", "-f", "s16le", "-")
+                  "-ac", "1", *rate, "-ar", "48000", "-f", "s16le", "-")
     samples = array.array("h")
     samples.frombytes(pcm)
     return samples
@@ -97,12 +103,12 @@ def correlation(reference, actual, source_at, output_at):
 
 def assert_audio(source, output, scene, expected_seconds):
     samples = decoded_audio(output)
-    original = decoded_audio(source)
+    original = decoded_audio(source, 2 if scene == "speed" else 1)
     expected = round(expected_seconds * 48000)
     if abs(len(samples) - expected) > 4800:
         raise AssertionError(f"audio: {len(samples)} samples, expected {expected} ±4800")
     points = []
-    if scene == "whole":
+    if scene in ("whole", "speed"):
         points = [(fraction * expected_seconds, fraction * expected_seconds)
                   for fraction in (0.05, 0.5, 0.9)]
     else:
@@ -128,8 +134,8 @@ def assert_audio(source, output, scene, expected_seconds):
 
 
 def main():
-    if len(sys.argv) != 4 or sys.argv[1] not in ("whole", "cuts"):
-        raise SystemExit("usage: assert_output.py whole|cuts SOURCE OUTPUT")
+    if len(sys.argv) != 4 or sys.argv[1] not in ("whole", "cuts", "speed"):
+        raise SystemExit("usage: assert_output.py whole|cuts|speed SOURCE OUTPUT")
     scene, source, output = sys.argv[1:]
     source_video, _ = streams(source)
     video, audio = streams(output)
@@ -141,7 +147,8 @@ def main():
         if source_video.get(name) != value or video.get(name) != value:
             raise AssertionError(f"{name}: source={source_video.get(name)} "
                                  f"output={video.get(name)}, expected {value}")
-    count = frame_count(source_video) if scene == "whole" else sum(n for _, n in CUTS)
+    count = {"whole": frame_count(source_video), "speed": SPEED_SOURCE // 2,
+             "cuts": sum(n for _, n in CUTS)}[scene]
     actual = frame_count(video)
     if actual != count:
         raise AssertionError(f"frames: {actual}, expected {count}")
