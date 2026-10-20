@@ -37,5 +37,8 @@ requires 10-bit HEVC and AV1 exports decoded in hardware to hash frame for frame
 `framemd5`) like the same exports decoded in software; on Intel both used VA-API, and an
 encoder change on one side makes it fail. A 25-minute
 long export passed with the same output size and checks as software decode, at half the
-CPU per frame. Not validated: other vendors, multi-stream scenes and two-hour exports.
+CPU per frame. GPU-resident memory is bounded by the decoder count: about 340 MB for one
+file, a 767 MB plateau over 40 cuts of one file, and 783 MB peak for seven files in
+round-robin, where software decode used 264 MB GPU but 325 MB more RSS. Not validated:
+other vendors, multi-stream (stacked) scenes, two-hour exports and memory pressure.
 Revert by choosing software decode in Settings or reverting this ADR's change.

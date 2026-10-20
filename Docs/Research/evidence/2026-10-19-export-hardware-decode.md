@@ -74,9 +74,14 @@ the two: exporting the whole file without cuts stays flat at about 340 MB GPU-re
 767 MB within 14 s and then stay at 742–767 MB to the end, with one-second spikes to
 844–931 MB at some reseeks. Forty seeks therefore do not accumulate memory (no leak); the
 plateau is about two decoders' worth, matching `kStreamsPerFile = 2`, plus transient overlap
-while a decoder is replaced. *Derived, not measured:* at several hundred MB per hardware
-decoder and up to `kMaxStreams = 6` decoders across files, a project with several 1080p
-sources could hold 2 GB or more of GPU-resident (on an iGPU, system) memory.
+while a decoder is replaced. A derived worst case of 2 GB or more for several 1080p sources
+(up to `kMaxStreams = 6` decoders) did **not** hold when measured: an edit cycling through
+seven different 1080p H.264 files in 140 one-second cuts (3,360 frames, so decoders are
+evicted and reopened) peaked at 783 MB GPU-resident (mean 707 MB) with hardware decode,
+against 264 MB with software decode chosen in Settings. Process RSS was 820 against
+1,145 MB, so on this iGPU, where both come from system memory, the totals are similar
+(about 1.6 against 1.4 GB). Hardware decode took 41.6 s and 57.9 s user CPU, software
+decode 58.4 s and 267.0 s; both outputs had 3,360 frames and were pixel-identical.
 
 Not covered: AMD/NVIDIA (not validated, so `Auto` stays software there), multi-stream 4K
-scenes, two-hour exports, several source files and memory pressure.
+scenes, two-hour exports and memory pressure.
