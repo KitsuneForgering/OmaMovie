@@ -58,6 +58,8 @@ std::unique_ptr<Command> to_command(const Op& op, Editor& editor) {
         return caption(op, editor);
     case Kind::RemoveCaption:
         return edit::remove_caption(caption_id(tl, op.b));
+    case Kind::Video:
+        return video(op, clip);
     case Kind::Connect:
         return edit::connect(id, clip_id(tl, op.b, op.c));
     case Kind::Disconnect:

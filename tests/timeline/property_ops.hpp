@@ -20,7 +20,7 @@ namespace property {
 //   Transition   a=duration b=kind (3 is none) c=0 removes it   Detach   b=lane track index
 //   AddMarker   a=at   RemoveMarker   b=marker index
 //   AddCaption, SetCaption   clip=caption index (Set) a=start b=duration c=1 overlong text
-//   RemoveCaption   b=caption index
+//   RemoveCaption   b=caption index   Video   b=0 opacity key at a, value c/4; 1 effect a; 2 clear
 enum class Kind {
     Append,
     Insert,
@@ -48,10 +48,11 @@ enum class Kind {
     AddCaption,
     SetCaption,
     RemoveCaption,
+    Video,
     Undo,
     Redo
 };
-inline constexpr int kKinds = 28;
+inline constexpr int kKinds = 29;
 
 struct Op {
     Kind kind = Kind::Undo;

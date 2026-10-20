@@ -58,6 +58,10 @@ void choose_values(Rng& rng, Op& op, const Extent& e) {
         op.c = rng.between(0, 9) == 0 ? 1 : 0;         // text over kMaxCaptionBytes is refused
     } else if (op.kind == Kind::RemoveCaption) {
         op.b = rng.between(0, 4);
+    } else if (op.kind == Kind::Video) {
+        op.b = rng.between(0, 2);
+        op.a = rng.between(-5, 40); // a key out of order or before the media is refused
+        op.c = rng.between(0, 5);   // values over 1 (c/4) are refused
     } else if (op.kind == Kind::Connect) {
         op.b = rng.between(0, e.tracks - 1);
         op.c = rng.between(0, 3);

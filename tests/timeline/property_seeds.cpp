@@ -4,14 +4,10 @@
 
 namespace property {
 
-namespace {
-
 std::uint64_t setting(const char* name, std::uint64_t fallback) {
     const char* value = std::getenv(name); // NOLINT(concurrency-mt-unsafe): read on the test thread
     return value ? std::strtoull(value, nullptr, 10) : fallback;
 }
-
-} // namespace
 
 Totals run_seeds() {
     const std::uint64_t only = setting("OMA_PROPERTY_SEED", 0);

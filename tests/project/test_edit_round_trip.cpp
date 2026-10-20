@@ -4,6 +4,7 @@
 #include "oma/project/document.hpp"
 #include "property_checker.hpp"
 #include "property_gen.hpp"
+#include "property_run.hpp"
 
 #include <format>
 #include <string>
@@ -32,12 +33,15 @@ std::string reloaded(const oma::timeline::Timeline& tl) {
     return property::difference(property::canonical(tl), property::canonical(*back->timeline));
 }
 
-// Seeds 1…16 of 60 steps; the first state that changes on the way, with its seed.
+// Seeds 1…16 of 60 steps by default (OMA_PROPERTY_RUNS and OMA_PROPERTY_STEPS widen it); the
+// first state that changes on the way, with its seed.
 std::string seeds_round_trip() {
-    for (std::uint64_t seed = 1; seed <= 16; ++seed) {
+    const std::uint64_t runs = property::setting("OMA_PROPERTY_RUNS", 16);
+    const auto steps = static_cast<int>(property::setting("OMA_PROPERTY_STEPS", 60));
+    for (std::uint64_t seed = 1; seed <= runs; ++seed) {
         property::Checker checker;
         property::Rng rng(seed);
-        for (int step = 0; step < 60; ++step) {
+        for (int step = 0; step < steps; ++step) {
             const int before = checker.transitions();
             if (checker.step(property::generate(rng, checker.timeline())))
                 return std::format("seed {}: a property failed", seed);

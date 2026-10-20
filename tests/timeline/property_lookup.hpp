@@ -36,4 +36,8 @@ namespace property {
 [[nodiscard]] std::unique_ptr<oma::timeline::Command> caption(const Op& op,
                                                               oma::timeline::Editor& editor);
 
+// The clip's video properties with an opacity key or effect added, or both lists cleared.
+[[nodiscard]] std::unique_ptr<oma::timeline::Command> video(const Op& op,
+                                                            const oma::timeline::Clip* clip);
+
 } // namespace property

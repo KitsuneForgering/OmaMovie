@@ -33,6 +33,8 @@ std::string broken_clip(const Timeline& tl, const Track& track, const Clip& c) {
         if (!primary || tl.track_of(primary->id) == &track || primary->anchor)
             return std::format("clip {}: invalid anchor", c.id.value());
     }
+    if (auto broken = broken_video(c); !broken.empty())
+        return broken;
     return broken_extent(tl, c);
 }
 

@@ -37,4 +37,7 @@ struct Totals {
 // Seed, generator version, fixture, replay command and the minimized log.
 [[nodiscard]] std::string report(std::uint64_t seed, const Run& run);
 
+// A numeric environment setting (OMA_PROPERTY_SEED, _RUNS, _STEPS), or `fallback` when unset.
+[[nodiscard]] std::uint64_t setting(const char* name, std::uint64_t fallback);
+
 } // namespace property
