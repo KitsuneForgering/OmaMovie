@@ -187,6 +187,8 @@ int run_gui_smoke(const SmokeContext& context) {
         bool export_started = false;
         bool saved_while_exporting = false;
         double play_from = 0; // viewer position when playback started beside the export
+        double resize_from = 0; // position restored after resizing during playback
+        int resize_source = -1; // source viewer reopened after it
         bool caption_added = false;
         int canvas_before = 0;
         qsizetype media = 0, clips = 0, lanes = 0;
@@ -899,6 +901,32 @@ int run_gui_smoke(const SmokeContext& context) {
                              !window->grabWindow().isNull();
              r.layout = r.layout && ok;
              if (!ok) std::printf("GUI smoke: layout did not recover after repeated resize and screen switches\n");
+             // M10 concurrency: the same tiling sizes while sequence playback decodes and
+             // composites (an open source viewer would play the source instead).
+             saved.resize_from = session.position();
+             saved.resize_source = session.source().value("open").toBool()
+                                       ? session.source().value("index").toInt() : -1;
+             session.closeSource();
+             session.seek(0);
+             session.togglePlay();
+         }},
+        {"resize while playing", after(100), [&] {
+             for (int i = 0; i < 24; ++i) {
+                 window->resize(i % 2 == 0 ? 640 : 1600, i % 3 == 0 ? 520 : 900);
+                 QTest::qWait(15);
+             }
+             window->resize(820, 620);
+             QTest::qWait(100);
+             auto* viewer = window->findChild<QQuickItem*>(QStringLiteral("preview"));
+             const double reached = session.position();
+             const bool ok = (session.playing() || reached >= session.duration() - 0.05) && reached > 0.2 &&
+                             viewer && viewer->isVisible() && viewer->width() > 0 && viewer->height() > 0;
+             if (!ok) std::printf("GUI smoke: playback or viewer did not survive resizing (%.3f s, playing %d)\n",
+                                  reached, session.playing());
+             r.layout = r.layout && ok;
+             session.pause();
+             if (saved.resize_source >= 0) session.openSource(saved.resize_source);
+             session.seek(saved.resize_from);
          }},
         {"context menu", after(400), [&] {
              auto* timeline = window->findChild<QQuickItem*>(QStringLiteral("timelinePanel"));
