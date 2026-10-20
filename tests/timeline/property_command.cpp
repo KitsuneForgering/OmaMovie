@@ -51,12 +51,13 @@ std::unique_ptr<Command> to_command(const Op& op, Editor& editor) {
         return edit::detach_audio(id, track_id(tl, op.b), editor.new_clip_id());
     case Kind::AddMarker:
         return edit::add_marker(editor.new_marker_id(), f(op.a), "m");
-    case Kind::RemoveMarker: {
-        const auto markers = tl.markers();
-        return edit::remove_marker(std::cmp_less(op.b, markers.size())
-                                       ? markers[static_cast<std::size_t>(op.b)].id
-                                       : MarkerId{});
-    }
+    case Kind::RemoveMarker:
+        return edit::remove_marker(marker_id(tl, op.b));
+    case Kind::AddCaption:
+    case Kind::SetCaption:
+        return caption(op, editor);
+    case Kind::RemoveCaption:
+        return edit::remove_caption(caption_id(tl, op.b));
     case Kind::Connect:
         return edit::connect(id, clip_id(tl, op.b, op.c));
     case Kind::Disconnect:

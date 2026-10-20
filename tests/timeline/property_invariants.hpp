@@ -11,8 +11,13 @@
 namespace property {
 
 // Track and clip IDs unique; clips sorted, apart, positive and on the sequence grid; media of a
-// kind the track plays; anchors to an unanchored clip on another track; markers on the grid.
+// kind the track plays; anchors to an unanchored clip on another track; valid transitions;
+// then broken_annotations.
 [[nodiscard]] std::string broken_structure(const oma::timeline::Timeline& tl);
+// Marker IDs valid and unique, on the grid, not before the start, in time order; caption IDs
+// valid and unique, on the grid, not before the start, not empty, within kMaxCaptionBytes,
+// sorted and apart.
+[[nodiscard]] std::string broken_annotations(const oma::timeline::Timeline& tl);
 // A segmented map covers its clip exactly, and the media the clip shows lies inside the media.
 [[nodiscard]] std::string broken_extent(const oma::timeline::Timeline& tl,
                                         const oma::timeline::Clip& clip);

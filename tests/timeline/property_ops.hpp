@@ -19,6 +19,8 @@ namespace property {
 //   Speed   a/b c=ripple   Ramp   a/2 to b/2   Connect   b=track index c=clip index
 //   Transition   a=duration b=kind (3 is none) c=0 removes it   Detach   b=lane track index
 //   AddMarker   a=at   RemoveMarker   b=marker index
+//   AddCaption, SetCaption   clip=caption index (Set) a=start b=duration c=1 overlong text
+//   RemoveCaption   b=caption index
 enum class Kind {
     Append,
     Insert,
@@ -43,10 +45,13 @@ enum class Kind {
     Detach,
     AddMarker,
     RemoveMarker,
+    AddCaption,
+    SetCaption,
+    RemoveCaption,
     Undo,
     Redo
 };
-inline constexpr int kKinds = 25;
+inline constexpr int kKinds = 28;
 
 struct Op {
     Kind kind = Kind::Undo;

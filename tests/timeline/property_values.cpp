@@ -51,6 +51,13 @@ void choose_values(Rng& rng, Op& op, const Extent& e) {
         op.a = rng.between(-2, e.timeline + 30); // before the start is refused
     } else if (op.kind == Kind::RemoveMarker) {
         op.b = rng.between(0, 4); // an index past the last marker is refused
+    } else if (op.kind == Kind::AddCaption || op.kind == Kind::SetCaption) {
+        op.clip = static_cast<int>(rng.between(0, 4)); // past the last caption is refused
+        op.a = rng.between(-2, e.timeline + 30);       // before the start is refused
+        op.b = rng.between(-1, 60);                    // empty or negative is refused
+        op.c = rng.between(0, 9) == 0 ? 1 : 0;         // text over kMaxCaptionBytes is refused
+    } else if (op.kind == Kind::RemoveCaption) {
+        op.b = rng.between(0, 4);
     } else if (op.kind == Kind::Connect) {
         op.b = rng.between(0, e.tracks - 1);
         op.c = rng.between(0, 3);

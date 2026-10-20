@@ -27,4 +27,13 @@ namespace property {
 [[nodiscard]] std::unique_ptr<oma::timeline::Command> placement(const Op& op,
                                                                 oma::timeline::Editor& editor);
 
+// Markers and captions by position: the ID (invalid past the last), and Add/SetCaption's
+// command.
+[[nodiscard]] oma::timeline::MarkerId marker_id(const oma::timeline::Timeline& tl,
+                                                std::int64_t index);
+[[nodiscard]] oma::timeline::CaptionId caption_id(const oma::timeline::Timeline& tl,
+                                                  std::int64_t index);
+[[nodiscard]] std::unique_ptr<oma::timeline::Command> caption(const Op& op,
+                                                              oma::timeline::Editor& editor);
+
 } // namespace property
