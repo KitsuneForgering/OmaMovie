@@ -11,6 +11,7 @@ Result<ir::Track> track_of(Object t, ir::Timeline& tl, Context& c) {
     ir::Track track;
     track.name = text(t, "name");
     track.kind = text(t, "kind") == "Audio" ? ir::TrackKind::Audio : ir::TrackKind::Video;
+    report_container(t, "track", track.name, c);
     simdjson::dom::array children;
     if (t["children"].get(children) != simdjson::SUCCESS)
         return track;
@@ -38,6 +39,7 @@ Result<void> read_stack(Object top, Imported& out, Context& c) {
         stack["children"].get(children) != simdjson::SUCCESS)
         return make_error(ErrorCode::InvalidData, Category::Importer, "timeline has no track stack",
                           out.timeline.name);
+    report_container(stack, "stack", text(stack, "name"), c);
     for (Element const e : children) {
         Object o;
         if (e.get(o) == simdjson::SUCCESS && schema_of(o).starts_with("Track.")) {

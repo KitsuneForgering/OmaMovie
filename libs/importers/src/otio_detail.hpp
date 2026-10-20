@@ -48,6 +48,11 @@ struct Context {
 // as an opaque object (already reported).
 [[nodiscard]] Result<std::optional<ir::Item>> item_of(Object o, ir::Timeline& tl, Context& c);
 
+// Whether the object says `"enabled": false` (OTIO's default is enabled).
+[[nodiscard]] bool disabled(Object o);
+// Reports what a track or stack carries but is not applied (effects, markers, trim, disabled).
+void report_container(Object o, std::string_view what, const std::string& name, Context& c);
+
 // The top-level Stack.1 under `tracks`: its Track.1 children as IR tracks, anything else kept
 // as opaque; then IR validation. Completes `out`, whose report `c` writes to.
 [[nodiscard]] Result<void> read_stack(Object top, Imported& out, Context& c);

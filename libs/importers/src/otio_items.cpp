@@ -9,8 +9,13 @@ Result<std::optional<ir::Item>> item_of(Object o, ir::Timeline& tl, Context& c) 
         return make_error(ErrorCode::OutOfRange, Category::Importer, "too many timeline items", "");
     const std::string schema = schema_of(o);
     const std::string name = text(o, "name");
-    if (schema.starts_with("Clip.1") || schema.starts_with("Clip.2"))
-        return clip_of(o, name, tl, c);
+    if (schema.starts_with("Clip.1") || schema.starts_with("Clip.2")) {
+        auto clip = clip_of(o, name, tl, c);
+        if (!clip || !disabled(o))
+            return clip;
+        c.issue(name, "clip disabled in the source", "left as a gap of its length");
+        return ir::Item{ir::Gap{.duration = std::get<ir::Clip>(*clip).source.duration()}};
+    }
     Element range;
     if (schema.starts_with("Gap.") && o["source_range"].get(range) == simdjson::SUCCESS) {
         auto r = range_of(range, c, name);
