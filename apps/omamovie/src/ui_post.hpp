@@ -13,10 +13,17 @@
 #include <utility>
 
 #if defined(__SANITIZE_THREAD__)
-extern "C" void __tsan_acquire(void* addr);
-extern "C" void __tsan_release(void* addr);
+#include <sanitizer/tsan_interface.h> // __tsan_acquire, __tsan_release (GCC and Clang)
+// Exported by the TSan runtime but declared by neither toolchain's header.
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wreserved-identifier"
+#endif
 extern "C" void __tsan_ignore_thread_begin();
 extern "C" void __tsan_ignore_thread_end();
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 #endif
 
 namespace ui_post_detail {
