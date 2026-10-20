@@ -46,5 +46,10 @@ pictures. The export now replaces its frame source with a software one at the lo
 decodes that frame again; `tests/app/test_export_device_loss.cpp` checks the switch and that
 every frame still matches an all-CPU export.
 
-Not covered: AMD/NVIDIA (not validated, so `Auto` stays software there), HEVC/AV1 export
-sources, multi-stream 4K scenes, long exports and memory pressure.
+**HEVC 10-bit and AV1.** `tests/app/test_export_decode_paths.cpp` exports the 320×180
+`hevc_10bit.mp4` and `av1_opus.mkv` fixtures through Session with Settings decode
+`hardware` and `software` (libx264 both times): per-frame `framemd5` of the outputs is
+identical, and the hardware runs decoded no software frames on this host.
+
+Not covered: AMD/NVIDIA (not validated, so `Auto` stays software there), multi-stream 4K
+scenes, long exports and memory pressure.

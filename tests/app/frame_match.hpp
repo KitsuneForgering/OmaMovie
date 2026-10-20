@@ -18,6 +18,14 @@ inline QByteArray gray_frames(const QString& file) {
                                                                    : QByteArray();
 }
 
+// Per-frame MD5 of the decoded video at full resolution: exact identity of two movies' pictures.
+inline QByteArray frame_hashes(const QString& file) {
+    QProcess ffmpeg;
+    ffmpeg.start("ffmpeg", {"-v", "error", "-i", file, "-map", "0:v", "-f", "framemd5", "-"});
+    return ffmpeg.waitForFinished(20000) && ffmpeg.exitCode() == 0 ? ffmpeg.readAllStandardOutput()
+                                                                   : QByteArray();
+}
+
 // The source frame most like exported frame `i` (sum of absolute differences).
 inline int closest(const QByteArray& source, const QByteArray& out, int i) {
     int best = -1;

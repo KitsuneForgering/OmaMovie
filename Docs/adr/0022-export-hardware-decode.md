@@ -32,6 +32,9 @@ concurrent exports both correct. GPU-resident memory rises by 150–250 MB and t
 engine carries decode and encode. Local app tests now exercise the hardware path by
 default on Intel; CI without VA-API keeps the software path. The GUI smoke now plays the
 viewer while it exports (Intel: both decode through VA-API, including a 10-bit HEVC source)
-and requires playback to advance and the export to finish. Not validated: other vendors,
-frame-level checks of HEVC/AV1 export sources, multi-stream scenes and long exports.
+and requires playback to advance and the export to finish. `test_export_decode_paths.cpp`
+requires 10-bit HEVC and AV1 exports decoded in hardware to hash frame for frame (ffmpeg
+`framemd5`) like the same exports decoded in software; on Intel both used VA-API, and an
+encoder change on one side makes it fail. Not validated: other vendors, multi-stream
+scenes and long exports.
 Revert by choosing software decode in Settings or reverting this ADR's change.
