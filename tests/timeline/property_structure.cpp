@@ -22,6 +22,10 @@ std::string broken_clip(const Timeline& tl, const Track& track, const Clip& c) {
                                                       : (m && m->has_video) || c.title.has_value();
     if (!plays)
         return std::format("clip {}: media the track cannot play", c.id.value());
+    if (const auto& tr = c.transition_in;
+        tr && (track.kind == TrackKind::Caption || tr->kind > TransitionKind::Wipe ||
+               !on_grid(tl, tr->duration) || tr->duration.value() <= 0))
+        return std::format("clip {}: invalid transition", c.id.value());
     if (c.anchor) {
         const Clip* primary = tl.find_clip(c.anchor->primary);
         if (!primary || tl.track_of(primary->id) == &track || primary->anchor)

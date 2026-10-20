@@ -17,6 +17,7 @@ namespace property {
 //   TrimStart, TrimEnd   a=delta of that edge c=ripple   Roll   a=delta of the clip's end
 //   Move          b=track index a=start      RippleMove    a=at
 //   Speed   a/b c=ripple   Ramp   a/2 to b/2   Connect   b=track index c=clip index
+//   Transition   a=duration b=kind (3 is none) c=0 removes it
 enum class Kind {
     Append,
     Insert,
@@ -37,10 +38,11 @@ enum class Kind {
     Connect,
     Disconnect,
     Ramp,
+    Transition,
     Undo,
     Redo
 };
-inline constexpr int kKinds = 21;
+inline constexpr int kKinds = 22;
 
 struct Op {
     Kind kind = Kind::Undo;

@@ -51,6 +51,11 @@ std::unique_ptr<Command> to_command(const Op& op, Editor& editor) {
         return edit::disconnect(id);
     case Kind::Ramp:
         return ramp(op, clip);
+    case Kind::Transition:
+        return edit::set_transition(
+            id, op.c == 0 ? std::nullopt
+                          : std::optional(Transition{.kind = static_cast<TransitionKind>(op.b),
+                                                     .duration = f(op.a)}));
     default: // Undo and Redo go through the Editor, not a command
         return nullptr;
     }
