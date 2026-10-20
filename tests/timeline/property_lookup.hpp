@@ -40,4 +40,8 @@ namespace property {
 [[nodiscard]] std::unique_ptr<oma::timeline::Command> video(const Op& op,
                                                             const oma::timeline::Clip* clip);
 
+// The clip's audio with a gain key, fades or an EQ band set, or those cleared.
+[[nodiscard]] std::unique_ptr<oma::timeline::Command> audio(const Op& op,
+                                                            const oma::timeline::Clip* clip);
+
 } // namespace property

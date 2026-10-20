@@ -35,6 +35,8 @@ std::string broken_clip(const Timeline& tl, const Track& track, const Clip& c) {
     }
     if (auto broken = broken_video(c); !broken.empty())
         return broken;
+    if (auto broken = broken_audio(c); !broken.empty())
+        return broken;
     return broken_extent(tl, c);
 }
 

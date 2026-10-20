@@ -62,6 +62,12 @@ void choose_values(Rng& rng, Op& op, const Extent& e) {
         op.b = rng.between(0, 2);
         op.a = rng.between(-5, 40); // a key out of order or before the media is refused
         op.c = rng.between(0, 5);   // values over 1 (c/4) are refused
+    } else if (op.kind == Kind::Audio) {
+        op.b = rng.between(0, 3);
+        // Negative fades, keys out of order, EQ past 24 dB are refused; fades stay short enough
+        // to fit typical clips, so the default run accepts some.
+        op.a = op.b == 1 ? rng.between(-2, 12) : rng.between(-2, 40);
+        op.c = rng.between(0, 5); // gains over 16 (4c) are refused
     } else if (op.kind == Kind::Connect) {
         op.b = rng.between(0, e.tracks - 1);
         op.c = rng.between(0, 3);
