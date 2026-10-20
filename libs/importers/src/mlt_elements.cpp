@@ -20,6 +20,7 @@ Tractor tractor_of(const xml::Element& e, const Document& doc) {
         if (c.name == "track")
             t.tracks.push_back({.producer = std::string(c.attribute("producer")),
                                 .audio = c.attribute("hide") == "video",
+                                .off = c.attribute("hide") == "both",
                                 .in = frames_of(c.attribute("in"), doc).value_or(0),
                                 .out = frames_of(c.attribute("out"), doc).value_or(-1)});
         else if (c.name == "transition" || c.name == "filter")

@@ -29,7 +29,9 @@ start at 0, where both readings agree.
   and an `SMPTE_Dissolve` of the overlap's length ends at the next entry; the converter centres
   it on the cut (reported), so the dissolve's frames differ from melt's while the cut points and
   every frame outside it match.
-- `hide="video"` on a track or `kdenlive:audio_track` on a playlist makes an audio track.
+- `hide="video"` on a track or `kdenlive:audio_track` on a playlist makes an audio track;
+  `hide="both"` imports the track hidden and muted. Kdenlive's other hide combinations for
+  hidden video or muted audio tracks are not distinguished yet (no Kdenlive here to author them).
 - Colour and black producers are generators: their entries stay as gaps, reported.
 - Transitions and filters on the main tractor (compositing, audio mixing between tracks) are kept
   opaque on the timeline and reported.

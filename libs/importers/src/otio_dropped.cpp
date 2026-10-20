@@ -19,8 +19,8 @@ void report_container(Object o, std::string_view what, const std::string& name, 
     Element range;
     if (o["source_range"].get(range) == simdjson::SUCCESS && !range.is_null())
         c.issue(who, std::format("{} source_range not imported", what), "plays untrimmed");
-    if (disabled(o))
-        c.issue(who, std::format("{} disabled in the source", what), "imported enabled");
+    if (what == "stack" && disabled(o)) // a disabled track is imported hidden and muted
+        c.issue(who, "stack disabled in the source", "imported enabled");
 }
 
 } // namespace oma::importers::otio

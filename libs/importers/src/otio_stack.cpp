@@ -12,6 +12,7 @@ Result<ir::Track> track_of(Object t, ir::Timeline& tl, Context& c) {
     track.name = text(t, "name");
     track.kind = text(t, "kind") == "Audio" ? ir::TrackKind::Audio : ir::TrackKind::Video;
     report_container(t, "track", track.name, c);
+    track.off = disabled(t);
     simdjson::dom::array children;
     if (t["children"].get(children) != simdjson::SUCCESS)
         return track;

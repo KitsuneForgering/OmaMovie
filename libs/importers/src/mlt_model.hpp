@@ -39,6 +39,7 @@ struct Playlist {
 struct TrackRef {
     std::string producer;
     bool audio = false;  // hide="video"
+    bool off = false;    // hide="both": neither picture nor sound
     std::int64_t in = 0; // a mix's tracks cut their producers
     std::int64_t out = -1;
 };

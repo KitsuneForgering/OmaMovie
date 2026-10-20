@@ -48,6 +48,7 @@ struct Track {
     TrackKind kind = TrackKind::Video;
     std::vector<Item> items;
     std::vector<Opaque> unsupported;
+    bool off = false; // disabled in the source: imported hidden and muted
 };
 
 struct Timeline {

@@ -11,7 +11,8 @@ void track_of(Builder& b, const TrackRef& ref, std::size_t depth) {
         ir::Track track{.name = ref.producer,
                         .kind = audio ? ir::TrackKind::Audio : ir::TrackKind::Video,
                         .items = {},
-                        .unsupported = {}};
+                        .unsupported = {},
+                        .off = ref.off};
         items_of(b, p->second, track);
         if (!track.items.empty())
             b.out.timeline.tracks.push_back(std::move(track));
@@ -31,7 +32,12 @@ void track_of(Builder& b, const TrackRef& ref, std::size_t depth) {
               mix ? "kept in the import; the clips meet at a cut" : "kept in the import");
     }
     for (const TrackRef& sub : t->second.tracks)
-        track_of(b, {.producer = sub.producer, .audio = ref.audio || sub.audio, .in = 0, .out = -1},
+        track_of(b,
+                 {.producer = sub.producer,
+                  .audio = ref.audio || sub.audio,
+                  .off = ref.off || sub.off,
+                  .in = 0,
+                  .out = -1},
                  depth + 1);
 }
 

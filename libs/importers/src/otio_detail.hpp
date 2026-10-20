@@ -50,7 +50,8 @@ struct Context {
 
 // Whether the object says `"enabled": false` (OTIO's default is enabled).
 [[nodiscard]] bool disabled(Object o);
-// Reports what a track or stack carries but is not applied (effects, markers, trim, disabled).
+// Reports what a track or stack carries but is not applied (effects, markers, trim; a stack's
+// disabled flag).
 void report_container(Object o, std::string_view what, const std::string& name, Context& c);
 
 // The top-level Stack.1 under `tracks`: its Track.1 children as IR tracks, anything else kept

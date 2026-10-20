@@ -45,7 +45,7 @@ bool reports_track_and_stack() {
                             R"("source_range":)" +
                                 std::string(kRange) + ",",
                             R"("markers":[{"OTIO_SCHEMA":"Marker.2"}],)");
-    return says(r, "track disabled in the source") && says(r, "track markers not imported") &&
+    return r && r->timeline.tracks[0].off && says(r, "track markers not imported") &&
            says(r, "track source_range not imported") && says(r, "stack markers not imported") &&
            std::holds_alternative<ir::Clip>(r->timeline.tracks[0].items[0]);
 }

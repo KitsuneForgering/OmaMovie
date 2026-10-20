@@ -42,6 +42,9 @@ Result<Document> from_ir(const ir::Timeline& timeline, const ResolveMedia& resol
             t.kind == ir::TrackKind::Audio ? tl::TrackKind::Audio : tl::TrackKind::Video;
         if (auto added = editor.execute(tl::edit::add_track(id, kind, t.name)); !added)
             return std::unexpected(added.error());
+        if (t.off && !editor.execute(tl::edit::set_track_flags(id, true, true)))
+            from_ir_detail::issue(report, t.name, "disabled track cannot be hidden",
+                                  "imported enabled");
         if (kind == tl::TrackKind::Video && !doc.storyline.valid())
             doc.storyline = id;
         if (auto placed = from_ir_detail::place_items(editor, id, t, ids, report); !placed)
