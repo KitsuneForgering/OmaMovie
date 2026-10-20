@@ -30,6 +30,8 @@ The [A/B](../Research/evidence/2026-10-19-export-hardware-decode.md) on the 4K23
 process CPU per frame 272 → 43 ms (median), export 9.5 → 7.1 s, output pixel-identical; two
 concurrent exports both correct. GPU-resident memory rises by 150–250 MB and the video
 engine carries decode and encode. Local app tests now exercise the hardware path by
-default on Intel; CI without VA-API keeps the software path. Not validated: other vendors,
-HEVC/AV1 export sources, multi-stream scenes, long exports, export beside live viewer decode.
+default on Intel; CI without VA-API keeps the software path. The GUI smoke now plays the
+viewer while it exports (Intel: both decode through VA-API, including a 10-bit HEVC source)
+and requires playback to advance and the export to finish. Not validated: other vendors,
+frame-level checks of HEVC/AV1 export sources, multi-stream scenes and long exports.
 Revert by choosing software decode in Settings or reverting this ADR's change.

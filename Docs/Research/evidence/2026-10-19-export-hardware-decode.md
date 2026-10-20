@@ -36,8 +36,10 @@ duration change as indicative; the CPU change is far outside the spread.
 **Contention probe.** Two B exports run concurrently (separate processes and devices) both
 finished correctly (240 frames each, pixel-identical to B) in 12.9 s each, i.e. about 37 fps
 aggregate against 34 fps alone: the GPU engines are shared, nothing failed or fell back.
-This approximates, but does not reproduce, an export running beside the viewer's own
-hardware decode.
+This approximates an export beside the viewer; the GUI smoke (`omamovie --smoke`) now plays
+the viewer during its export step and fails if playback does not advance. On this host the
+log shows the export decoding H.264 and 10-bit HEVC through VA-API → Vulkan while the viewer
+played 0.10 → 0.57 s; raising the required advance to 100 s made the smoke fail as expected.
 
 **Device loss.** With hardware decode, a lost device also invalidates the decoded
 pictures. The export now replaces its frame source with a software one at the loss and

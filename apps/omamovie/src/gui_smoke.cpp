@@ -186,6 +186,7 @@ int run_gui_smoke(const SmokeContext& context) {
         double export_seconds = 0;
         bool export_started = false;
         bool saved_while_exporting = false;
+        double play_from = 0; // viewer position when playback started beside the export
         bool caption_added = false;
         int canvas_before = 0;
         qsizetype media = 0, clips = 0, lanes = 0;
@@ -1864,6 +1865,10 @@ int run_gui_smoke(const SmokeContext& context) {
              session.exportMovie(QUrl::fromLocalFile(project_dir.filePath(QStringLiteral("movie.mp4"))));
              saved.export_started = session.exportProgress() >= 0;
              session.saveProject(QUrl());
+             // The viewer plays beside the export: both decode at once (in hardware on Intel,
+             // ADR-0022), each on its own device.
+             saved.play_from = session.position();
+             session.togglePlay();
          }},
         {"saved during export", [&] { return !session.dirty() || session.exportProgress() < 0 || run->elapsed() > 10000; }, [&] {
              saved.saved_while_exporting = !session.dirty() && session.exportProgress() >= 0;
@@ -1883,6 +1888,11 @@ int run_gui_smoke(const SmokeContext& context) {
              const bool sidecar = saved.caption_added && QFile::exists(project_dir.filePath(QStringLiteral("movie.srt")));
              if (!sidecar) std::printf("GUI smoke: no movie.srt beside the export\n");
              ok = ok && sidecar;
+             const bool played = session.position() > saved.play_from + 0.05;
+             if (!played) std::printf("GUI smoke: playback did not advance during export (%.3f -> %.3f s)\n",
+                                      saved.play_from, session.position());
+             session.pause();
+             ok = ok && played;
              // The notice names the encoder used (Settings: automatic here).
              const bool named = session.notice().contains(QStringLiteral("VA-API")) || session.notice().contains(QStringLiteral("libx264"));
              if (!named) std::printf("GUI smoke: export notice does not name the encoder (%s)\n", qPrintable(session.notice()));
