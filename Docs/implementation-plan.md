@@ -33,6 +33,27 @@ Keep fixtures, scene, host, driver, power/load state, build, cache state and pat
 
 Preserve synchronous, deterministic `timeline::evaluate` and commands apart from the compositor; move only execution across async boundaries ([ADR-0020](adr/0020-async-execution-boundary.md)). Retain CPU reference paths, explicit GPU ownership, FFmpeg as the media foundation and the existing QML-facing `Session` facade. Recent gains came from scheduling, cancellation, bounded queues/cache, ownership and lifetime fixes, pass fusion and explicit synchronization. Make measured vertical changes; extract `Session` state only when an independent lifecycle has a real owner ([M11](implementation-plan-m11-refactoring.md), [M12](implementation-plan-m12-gpu-export-architecture.md)). Do not introduce a universal GPU/compute backend, service locator, global event bus, dependency-injection framework, controller hierarchy or custom codec stack on speculation.
 
+**Source-path review (2026-10-19, `ad276a9`).** A repository inventory and focused trace of
+editing, playback, export, project persistence, recovery and QML found no basis for a
+whole-engine rewrite. The sorted-clip lookup, visible-range storyline model, bounded
+playback/encode queues and durable project-save path are useful existing choices. The
+measured export transfer problem and the intermittent long-timeline split sample are
+already assigned to [M12](implementation-plan-m12-gpu-export-architecture.md) and
+[M6/M10](implementation-plan-next-step.md). One additional *derived scaling risk* was
+then measured and closed without a code change (see below): `timeline::evaluate` asks `clip_at(track.id)` for each track, which searches
+the track vector again before binary-searching its clips; `Timeline::find_media` then
+scans the media vector for each active clip, and `build_viewer_frame` can repeat that
+media lookup. With `T` tracks, at most `C` clips per track, `A` active clips and `M`
+media entries, the non-decoding work is approximately `O(T² + T log(C+1) + A·M)` per
+frame, before effects and pixel work. The [lookup scaling benchmark](Research/evidence/2026-10-19-evaluate-lookup-scaling.md)
+measured at most 94 µs per frame at 64 tracks and 2,000 media entries (under 1% of a
+60 fps frame) and about 12 µs at 16 tracks and 500 media, so no index is added. Revisit
+only if a real playback/export profile attributes measurable time to `evaluate`; then
+search clips on the already available `Track` and remove the duplicate media query
+before comparing an index on the immutable export snapshot.
+Export power-loss durability remains outside the v0.1 claim as [M7](implementation-plan-m7-project-export.md)
+already states; process-crash recovery tests do not establish it.
+
 Significant releases require a release candidate, especially after project-format, timeline, playback, GPU, export, recovery, proxy, cache or hardware-interop changes: development → feature freeze → RC → real-world validation → blocker/regression/compatibility fixes only → another RC if needed → stable. Avoid new features, broad refactors and opportunistic cleanup during RC. Repeated fixes that break previously fixed behavior are evidence to inspect a boundary; an isolated fix with a regression test usually points to a local defect. The [2026-10-17 correctness pilot](Research/evidence/2026-10-17-rc-correctness-pilot.md) was one dirty-checkout round, not a frozen-SHA RC pass; follow the [RC gate](implementation-plan-cross-editor-benchmarks.md). Ship early within precisely described support.
 ## 1. Goal
 [Goal](implementation-plan-goal.md)

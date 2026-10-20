@@ -23,4 +23,14 @@ results and the tested hardware are recorded with fixtures, seeds, commands and 
 Unavailable hardware and unshipped pilots are outside this gate. A failing check blocks
 its support claim until fixed or explicitly removed from the release scope.
 
+**Local audit limit (2026-10-19, `ad276a9`):** a Debug `ctest -j 4` run passed eight
+suites, while four older binaries could not start because they linked against
+`libsimdjson.so.33` and the installed library was `.so.34`; the app and compositor suites
+had not completed when the local run was stopped. This does not establish a source-code
+failure or a passing gate. Reconfigure and rebuild against the installed dependencies,
+then run the required checks on the final SHA in the declared graphical/hardware
+environment. Do not use that partial local run as RC evidence. After rebuilding against
+`.so.34` the same day, the Debug run passed all 14 suites (app 42 s, compositor 19 s) on
+a dirty `ad276a9` tree; that is a local check, not the final-SHA RC gate.
+
 [← Implementation plan](implementation-plan.md)

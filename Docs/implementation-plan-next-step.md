@@ -8,8 +8,10 @@ records GPU conversion timestamps, fence wait, mapped host copy, staging rows, p
 and downgrade path on one 1080p60 and one 4K23.976 Intel run. Complete peak memory/GPU-use
 measurements, process CPU/frame, transfer counts and controlled repetitions on the same
 fixtures with independent frame/audio checks. Then define and pilot GPU-native
-compositor-output → VA-API encoder input. This remains a post-v0.1 baseline task, not a
-zero-copy or speedup claim; see [M12](implementation-plan-m12-gpu-export-architecture.md).
+compositor-output → VA-API encoder input, comparing FFmpeg 9's existing frame mapping
+with direct DMA-BUF import under the same correctness and transfer checks. This remains
+a post-v0.1 baseline task, not a zero-copy or speedup claim; see
+[M12](implementation-plan-m12-gpu-export-architecture.md).
 
 **v0.1 RC order:** settle the supported Intel/software scope → packaging and recovery
 → required CI gates on the final SHA → final automated regression/stress pass → feature
@@ -80,5 +82,8 @@ The 5,000-clip design (incremental model, level of detail) is not in question, b
 2026-10-06 numbers no longer hold; a timeline index or pooling rewrite still needs a profile.
 For test/property and long-form expansion, follow the
 [ranked engineering tasks](analysis/omamovie-2026-10-12-priorities.md).
+Per-frame track and media-ID lookups were measured below 1% of a 60 fps frame up to
+64 tracks and 2,000 media entries; no index is planned
+([lookup scaling evidence](Research/evidence/2026-10-19-evaluate-lookup-scaling.md)).
 
 [← Implementation plan](implementation-plan.md)
