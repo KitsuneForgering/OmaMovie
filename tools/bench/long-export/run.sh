@@ -36,6 +36,7 @@ python3 -I "$here/project.py" otio "$minutes" "$src" "$dir/edit.otio" &&
     import=${import% }
     echo "Long export $(date '+%F %T %z'): $minutes min, commit $(git -C "$repo" rev-parse --short HEAD)"
     echo "GPU: $(vulkaninfo --summary 2>/dev/null | grep -m1 deviceName | cut -d= -f2- | sed 's/^ //')"
+    bash "$repo/tools/bench/host-power.sh"
     echo "load: $(cut -d' ' -f1-3 /proc/loadavg); import: $import"
     python3 -I "$here/../cross-editor/measure.py" timeout $((minutes * 60)) "$app" --export-audit \
         "$dir/edit.omamovie" "$dir/out.mp4" 2>&1 | grep -E '^(export audit|  |measure:)'

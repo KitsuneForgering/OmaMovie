@@ -31,6 +31,7 @@ report=$out_dir/report.txt
     echo "GPU: $(vulkaninfo --summary 2>/dev/null | sed -n 's/.*deviceName[[:space:]]*= //p' | head -1)"
     echo "VA-API: $(vainfo 2>&1 | sed -n 's/.*Driver version: //p' | head -1)"
     ffmpeg -version | sed -n '1p'
+    bash "$repo/tools/bench/host-power.sh"
     echo "load at start: $(cut -d' ' -f1-3 /proc/loadavg)"
     echo "repeats: $repeats; timeout: 120 seconds per export"
     sha256sum "$screen" "$ultra" "$tone"

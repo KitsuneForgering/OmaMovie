@@ -37,6 +37,7 @@ cd "$repo" || exit 1
     echo "GPU: $(vulkaninfo --summary 2>/dev/null | grep -m1 deviceName | cut -d= -f2- | sed 's/^ //')"
     echo "VA-API: $(vainfo 2>&1 | grep -m1 'Driver version' | cut -d: -f2- | sed 's/^ //')"
     echo "$(ffmpeg -version | head -1)"
+    bash "$repo/tools/bench/host-power.sh"
     echo "power online: $(cat /sys/class/power_supply/A*/online 2>/dev/null | head -1), load at start: $(cut -d' ' -f1-3 /proc/loadavg)"
     echo
     echo "== build"

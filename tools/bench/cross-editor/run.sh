@@ -41,6 +41,7 @@ trap 'echo "FAIL: $report" >&2' ERR
     echo "GPU: $(vulkaninfo --summary 2>/dev/null | grep -m1 deviceName | cut -d= -f2- | sed 's/^ //')"
     echo "VA-API: $(vainfo 2>&1 | grep -m1 'Driver version' | cut -d: -f2- | sed 's/^ //')"
     echo "$(ffmpeg -version | head -1)"
+    bash "$repo/tools/bench/host-power.sh"
     echo "power online: $(cat /sys/class/power_supply/A*/online 2>/dev/null | head -1), load: $(cut -d' ' -f1-3 /proc/loadavg)"
     echo "editors: $(editor_version oma); $(editor_version melt)"
     scene_inputs "$scene" "$src" "$out_dir" || exit 1

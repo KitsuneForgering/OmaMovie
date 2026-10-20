@@ -32,6 +32,7 @@ summary="$out/summary.txt"
 {
     echo "OmaMovie Session stress $(date '+%F %T %z')"
     echo "commit $(git rev-parse --short HEAD)$(git diff --quiet || echo ' (dirty)')"
+    bash "$repo/tools/bench/host-power.sh"
     echo "host $(uname -sr), load $(cut -d' ' -f1-3 /proc/loadavg)"
     echo "build=$build rounds=$rounds transport_ops=${OMA_STRESS_TRANSPORT_OPS:-200} switch_ops=${OMA_STRESS_SWITCH_OPS:-40}"
     echo "fixture $(sha256sum "$fixture")"
