@@ -5,9 +5,12 @@ The [first instrumented run](Research/evidence/2026-10-15-export-transfer-baseli
 counted software compositor inputs, NV12 readbacks, writer row copies and VA-API uploads.
 The [newer phase split](Research/evidence/2026-10-16-export-transfer-phases.md) now also
 records GPU conversion timestamps, fence wait, mapped host copy, staging rows, process CPU
-and downgrade path on one 1080p60 and one 4K23.976 Intel run. Complete peak memory/GPU-use
-measurements, process CPU/frame, transfer counts and controlled repetitions on the same
-fixtures with independent frame/audio checks. Then define and pilot GPU-native
+and downgrade path on one 1080p60 and one 4K23.976 Intel run. [Three repeats with GPU
+use](Research/evidence/2026-10-19-export-transfer-repeats.md) (2026-10-19) add peak RSS,
+process CPU/frame, DRM engine busy time and GPU-resident memory: the 4K median is 9.5 s,
+the render engine is busy about 56% of wall time and the process uses about five cores,
+so the staged 4K export is mostly CPU-bound. Decode and upload, not render, drove the
+1.5× spread. Then define and pilot GPU-native
 compositor-output → VA-API encoder input, comparing FFmpeg 9's existing frame mapping
 with direct DMA-BUF import under the same correctness and transfer checks. This remains
 a post-v0.1 baseline task, not a zero-copy or speedup claim; see
