@@ -35,6 +35,7 @@ viewer while it exports (Intel: both decode through VA-API, including a 10-bit H
 and requires playback to advance and the export to finish. `test_export_decode_paths.cpp`
 requires 10-bit HEVC and AV1 exports decoded in hardware to hash frame for frame (ffmpeg
 `framemd5`) like the same exports decoded in software; on Intel both used VA-API, and an
-encoder change on one side makes it fail. Not validated: other vendors, multi-stream
-scenes and long exports.
+encoder change on one side makes it fail. A 25-minute
+long export passed with the same output size and checks as software decode, at half the
+CPU per frame. Not validated: other vendors, multi-stream scenes and two-hour exports.
 Revert by choosing software decode in Settings or reverting this ADR's change.

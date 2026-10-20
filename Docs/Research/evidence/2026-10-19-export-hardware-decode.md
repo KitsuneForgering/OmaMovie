@@ -51,5 +51,14 @@ every frame still matches an all-CPU export.
 `hardware` and `software` (libx264 both times): per-frame `framemd5` of the outputs is
 identical, and the hardware runs decoded no software frames on this host.
 
+**25-minute long export** (`tools/bench/long-export/run.sh 25`, 45,000 1080p30 frames with
+reordered cuts, a dissolve and two sepia clips; [raw report](2026-10-19-long-25min-hardware-decode.txt))
+against the [2026-10-17 software-decode run](2026-10-17-rc-long-25min.txt) of the same scene:
+PASS with the same output size (1,607,220,126 bytes) and the same frame-check values; CPU per
+frame 21.45 → 11.03 ms, peak RSS 804 → 358 MB, wall 344.8 → 292.6 s, zero software frames and
+staging copies; peak GPU-resident memory 1,050 MB. Different days and starting load (6.8 vs
+9.3), so the wall time is indicative; only a peak memory value was sampled, so this run does
+not exclude slow GPU-memory growth.
+
 Not covered: AMD/NVIDIA (not validated, so `Auto` stays software there), multi-stream 4K
-scenes, long exports and memory pressure.
+scenes, two-hour exports and memory pressure.
