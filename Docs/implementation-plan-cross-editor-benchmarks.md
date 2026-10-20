@@ -128,6 +128,10 @@ source for one editor. A famous name alone does not make a useful comparator.
   tried, and OmaMovie also decoded in hardware (ADR-0022), so this is not a ranking of the
   editors' best routes. The 3 dB gap is consistent with OmaMovie scaling in linear light
   (ADR-0006).
+  A follow-up with melt's `qtblend` transition (same tracks and rectangles, with and without
+  `always_active=1`) rendered only the background (11.8 dB against the reference), so it
+  produced no comparable timing. A comparison against Kdenlive's own compositing needs a
+  project saved by Kdenlive itself, not a reconstruction on the melt command line.
 - [ ] Add deterministic OmaMovie tests for the shared scene's edit, save/reopen and
   independently decoded export. Retain long-form and lifetime stress from
   [M10](implementation-plan-m10-validation.md); benchmark runs are evidence, not CI
