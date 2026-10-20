@@ -68,7 +68,15 @@ flat at 847–851 MB through the fourth cut and the last 115 s. Process RSS rose
 The steps match the frame source opening or reseeking decoders (at most two per file,
 `kStreamsPerFile`), so the growth is bounded in this run rather than a leak; whether about
 850 MB, roughly 280 NV12 1080p surfaces, is a necessary pool or retained imports is an open
-question, not a measured defect.
+question, not a measured defect. A probe on the same 10-minute source (2026-10-20) separates
+the two: exporting the whole file without cuts stays flat at about 340 MB GPU-resident from
+2 s to the end (122 s); the same 18,000 frames as 40 reordered 15-second cuts rise to about
+767 MB within 14 s and then stay at 742–767 MB to the end, with one-second spikes to
+844–931 MB at some reseeks. Forty seeks therefore do not accumulate memory (no leak); the
+plateau is about two decoders' worth, matching `kStreamsPerFile = 2`, plus transient overlap
+while a decoder is replaced. *Derived, not measured:* at several hundred MB per hardware
+decoder and up to `kMaxStreams = 6` decoders across files, a project with several 1080p
+sources could hold 2 GB or more of GPU-resident (on an iGPU, system) memory.
 
 Not covered: AMD/NVIDIA (not validated, so `Auto` stays software there), multi-stream 4K
 scenes, two-hour exports, several source files and memory pressure.
