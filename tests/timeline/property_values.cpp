@@ -59,7 +59,7 @@ void choose_values(Rng& rng, Op& op, const Extent& e) {
     } else if (op.kind == Kind::RemoveCaption) {
         op.b = rng.between(0, 4);
     } else if (op.kind == Kind::Video) {
-        op.b = rng.between(0, 2);
+        op.b = rng.between(0, 4);
         op.a = rng.between(-5, 40); // a key out of order or before the media is refused
         op.c = rng.between(0, 5);   // values over 1 (c/4) are refused
     } else if (op.kind == Kind::Audio) {

@@ -18,8 +18,9 @@ namespace property {
 // valid and unique, on the grid, not before the start, not empty, within kMaxCaptionBytes,
 // sorted and apart.
 [[nodiscard]] std::string broken_annotations(const oma::timeline::Timeline& tl);
-// Effects unique and at most kMaxEffects; opacity keys at most kMaxKeys, in [0, 1], strictly
-// increasing.
+// Effects unique and at most kMaxEffects, parameters unique and finite (sepia's amount in
+// [0, 1]); opacity keys at most kMaxKeys, in [0, 1], strictly increasing; transform keys strictly
+// increasing with finite, non-zero scales.
 [[nodiscard]] std::string broken_video(const oma::timeline::Clip& clip);
 // Gain keys in [0, 16] and strictly increasing; fades not negative and together within the clip;
 // equalizer bands within ±24 dB.

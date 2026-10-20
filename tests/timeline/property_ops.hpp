@@ -20,7 +20,8 @@ namespace property {
 //   Transition   a=duration b=kind (3 is none) c=0 removes it   Detach   b=lane track index
 //   AddMarker   a=at   RemoveMarker   b=marker index
 //   AddCaption, SetCaption   clip=caption index (Set) a=start b=duration c=1 overlong text
-//   RemoveCaption   b=caption index   Video   b=0 opacity key at a, value c/4; 1 effect a; 2 clear
+//   RemoveCaption   b=caption index   Video   b=0 opacity key at a, value c/4; 1 effect a; 2 clear;
+//     3 transform key at a, scale c/2; 4 sepia amount c/4 (an undeclared parameter for a < 0)
 //   Audio   b=0 gain key at a, value 4c; 1 fades a and 3c-2; 2 EQ low a-10 dB; 3 clear
 enum class Kind {
     Append,
