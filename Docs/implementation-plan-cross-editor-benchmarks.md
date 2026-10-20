@@ -159,6 +159,9 @@ source for one editor. A famous name alone does not make a useful comparator.
   and converts them to BT.709 (pure green → (73, 250, 0), matching the matrix), while melt
   keeps the samples. Pixel-level comparisons need tagged BT.709 fixtures.
 - [ ] Store raw results, commands, versions, fixture hashes and deviations under
+  (*2026-10-20*: the [same-machine summary](analysis/omamovie-2026-10-20-cross-editor-summary.md)
+  tabulates three-round whole, cuts and layer results with ranges, correctness and the
+  not-comparable cells; another person reproducing it is still open)
   `Docs/Research/evidence/`; publish a concise comparison with uncertainty, output
   correctness and explicit `not comparable` cells. Recheck candidate support when the
   experiment actually runs.
