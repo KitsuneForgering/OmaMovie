@@ -44,8 +44,8 @@ regressions in interaction come before new breadth.
    length; p95 now 33–93 ms). The intermittent long split sample is explained (2026-10-21,
    [rerun](Research/evidence/2026-10-20-timeline-5000-rerun.md)): the audit's fresh cache made Mesa
    compile the viewer compositor's pipelines on the first composite, inside Qt's sync; with a
-   warm shader cache no edit exceeded 100 ms in five runs. Left: a one-time 0.3-1 s freeze at the
-   first viewer frame on a cold shader cache, until the compositor is created before that frame.
+   warm shader cache no edit exceeded 100 ms in five runs. Left by decision: a 0.3-1 s freeze at the
+   first viewer frame of the first launch after an install or driver update (pipeline cache cold).
 
 1. **Enforce the existing CI (M10):** a repository ruleset now protects `master`
    (2026-10-15): PR, linear history, resolved review threads, no force push/deletion,

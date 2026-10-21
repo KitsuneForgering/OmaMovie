@@ -61,8 +61,10 @@ a 504 ms composite). Each audit run used a fresh `XDG_CACHE_HOME`, so Mesa's sha
 was cold every time. With one cache kept across five runs, only the first (cold) logged a slow
 composite (288 ms) and **no edit sample exceeded 100 ms in any of the five**.
 
-So the intermittent long split is the audit's own cold start, not the editing path. What users
-can meet is a one-time freeze of about 0.3-1 s at the first viewer frame after installing or
-updating the driver (cold shader cache). Creating the compositor before the first frame, off
-the scene-graph sync, would remove that freeze; not done yet. Audit runs meant to measure edits
-should keep the shader cache warm or discard the first composite.
+So the intermittent long split is the audit's own cold start, not the editing path. The
+compositor keeps its pipeline cache under `$XDG_CACHE_HOME/omamovie` (`pipeline_cache_path`),
+which the audit also started empty. What users can meet is a one-time freeze of about 0.3-1 s
+at the first viewer frame of the first launch after installing or updating the driver.
+*Decision:* creating the compositor on another thread before that frame would hand Vulkan
+objects to Qt's render thread to save one freeze per install, so it is not done. Audit runs
+meant to measure edits should keep the cache warm or discard the first composite.
