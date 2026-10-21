@@ -89,7 +89,8 @@ transport owner would need too many shared inputs, so it is not an automatic ext
    `tools/spikes/s9_compositor_to_encoder.cpp` then writes the compositor's NV12 into
    `h264_vaapi`'s own surfaces and encodes it beside today's readback route: the movies are
    byte-identical at 320×180, 1080p and 4K, and the step to the encoder took 2.1-2.5 instead of
-   9.2-10.5 ms per 4K frame. Next: an ADR for the route, then the export path (pool lifetime,
+   9.2-10.5 ms per 4K frame. Route recorded in proposed [ADR-0023](adr/0023-gpu-native-encoder-input.md).
+   Next: the export path (pool lifetime,
    synchronisation without a CPU wait per frame, device loss, cancellation, software fallback).
 4. Keep working-space → NV12 conversion on GPU for the first path. Specify P010 planes,
    color tags and synchronization in the contract, but do not make P010 or HDR a v0.1 gate

@@ -29,6 +29,7 @@ one as superseded.
 | [0020](0020-async-execution-boundary.md) | Async execution boundary for interactive work; libuv not adopted | Accepted (paused viewer; amends ADR-0005's viewer section) |
 | [0021](0021-clang-diagnostics-and-release-optimization.md) | Clang diagnostics and measured Release optimization | Accepted (amends ADR-0001/0018) |
 | [0022](0022-export-hardware-decode.md) | Hardware decode for export where validated | Proposed |
+| [0023](0023-gpu-native-encoder-input.md) | GPU-native export input through encoder-owned VA-API surfaces | Proposed |
 
 Template: copy the structure of an existing ADR (Context, Decision, Alternatives, Consequences).
 
