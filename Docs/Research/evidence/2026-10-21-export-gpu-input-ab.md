@@ -24,8 +24,20 @@ Wall time is the whole process (start-up, project, export, exit). B's three runs
 into encoder surfaces, A's 0; the last round's two movies are byte-identical (`cmp`), as
 `tests/app/test_export_gpu_input.cpp` requires on its fixture.
 
-**Reading:** on this export the GPU-native input saves about 1.1 s (13%) of wall time and
-2.5 s (20%) of user CPU. That is less than the 7-8 ms per frame the S9 spike measured for the
+**Second fixture, same day and method:** `a1080.mp4` (1080p23.976 H.264, 479 frames), load
+average 0.5 at the start.
+
+| Run | A wall s | A user CPU s | B wall s | B user CPU s |
+|---:|---:|---:|---:|---:|
+| 1 | 4.95 | 7.38 | 4.40 | 5.91 |
+| 2 | 4.99 | 7.42 | 4.50 | 5.97 |
+| 3 | 4.97 | 7.37 | 4.35 | 5.80 |
+| median | **4.97** | **7.38** | **4.40** | **5.91** |
+
+479/479 frames written into encoder surfaces in B; the last round's movies byte-identical.
+
+**Reading:** the GPU-native input saved about 13% (4K) and 11% (1080p) of wall time and 20% of
+user CPU on both. That is less than the 7-8 ms per frame the S9 spike measured for the
 hand-off alone (240 frames x 7.5 ms = 1.8 s), consistent with the readback having partly
 overlapped encoding on the encoder stage. Three rounds give a range, not a confidence interval.
-Not measured: GPU engine busy time and memory for B, other fixtures and resolutions, effects.
+Not measured: GPU engine busy time and memory for B, 60 fps and HDR sources, effects.
