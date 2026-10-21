@@ -23,16 +23,7 @@ void track_of(Builder& b, const TrackRef& ref, std::size_t depth) {
         issue(b.out.report, ref.producer, why_not(b, ref.producer) + " as a track", "left out");
         return;
     }
-    for (const ir::Opaque& kept : t->second.transitions) {
-        b.out.timeline.unsupported.push_back(kept);
-        if (inert(kept))
-            continue;
-        const bool mix = is_a(kept, "transition");
-        issue(b.out.report, kept.original_id,
-              kept.schema + (mix ? " within a track (a same-track mix) not imported"
-                                 : " track filter not imported"),
-              mix ? "kept in the import; the clips meet at a cut" : "kept in the import");
-    }
+    report_transitions(b, t->second);
     for (const TrackRef& sub : t->second.tracks)
         track_of(b,
                  {.producer = sub.producer,

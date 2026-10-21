@@ -29,6 +29,8 @@ struct Builder {
     std::map<std::string, std::string> media; // resource -> media id
 };
 
+// A track tractor's transitions and filters, kept on the timeline and reported unless inert.
+void report_transitions(Builder& b, const Tractor& t);
 // `playlist`'s entries as IR items on `track`.
 void items_of(Builder& b, const Playlist& playlist, ir::Track& track);
 
@@ -50,8 +52,10 @@ void items_of(Builder& b, const Playlist& playlist, ir::Track& track);
 [[nodiscard]] ir::Opaque opaque(const xml::Element& e);
 // Whether `o` was kept from a `<transition>` or a `<filter>` (opaque records the element).
 [[nodiscard]] bool is_a(const ir::Opaque& o, std::string_view element);
-// A filter that cannot change the output: disabled (`disable=1`, as Kdenlive adds volume and
-// panner to every track) or a level meter (audiolevel). Kept, but not reported.
+// What changes nothing OmaMovie would not do itself: a disabled filter (`disable=1`, as Kdenlive
+// adds volume and panner to every track), a level meter (audiolevel), or Kdenlive's automatic
+// track compositing (`internal_added=237`: tracks stacked and their sound summed). Kept, not
+// reported.
 [[nodiscard]] bool inert(const ir::Opaque& o);
 void issue(ir::ImportReport& r, std::string object, std::string reason, std::string impact);
 

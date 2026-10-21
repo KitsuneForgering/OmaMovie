@@ -36,9 +36,13 @@ start at 0, where both readings agree.
 - Transitions and filters on the main tractor (compositing, audio mixing between tracks) are kept
   opaque on the timeline and reported.
 - Clips of one resource share one media reference.
-- A filter with `disable=1` and an `audiolevel` meter cannot change the output: they are kept
-  (counted among the objects the project cannot save) but not reported one by one. Kdenlive adds
-  a disabled `volume` and `panner` and a meter to every track
+- A filter with `disable=1`, an `audiolevel` meter and Kdenlive's automatic track compositing
+  (`internal_added=237`: tracks stacked, their sound summed, as OmaMovie does) change nothing
+  OmaMovie would not do: they are kept (counted among the objects the project cannot save) but
+  not reported one by one. Kdenlive adds a disabled `volume` and `panner`, a meter and one
+  compositing transition to every track. A transition is a same-track mix only inside a tractor
+  of playlists (Kdenlive's A/B pair); in the sequence tractor Kdenlive 23.04+ nests in the main
+  one it is between tracks
   ([2026-10-20 rerun](../Research/evidence/2026-10-20-kdenlive-dataset-import.txt)).
 - A timewarp's frames (its in point, length and entry points) are source frames divided by the
   speed: `timewarp:2` frames 1-5 are source frames 2-10. The imported clip keeps the entry's
