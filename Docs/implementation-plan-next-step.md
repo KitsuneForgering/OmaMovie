@@ -41,8 +41,9 @@ regressions in interaction come before new breadth.
    ([async milestone](implementation-plan-async-interactive.md), ADR-0020). Left: the 4K
    composite still runs in Qt's sync phase (~11 ms).
 0. **5,000-clip edits (M6):** fixed 2026-10-14 (QML bindings reading the whole clip list for its
-   length; p95 now 33–93 ms). The intermittent ~90 ms split sample did not recur in ten runs on
-   2026-10-20 (worst split 40.8 ms; [rerun](Research/evidence/2026-10-20-timeline-5000-rerun.md)); its cause stays unknown.
+   length; p95 now 33–93 ms). The intermittent long split sample did not recur in ten runs on
+   2026-10-20 (worst split 40.8 ms) but returned once (300 ms, under load) in seven runs on
+   2026-10-21 ([rerun](Research/evidence/2026-10-20-timeline-5000-rerun.md)); its cause stays unknown.
 
 1. **Enforce the existing CI (M10):** a repository ruleset now protects `master`
    (2026-10-15): PR, linear history, resolved review threads, no force push/deletion,

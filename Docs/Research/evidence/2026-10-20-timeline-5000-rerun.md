@@ -23,3 +23,12 @@ every operation stayed under half of the 100 ms gate. If the old sample still oc
 run of three, ten clean runs would happen with probability about 2%, so it is treated as not
 reproduced on the current code. Its cause was never identified and no change is attributed;
 the audit remains the regression check.
+
+**Recheck after the sorted-search change (2026-10-21, Release of `403ade6`).** Seven runs, same
+command and host. The first run, started right after a clean TSan rebuild and the full test
+matrix (15-minute load average 4.8), recorded one split at **300.1 ms** (the other 19 of that
+run 29.9 ms p50); the next six runs had split p95 38.0-44.7 ms (max of each equal to its p95,
+none near 90 ms), undo p95 31.7-33.4 ms, and seek and select p95 under 27 ms. So the
+intermittent long split still exists, now once in 17 runs since 2026-10-20 and under load; its
+cause is still unknown. The model's per-edit work is small beside the frame time: split latency
+did not change measurably with the searches.
