@@ -34,3 +34,10 @@ add_executable(s4_qt_shared_device s4_qt_shared_device.cpp)
 target_compile_options(s4_qt_shared_device PRIVATE ${OMA_TEST_WARNINGS})
 target_link_libraries(s4_qt_shared_device PRIVATE
     oma_compositor oma_media oma_gpu oma_base Qt6::Quick Qt6::GuiPrivate)
+
+# s7 (M12 step 3): the GPU writing a VA-API encode surface imported as DMA-BUF.
+pkg_check_modules(SPIKE_VA REQUIRED libva libva-drm)
+add_executable(s7_va_encode_surface s7_va_encode_surface.cpp)
+target_compile_options(s7_va_encode_surface PRIVATE -Wall -Wextra)
+target_include_directories(s7_va_encode_surface SYSTEM PRIVATE ${SPIKE_VA_INCLUDE_DIRS})
+target_link_libraries(s7_va_encode_surface PRIVATE oma_gpu oma_base ${SPIKE_VA_LIBRARIES})

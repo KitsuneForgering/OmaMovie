@@ -75,7 +75,12 @@ transport owner would need too many shared inputs, so it is not an automatic ext
    and the [FFmpeg 9 VA-API DRM mapping](https://ffmpeg.org/doxygen/9.0/hwcontext__vaapi_8c_source.html)
    to define the pilot's compatibility checks, not to assume it will work on this driver.
    Record actual driver/API constraints and the simpler working route in a new ADR before
-   replacing the writer path. Do not infer AMD/NVIDIA support.
+   replacing the writer path. Do not infer AMD/NVIDIA support. *Route check (2026-10-21,
+   [evidence](Research/evidence/2026-10-21-m12-encoder-input-routes.md)):* on the Intel host
+   FFmpeg 9's mapping fails three ways (iHD refuses its exported DMA-BUF; VA-API cannot be
+   derived from Vulkan; reverse mapping crashes FFmpeg), while a VA-API encode surface exported
+   as DMA-BUF imports into OmaMovie's device as writable R8/RG8 planes and GPU writes read back
+   exactly through VA-API (`tools/spikes/s7_va_encode_surface.cpp`). Next: encode such a surface.
 4. Keep working-space → NV12 conversion on GPU for the first path. Specify P010 planes,
    color tags and synchronization in the contract, but do not make P010 or HDR a v0.1 gate
    or claim HDR without a separately validated color pipeline. Compare decoded output frames,
