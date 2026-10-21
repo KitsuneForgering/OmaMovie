@@ -33,7 +33,8 @@ not run on that session ([hang diagnosis](../Research/evidence/2026-10-21-export
 so `OMA_BENCH_HEADLESS=1` ran OmaMovie's exporter through `tools/bench/export-headless`'s
 `export_bench`: the same exporter, no Qt window or start-up, closer to melt's command line.
 This build also has the [decode-ahead change](../Research/evidence/2026-10-21-export-decode-ahead.md).
-Three alternated rounds, load average 3-7, all 36 exports passed. Reports:
+Three alternated rounds, load average 3-7, all 48 exports passed (layers: PSNR against FFmpeg's
+reference unchanged from the windowed runs, 41.95 and 41.41 dB). Reports:
 [whole](../Research/evidence/2026-10-21-cross-editor-headless-whole.txt),
 [cuts](../Research/evidence/2026-10-21-cross-editor-headless-cuts.txt),
 [speed](../Research/evidence/2026-10-21-cross-editor-headless-speed.txt).
@@ -46,6 +47,8 @@ Three alternated rounds, load average 3-7, all 36 exports passed. Reports:
 | Five reordered cuts | libx264 | 7.11 (7.03–7.27) | 10.25 (9.93–11.02) | 45.8 / 67.5 |
 | 2× speed (MLT timewarp) | VA-API H.264 | 1.38 (1.37–1.65) | 2.95 (2.89–3.00) | 1.0 / 9.6 |
 | 2× speed (MLT timewarp) | libx264 | 5.75 (5.70–7.41) | 7.50 (7.45–7.74) | 36.7 / 50.8 |
+| Three layers, two scaled ([report](../Research/evidence/2026-10-21-cross-editor-headless-layers.txt)) | VA-API H.264 | 2.19 (2.16–2.23) | 16.81 (15.61–17.35) | 1.0 / 42.5 |
+| Three layers, two scaled | libx264 | 4.41 (3.60–5.14) | 18.31 (18.18–19.64) | 22.8 / 55.1 |
 
 Against the windowed rows above, part of the gain is the missing window and start-up, so the two
 tables are not one A/B. OmaMovie's VA-API outputs have the same sizes as the windowed runs'
