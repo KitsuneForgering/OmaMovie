@@ -23,6 +23,15 @@ void place(Build& b, const Event& e, const std::string& name) {
     }
     if (e.rec_in > cursor)
         track.items.emplace_back(ir::Gap{.duration = at(e.rec_in - cursor)});
+    if ((e.reel == "BL" || e.reel == "BLK") && e.source_file.empty()) { // CMX 3600 black
+        if (e.kind != "C")
+            issue(b.out.report, e.number,
+                  std::format("transition {} to black not imported", e.kind),
+                  "a hard cut to black; the event's length is kept");
+        track.items.emplace_back(ir::Gap{.duration = at(e.rec_out - e.rec_in)});
+        cursor = e.rec_out;
+        return;
+    }
     if (e.kind == "D") {
         track.items.emplace_back(ir::Transition{.kind = "SMPTE_Dissolve",
                                                 .in_offset = at(0),

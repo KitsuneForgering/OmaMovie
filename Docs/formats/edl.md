@@ -32,6 +32,9 @@ frames 0 and 1 of each minute not divisible by ten are skipped; four at 59.94).
   converter centres it on the cut and reports that.
 - Wipes (`W###`) and keys (`K`, `K B`, `K O`) are kept opaque on their track and reported; the
   event still plays as a cut with its length.
+- Reel `BL` (or `BLK`) without a source file is black: a gap of the event's length, not a media
+  file (before 2026-10-20 it was reported as missing media). A dissolve or wipe to black is
+  reported and becomes a cut to black.
 - Clips of the same source file (or clip name, or reel) share one media reference.
 - Lines before the first event other than TITLE/FCM are kept on the timeline and reported;
   lines after an event (comments, `M2`, `SPLIT:`, `AUD`) are kept on that event's clip.
