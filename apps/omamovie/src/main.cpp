@@ -568,6 +568,13 @@ int main(int argc, char** argv) {
                 application.exit(1);
                 return;
             }
+            // The first viewer composite creates the compositor (pipelines compiled here when the
+            // shader and pipeline caches are cold, 0.3-1 s): wait for it, and report it apart, so
+            // it never lands on a timed edit.
+            const auto first0 = Clock::now();
+            const unsigned presented = preview->presentedFrames();
+            wait_for([&] { return preview->presentedFrames() > presented; }, 15000);
+            const double first_ms = ms_since(first0);
             // OMA_AUDIT_ZOOM=pixels-per-second: a working zoom with real clip delegates in view
             // instead of the whole sequence fitted (the default).
             if (const QByteArray zoom = qgetenv("OMA_AUDIT_ZOOM"); !zoom.isEmpty()) {
@@ -637,8 +644,8 @@ int main(int argc, char** argv) {
                     peak = l.substr(6);
             }
             std::printf("M6 timeline audit: %d clips, model build %.1f ms, open %.1f ms (save, "
-                        "load, reimport, UI), RSS%s, peak%s\n",
-                        clips, build_ms, open_ms, rss.c_str(), peak.c_str());
+                        "load, reimport, UI), first viewer frame %.1f ms after, RSS%s, peak%s\n",
+                        clips, build_ms, open_ms, first_ms, rss.c_str(), peak.c_str());
             line("seek", seek);
             line("select", select);
             line("split", split);

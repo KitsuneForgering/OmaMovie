@@ -68,3 +68,9 @@ at the first viewer frame of the first launch after installing or updating the d
 *Decision:* creating the compositor on another thread before that frame would hand Vulkan
 objects to Qt's render thread to save one freeze per install, so it is not done. Audit runs
 meant to measure edits should keep the cache warm or discard the first composite.
+
+**Audit made robust (2026-10-21).** After opening the long project the audit now waits for a
+viewer frame before timing anything, and reports how long it took ("first viewer frame ... ms
+after"). Eight runs with a fresh (cold) cache each: the 258-276 ms compositor creation was
+always over before the timed edits (first viewer frame after open 1.7-26.4 ms), no edit sample
+exceeded 100 ms, and split p95 was 37.6-63.4 ms.
