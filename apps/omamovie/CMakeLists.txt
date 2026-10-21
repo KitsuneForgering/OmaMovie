@@ -35,6 +35,15 @@ target_link_libraries(app_tests PRIVATE
     Qt6::Quick Qt6::Test Qt6::DBus Qt6::GuiPrivate)
 add_dependencies(app_tests fixtures)
 
+# Headless export bench (tools/bench/export-headless): the exporter without a window.
+add_executable(export_bench ${APP_LIB_SOURCES} ${CMAKE_SOURCE_DIR}/tools/bench/export-headless/main.cpp)
+set_target_properties(export_bench PROPERTIES AUTOMOC ON RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tools)
+target_include_directories(export_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_compile_options(export_bench PRIVATE ${OMA_TEST_WARNINGS})
+target_link_libraries(export_bench PRIVATE
+    oma_ingest oma_project oma_importers oma_project-ir oma_playback oma_timeline oma_audio oma_compositor oma_media oma_gpu oma_base
+    Qt6::Quick Qt6::Test Qt6::DBus Qt6::GuiPrivate)
+
 add_test(NAME app COMMAND sh ${CMAKE_SOURCE_DIR}/tests/support/run_test.sh $<TARGET_FILE:app_tests>)
 set_tests_properties(app PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 if(OMA_TEST_ENV)

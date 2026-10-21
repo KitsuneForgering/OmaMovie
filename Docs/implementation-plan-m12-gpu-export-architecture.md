@@ -106,6 +106,10 @@ transport owner would need too many shared inputs, so it is not an automatic ext
    color, audio and timing against the independent oracle before removing the mandatory
    compositor readback. Remeasure the *same* fixtures after that removal and record transfer
    counts, process CPU/frame, peak memory and GPU use; no speedup factor is assumed.
+   *Decode ahead (2026-10-21, [evidence](Research/evidence/2026-10-21-export-decode-ahead.md)):*
+   the export builds frame k+1 (evaluation, decode, import) on its own worker while frame k
+   renders; on the headless bench (`tools/bench/export-headless`) the 4K 240-frame export went
+   from about 6.6 to 4.6 s on the readback route and 5.2 to 4.4 s with GPU-native input.
 5. Hardware decode during export, moved ahead of steps 2–4 on evidence (2026-10-19,
    proposed [ADR-0022](adr/0022-export-hardware-decode.md)): the existing
    `VideoDecoder`/`FrameSource` mechanism cut 4K process CPU per frame from 272 to 43 ms

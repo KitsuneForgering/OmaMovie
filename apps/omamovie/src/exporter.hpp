@@ -41,7 +41,8 @@ struct ExportRequest {
 // Where an export's time went (the --export-audit diagnostic), in milliseconds.
 struct ExportStats {
     std::int64_t frames = 0;
-    double build = 0;   // evaluation and decode (frame builder)
+    double build = 0;   // waiting for the frame's evaluation and decode (built a frame ahead)
+    double build_worker = 0; // that evaluation and decode, on its own worker (overlaps render)
     double render = 0;  // composition and readback (or the CPU reference and BT.709 RGB24)
     double convert = 0; // waiting for the encoder stage (backpressure)
     double encode = 0;  // RGB to YUV, video and audio encoders, on the encoder stage's worker

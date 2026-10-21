@@ -228,19 +228,45 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
         st.writer_transfers = (*writer)->transfer_stats();
         return std::unexpected(std::move(error));
     };
+    const auto build_at = [&](std::int64_t at) {
+        return build_viewer_frame(request.timeline, request.paths, request.luts, request.width,
+                                  request.height, at, request.ticks_per_frame, *frames);
+    };
+    // The next frame is built (timeline evaluation, decode and import) on a worker of its own
+    // while this thread renders the current one; the two took about as long and ran in turn.
+    // While a build is in flight only that worker uses `frames`: it is joined before `frames`
+    // changes, and the pool, declared after everything a build reads, joins it before they go.
+    std::optional<oma::Result<std::shared_ptr<ViewerFrame>>> ahead;
+    oma::JobPool builder(1);
+    oma::JobHandle building;
+    const auto build_ahead = [&](std::int64_t at) {
+        building = builder.submit("export-build", [&, at](oma::JobContext&) {
+            const auto started_at = Clock::now();
+            ahead.emplace(build_at(at));
+            st.build_worker += std::chrono::duration<double, std::milli>(Clock::now() - started_at).count();
+            return oma::Result<void>{};
+        });
+    };
+    const auto settle = [&] { // no build in flight afterwards
+        if (building.valid())
+            (void)building.wait();
+        building = {};
+    };
     for (std::int64_t k = 0; k < request.frames; ++k) {
         if (!progress(k, request.frames)) {
+            settle();
             return stop(
                 oma::Error(oma::ErrorCode::Cancelled, oma::Category::Encode, "export cancelled"));
         }
         mark = Clock::now();
-        const auto build = [&] {
-            return build_viewer_frame(request.timeline, request.paths, request.luts, request.width,
-                                      request.height, k, request.ticks_per_frame, *frames);
-        };
-        auto view = build();
+        const auto build = [&] { return build_at(k); };
+        settle();
+        auto view = ahead ? std::move(*ahead) : build(); // the first frame, or after a device loss
+        ahead.reset();
         if (!view)
             return stop(view.error());
+        if (k + 1 < request.frames)
+            build_ahead(k + 1);
         lap(st.build);
         std::vector<oma::compositor::LayerInput> inputs;
         const auto collect = [&] {
@@ -285,7 +311,10 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
                 }
                 gpu.reset();
                 if (hardware_decode) {
-                    // This frame's pictures were decoded onto the lost device; decode it again.
+                    // This frame's pictures were decoded onto the lost device; decode it again,
+                    // and the next one too (its build in flight used the lost device).
+                    settle();
+                    ahead.reset();
                     frames.emplace(nullptr, &st.decoded);
                     st.decode_path += "; software after device loss at frame " + std::to_string(k);
                     view = build();
