@@ -1872,6 +1872,8 @@ void Session::exportMovie(const QUrl& url, const QString& profile) {
                           .decode = export_decode_ == QLatin1String("hardware")   ? ExportRequest::Decode::Hardware
                                     : export_decode_ == QLatin1String("software") ? ExportRequest::Decode::Software
                                                                                   : ExportRequest::Decode::Auto,
+                          // Pilot switch for proposed ADR-0023 until it is accepted: no setting yet.
+                          .gpu_input = qEnvironmentVariableIsSet("OMA_EXPORT_GPU_INPUT"),
                           .profile = choice->profile};
     const auto cues = caption_io::cues(request.timeline);
     const std::optional<std::string> captions = cues.empty() ? std::nullopt

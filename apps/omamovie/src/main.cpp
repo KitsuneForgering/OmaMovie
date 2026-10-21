@@ -407,6 +407,7 @@ int main(int argc, char** argv) {
             "delay remains in fence wait)\n"
             "  writer: NV12 CPU row copies %llu bytes (%.2f ms), VA-API uploads %llu (%llu bytes, "
             "%.2f ms)\n"
+            "  encoder input: %s (%llu frames written into encoder surfaces)\n"
             "  result: %s\n",
             static_cast<long long>(st.frames), st.total, n * 1000.0 / std::max(1.0, st.total),
             qPrintable(out), st.encoder.c_str(), st.decode_path.c_str(), st.compositor_path.c_str(),
@@ -427,7 +428,8 @@ int main(int argc, char** argv) {
             st.writer_transfers.nv12_copy_ms,
             static_cast<unsigned long long>(st.writer_transfers.va_uploads),
             static_cast<unsigned long long>(st.writer_transfers.va_upload_bytes),
-            st.writer_transfers.va_upload_ms,
+            st.writer_transfers.va_upload_ms, st.encoder_input.c_str(),
+            static_cast<unsigned long long>(st.surface_frames),
             qPrintable(session.exportedFile() == out ? QStringLiteral("written")
                                                      : session.notice()));
         return session.exportedFile() == out ? 0 : 1;

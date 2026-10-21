@@ -95,8 +95,10 @@ transport owner would need too many shared inputs, so it is not an automatic ext
    `ExportStats::encoder_input` names the route. `tests/app/test_export_gpu_input.cpp`: the movie
    is byte-identical to the readback route's, and a device lost at frame 10 finishes on the CPU
    with every frame right; a surface failure on a working device falls back to the readback with
-   its reason. Left: synchronisation without a CPU wait per frame, a whole-export A/B, and
-   acceptance of ADR-0023 before it is the default.
+   its reason. *Whole-export A/B* ([evidence](Research/evidence/2026-10-21-export-gpu-input-ab.md),
+   pilot switch `OMA_EXPORT_GPU_INPUT=1`): the 4K23.976 240-frame export went from a median
+   8.07 to 7.00 s wall and 12.4 to 9.9 s user CPU, outputs byte-identical. Left: synchronisation
+   without a CPU wait per frame, other fixtures, and acceptance of ADR-0023 before it is the default.
 4. Keep working-space → NV12 conversion on GPU for the first path. Specify P010 planes,
    color tags and synchronization in the contract, but do not make P010 or HDR a v0.1 gate
    or claim HDR without a separately validated color pipeline. Compare decoded output frames,
