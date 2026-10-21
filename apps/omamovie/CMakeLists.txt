@@ -50,6 +50,17 @@ if(OMA_TEST_ENV)
     set_tests_properties(app PROPERTIES ENVIRONMENT "${OMA_TEST_ENV}")
 endif()
 
+# The headless bench must keep exporting: the camera fixture whole, 30 frames, on whatever
+# device and encoder this machine has (CI: lavapipe, libx264).
+add_test(NAME export_bench COMMAND sh -c
+    "rm -f \"$1\" && \"$0\" tests/fixtures/generated/h264_30fps_aac.mp4 \"$1\""
+    $<TARGET_FILE:export_bench> ${CMAKE_BINARY_DIR}/export_bench_smoke.mp4)
+set_tests_properties(export_bench PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                     PASS_REGULAR_EXPRESSION "export ok: 30 frames")
+if(OMA_TEST_ENV)
+    set_tests_properties(export_bench PROPERTIES ENVIRONMENT "${OMA_TEST_ENV}")
+endif()
+
 # The installed tree: bin/omamovie finds its QML in ../share/omamovie/qml.
 install(TARGETS omamovie RUNTIME DESTINATION bin)
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/qml/
