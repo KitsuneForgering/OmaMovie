@@ -18,6 +18,7 @@ void run_effect_preset_tests();
 void run_media_color_tests();
 void run_property_tests();
 void run_no_op_edit_tests();
+void run_clip_id_tests();
 
 int main(int argc, char* argv[]) {
     cest_init(argc, argv);
@@ -39,5 +40,6 @@ int main(int argc, char* argv[]) {
     run_media_color_tests();
     run_property_tests();
     run_no_op_edit_tests();
+    run_clip_id_tests();
     return cest_result();
 }

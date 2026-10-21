@@ -328,6 +328,7 @@ Result<Timeline> Timeline::restore(FrameRate rate, Rational timebase, std::vecto
     t->media_ = std::move(media);
     t->luts_ = std::move(luts);
     t->next_id_ = largest + 1;
+    t->clip_id_bound_ = largest;
     if (auto valid = t->validate(); !valid) {
         return std::unexpected(valid.error());
     }

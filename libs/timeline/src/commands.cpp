@@ -17,10 +17,17 @@ void sort_clips(Track& t) {
 }
 
 // Whether [start, end) is free on the track, ignoring one clip (the one being replaced).
+// Every command leaves a track sorted and free of overlaps, so clip ends are sorted too: only
+// the clips from the first one ending after `start` up to `end` can collide (a scan of the whole
+// track made building a sequence clip by clip O(n²)).
 bool range_free(const Track& t, std::int64_t start, std::int64_t end, ClipId ignore = {}) {
-    return std::ranges::none_of(t.clips, [&](const Clip& c) {
-        return c.id != ignore && c.start_ticks() < end && start < c.end_ticks();
-    });
+    const auto first = std::ranges::upper_bound(t.clips, start, {}, &Clip::end_ticks);
+    for (auto it = first; it != t.clips.end() && it->start_ticks() < end; ++it) {
+        if (it->id != ignore) {
+            return false;
+        }
+    }
+    return true;
 }
 
 Result<std::int64_t> clip_end(const Clip& c) {
@@ -123,7 +130,8 @@ public:
         if (t == nullptr) {
             return error(ErrorCode::InvalidArgument, "unknown track", track_context(track_));
         }
-        if (!clip_.id.valid() || timeline.find_clip(clip_.id) != nullptr) {
+        const bool fresh = clip_.id.value() > m.clip_id_bound(); // above every clip ID in use
+        if (!clip_.id.valid() || (!fresh && timeline.find_clip(clip_.id) != nullptr)) {
             return error(ErrorCode::InvalidArgument, "clip ID is invalid or in use",
                          clip_context(clip_.id));
         }
@@ -140,6 +148,7 @@ public:
         const auto at =
             std::ranges::upper_bound(t->clips, clip_.start_ticks(), {}, &Clip::start_ticks);
         t->clips.insert(at, clip_);
+        m.clip_id_bound() = std::max(m.clip_id_bound(), clip_.id.value());
         return {};
     }
 

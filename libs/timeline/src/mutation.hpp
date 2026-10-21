@@ -25,6 +25,8 @@ public:
     [[nodiscard]] std::vector<MediaInfo>& media() noexcept;
     [[nodiscard]] std::vector<LutInfo>& luts() noexcept;
     [[nodiscard]] std::uint64_t allocate_id() noexcept;
+    // Timeline::clip_id_bound_: InsertClip raises it; nothing lowers it.
+    [[nodiscard]] std::uint64_t& clip_id_bound() noexcept;
 
     [[nodiscard]] Track* track(TrackId id) noexcept;
 

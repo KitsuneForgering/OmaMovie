@@ -128,11 +128,15 @@ std::int64_t track_end(const Track& t) {
 // and a clip covering the whole range is split around it (the tail gets a new ID).
 Result<Steps> clear_range(Timeline& tl, const Track& track, std::int64_t from, std::int64_t to) {
     Steps steps;
-    for (const Clip& c : track.clips) {
+    // Clips are sorted and never overlap, so their ends are sorted too: start at the first one
+    // ending after `from`, stop at the first starting at `to`. Scanning the whole track made
+    // building a sequence clip by clip (an import) O(n²).
+    const auto first = std::ranges::upper_bound(track.clips, from, {}, &Clip::end_ticks);
+    for (const Clip& c : std::ranges::subrange(first, track.clips.end())) {
         const std::int64_t start = c.start_ticks();
         const std::int64_t end = c.end_ticks();
-        if (end <= from || start >= to) {
-            continue;
+        if (start >= to) {
+            break;
         }
         if (start >= from && end <= to) {
             steps.push_back(detail::erase_clip(c.id));

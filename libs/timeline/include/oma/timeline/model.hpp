@@ -490,6 +490,10 @@ private:
     std::vector<LutInfo> luts_;
     // IDs only grow, even across undo, so an ID is never reused for another object.
     std::uint64_t next_id_ = 1;
+    // No clip in use has a larger ID (an upper bound, never lowered): an ID above it is free
+    // without searching every track. Allocated IDs are above it unless a caller chose a larger
+    // ID itself.
+    std::uint64_t clip_id_bound_ = 0;
 };
 
 } // namespace oma::timeline

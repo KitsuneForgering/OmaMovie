@@ -242,5 +242,8 @@ std::vector<LutInfo>& Mutation::luts() noexcept {
 std::uint64_t Mutation::allocate_id() noexcept {
     return t_.next_id_++;
 }
+std::uint64_t& Mutation::clip_id_bound() noexcept {
+    return t_.clip_id_bound_;
+}
 
 } // namespace oma::timeline::detail
