@@ -38,11 +38,30 @@ The surface is I915 Y-tiled (no CCS), one buffer with the chroma plane at 1920 �
 aligned to 16); both planes can be compute storage images. This is the reverse of the viewer's
 existing VA-API → Vulkan import (read-only there), on the same device and modifier family.
 
+## Route B encoded: the encoder's own pool, written by the GPU
+
+`tools/spikes/s8_va_encode_pool.cpp out.mp4 120`: FFmpeg's `h264_vaapi` gets a VA-API frames
+context (NV12 1920×1080, pool of 16); for each frame the spike takes a pool surface, exports and
+imports its planes into OmaMovie's device once per surface, clears Y to a gray that changes with
+the frame index (16 + 7i mod 220, chroma 128) on the GPU, and sends that same `AVFrame` to the
+encoder (constant QP 20, no B-frames, limited range). No host copy and no upload.
+
+```
+encoded 120 GPU-written frames from 2 pool surfaces to s8.mp4
+stream|codec_name=h264|profile=High|width=1920|height=1080|color_range=tv|nb_read_frames=120
+```
+
+An independent FFmpeg decode to raw YUV 4:2:0: all 120 frames, worst sampled deviation 1 level
+from the written value in Y, U and V; each frame shows its own index's gray, so a lost,
+repeated or reordered frame would fail. The encoder needed only two pool surfaces (it releases a
+surface once encoded); the spike waits for the surface with `vaSyncSurface` before writing it.
+
 ## Consequence
 
 Route B is the one to pilot: the compositor's NV12 conversion could write planes of encoder-owned
 VA surfaces directly, removing the readback, host copies and upload the
-[transfer phases](2026-10-16-export-transfer-phases.md) measured. Not shown yet: encoding such a
-surface (the surface must reach `h264_vaapi` as an `AV_PIX_FMT_VAAPI` frame of a frames context
-that owns it), a pool and reuse synchronisation, writes from the real compute pass, device loss
+[transfer phases](2026-10-16-export-transfer-phases.md) measured. Encoding such surfaces from the
+encoder's own pool is shown above. Not shown yet: writes from the real compositor's NV12 pass
+(compute storage writes, not a clear), synchronisation without `vkQueueWaitIdle` per frame
+(semaphores or a fence per surface), device loss
 and cancellation, output correctness against the independent oracle, and any speed figure.

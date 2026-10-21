@@ -41,3 +41,9 @@ add_executable(s7_va_encode_surface s7_va_encode_surface.cpp)
 target_compile_options(s7_va_encode_surface PRIVATE -Wall -Wextra)
 target_include_directories(s7_va_encode_surface SYSTEM PRIVATE ${SPIKE_VA_INCLUDE_DIRS})
 target_link_libraries(s7_va_encode_surface PRIVATE oma_gpu oma_base ${SPIKE_VA_LIBRARIES})
+
+# s8 (M12 step 3): h264_vaapi encoding surfaces of its own pool that the GPU wrote.
+add_executable(s8_va_encode_pool s8_va_encode_pool.cpp)
+target_compile_options(s8_va_encode_pool PRIVATE -Wall -Wextra)
+target_include_directories(s8_va_encode_pool SYSTEM PRIVATE ${SPIKE_VA_INCLUDE_DIRS} ${SPIKE_AV_INCLUDE_DIRS})
+target_link_libraries(s8_va_encode_pool PRIVATE oma_gpu oma_base ${SPIKE_VA_LIBRARIES} ${SPIKE_AV_LIBRARIES})

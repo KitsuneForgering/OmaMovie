@@ -80,7 +80,9 @@ transport owner would need too many shared inputs, so it is not an automatic ext
    FFmpeg 9's mapping fails three ways (iHD refuses its exported DMA-BUF; VA-API cannot be
    derived from Vulkan; reverse mapping crashes FFmpeg), while a VA-API encode surface exported
    as DMA-BUF imports into OmaMovie's device as writable R8/RG8 planes and GPU writes read back
-   exactly through VA-API (`tools/spikes/s7_va_encode_surface.cpp`). Next: encode such a surface.
+   exactly through VA-API (`tools/spikes/s7_va_encode_surface.cpp`); `s8_va_encode_pool.cpp`
+   writes surfaces of `h264_vaapi`'s own pool on the GPU and encodes them: 120/120 frames match an
+   independent decode within one level. Next: the compositor's NV12 pass writing those planes.
 4. Keep working-space → NV12 conversion on GPU for the first path. Specify P010 planes,
    color tags and synchronization in the contract, but do not make P010 or HDR a v0.1 gate
    or claim HDR without a separately validated color pipeline. Compare decoded output frames,
