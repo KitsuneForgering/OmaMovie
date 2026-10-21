@@ -21,7 +21,13 @@ dissolves; each rate 95-105 seeds; 1, 2 and 3 tracks about equally.
 with silent media failed 251 seeds on audio tracks only (clips without sound cannot be placed on
 an audio track): a fixture defect, fixed by giving the generated media sound.
 
-**Not covered:** clips whose rate differs from the timeline's (off-grid positions, rounded and
-reported by design), time effects, nested stacks, `.otioz`/`.otiod` bundles (not read), and
+**Mixed rates (`--mixed`):** later clips take random rates of the five (a 29.97 fps clip in a
+24 fps sequence). Lengths off the sequence grid are rounded to the nearest tick and reported,
+so the k-th clip of a track may sit up to k ticks (1/240000 s at NTSC rates) from the library's
+exact position. 500/500 seeds within that bound; the 1 ms mutation fails 10/10. The first mixed
+run failed 72 seeds because the oracle rounded the library's fractional frame values (3.125 s
+is 78.125 frames at 25 fps) to whole frames; OmaMovie was right.
+
+**Not covered:** time effects, nested stacks, `.otioz`/`.otiod` bundles (not read), and
 exports from applications other than Kdenlive (see
 [Kdenlive's exports](2026-10-20-kdenlive-otio-exports.txt)).

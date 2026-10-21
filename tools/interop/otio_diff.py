@@ -6,7 +6,9 @@ and integer rates)
 are written by the OTIO library; `oma-project convert` turns each into an OmaMovie project, and
 every clip's record start, length and source in must equal what OTIO computes
 (range_in_parent, source_range), exactly, as fractions of a second.
-Usage: otio_diff.py OMA_PROJECT_CLI [seeds=200]   (needs ffmpeg and the opentimelineio module)
+With --mixed, later clips take random rates; positions must then agree within one sequence tick
+per clip before them (lengths off the grid are rounded and reported).
+Usage: otio_diff.py OMA_PROJECT_CLI [seeds=200] [--mixed]  (needs ffmpeg, the opentimelineio module)
 """
 
 import json
@@ -31,10 +33,11 @@ def exact(rate):
 
 
 def seconds(t):
-    return Fraction(round(t.value)) / exact(t.rate)
+    # Mixed rates give fractional frame values (3.125 s is 78.125 frames at 25 fps).
+    return Fraction(t.value).limit_denominator(1_000_000) / exact(t.rate)
 
 
-def timeline(rng, media, rate):
+def timeline(rng, media, rate, mixed=False):
     tl = otio.schema.Timeline(name="diff")
     for v in range(rng.randint(1, 4)):
         audio = v > 0 and rng.random() < 0.4
@@ -53,12 +56,16 @@ def timeline(rng, media, rate):
                     out_offset=otio.opentime.RationalTime(half, rate)))
             ref = otio.schema.ExternalReference(target_url=media)
             start = rng.randint(24, 900)
+            at = rng.choice(RATES) if mixed and i else rate  # the first clip sets the sequence
             clip = otio.schema.Clip(name=f"c{v}{i}", media_reference=ref,
                                     source_range=otio.opentime.TimeRange(
-                                        otio.opentime.RationalTime(start, rate),
-                                        otio.opentime.RationalTime(rng.randint(13, 96), rate)))
+                                        otio.opentime.RationalTime(start, at),
+                                        otio.opentime.RationalTime(rng.randint(13, 96), at)))
             clip.enabled = rng.random() > 0.1  # a disabled clip must leave a gap
             track.append(clip)
+        if mixed:  # transitions between clips of different rates are not this check's subject
+            for t in [x for x in track if isinstance(x, otio.schema.Transition)]:
+                track.remove(t)
         if isinstance(track[-1], otio.schema.Transition):
             track.pop()
         tl.tracks.append(track)
@@ -91,9 +98,25 @@ def actual(project):
             for kind in ("video", "audio")}
 
 
+def close(want, got, tick):
+    """Mixed rates: lengths off the sequence grid round to the nearest tick, so the k-th clip
+    may sit up to k ticks from the library's exact position."""
+    if got is None or want.keys() != got.keys():
+        return False
+    for kind in want:
+        if len(want[kind]) != len(got[kind]):
+            return False
+        for a, b in zip(want[kind], got[kind]):
+            if len(a) != len(b) or any(abs(x - y) > (k + 1) * tick for k, (p, q) in enumerate(zip(a, b))
+                                       for x, y in zip(p, q)):
+                return False
+    return True
+
+
 def main():
     cli = sys.argv[1]
     seeds = int(sys.argv[2]) if len(sys.argv) > 2 else 200
+    mixed = "--mixed" in sys.argv
     failures = 0
     with tempfile.TemporaryDirectory() as tmp:
         # A minute of picture and sound: every generated source range lies inside it.
@@ -105,14 +128,16 @@ def main():
         for seed in range(1, seeds + 1):
             rng = random.Random(seed)
             rate = rng.choice(RATES)
-            tl = timeline(rng, media, rate)
+            tl = timeline(rng, media, rate, mixed)
             source, project = Path(tmp) / "t.otio", Path(tmp) / "t.omamovie"
             otio.adapters.write_to_file(tl, str(source))
             project.unlink(missing_ok=True)
             run = subprocess.run([cli, "convert", str(source), str(project)],
                                  capture_output=True, text=True)
             want, got = expected(tl), actual(project) if project.exists() else None
-            if want != got:
+            tick = (time_of({"value": 1, "timebase": json.loads(project.read_text())
+                             ["sequence"]["timebase"]}) if project.exists() else 0)
+            if (want != got) if not mixed else not close(want, got, tick):
                 failures += 1
                 print(f"FAIL seed {seed} rate {rate}: want {want}\n  got {got}\n  {run.stdout}")
     print(f"{seeds - failures}/{seeds} seeds agree with OpenTimelineIO {otio.__version__}")
