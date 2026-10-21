@@ -56,6 +56,27 @@ from the written value in Y, U and V; each frame shows its own index's gray, so 
 repeated or reordered frame would fail. The encoder needed only two pool surfaces (it releases a
 surface once encoded); the spike waits for the surface with `vaSyncSurface` before writing it.
 
+## The real compositor into the encoder's surfaces, against today's route
+
+`tools/spikes/s9_compositor_to_encoder.cpp input native.mp4 readback.mp4`: each frame of a
+software-decoded video is composited once by `VulkanCompositor`; its NV12 goes (a) into an
+`h264_vaapi` pool surface's imported planes with `write_nv12` (foreign-queue transfer), and
+(b) through `read_nv12` plus `av_hwframe_transfer_data` into a surface of a second encoder with
+identical settings (QP 20, no B-frames, BT.709 limited range): the export's current route up
+to the encoder.
+
+| Source | Frames | Native, ms/frame (3 runs) | Readback + upload, ms/frame | Output |
+|---|---:|---:|---:|---|
+| `h264_30fps_aac.mp4` 320×180 | 30 | | | files byte-identical |
+| `dec_h264_1080.mp4` 1920×1080 | 120 | 0.93 / 1.00 / 1.12 | 2.26 / 2.47 / 2.59 | files byte-identical |
+| `dec_h264_2160.mp4` 3840×2160 | 72 | 2.11 / 2.47 / 2.13 | 9.48 / 10.48 / 9.22 | files byte-identical |
+
+Byte-identical movies mean the encoder saw identical input both ways. Both columns wait for the
+GPU (write_nv12 and read_nv12 each wait for their fence), and neither includes compositing,
+decode or encode. The readback column is only what this spike does; the export's
+`VideoWriter` adds its own row copies beyond it ([phases](2026-10-16-export-transfer-phases.md)),
+so this is not an export speed-up figure. Load average 2.2-2.4 during the runs.
+
 ## Consequence
 
 Route B is the one to pilot: the compositor's NV12 conversion could write planes of encoder-owned

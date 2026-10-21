@@ -86,10 +86,8 @@ int main() {
     const bool ok = y == kWant[0] && uv[0] == kWant[1] && uv[1] == kWant[2];
     vaUnmapBuffer(va, image.buf);
     vaDestroyImage(va, image.image_id);
-    for (Plane& p : planes) {
-        vkDestroyImage(d.device(), p.image, nullptr);
-        vkFreeMemory(d.device(), p.memory, nullptr);
-    }
+    for (Plane& p : planes)
+        va_planes::destroy(d, p);
     for (std::uint32_t i = 0; i < desc.num_objects; ++i)
         close(desc.objects[i].fd);
     vaDestroySurfaces(va, &surface, 1);

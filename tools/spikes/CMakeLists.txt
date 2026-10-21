@@ -47,3 +47,10 @@ add_executable(s8_va_encode_pool s8_va_encode_pool.cpp)
 target_compile_options(s8_va_encode_pool PRIVATE -Wall -Wextra)
 target_include_directories(s8_va_encode_pool SYSTEM PRIVATE ${SPIKE_VA_INCLUDE_DIRS} ${SPIKE_AV_INCLUDE_DIRS})
 target_link_libraries(s8_va_encode_pool PRIVATE oma_gpu oma_base ${SPIKE_VA_LIBRARIES} ${SPIKE_AV_LIBRARIES})
+
+# s9 (M12 step 4): the compositor's NV12 into h264_vaapi's surfaces, against the readback route.
+add_executable(s9_compositor_to_encoder s9_compositor_to_encoder.cpp)
+target_compile_options(s9_compositor_to_encoder PRIVATE -Wall -Wextra)
+target_include_directories(s9_compositor_to_encoder SYSTEM PRIVATE ${SPIKE_VA_INCLUDE_DIRS} ${SPIKE_AV_INCLUDE_DIRS})
+target_link_libraries(s9_compositor_to_encoder PRIVATE
+    oma_compositor oma_media oma_gpu oma_base ${SPIKE_VA_LIBRARIES} ${SPIKE_AV_LIBRARIES})

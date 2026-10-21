@@ -86,7 +86,11 @@ transport owner would need too many shared inputs, so it is not an automatic ext
    `VulkanCompositor::write_nv12` writes the last render's NV12 into two caller-owned storage
    images (R8 luma, RG8 CbCr; foreign-queue ownership transfer when another driver owns them),
    byte-identical to `read_nv12` (`tests/compositor/test_nv12_planes.cpp`, 0 of 270 rows differ).
-   Next: `write_nv12` into the encoder's own pool surfaces, against today's export frame by frame.
+   `tools/spikes/s9_compositor_to_encoder.cpp` then writes the compositor's NV12 into
+   `h264_vaapi`'s own surfaces and encodes it beside today's readback route: the movies are
+   byte-identical at 320×180, 1080p and 4K, and the step to the encoder took 2.1-2.5 instead of
+   9.2-10.5 ms per 4K frame. Next: an ADR for the route, then the export path (pool lifetime,
+   synchronisation without a CPU wait per frame, device loss, cancellation, software fallback).
 4. Keep working-space → NV12 conversion on GPU for the first path. Specify P010 planes,
    color tags and synchronization in the contract, but do not make P010 or HDR a v0.1 gate
    or claim HDR without a separately validated color pipeline. Compare decoded output frames,

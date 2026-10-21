@@ -41,7 +41,15 @@ inline bool supported(const oma::gpu::Device& d, VkFormat format, std::uint64_t 
 struct Plane {
     VkImage image = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImageView view = VK_NULL_HANDLE; // for storage writes (VulkanCompositor::write_nv12)
 };
+
+inline void destroy(const oma::gpu::Device& d, Plane& p) {
+    vkDestroyImageView(d.device(), p.view, nullptr);
+    vkDestroyImage(d.device(), p.image, nullptr);
+    vkFreeMemory(d.device(), p.memory, nullptr);
+    p = {};
+}
 
 inline bool import_plane(const oma::gpu::Device& d, const VADRMPRIMESurfaceDescriptor& desc, std::uint32_t layer,
                   VkFormat format, std::uint32_t w, std::uint32_t h, Plane& out) {
@@ -78,7 +86,13 @@ inline bool import_plane(const oma::gpu::Device& d, const VADRMPRIMESurfaceDescr
                                      .allocationSize = req.size, .memoryTypeIndex = type};
     if (vkAllocateMemory(d.device(), &alloc, nullptr, &out.memory) != VK_SUCCESS)
         return fail("importing the plane's DMA-BUF");
-    return vkBindImageMemory(d.device(), out.image, out.memory, 0) == VK_SUCCESS || fail("vkBindImageMemory");
+    if (vkBindImageMemory(d.device(), out.image, out.memory, 0) != VK_SUCCESS)
+        return fail("vkBindImageMemory");
+    const VkImageViewCreateInfo view{.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .pNext = nullptr,
+                                     .flags = 0, .image = out.image, .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                                     .format = format, .components = {},
+                                     .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+    return vkCreateImageView(d.device(), &view, nullptr, &out.view) == VK_SUCCESS || fail("vkCreateImageView");
 }
 
 

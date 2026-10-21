@@ -121,10 +121,8 @@ int main(int argc, char** argv) {
     av_write_trailer(mux);
     std::printf("encoded %d GPU-written frames from %zu pool surfaces to %s\n", frames, imported.size(), argv[1]);
     for (auto& [surface, planes] : imported)
-        for (va_planes::Plane& p : planes) {
-            vkDestroyImage(d.device(), p.image, nullptr);
-            vkFreeMemory(d.device(), p.memory, nullptr);
-        }
+        for (va_planes::Plane& p : planes)
+            va_planes::destroy(d, p);
     av_packet_free(&packet);
     avio_closep(&mux->pb);
     avformat_free_context(mux);
