@@ -1,6 +1,7 @@
 #include "oma/compositor/compositor.hpp"
 
 #include "nv12_pass.hpp"
+#include "nv12_planes_pass.hpp"
 
 #include "layer_params.hpp"
 
@@ -317,6 +318,7 @@ struct VulkanCompositor::Impl {
     std::map<std::size_t, Upload> uploads; // by input index
     std::vector<VkImageView> transient_views;
     std::unique_ptr<detail::Nv12Pass> nv12; // export's NV12 readback, made on first use
+    std::unique_ptr<detail::Nv12PlanesPass> nv12_planes; // GPU-native NV12, made on first use
 
     Impl() = default;
     Impl(const Impl&) = delete;
@@ -1385,6 +1387,31 @@ Result<VulkanCompositor::Nv12Image> VulkanCompositor::read_nv12(Nv12ReadbackTimi
                 .count();
     }
     return Nv12Image{.width = w, .height = h, .stride = stride, .bytes = std::move(host_bytes)};
+}
+
+Result<void> VulkanCompositor::write_nv12(const Nv12Planes& planes) {
+    Impl& d = *impl_;
+    if (d.output.handle() == VK_NULL_HANDLE) {
+        return make_error(ErrorCode::InvalidArgument, Category::Compositor, "nothing rendered yet");
+    }
+    const std::uint32_t w = d.output.desc().width;
+    const std::uint32_t h = d.output.desc().height;
+    if (w % 2 != 0 || h % 2 != 0) {
+        return make_error(ErrorCode::Unsupported, Category::Compositor, "NV12 needs an even size");
+    }
+    if (!d.nv12_planes) {
+        auto made = detail::Nv12PlanesPass::create(*d.device, d.push_descriptors);
+        if (!made) {
+            return std::unexpected(made.error());
+        }
+        d.nv12_planes = std::move(*made);
+    }
+    return d.nv12_planes->run(*d.runner, d.output.view(), w, h,
+                              {.luma = planes.luma,
+                               .luma_view = planes.luma_view,
+                               .cbcr = planes.cbcr,
+                               .cbcr_view = planes.cbcr_view,
+                               .foreign = planes.foreign});
 }
 
 } // namespace oma::compositor

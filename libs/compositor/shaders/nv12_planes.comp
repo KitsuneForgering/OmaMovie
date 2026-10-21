@@ -1,0 +1,48 @@
+#version 450
+
+// GPU-native export input (M12): the same NV12 as nv12_bt709.comp — BT.709 matrix, limited
+// range, the export transfer, chroma the mean of each 2x2 block of encoded R'G'B' — written into
+// two images instead of a buffer: an R8 luma plane and an RG8 interleaved CbCr plane, such as
+// the planes of a hardware encoder's surface imported into this device. Values are stored as
+// whole 8-bit levels (k / 255), so they read back as the bytes nv12_bt709.comp would write.
+//
+// One invocation fills a 2x2 block: four luma texels and one chroma texel. Even sizes only
+// (VulkanCompositor::write_nv12 checks).
+
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(rgba16f, set = 0, binding = 0) uniform readonly image2D linear_image;
+layout(r8, set = 0, binding = 1) uniform writeonly image2D luma;
+layout(rg8, set = 0, binding = 2) uniform writeonly image2D cbcr;
+
+const vec3 kLuma = vec3(0.2126, 0.7152, 0.0722);
+
+vec3 encode_bt709(vec3 linear_rgb) {
+    return pow(clamp(linear_rgb, vec3(0.0), vec3(1.0)), vec3(1.0 / 2.4));
+}
+
+float level(float v) {
+    return clamp(round(v), 0.0, 255.0) / 255.0;
+}
+
+vec2 chroma(vec3 rgb) {
+    float y = dot(rgb, kLuma);
+    return vec2(128.0) + 224.0 * vec2((rgb.b - y) / 1.8556, (rgb.r - y) / 1.5748);
+}
+
+void main() {
+    ivec2 size = imageSize(linear_image);
+    ivec2 block = ivec2(gl_GlobalInvocationID.xy);
+    if (block.x * 2 >= size.x || block.y * 2 >= size.y) return;
+    vec3 sum = vec3(0.0);
+    // Columns outer, rows inner: nv12_bt709.comp's order, so the chroma sums round identically.
+    for (int dx = 0; dx < 2; ++dx) {
+        for (int dy = 0; dy < 2; ++dy) {
+            ivec2 p = block * 2 + ivec2(dx, dy);
+            vec3 e = encode_bt709(imageLoad(linear_image, p).rgb);
+            imageStore(luma, p, vec4(level(16.0 + 219.0 * dot(e, kLuma))));
+            sum += e;
+        }
+    }
+    vec2 c = chroma(sum * 0.25);
+    imageStore(cbcr, block, vec4(level(c.x), level(c.y), 0.0, 0.0));
+}

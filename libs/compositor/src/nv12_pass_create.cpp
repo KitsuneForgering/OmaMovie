@@ -23,33 +23,10 @@ Result<std::unique_ptr<Nv12Pass>> Nv12Pass::create(const gpu::Device& device,
     VkDevice dev = device.device();
     if (auto r = create_nv12_layouts(dev, p->set_layout_, p->layout_); !r)
         return std::unexpected(r.error());
-    const VkShaderModuleCreateInfo code{.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-                                        .pNext = nullptr,
-                                        .flags = 0,
-                                        .codeSize = sizeof(kNv12Spv),
-                                        .pCode = kNv12Spv.data()};
-    VkShaderModule module = VK_NULL_HANDLE;
-    if (const VkResult r = vkCreateShaderModule(dev, &code, nullptr, &module); r != VK_SUCCESS)
-        return std::unexpected(nv12_failure(r, "cannot load the NV12 shader"));
-    const VkComputePipelineCreateInfo info{
-        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                  .pNext = nullptr,
-                  .flags = 0,
-                  .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-                  .module = module,
-                  .pName = "main",
-                  .pSpecializationInfo = nullptr},
-        .layout = p->layout_,
-        .basePipelineHandle = VK_NULL_HANDLE,
-        .basePipelineIndex = -1};
-    const VkResult made =
-        vkCreateComputePipelines(dev, VK_NULL_HANDLE, 1, &info, nullptr, &p->pipeline_);
-    vkDestroyShaderModule(dev, module, nullptr);
-    if (made != VK_SUCCESS)
-        return std::unexpected(nv12_failure(made, "cannot create the NV12 pipeline"));
+    auto pipeline = nv12_pipeline(dev, kNv12Spv, p->layout_);
+    if (!pipeline)
+        return std::unexpected(pipeline.error());
+    p->pipeline_ = *pipeline;
 
     // Optional diagnostic: keep export functional when a queue cannot provide timestamps.
     std::uint32_t family_count = 0;

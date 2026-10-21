@@ -115,6 +115,21 @@ public:
     };
     [[nodiscard]] Result<Nv12Image> read_nv12(Nv12ReadbackTimings* timings = nullptr);
 
+    // The last render as the same NV12, written on the GPU into two caller-owned storage images
+    // instead of read back (M12): `luma` R8 width x height, `cbcr` RG8 half size, such as the
+    // planes of a hardware encoder's surface imported into this device. Their old contents are
+    // discarded; both are left in VK_IMAGE_LAYOUT_GENERAL. With `foreign` another driver owns
+    // them: they are acquired from and released back to VK_QUEUE_FAMILY_FOREIGN_EXT around the
+    // write. Returns when the GPU has finished. Even sizes only (Unsupported).
+    struct Nv12Planes {
+        VkImage luma = VK_NULL_HANDLE;
+        VkImageView luma_view = VK_NULL_HANDLE;
+        VkImage cbcr = VK_NULL_HANDLE;
+        VkImageView cbcr_view = VK_NULL_HANDLE;
+        bool foreign = false;
+    };
+    [[nodiscard]] Result<void> write_nv12(const Nv12Planes& planes);
+
 private:
     struct Impl;
     explicit VulkanCompositor(std::unique_ptr<Impl> impl);

@@ -82,7 +82,11 @@ transport owner would need too many shared inputs, so it is not an automatic ext
    as DMA-BUF imports into OmaMovie's device as writable R8/RG8 planes and GPU writes read back
    exactly through VA-API (`tools/spikes/s7_va_encode_surface.cpp`); `s8_va_encode_pool.cpp`
    writes surfaces of `h264_vaapi`'s own pool on the GPU and encodes them: 120/120 frames match an
-   independent decode within one level. Next: the compositor's NV12 pass writing those planes.
+   independent decode within one level. *Compositor side (2026-10-21):*
+   `VulkanCompositor::write_nv12` writes the last render's NV12 into two caller-owned storage
+   images (R8 luma, RG8 CbCr; foreign-queue ownership transfer when another driver owns them),
+   byte-identical to `read_nv12` (`tests/compositor/test_nv12_planes.cpp`, 0 of 270 rows differ).
+   Next: `write_nv12` into the encoder's own pool surfaces, against today's export frame by frame.
 4. Keep working-space → NV12 conversion on GPU for the first path. Specify P010 planes,
    color tags and synchronization in the contract, but do not make P010 or HDR a v0.1 gate
    or claim HDR without a separately validated color pipeline. Compare decoded output frames,

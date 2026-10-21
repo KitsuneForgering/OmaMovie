@@ -5,6 +5,8 @@
 #include <vulkan/vulkan_core.h>
 
 #include <array>
+#include <cstdint>
+#include <span>
 #include <string>
 
 // Pieces of the NV12 pass shared by its source files (nv12_pass*.cpp).
@@ -21,6 +23,10 @@ namespace oma::compositor::detail {
 // outlive them.
 [[nodiscard]] std::array<VkWriteDescriptorSet, 2> nv12_writes(const VkDescriptorImageInfo& image,
                                                               const VkDescriptorBufferInfo& range);
+
+// A compute pipeline running `spv`'s main with `layout`.
+[[nodiscard]] Result<VkPipeline> nv12_pipeline(VkDevice device, std::span<const std::uint32_t> spv,
+                                               VkPipelineLayout layout);
 
 // Makes the shader's buffer writes visible to the host (read after the runner's fence).
 void nv12_host_barrier(VkCommandBuffer cmd);

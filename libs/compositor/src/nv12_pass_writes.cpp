@@ -28,6 +28,39 @@ std::array<VkWriteDescriptorSet, 2> nv12_writes(const VkDescriptorImageInfo& ima
     return writes;
 }
 
+Result<VkPipeline> nv12_pipeline(VkDevice device, std::span<const std::uint32_t> spv,
+                                 VkPipelineLayout layout) {
+    const VkShaderModuleCreateInfo code{.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                                        .pNext = nullptr,
+                                        .flags = 0,
+                                        .codeSize = spv.size_bytes(),
+                                        .pCode = spv.data()};
+    VkShaderModule module = VK_NULL_HANDLE;
+    if (const VkResult r = vkCreateShaderModule(device, &code, nullptr, &module); r != VK_SUCCESS)
+        return std::unexpected(nv12_failure(r, "cannot load an NV12 shader"));
+    const VkComputePipelineCreateInfo info{
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .stage = {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                  .pNext = nullptr,
+                  .flags = 0,
+                  .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+                  .module = module,
+                  .pName = "main",
+                  .pSpecializationInfo = nullptr},
+        .layout = layout,
+        .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex = -1};
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    const VkResult made =
+        vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+    vkDestroyShaderModule(device, module, nullptr);
+    if (made != VK_SUCCESS)
+        return std::unexpected(nv12_failure(made, "cannot create an NV12 pipeline"));
+    return pipeline;
+}
+
 void nv12_host_barrier(VkCommandBuffer cmd) {
     const VkMemoryBarrier2 done{.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
                                 .pNext = nullptr,

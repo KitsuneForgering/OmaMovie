@@ -18,6 +18,7 @@ void run_grade_tests();
 void run_lifetime_tests();
 void run_shared_frame_tests();
 void run_nv12_tests();
+void run_nv12_planes_tests();
 void run_effect_memory_tests();
 
 namespace {
@@ -113,6 +114,7 @@ int main(int argc, char* argv[]) {
     run_lifetime_tests();
     run_shared_frame_tests();
     run_nv12_tests();
+    run_nv12_planes_tests();
     run_effect_memory_tests();
     release_compositor_test_device();
     return cest_result();
