@@ -46,11 +46,13 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <format>
 #include <fstream>
 #include <functional>
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -451,16 +453,26 @@ int main(int argc, char** argv) {
             return std::chrono::duration<double, std::milli>(Clock::now() - t).count();
         };
         // Runs `action`, then waits (processing events) until a frame that began after it ended.
+        // Samples over the 100 ms gate, split into the synchronous call (Session, the model and
+        // the QML bindings it triggers) and the wait for the frame that shows it, so an
+        // intermittent long one names its phase.
+        std::vector<std::string> slow;
+        const char* timing = "";
         const auto timed = [&](const std::function<void()>& action) {
             const auto t0 = Clock::now();
             action();
+            const double call = ms_since(t0);
             window->update();
             // The next frame to begin is the first that can show the change; wait for its end.
             const int target = begun.load() + 1;
             while (frames.load() < target && ms_since(t0) < 5000) {
                 QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 5);
             }
-            return ms_since(t0);
+            const double total = ms_since(t0);
+            if (total > 100)
+                slow.push_back(std::format("{} {:.1f} ms: call {:.1f}, then frame {:.1f}", timing,
+                                           total, call, total - call));
+            return total;
         };
         const auto wait_for = [&](const std::function<bool()>& done, int ms) {
             const auto t0 = Clock::now();
@@ -514,6 +526,7 @@ int main(int argc, char** argv) {
                 application.exit(1);
                 return;
             }
+            timing = "open (save, load, reimport)";
             const double open_ms = timed([&] {
                 session.openProject(QUrl::fromLocalFile(longp));
                 wait_for([&] { return session.clips().size() == clips; }, 60000);
@@ -538,8 +551,11 @@ int main(int argc, char** argv) {
             };
             for (int i = 0; i < 20; ++i) {
                 const double at = next() * (session.duration() - 0.1);
+                timing = "seek";
                 seek.push_back(timed([&] { session.seek(at); }));
+                timing = "split";
                 split.push_back(timed([&] { session.splitAtPlayhead(); }));
+                timing = "undo";
                 undo_ms.push_back(timed([&] { session.undo(); }));
                 const QVariantList list = session.clips();
                 const double id =
@@ -547,8 +563,11 @@ int main(int argc, char** argv) {
                         .toMap()
                         .value("id")
                         .toDouble();
+                timing = "select";
                 select.push_back(timed([&] { session.selectClip(id); }));
+                timing = "ripple del";
                 ripple.push_back(timed([&] { session.deleteSelected(true); }));
+                timing = "undo";
                 undo_ms.push_back(timed([&] { session.undo(); }));
             }
             // A continuous tail drag on a middle clip: four pointer events per frame of trim, as
@@ -560,9 +579,11 @@ int main(int argc, char** argv) {
             const QVariantList list = session.clips();
             const double dragged = list[list.size() / 2].toMap().value("id").toDouble();
             constexpr int kDragEvents = 100;
+            timing = "drag event";
             for (int i = 1; i <= kDragEvents; ++i)
                 drag.push_back(timed([&] { session.previewTrim(dragged, false, i / 4); }));
             QObject::disconnect(counter);
+            timing = "trim, undo";
             std::vector<double> release{
                 timed([&] { session.trimClip(dragged, false, kDragEvents / 4); })};
             release.push_back(timed([&] { session.undo(); }));
@@ -594,6 +615,8 @@ int main(int argc, char** argv) {
             std::printf("  trim drag: %d pointer events, %d scope updates\n", kDragEvents, scopes);
             line("drag event", drag);
             line("trim, undo", release);
+            for (const std::string& sample : slow)
+                std::printf("  over 100 ms: %s\n", sample.c_str());
             application.exit(0);
         });
         return application.exec();

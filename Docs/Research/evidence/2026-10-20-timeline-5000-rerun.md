@@ -32,3 +32,11 @@ none near 90 ms), undo p95 31.7-33.4 ms, and seek and select p95 under 27 ms. So
 intermittent long split still exists, now once in 17 runs since 2026-10-20 and under load; its
 cause is still unknown. The model's per-edit work is small beside the frame time: split latency
 did not change measurably with the searches.
+
+**Phase of the long split (2026-10-21).** The audit now prints every sample over the 100 ms gate
+split into the synchronous call (Session, the model and the QML bindings it triggers) and the
+wait for the end of the frame that shows it. Eleven more runs: one long split, **291.6 ms =
+call 32.3 + frame 259.3 ms** (run 1 of 5); no other edit sample over 100 ms (the project open,
+save + load + reimport, always is: 120-521 ms). The stall is after the call returns, in
+rendering or presenting the frame (render thread, scene-graph sync, Vulkan present), not in
+the model or the bindings. Next: time the render thread's phases for that frame.
