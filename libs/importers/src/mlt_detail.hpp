@@ -50,6 +50,9 @@ void items_of(Builder& b, const Playlist& playlist, ir::Track& track);
 [[nodiscard]] ir::Opaque opaque(const xml::Element& e);
 // Whether `o` was kept from a `<transition>` or a `<filter>` (opaque records the element).
 [[nodiscard]] bool is_a(const ir::Opaque& o, std::string_view element);
+// A filter that cannot change the output: disabled (`disable=1`, as Kdenlive adds volume and
+// panner to every track) or a level meter (audiolevel). Kept, but not reported.
+[[nodiscard]] bool inert(const ir::Opaque& o);
 void issue(ir::ImportReport& r, std::string object, std::string reason, std::string impact);
 
 } // namespace oma::importers::mlt

@@ -33,7 +33,8 @@ Result<Imported> import_mlt(std::string_view text) {
                 const auto remaps = std::ranges::count_if(c->unsupported, [](const ir::Opaque& o) {
                     return mlt::is_a(o, "link") && o.schema == "timeremap";
                 });
-                if (std::ssize(c->unsupported) > remaps)
+                const auto inert = std::ranges::count_if(c->unsupported, mlt::inert);
+                if (std::ssize(c->unsupported) > remaps + inert)
                     mlt::issue(out.report, c->name, "filters not imported", "kept in the import");
                 if (remaps > 0)
                     mlt::issue(out.report, c->name, "time remap not imported",

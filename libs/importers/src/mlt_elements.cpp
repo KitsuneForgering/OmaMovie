@@ -45,16 +45,4 @@ ir::Opaque opaque(const xml::Element& e) {
     return o;
 }
 
-bool is_a(const ir::Opaque& o, std::string_view element) {
-    return std::ranges::any_of(
-        o.fields, [&](const auto& f) { return f.first == "element" && f.second == element; });
-}
-
-void issue(ir::ImportReport& r, std::string object, std::string reason, std::string impact) {
-    r.issues.push_back({.object = std::move(object),
-                        .reason = std::move(reason),
-                        .level = ir::SupportLevel::Edits,
-                        .impact = std::move(impact)});
-}
-
 } // namespace oma::importers::mlt

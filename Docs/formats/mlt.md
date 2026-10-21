@@ -36,6 +36,10 @@ start at 0, where both readings agree.
 - Transitions and filters on the main tractor (compositing, audio mixing between tracks) are kept
   opaque on the timeline and reported.
 - Clips of one resource share one media reference.
+- A filter with `disable=1` and an `audiolevel` meter cannot change the output: they are kept
+  (counted among the objects the project cannot save) but not reported one by one. Kdenlive adds
+  a disabled `volume` and `panner` and a meter to every track
+  ([2026-10-20 rerun](../Research/evidence/2026-10-20-kdenlive-dataset-import.txt)).
 - A timewarp's frames (its in point, length and entry points) are source frames divided by the
   speed: `timewarp:2` frames 1-5 are source frames 2-10. The imported clip keeps the entry's
   length at the profile rate and its source range in source time. At half speed melt shows the

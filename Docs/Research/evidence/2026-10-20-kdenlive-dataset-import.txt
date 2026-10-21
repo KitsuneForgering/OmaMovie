@@ -1,0 +1,117 @@
+Kdenlive's own test projects through oma-project import (2026-10-20, rerun of 2026-10-15)
+Source: https://invent.kde.org/multimedia/kdenlive/-/tree/master/tests/dataset at 60c117f 2026-10-21 (GPL; read
+locally, not copied). All 8 .kdenlive files read (4 more than 2026-10-15). Kdenlive adds a
+disabled volume and panner filter and an audiolevel meter to every track; they cannot change
+the output, so they are kept but no longer reported (av.kdenlive: 17 distinct notes before, 8 after).
+Every remaining note names an object that changes picture or sound.
+
+== av.kdenlive (version="7.7.0", 11906 bytes)
+      1 format: Kdenlive (MLT XML)
+      1 issue: : 13 source objects are not saved in the project; re-import from the source file to recover them
+      1 issue: black_track: color generator not imported as a track; left out
+      1 issue: /home/six/git/kdenlive/tests/dataset/<producer>: media file not found or not readable; its clips become gaps
+      2 issue: <producer>: clip cannot be placed (no media, or outside it); left as a gap of its length
+      1 issue: transition0: mix between tracks not imported; kept in the import
+      1 issue: transition1: mix between tracks not imported; kept in the import
+      1 issue: transition2: frei0r.cairoblend between tracks not imported; kept in the import
+      1 issue: transition3: frei0r.cairoblend between tracks not imported; kept in the import
+      1 level reached: 2
+      1 media found: 0 of 1 (not probed)
+      1 version: 7.7.0
+
+== clip-ids.kdenlive (version="7.15.0", 88516 bytes)
+      1 format: Kdenlive (MLT XML)
+      1 issue: : 12 source objects are not saved in the project; re-import from the source file to recover them
+      1 issue: producer0: color generator not imported as a track; left out
+      1 issue: transition0: mix within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition1: mix within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition2: qtblend within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition3: qtblend within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 level reached: 2
+      1 media found: 4 of 4 (not probed)
+      1 version: 7.15.0
+
+== missing-proxy.kdenlive (version="7.19.0", 36416 bytes)
+      1 format: Kdenlive (MLT XML)
+      1 issue: : 12 source objects are not saved in the project; re-import from the source file to recover them
+      1 issue: /home/user/.cache/kdenlive/proxy/8843808b89cc22ece225bdab6b6e4f21.mov: media file not found or not readable; its clips become gaps
+      1 issue: producer0: color generator not imported as a track; left out
+      4 issue: red.mpg: clip cannot be placed (no media, or outside it); left as a gap of its length
+      1 issue: transition0: mix within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition1: mix within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition2: qtblend within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition3: qtblend within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 level reached: 2
+      1 media found: 0 of 1 (not probed)
+      1 version: 7.19.0
+
+== test-keyframes.kdenlive (version="7.17.0", 21923 bytes)
+      1 format: Kdenlive (MLT XML)
+      1 issue: : 13 source objects are not saved in the project; re-import from the source file to recover them
+      1 issue: filter7: brightness track filter not imported; kept in the import
+      1 issue: producer0: color generator not imported as a track; left out
+      1 issue: transition0: mix within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition1: mix within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition2: qtblend within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition3: qtblend within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 level reached: 2
+      1 media found: 1 of 1 (not probed)
+      1 version: 7.17.0
+
+== test-missing.kdenlive (version="7.19.0", 13672 bytes)
+      1 format: Kdenlive (MLT XML)
+      1 issue: : 12 source objects are not saved in the project; re-import from the source file to recover them
+      1 issue: producer0: color generator not imported as a track; left out
+      1 issue: producer1: color generator not imported; left as a gap
+      1 issue: transition0: mix2 within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition1: mix within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition2: qtblend within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition3: qtblend within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 level reached: 2
+      1 media found: 0 of 0 (not probed)
+      1 version: 7.19.0
+
+== test-mix.kdenlive (version="7.9.0", 14262 bytes)
+      1 format: Kdenlive (MLT XML)
+      1 issue: : 17 source objects are not saved in the project; re-import from the source file to recover them
+      1 issue: black_track: color generator not imported as a track; left out
+      1 issue: filter9: avfilter.fieldorder master filter not imported; kept in the import
+      3 issue: producer0: color generator not imported; left as a gap
+      2 issue: producer1: color generator not imported; left as a gap
+      1 issue: transition0: luma within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition1: luma within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition2: luma within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition3: mix between tracks not imported; kept in the import
+      1 issue: transition4: mix between tracks not imported; kept in the import
+      1 issue: transition5: frei0r.cairoblend between tracks not imported; kept in the import
+      1 issue: transition6: frei0r.cairoblend between tracks not imported; kept in the import
+      1 level reached: 2
+      1 media found: 0 of 0 (not probed)
+      1 version: 7.9.0
+
+== test-nesting-effects.kdenlive (version="7.17.0", 36342 bytes)
+      1 format: Kdenlive (MLT XML)
+      1 issue: : 12 source objects are not saved in the project; re-import from the source file to recover them
+      2 issue: {ba2b281d-29ba-40ca-8cdf-90d5cc311a41}: nested sequence (a tractor used as a clip) not imported; left as a gap
+      1 issue: producer0: color generator not imported as a track; left out
+      1 issue: transition4: mix within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition5: mix within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition6: frei0r.cairoblend within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition7: frei0r.cairoblend within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 level reached: 2
+      1 media found: 1 of 1 (not probed)
+      1 version: 7.17.0
+
+== test-nesting.kdenlive (version="7.23.0", 30738 bytes)
+      1 format: Kdenlive (MLT XML)
+      1 issue: : 12 source objects are not saved in the project; re-import from the source file to recover them
+      1 issue: producer0: color generator not imported; left as a gap
+      1 issue: producer1: color generator not imported as a track; left out
+      1 issue: transition0: mix within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition1: mix within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition2: qtblend within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 issue: transition3: qtblend within a track (a same-track mix) not imported; kept in the import; the clips meet at a cut
+      1 level reached: 2
+      1 media found: 0 of 0 (not probed)
+      1 version: 7.23.0
+

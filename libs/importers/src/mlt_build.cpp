@@ -25,6 +25,8 @@ void track_of(Builder& b, const TrackRef& ref, std::size_t depth) {
     }
     for (const ir::Opaque& kept : t->second.transitions) {
         b.out.timeline.unsupported.push_back(kept);
+        if (inert(kept))
+            continue;
         const bool mix = is_a(kept, "transition");
         issue(b.out.report, kept.original_id,
               kept.schema + (mix ? " within a track (a same-track mix) not imported"
@@ -52,6 +54,8 @@ Result<void> build(const Document& doc, Imported& out) {
         track_of(b, ref, 0);
     for (const ir::Opaque& kept : main.transitions) {
         out.timeline.unsupported.push_back(kept);
+        if (inert(kept))
+            continue;
         const bool filter = is_a(kept, "filter");
         issue(out.report, kept.original_id.empty() ? kept.schema : kept.original_id,
               kept.schema +
