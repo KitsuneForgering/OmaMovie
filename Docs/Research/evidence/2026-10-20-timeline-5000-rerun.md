@@ -40,3 +40,14 @@ call 32.3 + frame 259.3 ms** (run 1 of 5); no other edit sample over 100 ms (the
 save + load + reimport, always is: 120-521 ms). The stall is after the call returns, in
 rendering or presenting the frame (render thread, scene-graph sync, Vulkan present), not in
 the model or the bindings. Next: time the render thread's phases for that frame.
+
+**Inside the frame (2026-10-21).** The slow-sample line now also gives, in ms after the call
+began, when the render thread last began a frame, synced the scene graph, rendered and ended it.
+Twelve more runs, one long split: **291.7 ms = call 26.8, then the next frame began at 291.6;
+sync, render and end took under 1 ms.** The time went to the render loop not starting a frame
+for 265 ms, not to any work. Hypothesis, not verified: on Wayland Qt's render loop waits for
+the compositor's frame callback before drawing, and Hyprland delayed it (throttled or busy
+window); that would be intermittent and load-dependent, as observed. A check would log the
+frame-callback times (Qt's Wayland logging categories) during a run with a long split. (Phase
+values from a frame that skipped rendering are left from the previous frame, which is why some
+lines show a render end before its start.)

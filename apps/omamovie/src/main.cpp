@@ -45,6 +45,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <format>
 #include <fstream>
@@ -452,6 +453,26 @@ int main(int argc, char** argv) {
         const auto ms_since = [](Clock::time_point t) {
             return std::chrono::duration<double, std::milli>(Clock::now() - t).count();
         };
+        // When the render thread last reached each phase of a frame: begin, scene-graph sync
+        // (the GUI thread waits for it), render and end (present included). Read for a slow
+        // sample, whose frame is the last one by then.
+        enum Phase { kBegin, kSync, kSynced, kRender, kRendered, kEnd, kPhases };
+        std::array<std::atomic<std::int64_t>, kPhases> phase_at{};
+        const auto stamp = [&phase_at](Phase p) {
+            phase_at[p].store(Clock::now().time_since_epoch().count(), std::memory_order_relaxed);
+        };
+        QObject::connect(window, &QQuickWindow::beforeFrameBegin, window, [=] { stamp(kBegin); },
+                         Qt::DirectConnection);
+        QObject::connect(window, &QQuickWindow::beforeSynchronizing, window,
+                         [=] { stamp(kSync); }, Qt::DirectConnection);
+        QObject::connect(window, &QQuickWindow::afterSynchronizing, window,
+                         [=] { stamp(kSynced); }, Qt::DirectConnection);
+        QObject::connect(window, &QQuickWindow::beforeRendering, window,
+                         [=] { stamp(kRender); }, Qt::DirectConnection);
+        QObject::connect(window, &QQuickWindow::afterRendering, window,
+                         [=] { stamp(kRendered); }, Qt::DirectConnection);
+        QObject::connect(window, &QQuickWindow::afterFrameEnd, window, [=] { stamp(kEnd); },
+                         Qt::DirectConnection);
         // Runs `action`, then waits (processing events) until a frame that began after it ended.
         // Samples over the 100 ms gate, split into the synchronous call (Session, the model and
         // the QML bindings it triggers) and the wait for the frame that shows it, so an
@@ -469,9 +490,20 @@ int main(int argc, char** argv) {
                 QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 5);
             }
             const double total = ms_since(t0);
-            if (total > 100)
-                slow.push_back(std::format("{} {:.1f} ms: call {:.1f}, then frame {:.1f}", timing,
-                                           total, call, total - call));
+            if (total > 100) {
+                // Each phase of the frame as milliseconds after the call began.
+                const auto at = [&](Phase p) {
+                    return std::chrono::duration<double, std::milli>(
+                               Clock::duration(phase_at[p].load(std::memory_order_relaxed)) -
+                               t0.time_since_epoch())
+                        .count();
+                };
+                slow.push_back(std::format(
+                    "{} {:.1f} ms: call {:.1f}, then frame {:.1f} (frame begin {:.1f}, sync "
+                    "{:.1f}-{:.1f}, render {:.1f}-{:.1f}, end {:.1f})",
+                    timing, total, call, total - call, at(kBegin), at(kSync), at(kSynced),
+                    at(kRender), at(kRendered), at(kEnd)));
+            }
             return total;
         };
         const auto wait_for = [&](const std::function<bool()>& done, int ms) {
