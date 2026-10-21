@@ -32,7 +32,8 @@ oma::Result<void> EncodeStage::run() {
     while (auto frame = queue_.pop()) {
         const auto start = Clock::now();
         using P = EncodedFrame::Pixels;
-        auto video = frame->kind == P::Nv12   ? writer_.write_nv12(frame->pixels, frame->stride)
+        auto video = frame->kind == P::Surface ? writer_.write_surface(frame->surface)
+                     : frame->kind == P::Nv12  ? writer_.write_nv12(frame->pixels, frame->stride)
                      : frame->kind == P::Rgba ? writer_.write_rgba(frame->pixels, width_ * 4)
                                               : writer_.write(frame->pixels, width_ * 3);
         auto sound = video ? writer_.write_audio(frame->sound) : video;

@@ -31,6 +31,10 @@ struct ExportRequest {
     // Auto: hardware decode where OmaMovie has validated it (Intel VA-API, as the viewer), else
     // software; a stream whose hardware decoder cannot open falls back to software per file.
     enum class Decode : std::uint8_t { Auto, Software, Hardware } decode = Decode::Auto;
+    // GPU-native encoder input (proposed ADR-0023): with the VA-API encoder and a GPU
+    // compositor, frames are written on the GPU into the encoder's own surfaces instead of read
+    // back and uploaded. Off until the ADR is accepted; ExportStats::encoder_input says the route.
+    bool gpu_input = false;
     oma::media::OutputProfile profile = oma::media::OutputProfile::Mp4H264Aac;
 };
 
@@ -47,6 +51,8 @@ struct ExportStats {
     std::string decode_path;     // export frame source and its hardware choice
     std::string compositor_path; // selected renderer and any downgrade reason
     std::string encoder;         // what was used, and why when it is not what was asked for
+    std::string encoder_input;   // how frames reach the encoder (readback, or GPU-native and why not)
+    std::uint64_t surface_frames = 0; // frames written on the GPU into encoder surfaces
     // Transfer audit: counts at OmaMovie's explicit API boundaries, not driver-internal copies.
     FrameSource::DecodeTransferStats decoded;
     std::uint64_t software_inputs = 0;

@@ -20,10 +20,12 @@
 // producer collects the error from finish(). Destroying the stage closes the queue and joins the
 // worker: declare it after the writer so it goes first.
 struct EncodedFrame {
-    // RGB24 (CPU reference), RGBA8 (GPU readback for libx264) or NV12 (GPU readback for VA-API).
-    enum class Pixels : std::uint8_t { Rgb, Rgba, Nv12 } kind = Pixels::Rgb;
-    std::vector<std::uint8_t> pixels; // one frame, packed rows
+    // RGB24 (CPU reference), RGBA8 (GPU readback for libx264), NV12 (GPU readback for VA-API) or
+    // a VA-API surface the GPU already wrote (ADR-0023).
+    enum class Pixels : std::uint8_t { Rgb, Rgba, Nv12, Surface } kind = Pixels::Rgb;
+    std::vector<std::uint8_t> pixels; // one frame, packed rows (not for Surface)
     int stride = 0;                   // NV12 only: bytes per row of either plane
+    oma::media::EncoderSurface surface; // Surface only
     std::vector<float> sound;         // this frame's interleaved stereo samples
 };
 

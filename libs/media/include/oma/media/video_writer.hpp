@@ -2,6 +2,7 @@
 
 #include "oma/base/error.hpp"
 #include "oma/base/time.hpp"
+#include "oma/media/encoder_surfaces.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -68,6 +69,14 @@ public:
     // An NV12 frame (BT.709 limited range): `stride`-byte luma rows, then interleaved CbCr rows
     // at half height (compositor::VulkanCompositor::read_nv12). No conversion on the CPU.
     [[nodiscard]] Result<void> write_nv12(std::span<const std::uint8_t> nv12, int stride);
+    // GPU-native input (ADR-0023): the VA-API encoder's surface pool with planes writable on
+    // `device`. Unsupported for other encoders or a device without DMA-BUF import; the caller
+    // then keeps write_nv12. The result must be destroyed before `device`.
+    [[nodiscard]] Result<std::unique_ptr<EncoderSurfaces>> surfaces(const gpu::Device& device);
+    // Encodes an acquired surface whose planes the caller has filled and synchronized (the
+    // device's work on them finished and released to the foreign queue family), in order with
+    // the other video frames.
+    [[nodiscard]] Result<void> write_surface(const EncoderSurface& surface);
     [[nodiscard]] WriterTransferStats transfer_stats() const noexcept;
     // Appends interleaved samples (channels per frame) to the audio track, in order. The
     // caller keeps audio and video in step (the muxer interleaves by timestamp).

@@ -94,6 +94,9 @@ struct DmaBufPlane {
     VkFormat format = VK_FORMAT_UNDEFINED;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
+    // A plane this device writes (a hardware encoder's input surface, ADR-0023): storage usage
+    // and a view. Otherwise read-only (sampled, copied from), as decoded pictures are.
+    bool writable = false;
 };
 
 // A single-plane image over imported DMA-BUF memory (VK_EXT_external_memory_dma_buf with an
@@ -112,6 +115,8 @@ public:
 
     [[nodiscard]] VkImage handle() const noexcept;
     [[nodiscard]] VkFormat format() const noexcept;
+    // The full view of a writable plane; VK_NULL_HANDLE for a read-only one.
+    [[nodiscard]] VkImageView view() const noexcept;
 
 private:
     void reset() noexcept;
@@ -119,6 +124,7 @@ private:
     VkDevice device_ = VK_NULL_HANDLE;
     VkImage image_ = VK_NULL_HANDLE;
     VkDeviceMemory memory_ = VK_NULL_HANDLE;
+    VkImageView view_ = VK_NULL_HANDLE;
     VkFormat format_ = VK_FORMAT_UNDEFINED;
 };
 

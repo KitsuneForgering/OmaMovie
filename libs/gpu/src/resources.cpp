@@ -294,7 +294,9 @@ Result<DmaBufImage> DmaBufImage::import(const Device& device, const DmaBufPlane&
         .arrayLayers = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT,
-        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        .usage = static_cast<VkImageUsageFlags>(plane.writable ? VK_IMAGE_USAGE_STORAGE_BIT
+                                                               : VK_IMAGE_USAGE_SAMPLED_BIT) |
+                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
@@ -352,13 +354,33 @@ Result<DmaBufImage> DmaBufImage::import(const Device& device, const DmaBufPlane&
         r != VK_SUCCESS) {
         return std::unexpected(vk_failure(r, "cannot bind DMA-BUF memory"));
     }
+    if (plane.writable) {
+        const VkImageViewCreateInfo view{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .image = img.image_,
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = plane.format,
+            .components = {},
+            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                 .baseMipLevel = 0,
+                                 .levelCount = 1,
+                                 .baseArrayLayer = 0,
+                                 .layerCount = 1}};
+        if (const VkResult r = vkCreateImageView(img.device_, &view, nullptr, &img.view_);
+            r != VK_SUCCESS) {
+            return std::unexpected(vk_failure(r, "cannot create a view of a DMA-BUF image"));
+        }
+    }
     return img;
 }
 
 DmaBufImage::DmaBufImage(DmaBufImage&& other) noexcept
     : device_(std::exchange(other.device_, VK_NULL_HANDLE)),
       image_(std::exchange(other.image_, VK_NULL_HANDLE)),
-      memory_(std::exchange(other.memory_, VK_NULL_HANDLE)), format_(other.format_) {}
+      memory_(std::exchange(other.memory_, VK_NULL_HANDLE)),
+      view_(std::exchange(other.view_, VK_NULL_HANDLE)), format_(other.format_) {}
 
 DmaBufImage& DmaBufImage::operator=(DmaBufImage&& other) noexcept {
     if (this != &other) {
@@ -366,6 +388,7 @@ DmaBufImage& DmaBufImage::operator=(DmaBufImage&& other) noexcept {
         device_ = std::exchange(other.device_, VK_NULL_HANDLE);
         image_ = std::exchange(other.image_, VK_NULL_HANDLE);
         memory_ = std::exchange(other.memory_, VK_NULL_HANDLE);
+        view_ = std::exchange(other.view_, VK_NULL_HANDLE);
         format_ = other.format_;
     }
     return *this;
@@ -379,6 +402,9 @@ void DmaBufImage::reset() noexcept {
     if (device_ == VK_NULL_HANDLE) {
         return;
     }
+    if (view_ != VK_NULL_HANDLE) {
+        vkDestroyImageView(device_, view_, nullptr);
+    }
     if (image_ != VK_NULL_HANDLE) {
         vkDestroyImage(device_, image_, nullptr);
     }
@@ -388,6 +414,7 @@ void DmaBufImage::reset() noexcept {
     device_ = VK_NULL_HANDLE;
     image_ = VK_NULL_HANDLE;
     memory_ = VK_NULL_HANDLE;
+    view_ = VK_NULL_HANDLE;
 }
 
 VkBuffer Buffer::handle() const noexcept {
@@ -415,6 +442,9 @@ VkImage DmaBufImage::handle() const noexcept {
 }
 VkFormat DmaBufImage::format() const noexcept {
     return format_;
+}
+VkImageView DmaBufImage::view() const noexcept {
+    return view_;
 }
 
 } // namespace oma::gpu

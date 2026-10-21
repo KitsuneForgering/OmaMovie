@@ -17,12 +17,13 @@
 
 namespace {
 
-// One frame on the GPU, read back for the encoder: NV12 for VA-API (converted on the GPU, 1.5
-// bytes per pixel), else BT.709 RGBA8 for libx264's own conversion.
+// One frame on the GPU for the encoder: written into one of its surfaces where `surfaces` is
+// given (ADR-0023), else read back: NV12 for VA-API (converted on the GPU, 1.5 bytes per pixel),
+// else BT.709 RGBA8 for libx264's own conversion.
 oma::Result<EncodedFrame> render_gpu(oma::compositor::VulkanCompositor& gpu,
                                      const ViewerFrame& view,
                                      std::span<const oma::compositor::LayerInput> in, bool nv12,
-                                     ExportStats& stats) {
+                                     oma::media::EncoderSurfaces* surfaces, ExportStats& stats) {
     for (const auto& input : in) {
         if (input.frame == nullptr || input.frame->on_gpu())
             continue;
@@ -38,6 +39,22 @@ oma::Result<EncodedFrame> render_gpu(oma::compositor::VulkanCompositor& gpu,
     stats.staging_ms += transfers.staging_ms;
     stats.staging_row_copy_ms += transfers.row_copy_ms;
     EncodedFrame out;
+    if (surfaces != nullptr) {
+        auto surface = surfaces->acquire();
+        if (!surface)
+            return std::unexpected(surface.error());
+        if (auto written = gpu.write_nv12({.luma = surface->luma,
+                                           .luma_view = surface->luma_view,
+                                           .cbcr = surface->cbcr,
+                                           .cbcr_view = surface->cbcr_view,
+                                           .foreign = true});
+            !written)
+            return std::unexpected(written.error());
+        ++stats.surface_frames;
+        out.kind = EncodedFrame::Pixels::Surface;
+        out.surface = std::move(*surface);
+        return out;
+    }
     if (nv12) {
         const auto start = std::chrono::steady_clock::now();
         oma::compositor::VulkanCompositor::Nv12ReadbackTimings timings;
@@ -183,7 +200,20 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
         if (st.encoder.empty())
             st.encoder = oma::media::export_format(request.profile).video_encoder;
     }
-    oma::log_info(oma::Category::Encode, "export encoder: {}", st.encoder);
+    // GPU-native encoder input (proposed ADR-0023), only when asked for: the readback stays the
+    // route otherwise and the fallback whenever the encoder's surfaces cannot be used.
+    std::unique_ptr<oma::media::EncoderSurfaces> surfaces;
+    st.encoder_input = (*writer)->takes_nv12() ? "NV12 readback, uploaded" : "readback";
+    if (request.gpu_input && gpu && (*writer)->takes_nv12()) {
+        if (auto made = (*writer)->surfaces(*device)) {
+            surfaces = std::move(*made);
+            st.encoder_input = "written on the GPU into the encoder's surfaces";
+        } else {
+            st.encoder_input += ": GPU-native input unavailable: " + made.error().summary();
+        }
+    }
+    oma::log_info(oma::Category::Encode, "export encoder: {}; input: {}", st.encoder,
+                  st.encoder_input);
     oma::log_info(oma::Category::Encode, "export {}x{} {} frames to {}: {} compositor",
                   request.width, request.height, request.frames, request.file.string(),
                   gpu ? "Vulkan" : "CPU");
@@ -228,7 +258,17 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
             // The GPU encodes BT.709 RGBA8 and the encoder reads it back: one 8-bit readback per
             // frame, the documented exception for export until a hardware encoder takes GPU
             // frames (M12 transfer baseline), overlapped with encoding the previous frame.
-            auto pixels = render_gpu(*gpu, **view, inputs, (*writer)->takes_nv12(), st);
+            auto pixels =
+                render_gpu(*gpu, **view, inputs, (*writer)->takes_nv12(), surfaces.get(), st);
+            if (!pixels && surfaces && pixels.error().code() != oma::ErrorCode::DeviceLost) {
+                // The surfaces failed but the device works: read this frame and the rest back.
+                oma::log_warn(oma::Category::Encode, "export: encoder surfaces failed at frame {}: {}",
+                              k, pixels.error().summary());
+                st.encoder_input += "; NV12 readback after frame " + std::to_string(k) + ": " +
+                                    pixels.error().summary();
+                surfaces.reset();
+                pixels = render_gpu(*gpu, **view, inputs, true, nullptr, st);
+            }
             if (!pixels && pixels.error().code() == oma::ErrorCode::DeviceLost) {
                 // A lost device takes no more work (ADR-0005). The CPU reference renders the
                 // same graph within the compositors' agreed tolerance, so the export finishes,
@@ -239,6 +279,10 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
                               k);
                 st.compositor_path +=
                     "; CPU reference after device loss at frame " + std::to_string(k);
+                if (surfaces) {
+                    st.encoder_input += "; CPU frames after device loss";
+                    surfaces.reset(); // their planes were imported into the lost device
+                }
                 gpu.reset();
                 if (hardware_decode) {
                     // This frame's pictures were decoded onto the lost device; decode it again.

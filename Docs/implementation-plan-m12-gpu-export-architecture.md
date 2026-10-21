@@ -90,8 +90,13 @@ transport owner would need too many shared inputs, so it is not an automatic ext
    `h264_vaapi`'s own surfaces and encodes it beside today's readback route: the movies are
    byte-identical at 320×180, 1080p and 4K, and the step to the encoder took 2.1-2.5 instead of
    9.2-10.5 ms per 4K frame. Route recorded in proposed [ADR-0023](adr/0023-gpu-native-encoder-input.md).
-   Next: the export path (pool lifetime,
-   synchronisation without a CPU wait per frame, device loss, cancellation, software fallback).
+   *Export path (2026-10-21, off by default):* `ExportRequest::gpu_input` makes the export write
+   each frame into the encoder's surfaces (`media::EncoderSurfaces`, `VideoWriter::write_surface`);
+   `ExportStats::encoder_input` names the route. `tests/app/test_export_gpu_input.cpp`: the movie
+   is byte-identical to the readback route's, and a device lost at frame 10 finishes on the CPU
+   with every frame right; a surface failure on a working device falls back to the readback with
+   its reason. Left: synchronisation without a CPU wait per frame, a whole-export A/B, and
+   acceptance of ADR-0023 before it is the default.
 4. Keep working-space → NV12 conversion on GPU for the first path. Specify P010 planes,
    color tags and synchronization in the contract, but do not make P010 or HDR a v0.1 gate
    or claim HDR without a separately validated color pipeline. Compare decoded output frames,

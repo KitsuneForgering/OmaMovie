@@ -1,5 +1,6 @@
 #include "oma/media/video_writer.hpp"
 
+#include "encoder_surfaces_detail.hpp"
 #include "ffmpeg.hpp"
 #include "oma/media/format.hpp"
 
@@ -464,6 +465,35 @@ Result<void> VideoWriter::write_nv12(std::span<const std::uint8_t> nv12, int str
     s.transfers.nv12_copy_bytes +=
         static_cast<std::uint64_t>(w) * static_cast<std::uint64_t>(h) * 3 / 2;
     return s.send_video();
+}
+
+Result<std::unique_ptr<EncoderSurfaces>> VideoWriter::surfaces(const gpu::Device& device) {
+    auto& s = *impl_;
+    if (!s.hw_frames)
+        return make_error(ErrorCode::Unsupported, Category::Encode, "not the VA-API encoder");
+    if (!device.info().dma_buf_import || !device.info().drm_modifiers)
+        return make_error(ErrorCode::Unsupported, Category::Encode,
+                          "the device cannot import DMA-BUF");
+    auto impl = std::make_unique<EncoderSurfaces::Impl>();
+    impl->device = &device;
+    impl->frames.reset(av_buffer_ref(s.hw_frames.get()));
+    if (!impl->frames)
+        return make_error(ErrorCode::Internal, Category::Encode, "cannot share the VA-API frames");
+    return std::make_unique<EncoderSurfaces>(std::move(impl));
+}
+
+Result<void> VideoWriter::write_surface(const EncoderSurface& surface) {
+    auto& s = *impl_;
+    auto* frame = static_cast<AVFrame*>(surface.frame.get());
+    if (s.finished || !s.hw_frames || frame == nullptr || frame->hw_frames_ctx == nullptr ||
+        frame->hw_frames_ctx->data != s.hw_frames->data ||
+        s.next_pts == std::numeric_limits<std::int64_t>::max())
+        return make_error(ErrorCode::InvalidArgument, Category::Encode,
+                          "not a surface of this encoder");
+    frame->pts = s.next_pts++;
+    if (const int err = avcodec_send_frame(s.codec.get(), frame); err < 0)
+        return std::unexpected(ff::av_error(err, Category::Encode, "cannot submit video frame"));
+    return s.drain();
 }
 
 Result<void> VideoWriter::write_audio(std::span<const float> interleaved) {
