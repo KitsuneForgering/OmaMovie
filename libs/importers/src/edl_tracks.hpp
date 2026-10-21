@@ -36,6 +36,10 @@ struct Build {
 // then the clip; the outgoing side of a dissolve (a zero-length cut) adds nothing.
 void place(Build& b, const Event& e, const std::string& name);
 
+// The event's clip: its media shared by source file, clip name or reel, and its notes kept and
+// reported (an M2 speed change plays at normal speed).
+[[nodiscard]] ir::Clip clip_of(Build& b, const Event& e);
+
 void issue(ir::ImportReport& r, std::string object, std::string reason, std::string impact);
 
 // Header lines the reader did not understand: reported and kept on the timeline (§16.3).
