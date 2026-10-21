@@ -1,0 +1,34 @@
+Cross-editor export 2026-10-21 17:46:09 -0300, 3 repeats, order alternated per round
+CPU: 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz, 8 threads
+GPU: Intel(R) Iris(R) Xe Graphics (TGL GT2)
+VA-API: Driver version: Intel iHD driver for Intel(R) Gen Graphics - 26.3.5 ()
+ffmpeg version n9.0.2 Copyright (c) 2000-2026 the FFmpeg developers
+cpufreq: driver intel_pstate, governor powersave, epp balance_performance, power profile balanced, AC 1
+power online: 1, load: 2.91 1.83 3.05
+editors: OmaMovie b5f3bde (dirty), headless export_bench; melt 7.42.0 (Kdenlive 26.08.2)
+scene: whole; source: xed_1080p24_bt709_noise-v3.mp4 sha256 b555007fdc2c34c9, 479 frames
+round 1 oma hardware:   encoder: VA-API H.264 (GPU); input: NV12 readback, uploaded (0 surface frames); decode: hardware first, software per file if it cannot open measure: rc=0 wall_s=2.84 user_s=2.02 sys_s=0.36 peak_rss_mb=147 gpu_peak_resident_mb=175 gpu_copy_s=0.00 gpu_render_s=2.29 gpu_video_s=1.62 gpu_video-enhance_s=0.00
+PASS frames=479 duration=19.978s worst_psnr_y=44.32dB audio_min_corr=0.995 max_lag=0.0ms min_gain=0.98 bytes=28620000
+round 1 melt hardware: measure: rc=0 wall_s=5.77 user_s=14.01 sys_s=0.34 peak_rss_mb=351 gpu_peak_resident_mb=54 gpu_copy_s=0.00 gpu_render_s=1.79 gpu_video_s=1.36 gpu_video-enhance_s=0.00
+PASS frames=479 duration=19.978s worst_psnr_y=45.03dB audio_min_corr=0.988 max_lag=0.0ms min_gain=0.70 bytes=30333816
+round 1 oma software:   encoder: libx264; input: NV12 readback, uploaded (0 surface frames); decode: hardware first, software per file if it cannot open measure: rc=0 wall_s=11.77 user_s=78.53 sys_s=1.48 peak_rss_mb=672 gpu_peak_resident_mb=121 gpu_copy_s=0.00 gpu_render_s=1.42 gpu_video_s=0.67 gpu_video-enhance_s=0.00
+PASS frames=479 duration=19.978s worst_psnr_y=41.08dB audio_min_corr=0.995 max_lag=0.0ms min_gain=0.98 bytes=17290827
+round 1 melt software: measure: rc=0 wall_s=16.56 user_s=111.37 sys_s=1.59 peak_rss_mb=879 gpu=n/a
+PASS frames=479 duration=19.978s worst_psnr_y=41.27dB audio_min_corr=0.988 max_lag=0.0ms min_gain=0.70 bytes=19468714
+round 2 melt software: measure: rc=0 wall_s=15.53 user_s=109.31 sys_s=1.34 peak_rss_mb=884 gpu=n/a
+PASS frames=479 duration=19.978s worst_psnr_y=41.27dB audio_min_corr=0.988 max_lag=0.0ms min_gain=0.70 bytes=19468714
+round 2 oma software:   encoder: libx264; input: NV12 readback, uploaded (0 surface frames); decode: hardware first, software per file if it cannot open measure: rc=0 wall_s=14.42 user_s=91.20 sys_s=1.27 peak_rss_mb=681 gpu_peak_resident_mb=121 gpu_copy_s=0.00 gpu_render_s=1.34 gpu_video_s=0.63 gpu_video-enhance_s=0.00
+PASS frames=479 duration=19.978s worst_psnr_y=41.08dB audio_min_corr=0.995 max_lag=0.0ms min_gain=0.98 bytes=17290827
+round 2 melt hardware: measure: rc=0 wall_s=5.50 user_s=13.41 sys_s=0.36 peak_rss_mb=355 gpu_peak_resident_mb=54 gpu_copy_s=0.00 gpu_render_s=1.68 gpu_video_s=1.29 gpu_video-enhance_s=0.00
+PASS frames=479 duration=19.978s worst_psnr_y=45.03dB audio_min_corr=0.988 max_lag=0.0ms min_gain=0.70 bytes=30333816
+round 2 oma hardware:   encoder: VA-API H.264 (GPU); input: NV12 readback, uploaded (0 surface frames); decode: hardware first, software per file if it cannot open measure: rc=0 wall_s=2.86 user_s=2.03 sys_s=0.36 peak_rss_mb=147 gpu_peak_resident_mb=174 gpu_copy_s=0.00 gpu_render_s=2.26 gpu_video_s=1.63 gpu_video-enhance_s=0.00
+PASS frames=479 duration=19.978s worst_psnr_y=44.32dB audio_min_corr=0.995 max_lag=0.0ms min_gain=0.98 bytes=28620000
+round 3 oma hardware:   encoder: VA-API H.264 (GPU); input: NV12 readback, uploaded (0 surface frames); decode: hardware first, software per file if it cannot open measure: rc=0 wall_s=2.80 user_s=2.00 sys_s=0.33 peak_rss_mb=143 gpu_peak_resident_mb=174 gpu_copy_s=0.00 gpu_render_s=2.25 gpu_video_s=1.62 gpu_video-enhance_s=0.00
+PASS frames=479 duration=19.978s worst_psnr_y=44.32dB audio_min_corr=0.995 max_lag=0.0ms min_gain=0.98 bytes=28620000
+round 3 melt hardware: measure: rc=0 wall_s=5.99 user_s=14.79 sys_s=0.38 peak_rss_mb=352 gpu_peak_resident_mb=54 gpu_copy_s=0.00 gpu_render_s=1.87 gpu_video_s=1.36 gpu_video-enhance_s=0.00
+PASS frames=479 duration=19.978s worst_psnr_y=45.03dB audio_min_corr=0.988 max_lag=0.0ms min_gain=0.70 bytes=30333816
+round 3 oma software:   encoder: libx264; input: NV12 readback, uploaded (0 surface frames); decode: hardware first, software per file if it cannot open measure: rc=0 wall_s=13.48 user_s=91.15 sys_s=1.29 peak_rss_mb=677 gpu_peak_resident_mb=121 gpu_copy_s=0.00 gpu_render_s=1.33 gpu_video_s=0.63 gpu_video-enhance_s=0.00
+PASS frames=479 duration=19.978s worst_psnr_y=41.08dB audio_min_corr=0.995 max_lag=0.0ms min_gain=0.98 bytes=17290827
+round 3 melt software: measure: rc=0 wall_s=15.62 user_s=110.92 sys_s=1.27 peak_rss_mb=883 gpu=n/a
+PASS frames=479 duration=19.978s worst_psnr_y=41.27dB audio_min_corr=0.988 max_lag=0.0ms min_gain=0.70 bytes=19468714
+load at end: 6.87 4.60 3.90

@@ -4,9 +4,16 @@
 # Kdenlive renders through MLT's `melt`, so melt with Kdenlive's VA-API recipe is its engine.
 
 # export_oma route(hardware|software) out input: a video or a project; a private config and
-# cache per run (cold).
+# cache per run (cold). With OMA_BENCH_HEADLESS=1, tools/bench/export-headless's export_bench
+# runs the same exporter without a window (sessions that cannot present).
 export_oma() {
     local route=$1 out=$2 src=$3 home rc=0
+    if [[ ${OMA_BENCH_HEADLESS:-} == 1 ]]; then
+        local args=()
+        [[ $route == software ]] && args+=(software)
+        python3 -I "$here/measure.py" timeout 900 "$repo/build/release/tools/export_bench" "$src" "$out" "${args[@]}"
+        return
+    fi
     home=$(mktemp -d)
     mkdir -p "$home/config/omamovie"
     printf '[export]\nencoder=%s\n' "$route" > "$home/config/omamovie/settings.ini"
@@ -32,7 +39,7 @@ export_melt() {
 # The installed editor's version line, for the report.
 editor_version() {
     case $1 in
-        oma) echo "OmaMovie $(git -C "$here" rev-parse --short HEAD)$(git -C "$here" diff --quiet || echo ' (dirty)')" ;;
+        oma) echo "OmaMovie $(git -C "$here" rev-parse --short HEAD)$(git -C "$here" diff --quiet || echo ' (dirty)')$([[ ${OMA_BENCH_HEADLESS:-} == 1 ]] && echo ', headless export_bench')" ;;
         melt) echo "$(melt --version 2>&1 | head -1) (Kdenlive $(kdenlive --version 2>/dev/null | awk '{print $2}'))" ;;
     esac
 }

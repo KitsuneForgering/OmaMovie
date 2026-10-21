@@ -28,6 +28,29 @@ second source frame in order (worst luma PSNR OmaMovie 41.1/44.4, melt 41.2/45.0
 correlating at zero lag with the source played at twice its rate (pitch follows speed in both).
 The libx264 cell is a tie; with VA-API OmaMovie used 2.6× less CPU, its wall time within melt's range.
 
+**Headless rerun (2026-10-21, `b5f3bde` plus the bench change).** The window-based audit could
+not run on that session ([hang diagnosis](../Research/evidence/2026-10-21-export-audit-hang.md)),
+so `OMA_BENCH_HEADLESS=1` ran OmaMovie's exporter through `tools/bench/export-headless`'s
+`export_bench`: the same exporter, no Qt window or start-up, closer to melt's command line.
+This build also has the [decode-ahead change](../Research/evidence/2026-10-21-export-decode-ahead.md).
+Three alternated rounds, load average 3-7, all 36 exports passed. Reports:
+[whole](../Research/evidence/2026-10-21-cross-editor-headless-whole.txt),
+[cuts](../Research/evidence/2026-10-21-cross-editor-headless-cuts.txt),
+[speed](../Research/evidence/2026-10-21-cross-editor-headless-speed.txt).
+
+| Scene (1080p23.976) | Route | OmaMovie wall s, median (range) | melt wall s, median (range) | CPU s, OmaMovie / melt |
+|---|---|---|---|---|
+| Whole 20 s source | VA-API H.264 | 2.84 (2.80–2.86) | 5.77 (5.50–5.99) | 2.0 / 14.0 |
+| Whole 20 s source | libx264 | 13.48 (11.77–14.42) | 15.62 (15.53–16.56) | 91.2 / 110.9 |
+| Five reordered cuts | VA-API H.264 | 2.02 (2.00–2.17) | 4.22 (4.05–4.25) | 1.3 / 14.8 |
+| Five reordered cuts | libx264 | 7.11 (7.03–7.27) | 10.25 (9.93–11.02) | 45.8 / 67.5 |
+| 2× speed (MLT timewarp) | VA-API H.264 | 1.38 (1.37–1.65) | 2.95 (2.89–3.00) | 1.0 / 9.6 |
+| 2× speed (MLT timewarp) | libx264 | 5.75 (5.70–7.41) | 7.50 (7.45–7.74) | 36.7 / 50.8 |
+
+Against the windowed rows above, part of the gain is the missing window and start-up, so the two
+tables are not one A/B. OmaMovie's VA-API outputs have the same sizes as the windowed runs'
+(cuts 15,141,751 bytes), as expected from the same exporter.
+
 **Correctness (all 36 exports passed).** Frame counts exact (479, 256, 240); every frame of
 the cuts scene matches its planned source frame; output bytes identical across rounds for
 each editor and route. Worst luma PSNR against the source: whole/cuts OmaMovie 44.3 / 41.1–42.0
