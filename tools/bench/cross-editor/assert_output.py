@@ -12,6 +12,13 @@ from pathlib import Path
 CUTS = [(400, 40), (24, 72), (200, 60), (0, 12), (300, 72)]
 SPEED_SOURCE = 400  # the speed scene: source frames 0-399 at 2x, 200 output frames
 RATE = 24000 / 1001
+# The dissolve scene: source 0-251, then 288-478, mixed over output frames 228-251 (centred on
+# the cut at 240, where source 300 starts). OmaMovie mixes in linear light (ADR-0006), FFmpeg's
+# xfade and melt's luma on coded values, so mixed frames get their own, lower floor; a mix one
+# frame early or late measured about 24 dB, below it.
+DISSOLVE = (228, 24, 288)  # first mixed output frame, length, source frame where b starts
+DISSOLVE_FRAMES = 419
+MIXED_FLOOR = 30
 
 
 def command(*args):
@@ -36,6 +43,11 @@ def expected_filter(scene, count):
     if scene == "speed":  # every second source frame, in order
         return (f"[1:v]trim=end_frame={SPEED_SOURCE},select='not(mod(n,2))',"
                 "setpts=N/(24000/1001)/TB[e]")
+    if scene == "dissolve":
+        at, length, b_in = DISSOLVE
+        return (f"[1:v]split[x][y];[x]trim=end_frame={at + length},setpts=PTS-STARTPTS[a];"
+                f"[y]trim=start_frame={b_in},setpts=PTS-STARTPTS[b];"
+                f"[a][b]xfade=transition=fade:duration={length / RATE}:offset={at / RATE}[e]")
     pieces = []
     labels = []
     for i, (start, length) in enumerate(CUTS):
@@ -60,7 +72,12 @@ def assert_picture(source, output, scene, count):
             scores.append(float(score))
     if len(scores) != count:
         raise AssertionError(f"picture: compared {len(scores)} frames, expected {count}")
-    worst = min(scores)
+    mixed = range(DISSOLVE[0], DISSOLVE[0] + DISSOLVE[1]) if scene == "dissolve" else range(0)
+    for at in mixed:
+        if math.isnan(scores[at]) or scores[at] < MIXED_FLOOR:
+            raise AssertionError(f"picture: mixed frame {at} luma PSNR {scores[at]:.2f} dB, "
+                                 f"minimum {MIXED_FLOOR} dB")
+    worst = min(score for at, score in enumerate(scores) if at not in mixed)
     if math.isnan(worst) or worst < 35:
         raise AssertionError(f"picture: worst luma PSNR {worst:.2f} dB, minimum 35 dB")
     return worst
@@ -111,6 +128,10 @@ def assert_audio(source, output, scene, expected_seconds):
     if scene in ("whole", "speed"):
         points = [(fraction * expected_seconds, fraction * expected_seconds)
                   for fraction in (0.05, 0.5, 0.9)]
+    elif scene == "dissolve":  # away from the crossfade: a's frames, then b's (source = out + 60)
+        at, _, b_in = DISSOLVE
+        points = [(f / RATE, f / RATE) for f in (20, 110, 200)]
+        points += [((f + b_in - at) / RATE, f / RATE) for f in (280, 340, 400)]
     else:
         at = 0
         for start, length in CUTS:
@@ -134,8 +155,8 @@ def assert_audio(source, output, scene, expected_seconds):
 
 
 def main():
-    if len(sys.argv) != 4 or sys.argv[1] not in ("whole", "cuts", "speed"):
-        raise SystemExit("usage: assert_output.py whole|cuts|speed SOURCE OUTPUT")
+    if len(sys.argv) != 4 or sys.argv[1] not in ("whole", "cuts", "speed", "dissolve"):
+        raise SystemExit("usage: assert_output.py whole|cuts|speed|dissolve SOURCE OUTPUT")
     scene, source, output = sys.argv[1:]
     source_video, _ = streams(source)
     video, audio = streams(output)
@@ -148,7 +169,7 @@ def main():
             raise AssertionError(f"{name}: source={source_video.get(name)} "
                                  f"output={video.get(name)}, expected {value}")
     count = {"whole": frame_count(source_video), "speed": SPEED_SOURCE // 2,
-             "cuts": sum(n for _, n in CUTS)}[scene]
+             "cuts": sum(n for _, n in CUTS), "dissolve": DISSOLVE_FRAMES}[scene]
     actual = frame_count(video)
     if actual != count:
         raise AssertionError(f"frames: {actual}, expected {count}")

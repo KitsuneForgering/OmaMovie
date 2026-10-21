@@ -115,7 +115,8 @@ source for one editor. A famous name alone does not make a useful comparator.
   *Shared project (2026-10-15, [evidence](Research/evidence/2026-10-15-mlt-roundtrip.txt))*:
   `roundtrip.sh` has melt write an MLT document (two cuts, a luma mix), render it, and OmaMovie
   import and export the same document: 132/132 frames, cuts frame for frame (worst 39.7 dB
-  outside the dissolve, which OmaMovie centres on the cut).
+  outside the dissolve, which OmaMovie centred on the cut; since 2026-10-21 the import rolls
+  the cut to the mix's middle, [dissolve scene](Research/evidence/2026-10-21-cross-editor-dissolve.md)).
   *2× speed (2026-10-20, [evidence](Research/evidence/2026-10-20-cross-editor-speed.txt))*:
   `run.sh 5 DIR speed` renders source frames 0-399 at 2× from melt's `timewarp` producer and
   from OmaMovie's import of the document melt writes for it; `assert_output.py speed` checks
@@ -148,9 +149,10 @@ source for one editor. A famous name alone does not make a useful comparator.
   saves, reopens in a fresh Session, exports in software and matches all 19 frames to their
   expected source frames by an ffmpeg decode. Reordering two expected cuts makes both cases
   fail. A third case imports `melt_mix_23976.mlt`, written by melt 7.42 itself
-  (`roundtrip.sh` at fixture scale): 22 frames, and outside both dissolve windows (melt
-  10–13, OmaMovie centred 12–15) output 0–9 and 16–21 must be source 0–9 and 18–23; an
-  off-by-one expectation fails it. The dissolve frames themselves are not checked.
+  (`roundtrip.sh` at fixture scale): 22 frames; outside the mix (output 10–13 in both editors
+  since the 2026-10-21 centring roll) output 0–9 and 14–21 must be source 0–9 and 16–23; an
+  off-by-one expectation fails it. The dissolve frames themselves are not checked here; the
+  bench's `dissolve` scene checks them against FFmpeg's `xfade`.
   `cuts_steps.otio`/`.mlt` cut the 30 fps steps clip the same way and also check each output
   frame's sound by its loudness step over a whole-cycle window (11 cycles of 440 Hz);
   a one-frame sound shift fails both cases with the picture check disabled. melt renders

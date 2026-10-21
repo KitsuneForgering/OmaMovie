@@ -4,6 +4,8 @@
 #   cuts   five reordered cuts (cuts.sh), checked frame by frame against the source
 #   speed  source frames 0-399 at 2x as Kdenlive saves it (an MLT timewarp): melt renders the
 #          producer, OmaMovie imports the document melt writes for it (the app's MLT import)
+#   dissolve  source 0-251 and 288-478 with a 24-frame luma mix, imported the same way; checked
+#          against FFmpeg's xfade of the same frames (assert_output.py)
 
 scene_inputs() {
     local scene=$1 src=$2 dir=$3
@@ -24,6 +26,12 @@ scene_inputs() {
             oma_in="$dir/speed.omamovie"
             melt -quiet "${melt_in[@]}" -consumer "xml:$dir/speed.mlt" &&
                 "$cli" convert "$dir/speed.mlt" "$oma_in" > /dev/null || return 1
+            ;;
+        dissolve)
+            melt_in=("$src" "in=0" "out=251" "$src" "in=288" "out=478" -mix 24 -mixer luma)
+            oma_in="$dir/dissolve.omamovie"
+            melt -quiet "${melt_in[@]}" -consumer "xml:$dir/dissolve.mlt" &&
+                "$cli" convert "$dir/dissolve.mlt" "$oma_in" > /dev/null || return 1
             ;;
         *) echo "unknown scene: $scene" >&2; return 1 ;;
     esac

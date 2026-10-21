@@ -3,7 +3,8 @@
 # two cuts with a luma mix, renders it itself, OmaMovie imports the same document (oma-project
 # convert, then --export-audit) and the two movies are compared frame by frame by FFmpeg.
 # Outside the mix they must match (both are lossy encodes of the same frames); inside it they
-# differ by design: OmaMovie centres a dissolve on its cut and mixes in linear light (reported).
+# differ by design: OmaMovie mixes in linear light. Its import rolls the cut to the mix's middle
+# (OmaMovie centres dissolves), so the same frames mix (before 2026-10-21 they were 6 late).
 # Usage: tools/bench/cross-editor/roundtrip.sh [report-dir]
 set -uo pipefail
 

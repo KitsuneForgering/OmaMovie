@@ -54,6 +54,12 @@ Against the windowed rows above, part of the gain is the missing window and star
 tables are not one A/B. OmaMovie's VA-API outputs have the same sizes as the windowed runs'
 (cuts 15,141,751 bytes), as expected from the same exporter.
 
+**Dissolve scene (2026-10-21, [evidence](../Research/evidence/2026-10-21-cross-editor-dissolve.md)).**
+Building it exposed an import defect: melt's mix was centred without moving the cut, so the mix
+came half a dissolve late; the import now rolls the cut to its middle. Three headless rounds on a
+loaded machine (load 10-12), all 12 exports passed against FFmpeg's `xfade`: VA-API 4.54 against
+7.74 s (user CPU 2.6 / 21.1 s), libx264 15.52 against 19.55 s (81.6 / 103.5 s). Ranges only.
+
 **Correctness (all 36 exports passed).** Frame counts exact (479, 256, 240); every frame of
 the cuts scene matches its planned source frame; output bytes identical across rounds for
 each editor and route. Worst luma PSNR against the source: whole/cuts OmaMovie 44.3 / 41.1–42.0
