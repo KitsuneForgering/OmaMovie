@@ -20,16 +20,19 @@
 PreviewItem::PreviewItem(QQuickItem* parent) : QQuickItem(parent) {
     setFlag(ItemHasContents);
     connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow* window) {
-        if (window == nullptr) return;
+        if (window == nullptr)
+            return;
         // Before Qt tears its device state down, on the render thread.
-        connect(window, &QQuickWindow::sceneGraphInvalidated, this, [this] { releaseGpu(); },
-                Qt::DirectConnection);
+        connect(
+            window, &QQuickWindow::sceneGraphInvalidated, this, [this] { releaseGpu(); },
+            Qt::DirectConnection);
     });
 }
 
 PreviewItem::~PreviewItem() {
     // Normally released with the scene graph; this covers an item destroyed on its own.
-    if (compositor_) releaseGpu();
+    if (compositor_)
+        releaseGpu();
 }
 
 bool PreviewItem::hardwareDecodeAvailable() const {
@@ -43,41 +46,55 @@ bool PreviewItem::hardwareDecodeAvailable() const {
     constexpr std::uint32_t kIntel = 0x8086;
     bool forced = false;
     const int env = qEnvironmentVariableIntValue("OMA_PREVIEW_HARDWARE", &forced);
-    if (forced) return env != 0;
+    if (forced)
+        return env != 0;
     switch (decode_preference_) {
-    case DecodePreference::Hardware: return true;
-    case DecodePreference::Software: return false;
-    case DecodePreference::Auto: break;
+    case DecodePreference::Hardware:
+        return true;
+    case DecodePreference::Software:
+        return false;
+    case DecodePreference::Auto:
+        break;
     }
     return device_->info().vendor_id == kIntel;
 }
 
 QString PreviewItem::decodeStatus() const {
-    if (device_ == nullptr) return QStringLiteral("Software: no GPU device");
-    if (!((device_->info().dma_buf_import && device_->info().drm_modifiers) || device_->supports_video_decode())) {
+    if (device_ == nullptr)
+        return QStringLiteral("Software: no GPU device");
+    if (!((device_->info().dma_buf_import && device_->info().drm_modifiers) ||
+          device_->supports_video_decode())) {
         return QStringLiteral("Software: this GPU cannot import decoded video surfaces");
     }
     if (qEnvironmentVariableIsSet("OMA_PREVIEW_HARDWARE")) {
-        return hardwareDecodeAvailable() ? QStringLiteral("Hardware: forced by OMA_PREVIEW_HARDWARE")
-                                         : QStringLiteral("Software: forced by OMA_PREVIEW_HARDWARE");
+        return hardwareDecodeAvailable()
+                   ? QStringLiteral("Hardware: forced by OMA_PREVIEW_HARDWARE")
+                   : QStringLiteral("Software: forced by OMA_PREVIEW_HARDWARE");
     }
     switch (decode_preference_) {
-    case DecodePreference::Hardware: return QStringLiteral("Hardware: chosen in Settings (not validated on every GPU)");
-    case DecodePreference::Software: return QStringLiteral("Software: chosen in Settings");
-    case DecodePreference::Auto: break;
+    case DecodePreference::Hardware:
+        return QStringLiteral("Hardware: chosen in Settings (not validated on every GPU)");
+    case DecodePreference::Software:
+        return QStringLiteral("Software: chosen in Settings");
+    case DecodePreference::Auto:
+        break;
     }
-    return hardwareDecodeAvailable() ? QStringLiteral("Hardware: validated on this GPU vendor (Intel)")
-                                     : QStringLiteral("Software: hardware decode is not validated on this GPU vendor yet");
+    return hardwareDecodeAvailable()
+               ? QStringLiteral("Hardware: validated on this GPU vendor (Intel)")
+               : QStringLiteral(
+                     "Software: hardware decode is not validated on this GPU vendor yet");
 }
 
 void PreviewItem::reportLoss() {
     // Once, from whichever thread sees it first; the receiver is connected queued.
-    if (!loss_reported_.exchange(true)) emit deviceLost();
+    if (!loss_reported_.exchange(true))
+        emit deviceLost();
 }
 
 void PreviewItem::setFrame(std::shared_ptr<const ViewerFrame> frame) {
     // A hidden window draws nothing, so the render thread may never notice a loss: check here.
-    if (device_ != nullptr && device_->lost()) reportLoss();
+    if (device_ != nullptr && device_->lost())
+        reportLoss();
     frame_ = std::move(frame);
     ++generation_;
     update();
@@ -92,7 +109,8 @@ void PreviewItem::waitQueueIdle() const {
 }
 
 void PreviewItem::releaseGpu() {
-    if (device_ == nullptr || !compositor_) return;
+    if (device_ == nullptr || !compositor_)
+        return;
     // Nothing may still sample or write the images being destroyed.
     waitQueueIdle();
     compositor_.reset();
@@ -116,7 +134,8 @@ bool PreviewItem::composite() {
     if (!compositor_) {
         auto created = oma::compositor::VulkanCompositor::create(*device_);
         if (!created) {
-            oma::log_error(oma::Category::Compositor, "viewer compositor: {}", created.error().summary());
+            oma::log_error(oma::Category::Compositor, "viewer compositor: {}",
+                           created.error().summary());
             return false;
         }
         compositor_ = std::move(*created);
@@ -135,33 +154,55 @@ bool PreviewItem::composite() {
     std::vector<oma::compositor::LayerInput> inputs;
     inputs.reserve(f.pictures.size());
     for (const Picture& p : f.pictures) {
-        inputs.push_back(
-            {.frame = p.frame.get(), .color = p.color, .rotation = p.rotation, .sample_aspect = p.sample_aspect});
+        inputs.push_back({.frame = p.frame.get(),
+                          .color = p.color,
+                          .rotation = p.rotation,
+                          .sample_aspect = p.sample_aspect});
     }
+    const auto rendering = std::chrono::steady_clock::now();
     if (auto r = compositor_->render(graph, inputs); !r) {
         oma::log_error(oma::Category::Compositor, "viewer render: {}", r.error().summary());
         return false;
     }
+    const auto encoding = std::chrono::steady_clock::now();
     auto encoded = compositor_->encode_display();
     if (!encoded) {
-        oma::log_error(oma::Category::Compositor, "viewer display transform: {}", encoded.error().summary());
+        oma::log_error(oma::Category::Compositor, "viewer display transform: {}",
+                       encoded.error().summary());
         return false;
     }
     width_ = graph.width;
     height_ = graph.height;
-    display_ = reinterpret_cast<const void*>((*encoded)->handle()); // NOLINT(performance-no-int-to-ptr)
+    display_ =
+        reinterpret_cast<const void*>((*encoded)->handle()); // NOLINT(performance-no-int-to-ptr)
     composited_ = generation_;
     last_composited_frame_.store(f.frame, std::memory_order_release);
     presented_.fetch_add(1, std::memory_order_relaxed);
     const auto now = std::chrono::steady_clock::now();
-    const std::int64_t now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+    if (const auto ms =
+            [](auto span) {
+                return std::chrono::duration<double, std::milli>(span).count();
+            };
+        ms(now - started) > 50) {
+        // It runs in Qt's scene-graph sync, with the UI thread waiting: say where a long one went.
+        oma::log_warn(
+            oma::Category::Compositor,
+            "viewer composite {:.1f} ms (setup {:.1f}, render {:.1f}, display encode {:.1f}), "
+            "{} layers, {}x{}",
+            ms(now - started), ms(rendering - started), ms(encoding - rendering),
+            ms(now - encoding), inputs.size(), graph.width, graph.height);
+    }
+    const std::int64_t now_ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
     {
         constexpr std::size_t kMaxSamples = 1 << 16;
         const std::scoped_lock lock(timings_mutex_);
         if (timings_.composite_ms.size() < kMaxSamples) {
-            timings_.composite_ms.push_back(std::chrono::duration<double, std::milli>(now - started).count());
+            timings_.composite_ms.push_back(
+                std::chrono::duration<double, std::milli>(now - started).count());
             if (last_composite_ns_ != 0) {
-                timings_.interval_ms.push_back(static_cast<double>(now_ns - last_composite_ns_) / 1e6);
+                timings_.interval_ms.push_back(static_cast<double>(now_ns - last_composite_ns_) /
+                                               1e6);
             }
         }
     }
@@ -177,10 +218,13 @@ QSGNode* PreviewItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData* /*data*
         rhi_texture_ = nullptr;
         return nullptr;
     };
-    if (!frame_ || device_ == nullptr) return drop();
+    if (!frame_ || device_ == nullptr)
+        return drop();
     const bool encoded = composited_ != generation_;
-    if (encoded && !composite()) return drop();
-    if (display_ == nullptr || window()->rhi() == nullptr) return drop();
+    if (encoded && !composite())
+        return drop();
+    if (display_ == nullptr || window()->rhi() == nullptr)
+        return drop();
     if (node == nullptr) {
         node = new QSGSimpleTextureNode;
         node->setOwnsTexture(true);
@@ -188,8 +232,8 @@ QSGNode* PreviewItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData* /*data*
     }
     if (wrapped_ != display_) {
         const auto image = reinterpret_cast<quint64>(display_);
-        auto* texture = window()->rhi()->newTexture(QRhiTexture::RGBA8,
-                                                    QSize(static_cast<int>(width_), static_cast<int>(height_)));
+        auto* texture = window()->rhi()->newTexture(
+            QRhiTexture::RGBA8, QSize(static_cast<int>(width_), static_cast<int>(height_)));
         if (!texture->createFrom({image, VK_IMAGE_LAYOUT_GENERAL})) {
             delete texture;
             oma::log_error(oma::Category::Compositor, "Qt could not wrap the viewer image");
@@ -197,7 +241,8 @@ QSGNode* PreviewItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData* /*data*
         }
         // The wrapper takes the QRhiTexture; the node takes the wrapper (and deletes the one it
         // replaces). The VkImage stays the compositor's.
-        QSGTexture* wrapper = window()->createTextureFromRhiTexture(texture, QQuickWindow::TextureOwnsGLTexture);
+        QSGTexture* wrapper =
+            window()->createTextureFromRhiTexture(texture, QQuickWindow::TextureOwnsGLTexture);
         if (wrapper == nullptr) {
             delete texture;
             return drop();
@@ -210,18 +255,32 @@ QSGNode* PreviewItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData* /*data*
         node->markDirty(QSGNode::DirtyMaterial);
     }
     // The encode left the image in GENERAL; Qt transitions from the layout it is told.
-    if (encoded) rhi_texture_->setNativeLayout(VK_IMAGE_LAYOUT_GENERAL);
+    if (encoded)
+        rhi_texture_->setNativeLayout(VK_IMAGE_LAYOUT_GENERAL);
     const QSizeF fit = QSizeF(width_, height_).scaled(boundingRect().size(), Qt::KeepAspectRatio);
-    node->setRect((width() - fit.width()) / 2, (height() - fit.height()) / 2, fit.width(), fit.height());
+    node->setRect((width() - fit.width()) / 2, (height() - fit.height()) / 2, fit.width(),
+                  fit.height());
     return node;
 }
 
-void PreviewItem::setDevice(const oma::gpu::Device* device) { device_ = device; }
-const oma::gpu::Device* PreviewItem::device() const { return device_; }
-void PreviewItem::setDecodePreference(DecodePreference preference) { decode_preference_ = preference; }
-unsigned PreviewItem::presentedFrames() const { return presented_; }
-double PreviewItem::scale() const { return scale_.load(std::memory_order_relaxed); }
-std::int64_t PreviewItem::pendingFrame() const { return frame_ ? frame_->frame : -1; }
+void PreviewItem::setDevice(const oma::gpu::Device* device) {
+    device_ = device;
+}
+const oma::gpu::Device* PreviewItem::device() const {
+    return device_;
+}
+void PreviewItem::setDecodePreference(DecodePreference preference) {
+    decode_preference_ = preference;
+}
+unsigned PreviewItem::presentedFrames() const {
+    return presented_;
+}
+double PreviewItem::scale() const {
+    return scale_.load(std::memory_order_relaxed);
+}
+std::int64_t PreviewItem::pendingFrame() const {
+    return frame_ ? frame_->frame : -1;
+}
 
 std::int64_t PreviewItem::lastCompositedFrame() const {
     return last_composited_frame_.load(std::memory_order_acquire);

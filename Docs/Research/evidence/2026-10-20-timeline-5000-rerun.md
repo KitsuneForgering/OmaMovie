@@ -51,3 +51,18 @@ window); that would be intermittent and load-dependent, as observed. A check wou
 frame-callback times (Qt's Wayland logging categories) during a run with a long split. (Phase
 values from a frame that skipped rendering are left from the previous frame, which is why some
 lines show a render end before its start.)
+
+**Cause found (2026-10-21).** `PreviewItem` now logs any viewer composite over 50 ms with its
+parts. In 14 runs every run logged exactly one, of 264-1050 ms, almost all of it *setup*: the
+lazy `VulkanCompositor::create` on the first composite (render 1-10 ms, display encode under
+3 ms). It runs inside Qt's scene-graph sync (`updatePaintNode`), so the UI thread waits; when
+that first composite fell on a timed edit, the edit looked long (run 8: a seek of 543 ms beside
+a 504 ms composite). Each audit run used a fresh `XDG_CACHE_HOME`, so Mesa's shader cache
+was cold every time. With one cache kept across five runs, only the first (cold) logged a slow
+composite (288 ms) and **no edit sample exceeded 100 ms in any of the five**.
+
+So the intermittent long split is the audit's own cold start, not the editing path. What users
+can meet is a one-time freeze of about 0.3-1 s at the first viewer frame after installing or
+updating the driver (cold shader cache). Creating the compositor before the first frame, off
+the scene-graph sync, would remove that freeze; not done yet. Audit runs meant to measure edits
+should keep the shader cache warm or discard the first composite.
