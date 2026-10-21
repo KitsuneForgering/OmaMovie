@@ -56,3 +56,10 @@ pays one validation per failure. Each interactive edit still validates the whole
 (about 2 ms at 4,000 clips, derived from the first table), and `find_clip`, `track_of` and
 locating a clip for replace or erase remain linear scans; the sorted searches above also apply
 to interactive overwrites, inserts and moves, but no interactive latency was re-measured.
+
+**A false alarm worth knowing:** the first TSan run after adding the ID bound crashed in
+`Editor::~Editor` (device-loss export test, 8/8 alone; a Mesa string in a destroyed pointer).
+Reverting only the bound made it pass; a clean TSan rebuild with the bound passed 3/3 and the
+whole suite 14/14. A header had been edited while that build ran, leaving an object compiled
+against the old `Timeline` layout, which shifted `Editor::undo_`. After editing a widely
+included header during a build, rebuild cleanly before trusting a sanitizer result.
