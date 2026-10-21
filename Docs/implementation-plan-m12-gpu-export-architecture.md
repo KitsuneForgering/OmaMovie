@@ -114,8 +114,13 @@ transport owner would need too many shared inputs, so it is not an automatic ext
    that 4K export was GPU-bound (render engine busy ~86% of wall), not held by the per-frame
    fence wait, so the pass itself was cut first: one bilinear tap on the source grid and no
    target read for opaque pixels. Byte-identical movies; 4K GPU-native input 3.50 → 2.77 s,
-   readback 3.72 → 3.37 s (medians, `export_bench`). The render engine is now busy ~71% of wall,
-   so the open per-frame fence wait is a larger share than before: measure it next.
+   readback 3.72 → 3.37 s (medians, `export_bench`). Reading the engines afterwards: render-engine
+   time includes encoder/driver work (FFmpeg's own VA-API transcode of the fixture keeps it busy
+   1.3-2.7 s), the video engines have capacity 2 (`vcs0`, `vcs1`; about half busy), and the
+   export's per-frame breakdown now puts the encode stage on the critical path (~13 ms a frame,
+   with the renderer waiting ~2 ms for it). Low-power VDENC (`low_power=1`) moves the encoder off
+   the render engine but kept the video engines busy 4.55 s in FFmpeg alone, more than the whole
+   export, so it is not adopted. The per-frame fence wait stays open behind the encoder.
 5. Hardware decode during export, moved ahead of steps 2–4 on evidence (2026-10-19,
    proposed [ADR-0022](adr/0022-export-hardware-decode.md)): the existing
    `VideoDecoder`/`FrameSource` mechanism cut 4K process CPU per frame from 272 to 43 ms

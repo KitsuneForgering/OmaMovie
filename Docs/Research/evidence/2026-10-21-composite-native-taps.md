@@ -42,6 +42,11 @@ The first 4K round of each binary ran at load 1.4 and is the slow outlier in bot
 Every pair of movies is byte-identical (`cmp`). On the readback route user CPU rose from about
 2.2 to 2.5 s per run (more work per second of the same CPU-side stages); not investigated.
 
+**Caveat on "GPU-bound".** The render engine's busy time is not the compositor's alone: the
+VA-API encoder (`EncSlice`) and driver also run there (FFmpeg's own transcode of `a2160.mp4`
+keeps it busy 1.3-2.7 s). The A/B's drop in that time and in wall time is measured; how much of
+the remaining render-engine time is the compositor's was not separated.
+
 **Scope.** Native-size layers (source size equal to the canvas) gain; scaled, rotated or
 cropped-off-grid layers take the four-tap path as before. Playback composites the same pass, but
 playback was not measured. Single host; no other GPU vendor.
