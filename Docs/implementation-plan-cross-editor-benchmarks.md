@@ -151,8 +151,13 @@ source for one editor. A famous name alone does not make a useful comparator.
   fail. A third case imports `melt_mix_23976.mlt`, written by melt 7.42 itself
   (`roundtrip.sh` at fixture scale): 22 frames; outside the mix (output 10–13 in both editors
   since the 2026-10-21 centring roll) output 0–9 and 14–21 must be source 0–9 and 16–23; an
-  off-by-one expectation fails it. The dissolve frames themselves are not checked here; the
-  bench's `dissolve` scene checks them against FFmpeg's `xfade`.
+  off-by-one expectation fails it. *Mix frames (2026-10-21)*: `test_shared_dissolve.cpp`
+  fits each of output 10–13 as a blend of source k and k + 2 after linearising (power 2.4) and
+  mapping levels on the unmixed frames, since ADR-0006 mixes in linear light and converts this
+  untagged SD source; the weights read 0.05/0.28/0.50/0.73 against progress 0/¼/½/¾ (tolerance
+  0.1). Pairing the mix one source frame early or late, or sampling progress at frame centres,
+  fails it. On coded values the same correct export read 0.12 at the mix's first frame. The
+  bench's `dissolve` scene still checks full-size mixed frames against FFmpeg's `xfade`.
   `cuts_steps.otio`/`.mlt` cut the 30 fps steps clip the same way and also check each output
   frame's sound by its loudness step over a whole-cycle window (11 cycles of 440 Hz);
   a one-frame sound shift fails both cases with the picture check disabled. melt renders
