@@ -110,6 +110,12 @@ transport owner would need too many shared inputs, so it is not an automatic ext
    the export builds frame k+1 (evaluation, decode, import) on its own worker while frame k
    renders; on the headless bench (`tools/bench/export-headless`) the 4K 240-frame export went
    from about 6.6 to 4.6 s on the readback route and 5.2 to 4.4 s with GPU-native input.
+   *Layer pass (2026-10-21, [evidence](Research/evidence/2026-10-21-composite-native-taps.md)):*
+   that 4K export was GPU-bound (render engine busy ~86% of wall), not held by the per-frame
+   fence wait, so the pass itself was cut first: one bilinear tap on the source grid and no
+   target read for opaque pixels. Byte-identical movies; 4K GPU-native input 3.50 → 2.77 s,
+   readback 3.72 → 3.37 s (medians, `export_bench`). The render engine is now busy ~71% of wall,
+   so the open per-frame fence wait is a larger share than before: measure it next.
 5. Hardware decode during export, moved ahead of steps 2–4 on evidence (2026-10-19,
    proposed [ADR-0022](adr/0022-export-hardware-decode.md)): the existing
    `VideoDecoder`/`FrameSource` mechanism cut 4K process CPU per frame from 272 to 43 ms

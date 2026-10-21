@@ -349,11 +349,15 @@ void main() {
     vec2 t = f - base;
     ivec2 p0 = clamp(ivec2(base), lo, hi);
     ivec2 p1 = clamp(ivec2(base) + 1, lo, hi);
-    vec3 c00 = detailed(ivec2(p0.x, p0.y));
-    vec3 c10 = detailed(ivec2(p1.x, p0.y));
-    vec3 c01 = detailed(ivec2(p0.x, p1.y));
-    vec3 c11 = detailed(ivec2(p1.x, p1.y));
-    vec3 color = mix(mix(c00, c10, t.x), mix(c01, c11, t.x), t.y);
+    // On the source grid (a native-size layer) the other three taps weigh 0: skip them.
+    vec3 color = detailed(p0);
+    if (t != vec2(0.0)) {
+        vec3 c00 = color;
+        vec3 c10 = detailed(ivec2(p1.x, p0.y));
+        vec3 c01 = detailed(ivec2(p0.x, p1.y));
+        vec3 c11 = detailed(ivec2(p1.x, p1.y));
+        color = mix(mix(c00, c10, t.x), mix(c01, c11, t.x), t.y);
+    }
 
     // The layer's look, in the order of src/look.hpp.
     color = max(color * L.gains.rgb, vec3(0.0));
@@ -385,6 +389,11 @@ void main() {
         alpha *= clamp(L.misc.z - float(out_px.x), 0.0, 1.0); // pixel coverage left of the edge
     }
     vec4 src = vec4(color * alpha, alpha);
+    if (alpha >= 1.0 && L.extra.x != kBlendAdd && L.extra.x != kBlendMultiply &&
+        L.extra.x != kBlendScreen) {
+        imageStore(target, out_px, src); // opaque over: the target is not read (66 MB at 4K)
+        return;
+    }
     vec4 dst = imageLoad(target, out_px);
     vec4 result;
     if (L.extra.x == kBlendAdd) {
