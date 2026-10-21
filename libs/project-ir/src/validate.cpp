@@ -39,6 +39,8 @@ Result<void> validate(const Timeline& timeline) {
                 return invalid("clip refers to unknown media", where + " " + clip->media);
             if (negative(clip->source.duration()))
                 return invalid("negative clip duration", where);
+            if (!clip->speed.is_positive()) // reverse and frozen speeds are not represented
+                return invalid("clip speed is not positive", where);
             const auto& available = found->second->available;
             if (available && (clip->source.start() < available->start() ||
                               available->end() < clip->source.end()))

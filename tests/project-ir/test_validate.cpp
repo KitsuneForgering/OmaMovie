@@ -33,6 +33,15 @@ void run_validate_tests() {
         it("accepts a clip inside its media and a gap",
            { expect(ir::validate(sample()).has_value()).toBeTruthy(); });
 
+        it("refuses a speed that is not positive", {
+            ir::Timeline frozen = sample();
+            std::get<ir::Clip>(frozen.tracks[0].items[0]).speed = oma::Rational();
+            expect(ir::validate(frozen).has_value()).toBeFalsy();
+            ir::Timeline reverse = sample();
+            std::get<ir::Clip>(reverse.tracks[0].items[0]).speed = oma::Rational::literal(-1, 1);
+            expect(ir::validate(reverse).has_value()).toBeFalsy();
+        });
+
         it("refuses unknown or repeated media", {
             ir::Timeline unknown = sample();
             std::get<ir::Clip>(unknown.tracks[0].items[0]).media = "m2";
