@@ -1,4 +1,4 @@
-#include "from_ir_detail.hpp"
+#include "from_ir_dissolve.hpp"
 
 #include "oma/timeline/edit.hpp"
 

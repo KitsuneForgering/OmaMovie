@@ -18,10 +18,10 @@ Scene step_cuts(const char* name, const char* encoder = "software") {
     return {name, 5,      kSteps, 30, frames({{20, 4}, {3, 6}, {12, 3}, {0, 2}, {25, 5}}),
             true, encoder};
 }
-// roundtrip.sh at fixture scale, a document melt wrote: melt dissolves over output 10-13 and
-// OmaMovie centres the dissolve on its cut (12-15); outside both windows they must agree.
+// roundtrip.sh at fixture scale, a document melt wrote: melt dissolves over output 10-13, and
+// the import rolls the cut to the mix's middle so OmaMovie does too; every other frame agrees.
 Scene mix() {
-    return {"melt_mix_23976.mlt", 2, kSource, 24, frames({{0, 10}, {-1, 6}, {18, 6}})};
+    return {"melt_mix_23976.mlt", 2, kSource, 24, frames({{0, 10}, {-1, 4}, {16, 8}})};
 }
 
 // The bench's hardware route: VA-API where it opens (the Intel reference host), otherwise the

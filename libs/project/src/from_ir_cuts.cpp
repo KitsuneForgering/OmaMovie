@@ -1,4 +1,4 @@
-#include "from_ir_detail.hpp"
+#include "from_ir_dissolve.hpp"
 
 #include "oma/timeline/edit.hpp"
 
@@ -32,11 +32,25 @@ std::optional<tl::Transition> dissolve_of(const tl::Timeline& timeline, const ir
               "replaced by a hard cut");
         return std::nullopt;
     }
-    if (!(t.in_offset == t.out_offset))
-        issue(r, who, "dissolve is not centred on the cut", "centred, same total length");
     const std::int64_t length =
         ticks_of(timeline, t.in_offset, who, r) + ticks_of(timeline, t.out_offset, who, r);
     return tl::Transition{.kind = tl::TransitionKind::Dissolve, .duration = timeline.at(length)};
+}
+
+std::optional<Edit> centring_roll(const tl::Timeline& timeline, tl::ClipId into,
+                                  const ir::Transition& t, const std::string& who,
+                                  ir::ImportReport& r) {
+    const std::int64_t shift =
+        (ticks_of(timeline, t.in_offset, who, r) - ticks_of(timeline, t.out_offset, who, r)) / 2;
+    const tl::Clip* right = timeline.find_clip(into);
+    const tl::Track* track = timeline.track_of(into);
+    const tl::Clip* left =
+        right && track ? timeline.clip_at(track->id, right->start_ticks() - 1) : nullptr;
+    if (shift == 0 || left == nullptr || left->end_ticks() != right->start_ticks())
+        return std::nullopt;
+    return [l = left->id, cut = timeline.at(right->start_ticks() - shift)] {
+        return tl::edit::roll(l, cut);
+    };
 }
 
 } // namespace oma::project::from_ir_detail

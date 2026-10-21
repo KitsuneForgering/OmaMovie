@@ -26,9 +26,10 @@ start at 0, where both readings agree.
 
 - melt's mix (`melt A B -mix N`) is a nested tractor of the outgoing and incoming producers'
   overlapping frames plus a `luma`/`mix` transition. The previous clip takes its own frames on
-  and an `SMPTE_Dissolve` of the overlap's length ends at the next entry; the converter centres
-  it on the cut (reported), so the dissolve's frames differ from melt's while the cut points and
-  every frame outside it match.
+  and an `SMPTE_Dissolve` of the overlap's length ends at the next entry. OmaMovie centres its
+  dissolves, so the converter rolls the cut back to the overlap's middle (reported; 2026-10-21):
+  the same frames mix as in melt's render. Without incoming media before the new cut it centres
+  the dissolve on the old cut instead and says so. The mix itself is in linear light (ADR-0006).
 - `hide="video"` on a track or `kdenlive:audio_track` on a playlist makes an audio track;
   `hide="both"` imports the track hidden and muted. Kdenlive's other hide combinations for
   hidden video or muted audio tracks are not distinguished yet (no Kdenlive here to author them).

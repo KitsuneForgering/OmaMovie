@@ -29,7 +29,8 @@ frames 0 and 1 of each minute not divisible by ten are skipped; four at 59.94).
 - A dissolve is two lines with one number: a zero-length cut on the outgoing reel, then the `D`
   line. The zero-length cut adds nothing; the `D` line becomes an `SMPTE_Dissolve` transition
   starting at the cut (in offset 0, out offset its length), then the incoming clip. The
-  converter centres it on the cut and reports that.
+  converter rolls the cut forward to the dissolve's middle (OmaMovie centres dissolves) and
+  reports that, so the same frames mix.
 - Wipes (`W###`) and keys (`K`, `K B`, `K O`) are kept opaque on their track and reported; the
   event still plays as a cut with its length.
 - Reel `BL` (or `BLK`) without a source file is black: a gap of the event's length, not a media
