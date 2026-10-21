@@ -53,6 +53,12 @@ struct Context {
 // Reports what a track or stack carries but is not applied (effects, markers, trim; a stack's
 // disabled flag).
 void report_container(Object o, std::string_view what, const std::string& name, Context& c);
+// Reports a track's source_range when it trims the track's content.
+
+void report_trim(Object t, const ir::Track& track, Context& c);
+
+// Drops (and reports) an advisory available_range a clip runs outside; the probe decides.
+void trust_available(ir::Timeline& tl, Context& c);
 
 // The top-level Stack.1 under `tracks`: its Track.1 children as IR tracks, anything else kept
 // as opaque; then IR validation. Completes `out`, whose report `c` writes to.

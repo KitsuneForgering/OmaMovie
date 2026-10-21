@@ -36,8 +36,6 @@ void run_otio_refusal_tests() {
             expect(refused(with("\"rate\": 23.976023976023978, \"value\": 24.0",
                                 "\"rate\": -24, \"value\": 24.0")))
                 .toBeTruthy();
-            // 240 frames of media: a clip from frame 24 for 480 frames runs past it.
-            expect(refused(with("\"value\": 48.0", "\"value\": 480.0"))).toBeTruthy();
         });
     });
 }

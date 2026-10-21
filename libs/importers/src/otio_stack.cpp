@@ -29,6 +29,7 @@ Result<ir::Track> track_of(Object t, ir::Timeline& tl, Context& c) {
         else
             track.unsupported.push_back(opaque(e, text(o, "name")));
     }
+    report_trim(t, track, c);
     return track;
 }
 } // namespace
@@ -54,6 +55,7 @@ Result<void> read_stack(Object top, Imported& out, Context& c) {
         c.issue(kept.original_id, std::format("{} in the top stack is not imported", kept.schema),
                 "kept in the import; nested stacks are not flattened");
     }
+    trust_available(out.timeline, c);
     if (auto valid = ir::validate(out.timeline); !valid)
         return std::unexpected(valid.error());
     out.report.reached = ir::SupportLevel::Edits;

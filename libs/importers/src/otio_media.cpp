@@ -42,10 +42,11 @@ Result<std::string> media_of(Object clip, ir::Timeline& tl, Context& c) {
                        .unsupported = {}};
     Element range;
     if (o["available_range"].get(range) == simdjson::SUCCESS && !range.is_null()) {
-        auto r = range_of(range, c, name);
-        if (!r)
-            return std::unexpected(r.error());
-        media.available = *r;
+        // Advisory: Kdenlive writes rate 0 for stills; the probed file decides its length.
+        if (auto r = range_of(range, c, name))
+            media.available = *r;
+        else
+            c.issue(name, "media available_range unreadable", "ignored; the file's length is used");
     }
     if (!schema.starts_with("ExternalReference.")) {
         media.unsupported.push_back(opaque(*ref, name));

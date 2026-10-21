@@ -1,0 +1,102 @@
+Kdenlive's own OTIO exports through oma-project import (2026-10-20)
+Source: https://invent.kde.org/multimedia/kdenlive/-/tree/master/tests/dataset at 60c117f 2026-10-21 (GPL; read
+locally, not copied into this repository). Before this change 5 of the 8 files were refused:
+invalid rate (available_range at rate 0 for stills and colour generators: test-color-clips,
+test-missing-media, test-missing-media2, test-transitions) and clip plays outside its media
+(test-guides-markers: clip ranges at the 24 fps timeline rate, media ranges at 25 fps). Every
+track also carried its whole extent as source_range, reported as a trim before. Now all 8 read;
+the mpg fixtures hold 0.1 s of video, so their 5-frame clips are reported as unplaceable.
+
+== test-color-clips.otio (12193 bytes)
+      1 format: OpenTimelineIO JSON
+      1 issue: : 3 source objects are not saved in the project; re-import from the source file to recover them
+      1 issue: Blue: clip cannot be placed (no media, or outside it); left as a gap of its length
+      1 issue: Blue: media available_range unreadable; ignored; the file's length is used
+      1 issue: Blue: media reference GeneratorReference.1 has no file; the clip is offline until relinked
+      3 issue: : media file not found or not readable; its clips become gaps
+      1 issue: Red: clip cannot be placed (no media, or outside it); left as a gap of its length
+      1 issue: Red: media available_range unreadable; ignored; the file's length is used
+      1 issue: Red: media reference GeneratorReference.1 has no file; the clip is offline until relinked
+      1 issue: Yellow: clip cannot be placed (no media, or outside it); left as a gap of its length
+      1 issue: Yellow: media available_range unreadable; ignored; the file's length is used
+      1 issue: Yellow: media reference GeneratorReference.1 has no file; the clip is offline until relinked
+      1 level reached: 2
+      1 media found: 0 of 3 (not probed)
+      1 version: Timeline.1
+
+== test-guides-markers.otio (31244 bytes)
+      1 format: OpenTimelineIO JSON
+      1 issue: : 10 source objects are not saved in the project; re-import from the source file to recover them
+      2 issue: blue.mpg: clip cannot be placed (no media, or outside it); left as a gap of its length
+      1 issue: blue.mpg: clip runs outside its media's available_range; range ignored; the file's length is used
+      4 issue: blue.mpg: markers Marker.2 not imported; kept in the import, not applied
+      1 issue: blue.mpg: media file not found or not readable; its clips become gaps
+      2 issue: red.mpg: clip cannot be placed (no media, or outside it); left as a gap of its length
+      1 issue: red.mpg: clip runs outside its media's available_range; range ignored; the file's length is used
+      4 issue: red.mpg: markers Marker.2 not imported; kept in the import, not applied
+      1 issue: red.mpg: media file not found or not readable; its clips become gaps
+      1 issue: tracks: stack markers not imported; left out
+      2 issue: yellow.mpg: clip cannot be placed (no media, or outside it); left as a gap of its length
+      1 issue: yellow.mpg: clip runs outside its media's available_range; range ignored; the file's length is used
+      2 issue: yellow.mpg: markers Marker.2 not imported; kept in the import, not applied
+      1 issue: yellow.mpg: media file not found or not readable; its clips become gaps
+      1 level reached: 2
+      1 media found: 0 of 3 (not probed)
+      1 version: Timeline.1
+
+== test-missing-media2.otio (5276 bytes)
+      1 format: OpenTimelineIO JSON
+      2 issue: : media file not found or not readable; its clips become gaps
+      1 issue: red.png: clip cannot be placed (no media, or outside it); left as a gap of its length
+      1 issue: red.png: media available_range unreadable; ignored; the file's length is used
+      1 issue: yellow.png: clip cannot be placed (no media, or outside it); left as a gap of its length
+      1 issue: yellow.png: media available_range unreadable; ignored; the file's length is used
+      1 level reached: 2
+      1 media found: 0 of 2 (not probed)
+      1 version: Timeline.1
+
+== test-missing-media.otio (5283 bytes)
+      1 format: OpenTimelineIO JSON
+      1 issue: : media file not found or not readable; its clips become gaps
+      1 issue: red.png: clip cannot be placed (no media, or outside it); left as a gap of its length
+      1 issue: red.png: media available_range unreadable; ignored; the file's length is used
+      1 issue: red.png: media file not found or not readable; its clips become gaps
+      1 issue: yellow.png: clip cannot be placed (no media, or outside it); left as a gap of its length
+      1 issue: yellow.png: media available_range unreadable; ignored; the file's length is used
+      1 level reached: 2
+      1 media found: 0 of 2 (not probed)
+      1 version: Timeline.1
+
+== test-no-clips.otio (1114 bytes)
+      1 format: OpenTimelineIO JSON
+      1 level reached: 2
+      1 media found: 0 of 0 (not probed)
+      1 version: Timeline.1
+
+== test-no-tracks.otio (334 bytes)
+      1 format: OpenTimelineIO JSON
+      1 level reached: 2
+      1 media found: 0 of 0 (not probed)
+      1 version: Timeline.1
+
+== test-tracks-clips.otio (19452 bytes)
+      1 format: OpenTimelineIO JSON
+      1 level reached: 2
+      1 media found: 3 of 3 (not probed)
+      1 version: Timeline.1
+
+== test-transitions.otio (11026 bytes)
+      1 format: OpenTimelineIO JSON
+      1 issue: blue.png: clip cannot be placed (no media, or outside it); left as a gap of its length
+      1 issue: blue.png: media available_range unreadable; ignored; the file's length is used
+      1 issue: blue.png: media file not found or not readable; its clips become gaps
+      1 issue: red.png: clip cannot be placed (no media, or outside it); left as a gap of its length
+      1 issue: red.png: media available_range unreadable; ignored; the file's length is used
+      1 issue: red.png: media file not found or not readable; its clips become gaps
+      1 issue: yellow.png: clip cannot be placed (no media, or outside it); left as a gap of its length
+      1 issue: yellow.png: media available_range unreadable; ignored; the file's length is used
+      1 issue: yellow.png: media file not found or not readable; its clips become gaps
+      1 level reached: 2
+      1 media found: 0 of 3 (not probed)
+      1 version: Timeline.1
+

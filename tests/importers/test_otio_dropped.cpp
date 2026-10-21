@@ -16,6 +16,9 @@ constexpr auto kRange = R"({"OTIO_SCHEMA":"TimeRange.1",)"
                         R"("start_time":{"OTIO_SCHEMA":"RationalTime.1","rate":24,"value":0},)"
                         R"("duration":{"OTIO_SCHEMA":"RationalTime.1","rate":24,"value":12}})";
 
+// Half of the clip: a track range that trims (kRange, the whole extent, does not).
+const std::string kTrim = std::string(kRange).replace(std::string(kRange).rfind("12"), 2, "6");
+
 // One clip on one track; `clip`, `track` and `stack` are extra members of each.
 oma::Result<oma::importers::Imported> one_clip(const std::string& clip, const std::string& track,
                                                const std::string& stack) {
@@ -43,11 +46,18 @@ bool reports_track_and_stack() {
     const auto r = one_clip("",
                             R"("enabled":false,"markers":[{"OTIO_SCHEMA":"Marker.2"}],)"
                             R"("source_range":)" +
-                                std::string(kRange) + ",",
+                                kTrim + ",",
                             R"("markers":[{"OTIO_SCHEMA":"Marker.2"}],)");
     return r && r->timeline.tracks[0].off && says(r, "track markers not imported") &&
-           says(r, "track source_range not imported") && says(r, "stack markers not imported") &&
+           says(r, "track source_range (a trim) not imported") &&
+           says(r, "stack markers not imported") &&
            std::holds_alternative<ir::Clip>(r->timeline.tracks[0].items[0]);
+}
+
+// Kdenlive's whole-extent track range (start 0, the content's length) trims nothing.
+bool whole_extent_is_silent() {
+    const auto r = one_clip("", R"("source_range":)" + std::string(kRange) + ",", "");
+    return r && !says(r, "track source_range (a trim) not imported");
 }
 
 } // namespace
@@ -56,6 +66,8 @@ void run_otio_dropped_tests() {
     describe("OTIO data not applied", {
         it("leaves a disabled clip as a gap of its length",
            { expect(disabled_clip_is_a_gap()).toBeTruthy(); });
+        it("says nothing of a track range that trims nothing",
+           { expect(whole_extent_is_silent()).toBeTruthy(); });
         it("reports a track's and the stack's markers, trim and disabled flag",
            { expect(reports_track_and_stack()).toBeTruthy(); });
     });
