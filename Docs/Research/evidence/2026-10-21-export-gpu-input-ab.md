@@ -36,6 +36,20 @@ average 0.5 at the start.
 
 479/479 frames written into encoder surfaces in B; the last round's movies byte-identical.
 
+**Third fixture, headless (after decode-ahead, `e8410a4`):** a generated 1080p60 H.264 source
+with grain and pink-noise audio (`xed_1080p60_noise.mp4`, 600 frames, sha256 `779347a2…`),
+`tools/bench/export-headless`'s `export_bench`, load average 0.5–2.
+
+| Run | A export ms | A CPU ms/frame | B export ms | B CPU ms/frame |
+|---:|---:|---:|---:|---:|
+| 1 | 3137 | 4.0 | 3157 | 2.6 |
+| 2 | 3112 | 4.0 | 3115 | 2.5 |
+| 3 | 3146 | 4.1 | 3109 | 2.6 |
+
+Wall time is a tie at about 190 fps: the export is limited elsewhere, likely the shared video
+engines (decode and encode), not measured. The GPU-native input still takes about 37% less process
+CPU per frame. Last round's outputs byte-identical.
+
 **Reading:** the GPU-native input saved about 13% (4K) and 11% (1080p) of wall time and 20% of
 user CPU on both. That is less than the 7-8 ms per frame the S9 spike measured for the
 hand-off alone (240 frames x 7.5 ms = 1.8 s), consistent with the readback having partly
