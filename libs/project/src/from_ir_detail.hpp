@@ -3,8 +3,13 @@
 #include "oma/project/from_ir.hpp"
 #include "oma/timeline/editor.hpp"
 
+#include <cstdint>
+#include <functional>
+#include <optional>
+#include <span>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 namespace oma::project::from_ir_detail {
 
@@ -28,8 +33,27 @@ void report_unsaved(const ir::Timeline& timeline, ir::ImportReport& report);
                                     const std::string& who, ir::ImportReport& report);
 // The sequence time a clip lasts: its source range at its speed (MLT's timewarp frames).
 [[nodiscard]] RationalTime played(const ir::Clip& clip);
-// The IR transition before `clip` as its transition in, or a reported hard cut.
-void transition_into(timeline::Editor& editor, timeline::ClipId clip, const ir::Transition& t,
-                     const std::string& who, ir::ImportReport& report);
+// The IR transition before a clip as a dissolve; none (and a reported hard cut) for a kind
+// OmaMovie has no equivalent for.
+[[nodiscard]] std::optional<timeline::Transition> dissolve_of(const timeline::Timeline& timeline,
+                                                              const ir::Transition& t,
+                                                              const std::string& who,
+                                                              ir::ImportReport& report);
+
+// The dissolves into the placed clips (`into[i]` before `placed[i]`, if any), after reporting the
+// clips that did not land; a dissolve that cannot be set becomes a reported hard cut.
+void place_dissolves(timeline::Editor& editor,
+                     std::span<const std::pair<const ir::Clip*, timeline::ClipId>> placed,
+                     std::span<const std::uint8_t> landed,
+                     std::span<const ir::Transition* const> into, ir::ImportReport& report);
+
+// One edit to make, made again if its group has to be retried.
+using Edit = std::function<std::unique_ptr<timeline::Command>()>;
+// Executes `edits` in order; landed[i] says whether edit i took effect. A group runs as one
+// transaction (one timeline-wide validation, not one per edit, which made an import of n clips
+// O(n^2)); a group that fails is halved until each edit lands or fails on its own, as it would
+// executed alone.
+void execute_each(timeline::Editor& editor, std::span<const Edit> edits,
+                  std::span<std::uint8_t> landed);
 
 } // namespace oma::project::from_ir_detail

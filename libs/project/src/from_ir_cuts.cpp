@@ -25,21 +25,18 @@ RationalTime played(const ir::Clip& c) {
     return t ? *t : d;
 }
 
-void transition_into(tl::Editor& ed, tl::ClipId clip, const ir::Transition& t,
-                     const std::string& who, ir::ImportReport& r) {
+std::optional<tl::Transition> dissolve_of(const tl::Timeline& timeline, const ir::Transition& t,
+                                          const std::string& who, ir::ImportReport& r) {
     if (t.kind != "SMPTE_Dissolve") {
         issue(r, who, std::format("transition {} has no equivalent", t.kind),
               "replaced by a hard cut");
-        return;
+        return std::nullopt;
     }
     if (!(t.in_offset == t.out_offset))
         issue(r, who, "dissolve is not centred on the cut", "centred, same total length");
-    const std::int64_t length = ticks_of(ed.timeline(), t.in_offset, who, r) +
-                                ticks_of(ed.timeline(), t.out_offset, who, r);
-    if (!ed.execute(
-            tl::edit::set_transition(clip, tl::Transition{.kind = tl::TransitionKind::Dissolve,
-                                                          .duration = ed.timeline().at(length)})))
-        issue(r, who, "dissolve needs media the clips do not have", "replaced by a hard cut");
+    const std::int64_t length =
+        ticks_of(timeline, t.in_offset, who, r) + ticks_of(timeline, t.out_offset, who, r);
+    return tl::Transition{.kind = tl::TransitionKind::Dissolve, .duration = timeline.at(length)};
 }
 
 } // namespace oma::project::from_ir_detail
