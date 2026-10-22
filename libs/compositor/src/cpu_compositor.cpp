@@ -405,12 +405,16 @@ void composite(const LayerParams& p, const Planes& planes, const Lut3d* lut, Rgb
             const int y0 = std::clamp(static_cast<int>(by), lo_y, hi_y);
             const int x1 = std::clamp(static_cast<int>(bx) + 1, lo_x, hi_x);
             const int y1 = std::clamp(static_cast<int>(by) + 1, lo_y, hi_y);
-            Rgb color = apply_look(p, sx, sy,
-                                   mix(mix(detailed(p, planes, blurred, x0, y0),
-                                           detailed(p, planes, blurred, x1, y0), tx),
-                                       mix(detailed(p, planes, blurred, x0, y1),
-                                           detailed(p, planes, blurred, x1, y1), tx),
-                                       ty));
+            // On the source grid (a native-size layer) the other three taps weigh 0: skip them,
+            // as the shader does.
+            Rgb color = detailed(p, planes, blurred, x0, y0);
+            if (tx != 0.0F || ty != 0.0F) {
+                color = mix(mix(color, detailed(p, planes, blurred, x1, y0), tx),
+                            mix(detailed(p, planes, blurred, x0, y1),
+                                detailed(p, planes, blurred, x1, y1), tx),
+                            ty);
+            }
+            color = apply_look(p, sx, sy, color);
             if (p.grade[0] != 0) {
                 color = apply_grade(p, lut, color);
             }
