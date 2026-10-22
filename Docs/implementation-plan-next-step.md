@@ -12,10 +12,20 @@ the render engine is busy about 56% of wall time and the process uses about five
 so the staged 4K export is mostly CPU-bound. Decode and upload, not render, drove the
 1.5× spread. Hardware decode for export ([A/B](Research/evidence/2026-10-19-export-hardware-decode.md),
 proposed [ADR-0022](adr/0022-export-hardware-decode.md)) then cut 4K CPU per frame from
-272 to 43 ms with pixel-identical output. Then define and pilot GPU-native
-compositor-output → VA-API encoder input, comparing FFmpeg 9's existing frame mapping
-with direct DMA-BUF import under the same correctness and transfer checks. This remains
-a post-v0.1 baseline task, not a zero-copy or speedup claim; see
+272 to 43 ms with pixel-identical output. The GPU-native compositor-output → VA-API encoder
+input has since been piloted (proposed [ADR-0023](adr/0023-gpu-native-encoder-input.md);
+FFmpeg's frame mapping was refused by iHD, so frames are written into imported encoder
+surfaces) behind `ExportRequest::gpu_input`, off by default. On Intel it gave byte-identical
+movies on every fixture measured, including layered and effect scenes at 1080p, 4K and
+1080p60, with 9–11% less wall time where the hand-off was on the critical path, a tie where
+the export is render-bound, and 35–64% less CPU
+([layers, effects, 4K, 60 fps](Research/evidence/2026-10-21-gpu-input-layers-effects.md)).
+The staged route itself lost its writer row copy (4K CPU 16.1 → 13.95 ms/frame,
+[A/B](Research/evidence/2026-10-21-va-upload-borrowed-nv12.md)) and now sites chroma left as
+it is tagged ([evidence](Research/evidence/2026-10-22-export-chroma-siting.md)). Open before
+making the GPU-native input the default: a test of the surface-failure fallback (the device
+working, its surfaces not), other vendors, and the maintainer's acceptance of ADR-0023. This
+remains post-v0.1 and not a zero-copy claim; see
 [M12](implementation-plan-m12-gpu-export-architecture.md).
 
 **v0.1 RC order:** settle the supported Intel/software scope → packaging and recovery
