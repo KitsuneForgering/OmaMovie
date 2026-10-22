@@ -99,8 +99,8 @@ source for one editor. A famous name alone does not make a useful comparator.
   `--m4-audit` already opens a project, so the bench's layer scene runs through it: all 12
   runs (1080p/4K, with and without effects) pass with composition p99 under 14 ms, but drop
   one to three frames per 8 s where one clip drops zero or one. New `late`/`skipped` counters
-  show the producer on time (skipped 0): the drops are on-time frames overtaken between
-  render-thread takes, which also happens on one clip.
+  show the producer on time (skipped 0), and every drop fell on frame 1 or 2 as playback
+  started; after the audit's 2 s settle all layered scenes read 0 dropped frames.
 - [ ] Pilot one simple and one intermediate Linux editor, then Kdenlive/Shotcut and a
   professional Linux candidate if it runs the shared case on the reference host. Run
   the task sheet once to find semantic mismatches before gathering timed repetitions.

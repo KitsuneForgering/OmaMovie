@@ -786,6 +786,7 @@ int main(int argc, char** argv) {
         std::size_t first_count = 0;
         std::size_t last_count = 0;
         std::int64_t initial_underruns = 0;
+        std::int64_t initial_dropped = 0;
         double first_underrun_at = -1.0;
         bool started = false;
         bool settled = false;
@@ -816,6 +817,7 @@ int main(int argc, char** argv) {
             const double seconds = static_cast<double>(elapsed.elapsed()) / 1000.0;
             if (seconds >= 2.0 && !settled) {
                 initial_underruns = session.audioUnderruns();
+                initial_dropped = session.droppedVideoFrames();
                 settled = true;
             }
             if (settled && first_underrun_at < 0.0 && session.audioUnderruns() > initial_underruns)
@@ -861,9 +863,13 @@ int main(int argc, char** argv) {
                                 underruns == 0;
             // Dropped: prepared but never shown; late: queued already due; skipped: never
             // prepared because the producer had fallen behind the clock.
-            const std::string dropped = std::to_string(session.droppedVideoFrames()) + " (late " +
-                                        std::to_string(session.lateVideoFrames()) + ", skipped " +
-                                        std::to_string(session.skippedVideoFrames()) + ")";
+            // Drops measured on the three-layer scenes all fell on frames 1-2, as playback started
+            // (2026-10-22), so the steady-state count after the 2 s settle is reported apart.
+            const std::string dropped =
+                std::to_string(session.droppedVideoFrames()) + " (after 2 s " +
+                std::to_string(session.droppedVideoFrames() - initial_dropped) + ", late " +
+                std::to_string(session.lateVideoFrames()) + ", skipped " +
+                std::to_string(session.skippedVideoFrames()) + ")";
             auto timings = preview->takeTimings();
             const auto pct = [](std::vector<double>& v, int p) {
                 if (v.empty())

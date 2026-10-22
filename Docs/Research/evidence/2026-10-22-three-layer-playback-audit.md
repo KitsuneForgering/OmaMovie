@@ -33,8 +33,17 @@ single clip dropped 0/1/1 (late 2/1/1, skipped 0), the 1080p layers 1/2/2 (late 
 the 4K layers with effects 1/2/2 (late 1, skipped 0). The one late frame is the first, due as
 playback starts. So the producer keeps up with three decoders even at 4K; the drops are
 on-time frames overtaken between two takes on the render thread, whose composite interval
-p99 reaches 60–130 ms on the single clip too. The decoder hypothesis is refuted; the next
-question is what delays the render loop's takes (presentation or Qt's update scheduling). The interval percentiles
+p99 reaches 60–130 ms on the single clip too. The decoder hypothesis is refuted.
+
+**Where the drops fall.** A temporary log of each drop's target frame (not committed) put every
+one of them, on all three scenes and three rounds, at frame 1 or 2: as playback starts, while
+the first frames of three freshly positioned decoders are composed, the clock overtakes one
+or two of them. None fell later. The audit now reports the count after its 2 s settle beside
+the total, as it already did for audio underruns: six more runs read `after 2 s 0` on the
+single clip, the 1080p layers and the 4K layers with effects. So in steady state the layered
+scenes drop no frames on this host; what the layers cost is a one- or two-frame stutter at
+the start of playback, which a preroll (waiting for the first frames before starting the
+clock) could remove. Not attempted: it trades a little start latency. The interval percentiles
 (p50 40, p95 60 ms) follow the audit's 20 ms UI timer, not presentation.
 
 Not comparable with melt: its `sdl2` consumer reports no dropped frames (see the
