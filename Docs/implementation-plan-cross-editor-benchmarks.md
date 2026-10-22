@@ -170,6 +170,14 @@ source for one editor. A famous name alone does not make a useful comparator.
   all 20 frames must show source 0-18 by twos then 20-29, and each frame's loudness step over
   samples 100-700 must name the same source frame. melt's own render of the document hears the
   same frames there at −3 dB. A one-frame sound shift either way fails it.
+  *Mixed frame rates in `app_tests` (2026-10-21)*: `melt_mixed_rate.mlt`, written by melt 7.42,
+  puts 12 frames of the 23.976 fps clip and 15 sequence frames of the 29.97 fps clip in the
+  first clip's 23.976 fps profile; both editors render 27 frames. `test_shared_rates.cpp`
+  imports, saves, reopens and exports it and matches every frame to its source. For output
+  12 + k OmaMovie shows the 29.97 fps frame on screen at k·1.25 (ADR-0004: last pts <= t:
+  0 1 2 3 5 6 7 8 10 11 12 13 15 16 17); melt shows the nearest (0 1 3 4 5 6 7 9 10 11 12 14
+  15 16 18), so they differ by design at 3.75, 8.75 and 13.75 and at the half-frame ties.
+  Expecting melt's sequence, or the clip one frame early, fails the test.
   `cuts_steps.otio`/`.mlt` cut the 30 fps steps clip the same way and also check each output
   frame's sound by its loudness step over a whole-cycle window (11 cycles of 440 Hz);
   a one-frame sound shift fails both cases with the picture check disabled. melt renders
