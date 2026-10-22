@@ -27,6 +27,19 @@ if [[ ! -x $binary || ! -s $fixture ]]; then
     exit 2
 fi
 
+# The sanitizer environment ctest gives these builds (OMA_TEST_ENV in cmake/OmaTargets.cmake):
+# without its suppressions TSan stops on FFmpeg's own thread hand-offs, not on OmaMovie code.
+sanitizer_env=()
+case $build in
+    asan) sanitizer_env=(DEBUGINFOD_URLS= "VK_LOADER_DRIVERS_DISABLE=*nvidia*"
+        ASAN_OPTIONS=detect_leaks=1:abort_on_error=1:strict_string_checks=1:fast_unwind_on_malloc=0
+        "LSAN_OPTIONS=suppressions=$repo/tests/support/lsan.supp:print_suppressions=0"
+        UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1) ;;
+    tsan) sanitizer_env=(DEBUGINFOD_URLS= "VK_LOADER_DRIVERS_DISABLE=*nvidia*"
+        "TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1:die_after_fork=0:suppressions=$repo/tests/support/tsan.supp"
+        VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1) ;;
+esac
+
 cd "$repo"
 summary="$out/summary.txt"
 {
@@ -42,7 +55,7 @@ run_case() {
     local round=$1 seed=$2 label=$3 filter=$4 logfile
     logfile="$out/round-${round}-${label}.log"
     echo "round=$round seed=$seed case=$label" | tee -a "$summary"
-    if timeout 600 env OMA_STRESS_SEED="$seed" \
+    if timeout 600 env "${sanitizer_env[@]}" OMA_STRESS_SEED="$seed" \
         python3 -I "$repo/tools/bench/cross-editor/measure.py" "$binary" "$filter" \
         > "$logfile" 2>&1; then
         tail -n 3 "$logfile" | tee -a "$summary"

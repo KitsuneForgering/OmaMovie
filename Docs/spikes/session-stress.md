@@ -22,7 +22,9 @@ OMA_STRESS_TRANSPORT_OPS=1000 OMA_STRESS_SWITCH_OPS=120 \
 OMA_STRESS_SEED=9945 build/debug/tests/app_tests 'survives seeded'
 ```
 
-`BUILD=asan` or `BUILD=tsan` selects the corresponding prebuilt `app_tests` binary. Each case
+`BUILD=asan` or `BUILD=tsan` selects the corresponding prebuilt `app_tests` binary. The runner
+gives it ctest's sanitizer environment (`OMA_TEST_ENV`, with `tests/support/*.supp`); before
+2026-10-22 it did not, and a TSan soak stopped on FFmpeg's suppressed thread hand-offs. Each case
 has a 600-second timeout. These are correctness and lifetime stress tests, not a speed
 benchmark; wall and RSS measurements help spot large regressions across repetitions, but
 include setup and are affected by host load. The headless tests do not establish visible
