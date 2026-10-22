@@ -158,6 +158,13 @@ source for one editor. A famous name alone does not make a useful comparator.
   0.1). Pairing the mix one source frame early or late, or sampling progress at frame centres,
   fails it. On coded values the same correct export read 0.12 at the mix's first frame. The
   bench's `dissolve` scene still checks full-size mixed frames against FFmpeg's `xfade`.
+  *Layers scene in `app_tests` (2026-10-21)*: `test_shared_layers.cpp` builds `layers.py`'s
+  shape through the editor (the camera fixture on V1, connected above itself at 0.2 s and 0.4 s,
+  V2 and V3 halved into the top-left and bottom-right quadrants), saves, reopens, exports in
+  software and compares output frame 20 by quadrant with the camera exported alone, decoded and
+  halved by ffmpeg: about 2.3 mean gray difference where the right layer sits, about 11 for the
+  other layer's frame (gate 5 and 10). Swapped quadrants, an unscaled layer or a layer connected
+  at another time fail it. Passes on Iris Xe and lavapipe.
   `cuts_steps.otio`/`.mlt` cut the 30 fps steps clip the same way and also check each output
   frame's sound by its loudness step over a whole-cycle window (11 cycles of 440 Hz);
   a one-frame sound shift fails both cases with the picture check disabled. melt renders
