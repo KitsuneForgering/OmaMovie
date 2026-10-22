@@ -19,6 +19,7 @@ RATE = 24000 / 1001
 DISSOLVE = (228, 24, 288)  # first mixed output frame, length, source frame where b starts
 DISSOLVE_FRAMES = 419
 MIXED_FLOOR = 30
+CHROMA_FLOOR = 30
 
 
 def command(*args):
@@ -67,9 +68,11 @@ def assert_picture(source, output, scene, count):
         command("ffmpeg", "-v", "error", "-i", str(output), "-i", str(source),
                 "-filter_complex", graph, "-f", "null", "-")
         scores = []
+        chroma = []
         for line in stats.read_text().splitlines():
-            score = next(part[7:] for part in line.split() if part.startswith("psnr_y:"))
-            scores.append(float(score))
+            fields = dict(part.split(":", 1) for part in line.split() if ":" in part)
+            scores.append(float(fields["psnr_y"]))
+            chroma.append((float(fields["psnr_u"]), float(fields["psnr_v"])))
     if len(scores) != count:
         raise AssertionError(f"picture: compared {len(scores)} frames, expected {count}")
     mixed = range(DISSOLVE[0], DISSOLVE[0] + DISSOLVE[1]) if scene == "dissolve" else range(0)
@@ -80,7 +83,16 @@ def assert_picture(source, output, scene, count):
     worst = min(score for at, score in enumerate(scores) if at not in mixed)
     if math.isnan(worst) or worst < 35:
         raise AssertionError(f"picture: worst luma PSNR {worst:.2f} dB, minimum 35 dB")
-    return worst
+    # Chroma too: a luma-only check missed colour sited half a pixel off (2026-10-22). The floor
+    # catches gross errors (swapped or missing Cb/Cr); the means are for comparing editors.
+    unmixed = [uv for at, uv in enumerate(chroma) if at not in mixed]
+    worst_uv = min(min(uv) for uv in unmixed)
+    if math.isnan(worst_uv) or worst_uv < CHROMA_FLOOR:
+        raise AssertionError(f"picture: worst chroma PSNR {worst_uv:.2f} dB, "
+                             f"minimum {CHROMA_FLOOR} dB")
+    mean_u = sum(u for u, _ in unmixed) / len(unmixed)
+    mean_v = sum(v for _, v in unmixed) / len(unmixed)
+    return worst, worst_uv, mean_u, mean_v
 
 
 def decoded_audio(path, speed=1):
@@ -182,9 +194,10 @@ def main():
         raise AssertionError(f"video duration: {video_seconds:.3f}, expected {expected_seconds:.3f}")
     if abs(audio_seconds - expected_seconds) > 0.1:
         raise AssertionError(f"audio duration: {audio_seconds:.3f}, expected {expected_seconds:.3f}")
-    worst = assert_picture(source, output, scene, count)
+    worst, worst_uv, mean_u, mean_v = assert_picture(source, output, scene, count)
     audio_match, audio_lag_ms, audio_min_gain = assert_audio(source, output, scene, expected_seconds)
     print(f"PASS frames={count} duration={video_seconds:.3f}s worst_psnr_y={worst:.2f}dB "
+          f"worst_psnr_uv={worst_uv:.2f}dB mean_psnr_u={mean_u:.2f}dB mean_psnr_v={mean_v:.2f}dB "
           f"audio_min_corr={audio_match:.3f} max_lag={audio_lag_ms:.1f}ms "
           f"min_gain={audio_min_gain:.2f} "
           f"bytes={Path(output).stat().st_size}")

@@ -178,6 +178,15 @@ source for one editor. A famous name alone does not make a useful comparator.
   0 1 2 3 5 6 7 8 10 11 12 13 15 16 17); melt shows the nearest (0 1 3 4 5 6 7 9 10 11 12 14
   15 16 18), so they differ by design at 3.75, 8.75 and 13.75 and at the half-frame ties.
   Expecting melt's sequence, or the clip one frame early, fails the test.
+  *Chroma in the bench (2026-10-22)*: `assert_output.py` checked luma only, which let export
+  chroma sited half a pixel off pass ([evidence](Research/evidence/2026-10-22-export-chroma-siting.md)).
+  It now also reads the U and V PSNR of every unmixed frame, fails below 30 dB (a copy of the
+  source with Cb and Cr swapped reads 7.8 dB) and reports the means. One round per scene
+  after the fix: on VA-API OmaMovie and melt agree within 0.2 dB (whole U 38.41 / 38.20,
+  V 36.45 / 36.54); on libx264 melt stays 1.6–2.0 dB ahead (whole U 37.37 / 38.99, V 35.79 /
+  37.83), which is the linear-RGB round trip of ADR-0006, not siting. The dissolve scene's
+  reference passes through FFmpeg's `xfade`, so its chroma figures are not comparable with
+  the other scenes'.
   `cuts_steps.otio`/`.mlt` cut the 30 fps steps clip the same way and also check each output
   frame's sound by its loudness step over a whole-cycle window (11 cycles of 440 Hz);
   a one-frame sound shift fails both cases with the picture check disabled. melt renders
