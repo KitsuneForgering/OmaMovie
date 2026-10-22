@@ -3,8 +3,7 @@
 // Export encode on the GPU (code review part 5): the compositor's linear BT.709 RGBA16F image as
 // NV12, BT.709 matrix, limited range, written straight into a host-visible buffer so the
 // readback is 1.5 bytes per pixel and the CPU converts nothing. The transfer is the export one
-// (display_srgb.comp's `bt709`: the inverse BT.1886 EOTF). Chroma is the mean of each 2x2 block
-// of encoded R'G'B', the centre of the block.
+// (display_srgb.comp's `bt709`: the inverse BT.1886 EOTF). Chroma is sited left (left_sited).
 //
 // One invocation fills a 4x2 block: one word of each luma row and one of the chroma row. The
 // buffer holds `stride`-byte luma rows, then `stride`-byte interleaved CbCr rows; the stride is
@@ -31,24 +30,38 @@ vec2 chroma(vec3 rgb) {
     return vec2(128.0) + 224.0 * vec2((rgb.b - y) / 1.8556, (rgb.r - y) / 1.5748);
 }
 
+// The chroma sample of the 2x2 block whose top-left luma texel is `p0`, sited as H.264's default
+// (and the encoder's tag) says, "left": on the even column, between the two rows. Horizontally a
+// [1 2 1] / 4 filter about that column, the edge repeated; vertically the mean of the two rows.
+// Same order of loads and sums in nv12_bt709.comp and nv12_planes.comp, so both round alike.
+vec3 left_sited(ivec2 p0, ivec2 size) {
+    vec3 sum = vec3(0.0);
+    for (int dy = 0; dy < 2; ++dy) {
+        int y = min(p0.y + dy, size.y - 1);
+        sum += 0.25 * encode_bt709(imageLoad(linear_image, ivec2(max(p0.x - 1, 0), y)).rgb);
+        sum += 0.5 * encode_bt709(imageLoad(linear_image, ivec2(min(p0.x, size.x - 1), y)).rgb);
+        sum += 0.25 * encode_bt709(imageLoad(linear_image, ivec2(min(p0.x + 1, size.x - 1), y)).rgb);
+    }
+    return sum * 0.5;
+}
+
 void main() {
     ivec2 size = imageSize(linear_image);
     uvec2 block = gl_GlobalInvocationID.xy;
     if (int(block.x * 4u) >= size.x || int(block.y * 2u) >= size.y) return;
     vec4 rows[2];
-    vec3 sums[2] = vec3[2](vec3(0.0), vec3(0.0));
     for (int i = 0; i < 4; ++i) {
         for (int r = 0; r < 2; ++r) {
             // Past a width that is not a multiple of 4: repeat the edge into the row padding.
             ivec2 p = min(ivec2(int(block.x * 4u) + i, int(block.y * 2u) + r), size - 1);
             vec3 e = encode_bt709(imageLoad(linear_image, p).rgb);
             rows[r][i] = 16.0 + 219.0 * dot(e, kLuma);
-            sums[i / 2] += e;
         }
     }
     uint row0 = (block.y * 2u * params.stride + block.x * 4u) / 4u;
     uint uv = (params.stride * uint(size.y) + block.y * params.stride + block.x * 4u) / 4u;
     nv12.words[row0] = pack(rows[0]);
     nv12.words[row0 + params.stride / 4u] = pack(rows[1]);
-    nv12.words[uv] = pack(vec4(chroma(sums[0] * 0.25), chroma(sums[1] * 0.25)));
+    ivec2 p0 = ivec2(int(block.x * 4u), int(block.y * 2u));
+    nv12.words[uv] = pack(vec4(chroma(left_sited(p0, size)), chroma(left_sited(p0 + ivec2(2, 0), size))));
 }

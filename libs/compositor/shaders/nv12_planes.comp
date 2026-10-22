@@ -1,7 +1,7 @@
 #version 450
 
 // GPU-native export input (M12): the same NV12 as nv12_bt709.comp — BT.709 matrix, limited
-// range, the export transfer, chroma the mean of each 2x2 block of encoded R'G'B' — written into
+// range, the export transfer, chroma sited left (left_sited, the same code) — written into
 // two images instead of a buffer: an R8 luma plane and an RG8 interleaved CbCr plane, such as
 // the planes of a hardware encoder's surface imported into this device. Values are stored as
 // whole 8-bit levels (k / 255), so they read back as the bytes nv12_bt709.comp would write.
@@ -29,20 +29,32 @@ vec2 chroma(vec3 rgb) {
     return vec2(128.0) + 224.0 * vec2((rgb.b - y) / 1.8556, (rgb.r - y) / 1.5748);
 }
 
+// The chroma sample of the 2x2 block whose top-left luma texel is `p0`, sited as H.264's default
+// (and the encoder's tag) says, "left": on the even column, between the two rows. Horizontally a
+// [1 2 1] / 4 filter about that column, the edge repeated; vertically the mean of the two rows.
+// Same order of loads and sums in nv12_bt709.comp and nv12_planes.comp, so both round alike.
+vec3 left_sited(ivec2 p0, ivec2 size) {
+    vec3 sum = vec3(0.0);
+    for (int dy = 0; dy < 2; ++dy) {
+        int y = min(p0.y + dy, size.y - 1);
+        sum += 0.25 * encode_bt709(imageLoad(linear_image, ivec2(max(p0.x - 1, 0), y)).rgb);
+        sum += 0.5 * encode_bt709(imageLoad(linear_image, ivec2(min(p0.x, size.x - 1), y)).rgb);
+        sum += 0.25 * encode_bt709(imageLoad(linear_image, ivec2(min(p0.x + 1, size.x - 1), y)).rgb);
+    }
+    return sum * 0.5;
+}
+
 void main() {
     ivec2 size = imageSize(linear_image);
     ivec2 block = ivec2(gl_GlobalInvocationID.xy);
     if (block.x * 2 >= size.x || block.y * 2 >= size.y) return;
-    vec3 sum = vec3(0.0);
-    // Columns outer, rows inner: nv12_bt709.comp's order, so the chroma sums round identically.
     for (int dx = 0; dx < 2; ++dx) {
         for (int dy = 0; dy < 2; ++dy) {
             ivec2 p = block * 2 + ivec2(dx, dy);
             vec3 e = encode_bt709(imageLoad(linear_image, p).rgb);
             imageStore(luma, p, vec4(level(16.0 + 219.0 * dot(e, kLuma))));
-            sum += e;
         }
     }
-    vec2 c = chroma(sum * 0.25);
+    vec2 c = chroma(left_sited(block * 2, size));
     imageStore(cbcr, block, vec4(level(c.x), level(c.y), 0.0, 0.0));
 }
