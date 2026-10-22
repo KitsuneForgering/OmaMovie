@@ -165,6 +165,11 @@ source for one editor. A famous name alone does not make a useful comparator.
   halved by ffmpeg: about 2.3 mean gray difference where the right layer sits, about 11 for the
   other layer's frame (gate 5 and 10). Swapped quadrants, an unscaled layer or a layer connected
   at another time fail it. Passes on Iris Xe and lavapipe.
+  *Timewarp sound in `app_tests` (2026-10-21)*: `melt_timewarp_steps.mlt`, written by melt 7.42
+  (`timewarp:2` over steps 0-9, then 20-29 at 1×), is imported, saved, reopened and exported;
+  all 20 frames must show source 0-18 by twos then 20-29, and each frame's loudness step over
+  samples 100-700 must name the same source frame. melt's own render of the document hears the
+  same frames there at −3 dB. A one-frame sound shift either way fails it.
   `cuts_steps.otio`/`.mlt` cut the 30 fps steps clip the same way and also check each output
   frame's sound by its loudness step over a whole-cycle window (11 cycles of 440 Hz);
   a one-frame sound shift fails both cases with the picture check disabled. melt renders

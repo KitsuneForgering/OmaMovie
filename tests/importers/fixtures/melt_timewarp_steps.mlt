@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Written by melt 7.42 (`melt timewarp:2:SRC in=0 out=9 SRC in=20 out=29 -consumer xml:`, SRC
+     the 30 fps steps clip) from this directory, as Kdenlive writes a speed change; root and
+     meta.* properties removed so the resource resolves next to this file. melt renders 20 frames:
+     source 0-18 by twos, then 20-29, and its sound follows the picture frame for frame (each 2x
+     frame plays source 2k then 2k + 1) at -3 dB, its mono to stereo upmix. -->
+<mlt LC_NUMERIC="C" version="7.42.0" title="h264_30fps_steps.mkv">
+  <profile description="automatic" width="320" height="180" progressive="1" sample_aspect_num="1" sample_aspect_den="1" display_aspect_num="16" display_aspect_den="9" frame_rate_num="30" frame_rate_den="1" colorspace="601"/>
+  <producer id="producer0" in="0" out="9">
+    <property name="length">15</property>
+    <property name="eof">pause</property>
+    <property name="resource">2:../../fixtures/generated/h264_30fps_steps.mkv</property>
+    <property name="aspect_ratio">1</property>
+    <property name="seekable">1</property>
+    <property name="format">3</property>
+    <property name="audio_index">1</property>
+    <property name="video_index">0</property>
+    <property name="warp_speed">2</property>
+    <property name="warp_resource">../../fixtures/generated/h264_30fps_steps.mkv</property>
+    <property name="mlt_service">timewarp</property>
+  </producer>
+  <producer id="producer1" in="20" out="29">
+    <property name="length">30</property>
+    <property name="eof">pause</property>
+    <property name="resource">../../fixtures/generated/h264_30fps_steps.mkv</property>
+    <property name="seekable">1</property>
+    <property name="aspect_ratio">1</property>
+    <property name="format">3</property>
+    <property name="audio_index">1</property>
+    <property name="video_index">0</property>
+    <property name="mute_on_pause">0</property>
+    <property name="mlt_service">avformat</property>
+  </producer>
+  <playlist id="playlist0">
+    <entry producer="producer0" in="0" out="9"/>
+    <entry producer="producer1" in="0" out="9"/>
+  </playlist>
+  <tractor id="tractor0" title="h264_30fps_steps.mkv" in="0" out="19">
+    <track producer="playlist0"/>
+  </tractor>
+</mlt>
