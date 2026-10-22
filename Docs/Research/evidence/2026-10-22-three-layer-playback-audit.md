@@ -49,3 +49,12 @@ clock) could remove. Not attempted: it trades a little start latency. The interv
 Not comparable with melt: its `sdl2` consumer reports no dropped frames (see the
 [summary](../../analysis/omamovie-2026-10-20-cross-editor-summary.md)). Not measured: longer
 runs, seek, other vendors.
+
+**Consequence for the adaptive preview (same day).** The runs above used this host's settings
+(`[preview] quality=full`). With a fresh configuration, where the automatic preview is the
+default, three audits of `a2160.mp4` all logged `preview at half resolution` (3, 5 and 9 of
+about 125 frames dropped), each for the rest of the playback, though none of those drops fell
+after the 2 s settle: the start transient alone halved every 4K playback. The rule now lives in
+`PreviewAdapt` and leaves the first 12 shown frames of each playback out of its window; three
+more fresh-configuration audits stayed at full resolution (2, 2 and 5 start drops, 0 after the
+settle). Sustained drops still halve the preview (`tests/app/test_preview_adapt.cpp`).

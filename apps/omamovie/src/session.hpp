@@ -6,6 +6,7 @@
 #include "clip_list_model.hpp"
 #include "recent_projects.hpp"
 #include "frame_source.hpp"
+#include "preview_adapt.hpp"
 #include "video_scheduler.hpp"
 #include "viewer_frame.hpp"
 #include "waveform_store.hpp"
@@ -732,8 +733,7 @@ private:
     PreviewQuality preview_quality_ = PreviewQuality::Auto;
     bool preview_quality_from_env_ = false;
     QString recordings_override_;
-    std::int64_t adapt_shown_ = 0;
-    std::int64_t adapt_dropped_base_ = 0;
+    PreviewAdapt adapt_;
     void adaptPreview();
     std::vector<double> tick_ms_;
     std::vector<double> tick_gap_ms_;

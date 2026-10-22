@@ -3273,8 +3273,7 @@ void Session::startPlayback() {
     if (preview_ != nullptr && preview_quality_ == PreviewQuality::Auto) {
         preview_->setScale(1.0); // each playback starts at full resolution
     }
-    adapt_shown_ = 0;
-    adapt_dropped_base_ = scheduler_.dropped();
+    adapt_.restart(scheduler_.dropped());
     scheduler_.start(timeline, paths_, luts_, canvas_width_, canvas_height_, ticksPerFrame(),
                      play_from_frame_, speed_, source ? source_frames_ - 1 : lastFrame());
     last_restart_ms_ = static_cast<double>(restart.nsecsElapsed()) / 1e6;
@@ -3346,8 +3345,7 @@ void Session::setPreviewQuality(const QString& quality) {
     } else {
         preview_quality_ = quality == QLatin1String("full") ? PreviewQuality::Full : PreviewQuality::Auto;
         preview_->setScale(1.0); // automatic starts at full and lowers only after drops
-        adapt_shown_ = 0;
-        adapt_dropped_base_ = scheduler_.dropped();
+        adapt_.restart(scheduler_.dropped());
     }
     requestFrame();
 }
@@ -3358,27 +3356,19 @@ void Session::setRecordingsFolderOverride(const QString& folder) {
     refreshRecordings();
 }
 
-// M4 adaptive preview (default; OMA_PREVIEW_SCALE=1 keeps full resolution, 0.5 fixes half): when
-// more than 2% of the frames due over two seconds were dropped, composite at half resolution for
-// the rest of this playback. The picture's framing, the timeline and export never change.
+// M4 adaptive preview (default; OMA_PREVIEW_SCALE=1 keeps full resolution, 0.5 fixes half): the
+// rule is PreviewAdapt's. The picture's framing, the timeline and export never change.
 // ------------------------------------------------------------------- playback loop (adaptive preview quality, tick)
 
 void Session::adaptPreview() {
     if (preview_ == nullptr || preview_quality_ != PreviewQuality::Auto || preview_->scale() < 1.0) {
         return;
     }
-    constexpr std::int64_t kWindowFrames = 120;
-    if (++adapt_shown_ < kWindowFrames) {
-        return;
-    }
-    const std::int64_t dropped = scheduler_.dropped() - adapt_dropped_base_;
-    if (dropped * 50 > adapt_shown_) {
+    if (adapt_.shown(scheduler_.dropped())) {
         preview_->setScale(0.5);
-        oma::log_info(oma::Category::Playback, "preview at half resolution: {} of {} frames dropped", dropped,
-                      adapt_shown_ + dropped);
+        oma::log_info(oma::Category::Playback, "preview at half resolution: {} of {} frames dropped",
+                      adapt_.window_dropped(), adapt_.window_shown() + adapt_.window_dropped());
     }
-    adapt_shown_ = 0;
-    adapt_dropped_base_ = scheduler_.dropped();
 }
 
 void Session::onTick() {
