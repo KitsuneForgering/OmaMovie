@@ -28,3 +28,22 @@ byte-identical (`cmp`) for both scenes. Wall time fell 9.3% and 10.6% with non-o
 ranges, and process CPU per frame by 47% and 46%; render time also fell because the readback
 conversion and fence wait leave the render stage. Not measured: GPU engine busy time and
 memory, 4K layered scenes, 60 fps sources with effects, other vendors.
+
+## 4K layered scenes, with GPU memory — 2026-10-22
+
+Same method at `bb95894`, plus `tools/bench/cross-editor/measure.py` for process CPU, peak RSS,
+peak GPU-resident memory and DRM engine busy time. Sources: the same three generators at
+3840x2160 23.976, 10 s (`~/.cache/omamovie-bench/fixtures/layers4k`, sha256 `2f8db9ff…`,
+`d8263118…`, `16590f88…`), `layers.py`'s project on a 4K canvas with V2/V3 offset ±960/±540;
+the effect variant as above. Four alternating rounds, load 1.5–4 at the start.
+
+| Scene (4K, 240 frames) | Wall A s | Wall B s | CPU s A → B | Peak RSS MB A → B | GPU-resident MB A → B | Video engine busy s A → B |
+|---|---|---|---|---|---|---|
+| Layers | 5.78 [5.76–5.86] | 5.34 [5.25–5.36] | 3.46 → 1.33 | 235 → 203 | 1073 → 1082 | 5.89 → 5.49 |
+| Layers + effects | 6.79 [6.75–6.84] | 6.12 [6.11–6.28] | 3.62 → 1.31 | 224 → 203 | 1102 → 1114 | 5.63 → 5.41 |
+
+B wrote all 240 frames into encoder surfaces; A and B movies byte-identical for both scenes.
+Wall time fell 7.6% and 9.9% (ranges apart), CPU 62–64%; GPU-resident memory rose about
+10 MB (1%). The video engine (decode and encode) is busy for about the whole export on both
+routes, so at 4K the export is bound there, not by the hand-off. Still not measured: 60 fps
+sources with effects, other vendors.
