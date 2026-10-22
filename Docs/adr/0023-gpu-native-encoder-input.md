@@ -54,5 +54,9 @@ Before the export uses this route:
   `ExportStats`.
 - **Checks:** the existing export tests and the independent decoded-frame oracle must pass on
   the new route, and the export transfer baseline is measured again on the same fixtures.
+  *Layered and effect scenes (2026-10-21, [evidence](../Research/evidence/2026-10-21-gpu-input-layers-effects.md))*:
+  the bench's 1080p three-layer scene, plain and with blur, a look and a colour adjustment,
+  exported byte-identical on both routes, 9–11% faster and with about 46% less process CPU
+  per frame on the GPU-native input.
 
 Reverting means keeping the readback route, which stays in place throughout.
