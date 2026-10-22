@@ -95,6 +95,11 @@ source for one editor. A famous name alone does not make a useful comparator.
   `tools/bench/*/run.sh` now prints it through `tools/bench/host-power.sh` (driver,
   governor, EPP, power profile, AC). A machine-readable result schema stays open until two
   reports actually need automated comparison.
+  *Three-layer playback audit (2026-10-22, [evidence](Research/evidence/2026-10-22-three-layer-playback-audit.md))*:
+  `--m4-audit` already opens a project, so the bench's layer scene runs through it: all 12
+  runs (1080p/4K, with and without effects) pass with composition p99 under 14 ms, but drop
+  one to three frames per 8 s where one clip drops zero or one; the cause is not compositing
+  and is not yet attributed.
 - [ ] Pilot one simple and one intermediate Linux editor, then Kdenlive/Shotcut and a
   professional Linux candidate if it runs the shared case on the reference host. Run
   the task sheet once to find semantic mismatches before gathering timed repetitions.
