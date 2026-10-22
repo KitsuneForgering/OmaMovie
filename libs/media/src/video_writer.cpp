@@ -78,10 +78,12 @@ struct VideoWriter::Impl {
     std::unique_ptr<SwsContext, SwsCloser> scale;
     std::unique_ptr<SwsContext, SwsCloser> scale_rgba; // made on the first write_rgba
     AVPixelFormat sw_format = AV_PIX_FMT_YUV420P;      // what swscale writes (NV12 for VA-API)
-    // VA-API: `frame` is the system-memory NV12 picture, uploaded into `hw_frame` each time.
+    // VA-API: `frame` is the system-memory NV12 picture, uploaded into `hw_frame` each time;
+    // write_nv12 instead points `borrowed` at the caller's NV12 and uploads from there.
     ff::BufferPtr hw_device;
     ff::BufferPtr hw_frames;
     ff::FramePtr hw_frame;
+    ff::FramePtr borrowed;
     WriterTransferStats transfers;
     AVStream* stream = nullptr;
     std::int64_t next_pts = 0;
@@ -106,8 +108,9 @@ struct VideoWriter::Impl {
     Result<void> encode(SwsContext* from, std::span<const std::uint8_t> pixels, int stride,
                         int bpp);
     Result<void> drain(AVCodecContext* from, AVStream* to) const;
-    // Sends `frame` (filled in sw_format): uploaded to a VA surface first on VA-API.
-    Result<void> send_video();
+    // Sends `picture` (in sw_format; `frame` by default): uploaded to a VA surface first on
+    // VA-API, so a borrowed picture need only outlive this call there.
+    Result<void> send_video(AVFrame* picture = nullptr);
     // Encodes whole frames from the FIFO; with `flush`, also the remainder, padded with silence.
     Result<void> encode_audio(bool flush);
 };
@@ -247,7 +250,8 @@ Result<std::unique_ptr<VideoWriter>> VideoWriter::create(const std::filesystem::
                 ff::av_error(made, Category::Encode, "cannot open VA-API", node));
         impl->hw_frames.reset(av_hwframe_ctx_alloc(impl->hw_device.get()));
         impl->hw_frame.reset(av_frame_alloc());
-        if (!impl->hw_frames || !impl->hw_frame)
+        impl->borrowed.reset(av_frame_alloc());
+        if (!impl->hw_frames || !impl->hw_frame || !impl->borrowed)
             return make_error(ErrorCode::Internal, Category::Encode,
                               "cannot allocate VA-API frames");
         auto* frames = reinterpret_cast<AVHWFramesContext*>(impl->hw_frames->data);
@@ -379,15 +383,15 @@ Result<void> VideoWriter::Impl::encode(SwsContext* from, std::span<const std::ui
     return send_video();
 }
 
-Result<void> VideoWriter::Impl::send_video() {
-    AVFrame* send = frame.get();
+Result<void> VideoWriter::Impl::send_video(AVFrame* picture) {
+    AVFrame* send = picture != nullptr ? picture : frame.get();
     if (hw_frames) {
         // Upload into a VA surface from the encoder's pool (released when the encoder is done).
         av_frame_unref(hw_frame.get());
         if (const int err = av_hwframe_get_buffer(hw_frames.get(), hw_frame.get(), 0); err < 0)
             return std::unexpected(ff::av_error(err, Category::Encode, "no free VA-API surface"));
         const auto upload_started = std::chrono::steady_clock::now();
-        const int err = av_hwframe_transfer_data(hw_frame.get(), frame.get(), 0);
+        const int err = av_hwframe_transfer_data(hw_frame.get(), send, 0);
         transfers.va_upload_ms += std::chrono::duration<double, std::milli>(
                                       std::chrono::steady_clock::now() - upload_started)
                                       .count();
@@ -442,14 +446,27 @@ Result<void> VideoWriter::write_nv12(std::span<const std::uint8_t> nv12, int str
         s.next_pts == std::numeric_limits<std::int64_t>::max()) {
         return make_error(ErrorCode::InvalidArgument, Category::Encode, "invalid NV12 frame");
     }
-    if (const int err = av_frame_make_writable(s.frame.get()); err < 0) {
-        return std::unexpected(ff::av_error(err, Category::Encode, "cannot reuse video frame"));
-    }
     // Luma rows, then interleaved chroma rows at half height, each `w` bytes wide.
     const auto row = static_cast<std::size_t>(stride);
     const auto width = static_cast<std::size_t>(w);
     const auto rows = static_cast<std::size_t>(h);
     const std::uint8_t* uv = nv12.data() + (row * rows);
+    if (s.hw_frames) {
+        // The VA-API upload reads the caller's rows directly and finishes before send_video
+        // returns, so no system-memory copy is made first (it measured 0.5 ms a 1080p frame).
+        AVFrame& b = *s.borrowed;
+        b.format = AV_PIX_FMT_NV12;
+        b.width = w;
+        b.height = h;
+        b.data[0] = const_cast<std::uint8_t*>(nv12.data());
+        b.data[1] = const_cast<std::uint8_t*>(uv);
+        b.linesize[0] = stride;
+        b.linesize[1] = stride;
+        return s.send_video(&b);
+    }
+    if (const int err = av_frame_make_writable(s.frame.get()); err < 0) {
+        return std::unexpected(ff::av_error(err, Category::Encode, "cannot reuse video frame"));
+    }
     const auto copy_started = std::chrono::steady_clock::now();
     for (std::size_t y = 0; y < rows; ++y) {
         std::memcpy(s.frame->data[0] + (static_cast<std::ptrdiff_t>(y) * s.frame->linesize[0]),

@@ -119,5 +119,8 @@ int main(int argc, char** argv) {
                 st.process_cpu_ms / n, st.build / n, st.build_worker / n, st.render / n, st.convert / n,
                 st.encode / n, st.audio / n, st.encoder.c_str(), st.encoder_input.c_str(),
                 static_cast<unsigned long long>(st.surface_frames), st.decode_path.c_str());
+    std::printf("  transfers per frame: readback %.2f, host copy %.2f, writer row copy %.2f, VA-API upload %.2f ms\n",
+                st.readback_ms / n, st.nv12_host_copy_ms / n, st.writer_transfers.nv12_copy_ms / n,
+                st.writer_transfers.va_upload_ms / n);
     return done ? 0 : 1;
 }

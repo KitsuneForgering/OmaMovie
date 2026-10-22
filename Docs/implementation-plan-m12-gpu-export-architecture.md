@@ -12,9 +12,10 @@ frames, then calls `read_nv12()` for the VA-API writer or `read_display()` for s
 encoding (`apps/omamovie/src/exporter.cpp`). `EncodedFrame` owns CPU pixels in a vector;
 the current NV12 compute pass writes a host-visible readback buffer, not an exportable
 NV12 image (`libs/compositor/src/nv12_pass.cpp`).
-`EncodeStage` passes NV12 bytes to `VideoWriter::write_nv12`, which copies rows into an
-AVFrame and calls `av_hwframe_transfer_data` to upload to a VA-API surface
-(`libs/media/src/video_writer.cpp`). The H.264 encode itself can use VA-API; the
+`EncodeStage` passes NV12 bytes to `VideoWriter::write_nv12`, which calls
+`av_hwframe_transfer_data` to upload them to a VA-API surface straight from the readback
+rows (`libs/media/src/video_writer.cpp`; the former row copy into an AVFrame was removed on
+2026-10-21, 4K CPU 16.1 → 13.95 ms/frame, [A/B](Research/evidence/2026-10-21-va-upload-borrowed-nv12.md)). The H.264 encode itself can use VA-API; the
 pixel round-trip around its encoder input is a measured, avoidable 4K export cost,
 not evidence of CPU-only encoding or proof that this cost dominates wall time.
 On the 4K23.976/240-frame fixture, about 2.986 GB crosses each
