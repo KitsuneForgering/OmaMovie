@@ -66,6 +66,30 @@ bool takes(const AVCodec* encoder, AVPixelFormat format) {
     return std::find(list, list + count, format) != list + count;
 }
 
+// `from` (RGB24 or RGBA, full range) to `to` at the same size: BT.709, limited range, chroma
+// sited left as the stream is tagged and as the GPU's NV12 is (nv12_bt709.comp), instead of
+// swscale's default centre. Against the source it measured the same; against the GPU export of
+// the same edit, which a device lost mid-export continues on the CPU, chroma came 4 dB closer.
+SwsContext* to_yuv(int width, int height, AVPixelFormat from, AVPixelFormat to) {
+    SwsContext* c = sws_alloc_context();
+    if (c == nullptr)
+        return nullptr;
+    c->src_w = c->dst_w = width;
+    c->src_h = c->dst_h = height;
+    c->src_format = from;
+    c->dst_format = to;
+    c->flags = SWS_BILINEAR;
+    c->dst_h_chr_pos = 0;   // on the even luma column
+    c->dst_v_chr_pos = 128; // between the two rows (luma grid / 256)
+    if (sws_init_context(c, nullptr, nullptr) < 0 ||
+        sws_setColorspaceDetails(c, sws_getCoefficients(SWS_CS_ITU709), 1,
+                                 sws_getCoefficients(SWS_CS_ITU709), 0, 0, 1 << 16, 1 << 16) < 0) {
+        sws_freeContext(c);
+        return nullptr;
+    }
+    return c;
+}
+
 } // namespace
 
 struct VideoWriter::Impl {
@@ -295,14 +319,9 @@ Result<std::unique_ptr<VideoWriter>> VideoWriter::create(const std::filesystem::
     if (err < 0) {
         return std::unexpected(ff::av_error(err, Category::Encode, "cannot allocate video frame"));
     }
-    impl->scale.reset(sws_getContext(width, height, AV_PIX_FMT_RGB24, width, height,
-                                     impl->sw_format, SWS_BILINEAR, nullptr, nullptr, nullptr));
+    impl->scale.reset(to_yuv(width, height, AV_PIX_FMT_RGB24, impl->sw_format));
     if (!impl->scale) {
         return make_error(ErrorCode::Internal, Category::Encode, "cannot convert RGB to YUV");
-    }
-    if (sws_setColorspaceDetails(impl->scale.get(), sws_getCoefficients(SWS_CS_ITU709), 1,
-                                 sws_getCoefficients(SWS_CS_ITU709), 0, 0, 1 << 16, 1 << 16) < 0) {
-        return make_error(ErrorCode::Internal, Category::Encode, "cannot set BT.709 conversion");
     }
     if (audio) {
         const AVCodec* audio_encoder = avcodec_find_encoder_by_name(format.audio_encoder->c_str());
@@ -418,11 +437,8 @@ Result<void> VideoWriter::write_rgba(std::span<const std::uint8_t> rgba, int str
     if (!s.scale_rgba) {
         const int w = s.codec->width;
         const int h = s.codec->height;
-        s.scale_rgba.reset(sws_getContext(w, h, AV_PIX_FMT_RGBA, w, h, s.sw_format, SWS_BILINEAR,
-                                          nullptr, nullptr, nullptr));
-        if (!s.scale_rgba || sws_setColorspaceDetails(
-                                 s.scale_rgba.get(), sws_getCoefficients(SWS_CS_ITU709), 1,
-                                 sws_getCoefficients(SWS_CS_ITU709), 0, 0, 1 << 16, 1 << 16) < 0) {
+        s.scale_rgba.reset(to_yuv(w, h, AV_PIX_FMT_RGBA, s.sw_format));
+        if (!s.scale_rgba) {
             return make_error(ErrorCode::Internal, Category::Encode, "cannot convert RGBA to YUV");
         }
     }

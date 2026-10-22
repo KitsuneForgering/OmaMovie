@@ -31,3 +31,20 @@ expected: melt hands the decoded YUV to x264 unchanged, while OmaMovie composite
 13.43 → 13.90 ms/frame median (+3.5%), wall 1360 [1310–1389] → 1330 [1279–1488] ms (noise),
 load 1.2–2.7. `tests/compositor/test_nv12.cpp` now checks left siting against its CPU
 reference (1 level; the centred shader is 52 levels off it).
+
+**CPU reference path (same day).** Without a Vulkan device the exporter converts the CPU
+compositor's RGBA with swscale, whose default destination siting is centre: a direct probe
+(gray RGBA, one red column at x = 3, to NV12) put all of its Cr in chroma column 1 by default
+and spread it over columns 1 and 2 with `dst_h_chr_pos = 0`. `VideoWriter` now sets
+`dst_h_chr_pos = 0`, `dst_v_chr_pos = 128`. On a 640x360, 48-frame cut of the fixture
+(`chroma_location=left`), libx264, `VK_ICD_FILENAMES=/nonexistent.json`:
+
+| CPU path against | U before → after | V before → after |
+|---|---|---|
+| the source | 34.68 → 34.47 dB | 32.09 → 32.14 dB |
+| the GPU path's export of the same clip | 38.74 → 42.44 dB | 36.55 → 40.91 dB |
+
+So siting was not why the CPU path's chroma trails the GPU path's against the source
+(36.66 / 34.60 dB there); the change makes the CPU continuation of a device lost mid-export
+match the GPU frames it follows. The cause of the remaining 2 dB is not identified.
+The exporter also stopped calling this path's input "NV12 readback".

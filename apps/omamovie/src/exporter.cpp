@@ -206,9 +206,11 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
     // route otherwise and the fallback whenever the encoder's surfaces cannot be used.
     std::unique_ptr<oma::media::EncoderSurfaces> surfaces;
     // libx264 also takes NV12, copied into its frame on the CPU; only VA-API uploads it.
-    st.encoder_input = !(*writer)->takes_nv12() ? "readback"
-                       : vaapi                  ? "NV12 readback, uploaded"
-                                                : "NV12 readback, copied into the encoder's frame";
+    // Without a Vulkan compositor the CPU's RGBA is converted by swscale (VideoWriter::write_rgba).
+    st.encoder_input = !gpu                         ? "CPU-rendered RGBA, converted to YUV"
+                       : !(*writer)->takes_nv12()   ? "readback"
+                       : vaapi                      ? "NV12 readback, uploaded"
+                                                    : "NV12 readback, copied into the encoder's frame";
     if (request.gpu_input && gpu && (*writer)->takes_nv12()) {
         if (auto made = (*writer)->surfaces(*device)) {
             surfaces = std::move(*made);
