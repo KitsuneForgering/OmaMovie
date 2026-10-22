@@ -49,7 +49,10 @@ regressions in interaction come before new breadth.
 0. **Paused hardware scrub (M11) — done 2026-10-14:** paused hardware frames decode on their
    own job worker with latest-request-wins; UI gap p95 221 → 12 ms at 1080p, 1323 → 12 ms at 4K
    ([async milestone](implementation-plan-async-interactive.md), ADR-0020). Left: the 4K
-   composite still runs in Qt's sync phase (~11 ms).
+   composite still runs in Qt's sync phase: `--m4-audit a2160.mp4 8` on 2026-10-22 (`e987f34`,
+   two runs) read composite p50 6.5 ms, p99 10.0–10.4 ms, no drops after the 2 s settle; the
+   earlier ~11 ms is now the p99. Three-layer 4K scenes read p50 4.2, p99 10–13 ms
+   ([audit](Research/evidence/2026-10-22-three-layer-playback-audit.md)).
 0. **5,000-clip edits (M6):** fixed 2026-10-14 (QML bindings reading the whole clip list for its
    length; p95 now 33–93 ms). The intermittent long split sample is explained (2026-10-21,
    [rerun](Research/evidence/2026-10-20-timeline-5000-rerun.md)): the audit's fresh cache made Mesa
