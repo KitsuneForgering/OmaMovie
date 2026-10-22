@@ -47,3 +47,21 @@ Wall time fell 7.6% and 9.9% (ranges apart), CPU 62–64%; GPU-resident memory r
 10 MB (1%). The video engine (decode and encode) is busy for about the whole export on both
 routes, so at 4K the export is bound there, not by the hand-off. Still not measured: 60 fps
 sources with effects, other vendors.
+
+## 1080p60 with effects — 2026-10-22
+
+`xed_1080p60_noise.mp4` (600 frames, sha256 `779347a2…`) on V1 with `oma.detail` −0.6,
+`oma.look.vintage` 0.7 and the colour adjustment above, and the same clip halved into the
+top-left quadrant on V2 (a 60/1 sequence from a two-track OTIO, `oma-project convert`).
+`measure.py`, five alternating rounds at `0726cd1`, load 0.4–1.0.
+
+| Route | Wall s | CPU s | Peak RSS MB | GPU-resident MB | Render busy s | Video busy s |
+|---|---|---|---|---|---|---|
+| A readback | 3.49 [3.42–3.62] | 2.40 | 139 | 180 | 2.86 | 2.03 |
+| B GPU-native input | 3.54 [3.50–3.57] | 1.57 | 131 | 184 | 2.77 | 1.75 |
+
+600/600 frames in encoder surfaces; movies byte-identical. Wall time is a tie with overlapping
+ranges: the render engine is busy about 80% of the export, so this scene is bound by
+compositing and effects. B still uses 35% less CPU and 4 MB more GPU memory. With this, the
+layered, effect, 4K and 60 fps checks of ADR-0023 have no case where B is slower beyond noise
+or differs in output; other vendors and the surface-failure fallback test remain open.
