@@ -181,6 +181,7 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
         .profile = request.profile};
     oma::Result<std::unique_ptr<oma::media::VideoWriter>> writer = std::unexpected(
         oma::Error(oma::ErrorCode::Unsupported, oma::Category::Encode, "not tried"));
+    bool vaapi = false;
     if (try_hardware) {
         auto hw = base;
         hw.encoder = oma::media::VideoEncoder::VaApi;
@@ -188,6 +189,7 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
             hw.render_node = device->info().render_node;
         writer = oma::media::VideoWriter::create(request.file, static_cast<int>(request.width),
                                                  static_cast<int>(request.height), rate, hw);
+        vaapi = writer.has_value();
         st.encoder =
             writer ? "VA-API H.264 (GPU)"
                    : "libx264 (software): the GPU encoder failed: " + writer.error().summary();
@@ -203,7 +205,10 @@ export_timeline_on(const ExportRequest& request, oma::gpu::Device* device,
     // GPU-native encoder input (proposed ADR-0023), only when asked for: the readback stays the
     // route otherwise and the fallback whenever the encoder's surfaces cannot be used.
     std::unique_ptr<oma::media::EncoderSurfaces> surfaces;
-    st.encoder_input = (*writer)->takes_nv12() ? "NV12 readback, uploaded" : "readback";
+    // libx264 also takes NV12, copied into its frame on the CPU; only VA-API uploads it.
+    st.encoder_input = !(*writer)->takes_nv12() ? "readback"
+                       : vaapi                  ? "NV12 readback, uploaded"
+                                                : "NV12 readback, copied into the encoder's frame";
     if (request.gpu_input && gpu && (*writer)->takes_nv12()) {
         if (auto made = (*writer)->surfaces(*device)) {
             surfaces = std::move(*made);

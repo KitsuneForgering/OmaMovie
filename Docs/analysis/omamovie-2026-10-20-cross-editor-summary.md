@@ -50,6 +50,15 @@ reference unchanged from the windowed runs, 41.95 and 41.41 dB). Reports:
 | Three layers, two scaled ([report](../Research/evidence/2026-10-21-cross-editor-headless-layers.txt)) | VA-API H.264 | 2.19 (2.16–2.23) | 16.81 (15.61–17.35) | 1.0 / 42.5 |
 | Three layers, two scaled | libx264 | 4.41 (3.60–5.14) | 18.31 (18.18–19.64) | 22.8 / 55.1 |
 
+*Whole rerun after the VA-API upload change (`45228be`, 2026-10-21, load 0.4–0.9 at the start,
+[report](../Research/evidence/2026-10-21-cross-editor-headless-whole-rerun.txt))*: VA-API 2.72 s
+(2.59–2.74) against melt's 6.00 (5.99–6.01), user CPU about 2.1 against 15.3 s; libx264 12.84
+(11.17–12.95) against 17.20 (15.63–17.95). All 12 exports passed with the same bytes and PSNR as
+before. The earlier VA-API row (2.84, 2.80–2.86) was on a different day and load, so the 4% is
+not an A/B; the [same-session A/B](../Research/evidence/2026-10-21-va-upload-borrowed-nv12.md) is.
+On libx264 OmaMovie's file is 11% smaller at 0.2 dB lower worst PSNR, so its speed is not a
+like-for-like quality win.
+
 Against the windowed rows above, part of the gain is the missing window and start-up, so the two
 tables are not one A/B. OmaMovie's VA-API outputs have the same sizes as the windowed runs'
 (cuts 15,141,751 bytes), as expected from the same exporter.
