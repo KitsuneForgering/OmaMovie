@@ -859,7 +859,11 @@ int main(int argc, char** argv) {
             const bool passed = p99 * 1000.0 <= frame_ms &&
                                 (audit_seconds < 120 || drift * 1000.0 <= frame_ms) &&
                                 underruns == 0;
-            const std::string dropped = std::to_string(session.droppedVideoFrames());
+            // Dropped: prepared but never shown; late: queued already due; skipped: never
+            // prepared because the producer had fallen behind the clock.
+            const std::string dropped = std::to_string(session.droppedVideoFrames()) + " (late " +
+                                        std::to_string(session.lateVideoFrames()) + ", skipped " +
+                                        std::to_string(session.skippedVideoFrames()) + ")";
             auto timings = preview->takeTimings();
             const auto pct = [](std::vector<double>& v, int p) {
                 if (v.empty())

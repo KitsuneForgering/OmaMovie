@@ -188,6 +188,9 @@ public:
     [[nodiscard]] std::int64_t audibleSample() const;
     [[nodiscard]] std::int64_t audioUnderruns() const;
     [[nodiscard]] std::int64_t droppedVideoFrames() const;
+    // Playback frames queued already due, and never prepared because the clock passed them.
+    [[nodiscard]] std::int64_t lateVideoFrames() const;
+    [[nodiscard]] std::int64_t skippedVideoFrames() const;
     // How long the last playback (re)start held the UI thread, in milliseconds (M4 audit).
     [[nodiscard]] double lastRestartMs() const;
     // Paused-viewer seeks stopped by a newer request: milliseconds from that request to the

@@ -30,6 +30,7 @@ void VideoScheduler::start(std::shared_ptr<const oma::timeline::Timeline> timeli
             // Never prepare a frame the clock has already passed.
             const std::int64_t clock = target_.load(std::memory_order_relaxed);
             if (stride > 0 ? next < clock : next > clock) {
+                skipped_.fetch_add((clock - next) / stride, std::memory_order_relaxed);
                 next = clock;
             }
             if (next < 0 || next > last) {
@@ -46,6 +47,9 @@ void VideoScheduler::start(std::shared_ptr<const oma::timeline::Timeline> timeli
                     error_ = view.error().summary();
                 }
                 break;
+            }
+            if (not_after(next, target_.load(std::memory_order_relaxed))) {
+                late_.fetch_add(1, std::memory_order_relaxed);
             }
             if (!queue->push(Frame{.frame = next, .view = std::move(*view)})) {
                 break; // closed: stopped
@@ -98,6 +102,10 @@ std::optional<std::string> VideoScheduler::take_error() {
 }
 
 std::int64_t VideoScheduler::dropped() const noexcept { return dropped_.load(std::memory_order_relaxed); }
+
+std::int64_t VideoScheduler::late() const noexcept { return late_.load(std::memory_order_relaxed); }
+
+std::int64_t VideoScheduler::skipped() const noexcept { return skipped_.load(std::memory_order_relaxed); }
 
 bool VideoScheduler::not_after(std::int64_t frame, std::int64_t target) const noexcept {
     return step_ > 0 ? frame <= target : frame >= target;

@@ -24,8 +24,17 @@ scenes in a fixed order per round.
 No audio underruns; about 190 composites per run. Composition stays far below the 41.7 ms
 frame period even at 4K with effects, yet every layered scene drops one to three frames per
 8 s where the single clip drops zero or one. The extra drops therefore do not come from
-compositing cost; three concurrent decoders or their scheduling are the next hypothesis, not
-yet measured (the audit does not attribute a drop to a stage). The interval percentiles
+compositing cost.
+
+**Attribution (same day).** `VideoScheduler` now also counts frames the producer queued
+already due (`late`) and frames it never prepared because the clock had passed them
+(`skipped`, which `dropped` never included); the audit prints both. Three more rounds: the
+single clip dropped 0/1/1 (late 2/1/1, skipped 0), the 1080p layers 1/2/2 (late 1, skipped 0),
+the 4K layers with effects 1/2/2 (late 1, skipped 0). The one late frame is the first, due as
+playback starts. So the producer keeps up with three decoders even at 4K; the drops are
+on-time frames overtaken between two takes on the render thread, whose composite interval
+p99 reaches 60–130 ms on the single clip too. The decoder hypothesis is refuted; the next
+question is what delays the render loop's takes (presentation or Qt's update scheduling). The interval percentiles
 (p50 40, p95 60 ms) follow the audit's 20 ms UI timer, not presentation.
 
 Not comparable with melt: its `sdl2` consumer reports no dropped frames (see the

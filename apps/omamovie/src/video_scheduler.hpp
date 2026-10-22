@@ -58,6 +58,10 @@ public:
 
     // Prepared frames never shown because a newer one was due.
     [[nodiscard]] std::int64_t dropped() const noexcept;
+    // Frames the producer queued already due (at or past the clock): late, though maybe shown.
+    [[nodiscard]] std::int64_t late() const noexcept;
+    // Frames the producer never prepared because the clock had passed them (not in dropped()).
+    [[nodiscard]] std::int64_t skipped() const noexcept;
     // A failure in the producer (undecodable media), reported once.
     [[nodiscard]] std::optional<std::string> take_error();
 
@@ -68,6 +72,8 @@ private:
     std::shared_ptr<oma::BoundedQueue<Frame>> queue_;
     std::atomic<std::int64_t> target_{0};
     std::atomic<std::int64_t> dropped_{0};
+    std::atomic<std::int64_t> late_{0};
+    std::atomic<std::int64_t> skipped_{0};
     std::mutex error_mutex_;
     std::optional<std::string> error_;
     // This pipeline's own decoders. Only the producer touches them, and stop() joins it before

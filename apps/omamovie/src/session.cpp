@@ -193,6 +193,10 @@ std::uint64_t Session::cacheBytes() const { return thumbnail_cache_.size() + wav
 std::int64_t Session::audibleSample() const { return audio_.audible_sample(); }
 std::int64_t Session::audioUnderruns() const { return audio_.underruns(); }
 std::int64_t Session::droppedVideoFrames() const { return scheduler_.dropped(); }
+
+std::int64_t Session::lateVideoFrames() const { return scheduler_.late(); }
+
+std::int64_t Session::skippedVideoFrames() const { return scheduler_.skipped(); }
 double Session::lastRestartMs() const { return last_restart_ms_; }
 
 std::pair<std::vector<double>, std::vector<double>> Session::takeTickTimings() {
