@@ -48,3 +48,13 @@ So siting was not why the CPU path's chroma trails the GPU path's against the so
 (36.66 / 34.60 dB there); the change makes the CPU continuation of a device lost mid-export
 match the GPU frames it follows. The cause of the remaining 2 dB is not identified.
 The exporter also stopped calling this path's input "NV12 readback".
+
+**Open: sources without a chroma location (2026-10-22).** FFmpeg reports `left` for H.264
+and HEVC that do not signal one (both codecs' default), so input and output agree for them.
+AV1 and VP9 report `unspecified` (`av1_opus.mkv`, `dec_av1_2160.mp4`, `dec_vp9_2160.webm`),
+which `layer_params.cpp` reads as centre while the export now writes left, as its stream
+says. That is right when such a source really is centre-sited (FFmpeg's own `yuv420p`
+conversion, which made these fixtures, is centre by default) and half a pixel off when it is
+left-sited, where the former centre output had cancelled the input's error. Which convention
+real AV1/VP9 sources (screen recorders, cameras, browsers) follow has not been researched or
+measured; settle it from encoder sources and a few real files before changing the input rule.
