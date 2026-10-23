@@ -26,3 +26,14 @@ claim there is CPU only; at 4K the wall median dropped 6.6% with ranges overlapp
 `export_bench` now prints the per-frame readback, host copy, writer row copy and upload.
 This removes one host copy of the staged route; it is not the GPU-native input of
 [M12](../../implementation-plan-m12-gpu-export-architecture.md) (`gpu-input`, separate A/B).
+
+**Where the rest goes (sampled 2026-10-23, `25f6147`).** `export_bench` on the same 1080p
+fixture as a child of `gdb`, `SIGINT` every 50 ms (264 thread stacks, 51 not waiting on a
+condition variable). Of the busy ones, 24 sat in `gpu::CommandRunner::run` under
+`VulkanCompositor::render` and `Nv12Pass::run`: the fence wait after each of the two
+synchronous submissions per frame, so GPU time rather than CPU work. The CPU work left on this
+route is the VA-API upload's copy into the surface (`av_hwframe_transfer_data` →
+`av_image_copy`, 12) and the encoder's submission (`avcodec_send_frame`, 9); per-frame
+DMA-BUF imports of decoded frames appeared twice. The GPU-native input removes the upload copy;
+merging the two submissions per frame is ADR-0023's open synchronisation item. No cheaper
+change is indicated.
