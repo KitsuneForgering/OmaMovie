@@ -20,3 +20,9 @@ Not covered: CI's second compiler, the clang-tidy and fuzz jobs, the GUI smoke u
 `vm.mmap_rnd_bits=28` for TSan (not changeable here; the run passed without it).
 Without any Vulkan device (`VK_ICD_FILENAMES=/nonexistent.json`) five older app tests that
 export 1080p in debug exceed their 60 s wait on the CPU compositor; no CI job runs that way.
+
+**Follow-up at `f352aa3`.** The later playback and compositor changes (frame
+counters in `VideoScheduler`, `PreviewAdapt`, unspecified chroma read as left) were run
+under the same sanitizer environment ctest gives: TSan on the scheduler, adaptive-preview and
+seeded Session stress tests (all pass, no TSan report) and ASan on `compositor_tests` (258/258)
+and the scheduler test (pass).
