@@ -20,6 +20,11 @@ Not covered: CI's second compiler, the clang-tidy and fuzz jobs, the GUI smoke u
 `vm.mmap_rnd_bits=28` for TSan (not changeable here; the run passed without it).
 Without any Vulkan device (`VK_ICD_FILENAMES=/nonexistent.json`) five older app tests that
 export 1080p in debug exceed their 60 s wait on the CPU compositor; no CI job runs that way.
+*Update 2026-10-23*: after the CPU compositor's one-tap and threaded-rows changes the three
+1080p exports finish in 16–32 s, and the two decode-path tests failed only because they
+required the reason "chosen in Settings" where a machine without a device says "no GPU
+device"; they accept both now. The whole `app_tests` suite passes without any Vulkan device
+(136/136, 145 s).
 
 **Follow-up at `f352aa3`.** The later playback and compositor changes (frame
 counters in `VideoScheduler`, `PreviewAdapt`, unspecified chroma read as left) were run

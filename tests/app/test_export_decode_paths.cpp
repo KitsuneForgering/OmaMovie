@@ -39,8 +39,10 @@ bool hardware_decode_matches_software(const char* media) {
     QTemporaryDir dir;
     const Exported hw = export_with(dir, media, "hardware");
     const Exported sw = export_with(dir, media, "software");
+    // Without any Vulkan device the reason is the missing device, not the Settings choice.
     if (hw.movie.isEmpty() || sw.movie.isEmpty() ||
-        !sw.stats.decode_path.starts_with("software (chosen in Settings)"))
+        !(sw.stats.decode_path.starts_with("software (chosen in Settings)") ||
+          sw.stats.decode_path.starts_with("software (no GPU device)")))
         return false;
     if (hw.stats.decoded.software_frames > 0)
         std::printf("    (%s: hardware decode unavailable, compared software with software)\n",
