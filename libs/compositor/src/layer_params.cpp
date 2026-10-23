@@ -139,7 +139,10 @@ Result<PreparedLayer> prepare_layer(const Layer& layer, const LayerInput& input,
     const auto sx = static_cast<float>(1U << static_cast<unsigned>(layout.chroma_shift_x));
     const auto sy = static_cast<float>(1U << static_cast<unsigned>(layout.chroma_shift_y));
     const auto location = input.color.chroma_location;
-    const bool left = location == 1 || location == 3 || location == 5;
+    // Unspecified (0) is left, as H.264/HEVC define it and as libplacebo (mpv) assumes for any
+    // untagged subsampled source ("the majority of subsampled chroma content"): AV1 and VP9
+    // report it, and the export writes left-sited chroma (nv12_bt709.comp).
+    const bool left = location == 0 || location == 1 || location == 3 || location == 5;
     const bool top = location == 3 || location == 4;
     const bool bottom = location == 5 || location == 6;
     p.chroma = {sx > 1.0F && left ? 0.5F : sx * 0.5F,

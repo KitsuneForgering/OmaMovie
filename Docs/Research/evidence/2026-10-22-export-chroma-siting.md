@@ -58,3 +58,17 @@ conversion, which made these fixtures, is centre by default) and half a pixel of
 left-sited, where the former centre output had cancelled the input's error. Which convention
 real AV1/VP9 sources (screen recorders, cameras, browsers) follow has not been researched or
 measured; settle it from encoder sources and a few real files before changing the input rule.
+
+**Settled the same day.** Transcoding the left-tagged H.264 fixture to AV1 (SVT-AV1 4.2) and
+VP9 (libvpx) with FFmpeg 9 wrote `unspecified` while keeping the source's left-sited samples:
+the common path to an untagged AV1/VP9 file carries left siting. libplacebo, mpv's renderer,
+resolves an unknown location to left in `pl_chroma_location_offset`
+(`loc = PL_DEF(loc, PL_CHROMA_LEFT)`, commented "the majority of subsampled chroma content out
+there"; [source](https://github.com/haasn/libplacebo/blob/master/src/colorspace.c)), after an
+earlier change had treated it as top-left. `layer_params.cpp` now reads `unspecified` as left
+too, so input, export and the common players agree; `tests/compositor/test_compositors.cpp`
+renders an untagged source exactly as a left-sited one (the old rule fails it). On
+`av1_opus.mkv` (untagged SD, so its absolute PSNR is dominated by the ADR-0006 colour
+conversion) the libx264 export's chroma came closer to the source samples: U 25.01 → 25.60,
+V 20.09 → 20.39 dB, luma unchanged within 0.1 dB. Sources made by FFmpeg's own `yuv420p`
+conversion, centre-sited but untagged, now read half a pixel off, as they do in mpv.

@@ -708,6 +708,12 @@ void chroma_location_changes_color_edges() {
     }
     // The vivid patch starts at x=160; siting changes the interpolation at its edge.
     expect(std::abs(a->at(159, 90)[0] - b->at(159, 90)[0]) > 0.002F).toBeTruthy();
+    // An untagged source (AV1, VP9) is read as left-sited, as libplacebo reads it.
+    auto unknown = center;
+    unknown.color.chroma_location = 0;
+    const std::array<LayerInput, 1> untagged{unknown};
+    const auto u = CpuCompositor{}.render(g, untagged);
+    expect(u && u->at(159, 90)[0] == b->at(159, 90)[0]).toBeTruthy();
     expect(std::abs(a->at(120, 90)[0] - b->at(120, 90)[0]) < 1e-5F).toBeTruthy();
     // Both sitings against the independent reconstruction across the edge (the decoded
     // samples, so the shared chroma positions and interpolation are what is compared).
