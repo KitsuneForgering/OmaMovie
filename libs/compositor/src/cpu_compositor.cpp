@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <thread>
 #include <vector>
 
 namespace oma::compositor {
@@ -371,100 +372,113 @@ Rgb apply_grade(const LayerParams& p, const Lut3d* lut, Rgb c) {
             .b = to_linear(e.b, transfer)};
 }
 
-// Mirrors main() in shaders/composite.comp.
+// Mirrors main() in shaders/composite.comp. Every output pixel depends only on the source and
+// its own previous value, so the rows are split over the cores, as the shader's invocations are:
+// the result is the same for any split.
 void composite(const LayerParams& p, const Planes& planes, const Lut3d* lut, RgbaImage& out) {
     const auto [lo_x, lo_y, hi_x, hi_y] = tap_bounds(p);
     const Blurred blurred = blurred_source(p, planes);
-    for (int oy = p.region[1]; oy < p.region[3]; ++oy) {
-        for (int ox = p.region[0]; ox < p.region[2]; ++ox) {
-            const float fx = static_cast<float>(ox) + 0.5F;
-            const float fy = static_cast<float>(oy) + 0.5F;
-            const float sx = (p.inv0[0] * fx) + (p.inv0[1] * fy) + p.inv0[2];
-            const float sy = (p.inv1[0] * fx) + (p.inv1[1] * fy) + p.inv1[2];
-            // A 2x2 coverage grid smooths transformed and cropped edges. Color is still
-            // evaluated once at the pixel center, with source taps clamped to the crop.
-            float coverage = 0.0F;
-            for (const float dy : {-0.25F, 0.25F}) {
-                for (const float dx : {-0.25F, 0.25F}) {
-                    const float sample_x = sx + (p.inv0[0] * dx) + (p.inv0[1] * dy);
-                    const float sample_y = sy + (p.inv1[0] * dx) + (p.inv1[1] * dy);
-                    coverage += sample_x >= p.crop[0] && sample_y >= p.crop[1] &&
-                                        sample_x < p.crop[2] && sample_y < p.crop[3]
-                                    ? 0.25F
-                                    : 0.0F;
+    const auto rows = [&](int first, int end) {
+        for (int oy = first; oy < end; ++oy) {
+            for (int ox = p.region[0]; ox < p.region[2]; ++ox) {
+                const float fx = static_cast<float>(ox) + 0.5F;
+                const float fy = static_cast<float>(oy) + 0.5F;
+                const float sx = (p.inv0[0] * fx) + (p.inv0[1] * fy) + p.inv0[2];
+                const float sy = (p.inv1[0] * fx) + (p.inv1[1] * fy) + p.inv1[2];
+                // A 2x2 coverage grid smooths transformed and cropped edges. Color is still
+                // evaluated once at the pixel center, with source taps clamped to the crop.
+                float coverage = 0.0F;
+                for (const float dy : {-0.25F, 0.25F}) {
+                    for (const float dx : {-0.25F, 0.25F}) {
+                        const float sample_x = sx + (p.inv0[0] * dx) + (p.inv0[1] * dy);
+                        const float sample_y = sy + (p.inv1[0] * dx) + (p.inv1[1] * dy);
+                        coverage += sample_x >= p.crop[0] && sample_y >= p.crop[1] &&
+                                            sample_x < p.crop[2] && sample_y < p.crop[3]
+                                        ? 0.25F
+                                        : 0.0F;
+                    }
                 }
-            }
-            if (coverage == 0.0F) {
-                continue;
-            }
-            const float bx = std::floor(sx - 0.5F);
-            const float by = std::floor(sy - 0.5F);
-            const float tx = (sx - 0.5F) - bx;
-            const float ty = (sy - 0.5F) - by;
-            const int x0 = std::clamp(static_cast<int>(bx), lo_x, hi_x);
-            const int y0 = std::clamp(static_cast<int>(by), lo_y, hi_y);
-            const int x1 = std::clamp(static_cast<int>(bx) + 1, lo_x, hi_x);
-            const int y1 = std::clamp(static_cast<int>(by) + 1, lo_y, hi_y);
-            // On the source grid (a native-size layer) the other three taps weigh 0: skip them,
-            // as the shader does.
-            Rgb color = detailed(p, planes, blurred, x0, y0);
-            if (tx != 0.0F || ty != 0.0F) {
-                color = mix(mix(color, detailed(p, planes, blurred, x1, y0), tx),
-                            mix(detailed(p, planes, blurred, x0, y1),
-                                detailed(p, planes, blurred, x1, y1), tx),
-                            ty);
-            }
-            color = apply_look(p, sx, sy, color);
-            if (p.grade[0] != 0) {
-                color = apply_grade(p, lut, color);
-            }
+                if (coverage == 0.0F) {
+                    continue;
+                }
+                const float bx = std::floor(sx - 0.5F);
+                const float by = std::floor(sy - 0.5F);
+                const float tx = (sx - 0.5F) - bx;
+                const float ty = (sy - 0.5F) - by;
+                const int x0 = std::clamp(static_cast<int>(bx), lo_x, hi_x);
+                const int y0 = std::clamp(static_cast<int>(by), lo_y, hi_y);
+                const int x1 = std::clamp(static_cast<int>(bx) + 1, lo_x, hi_x);
+                const int y1 = std::clamp(static_cast<int>(by) + 1, lo_y, hi_y);
+                // On the source grid (a native-size layer) the other three taps weigh 0: skip them,
+                // as the shader does.
+                Rgb color = detailed(p, planes, blurred, x0, y0);
+                if (tx != 0.0F || ty != 0.0F) {
+                    color = mix(mix(color, detailed(p, planes, blurred, x1, y0), tx),
+                                mix(detailed(p, planes, blurred, x0, y1),
+                                    detailed(p, planes, blurred, x1, y1), tx),
+                                ty);
+                }
+                color = apply_look(p, sx, sy, color);
+                if (p.grade[0] != 0) {
+                    color = apply_grade(p, lut, color);
+                }
 
-            float a = p.misc[0] * coverage;
-            if (p.extra[3] != 0) {
-                // The source's own alpha, filtered with the same taps as its colour. The colour of
-                // fully transparent pixels still bleeds in at edges; title rasterizing fills them
-                // with the text colour so that bleed is invisible.
-                const auto alpha = [&](int x, int y) {
-                    return planes.fetch(3, x, y, 0, 1) * p.misc[1];
-                };
-                a *= std::lerp(std::lerp(alpha(x0, y0), alpha(x1, y0), tx),
-                               std::lerp(alpha(x0, y1), alpha(x1, y1), tx), ty);
+                float a = p.misc[0] * coverage;
+                if (p.extra[3] != 0) {
+                    // The source's own alpha, filtered with the same taps as its colour. The colour
+                    // of fully transparent pixels still bleeds in at edges; title rasterizing fills
+                    // them with the text colour so that bleed is invisible.
+                    const auto alpha = [&](int x, int y) {
+                        return planes.fetch(3, x, y, 0, 1) * p.misc[1];
+                    };
+                    a *= std::lerp(std::lerp(alpha(x0, y0), alpha(x1, y0), tx),
+                                   std::lerp(alpha(x0, y1), alpha(x1, y1), tx), ty);
+                }
+                if (p.misc[2] >= 0.0F) {
+                    a *= std::clamp(p.misc[2] - static_cast<float>(ox), 0.0F, 1.0F);
+                }
+                const std::array<float, 4> src{color.r * a, color.g * a, color.b * a, a};
+                float* dst =
+                    out.pixels.data() +
+                    ((static_cast<std::size_t>(oy) * out.width) + static_cast<std::size_t>(ox)) * 4;
+                const float out_a = src[3] + (dst[3] * (1.0F - src[3]));
+                switch (static_cast<BlendMode>(p.extra[0])) {
+                case BlendMode::Add:
+                    for (int c = 0; c < 3; ++c) {
+                        dst[c] = src[static_cast<std::size_t>(c)] + dst[c];
+                    }
+                    break;
+                case BlendMode::Multiply:
+                    for (int c = 0; c < 3; ++c) {
+                        const float s = src[static_cast<std::size_t>(c)];
+                        dst[c] = (s * dst[c]) + (s * (1.0F - dst[3])) + (dst[c] * (1.0F - src[3]));
+                    }
+                    break;
+                case BlendMode::Screen:
+                    for (int c = 0; c < 3; ++c) {
+                        const float s = src[static_cast<std::size_t>(c)];
+                        dst[c] = s + dst[c] - (s * dst[c]);
+                    }
+                    break;
+                case BlendMode::Normal:
+                    for (int c = 0; c < 3; ++c) {
+                        dst[c] = src[static_cast<std::size_t>(c)] + (dst[c] * (1.0F - src[3]));
+                    }
+                    break;
+                }
+                dst[3] = out_a;
             }
-            if (p.misc[2] >= 0.0F) {
-                a *= std::clamp(p.misc[2] - static_cast<float>(ox), 0.0F, 1.0F);
-            }
-            const std::array<float, 4> src{color.r * a, color.g * a, color.b * a, a};
-            float* dst =
-                out.pixels.data() +
-                ((static_cast<std::size_t>(oy) * out.width) + static_cast<std::size_t>(ox)) * 4;
-            const float out_a = src[3] + (dst[3] * (1.0F - src[3]));
-            switch (static_cast<BlendMode>(p.extra[0])) {
-            case BlendMode::Add:
-                for (int c = 0; c < 3; ++c) {
-                    dst[c] = src[static_cast<std::size_t>(c)] + dst[c];
-                }
-                break;
-            case BlendMode::Multiply:
-                for (int c = 0; c < 3; ++c) {
-                    const float s = src[static_cast<std::size_t>(c)];
-                    dst[c] = (s * dst[c]) + (s * (1.0F - dst[3])) + (dst[c] * (1.0F - src[3]));
-                }
-                break;
-            case BlendMode::Screen:
-                for (int c = 0; c < 3; ++c) {
-                    const float s = src[static_cast<std::size_t>(c)];
-                    dst[c] = s + dst[c] - (s * dst[c]);
-                }
-                break;
-            case BlendMode::Normal:
-                for (int c = 0; c < 3; ++c) {
-                    dst[c] = src[static_cast<std::size_t>(c)] + (dst[c] * (1.0F - src[3]));
-                }
-                break;
-            }
-            dst[3] = out_a;
         }
-    }
+    };
+    const int height = p.region[3] - p.region[1];
+    const int parts = std::clamp(static_cast<int>(std::thread::hardware_concurrency()), 1,
+                                 std::max(height / 16, 1));
+    std::vector<std::jthread> workers;
+    workers.reserve(static_cast<std::size_t>(parts - 1));
+    for (int i = 1; i < parts; ++i)
+        workers.emplace_back(rows, p.region[1] + (height * i / parts),
+                             p.region[1] + (height * (i + 1) / parts));
+    rows(p.region[1], p.region[1] + (height / parts));
 }
 
 } // namespace

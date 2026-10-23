@@ -19,3 +19,20 @@ Outputs are byte-identical (`cmp`): with both weights 0 the mix returns its firs
 Scaled or transformed layers keep all four taps; `compositor_tests` (CPU against GPU, transforms
 included) and the full suite pass. Still about 0.4 s a 1080p frame: this is a fallback, not a
 real-time path.
+
+## Rows over the cores — 2026-10-23
+
+No `perf` here and `ptrace_scope` 1, so `export_bench` ran as a child of `gdb` with `SIGINT`
+every 0.4 s (786 sampled frames). Where symbols resolved, the main thread sat in
+`CpuCompositor::render` → `composite` → `detailed` → `texel` (the per-pixel YUV to linear-RGB
+conversion), on one thread of eight. Every output pixel depends only on the source and its own
+previous value, so `composite` now splits the layer's rows over `hardware_concurrency()` threads
+(at least 16 rows each). Same 24 frames, two runs each:
+
+| Build | Export | Process CPU per frame |
+|---|---|---|
+| `5b8269a` (one thread) | 6,354 / 6,371 ms | 379 / 382 ms |
+| plus this change | 2,330 / 2,298 ms | 527 / 513 ms |
+
+2.75× faster with byte-identical output (`cmp`); total CPU per frame rises with the threads
+(hyperthreads share cores). `compositor_tests` pass under TSan with no report.
