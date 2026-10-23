@@ -36,14 +36,23 @@ std::optional<Input> from_video(const char* file) {
     const auto rate = v.video && v.video->frame_rate ? *v.video->frame_rate : oma::frame_rates::k30;
     tl::Editor ed(tl::Timeline::create(rate, oma::SampleRate::make(48000).value()).value());
     const tl::MediaId media{1};
+    // Matroska records neither a stream duration nor a frame count: use the container's
+    // duration, in the stream's timebase as the media range needs, and the frames it spans.
     const auto start = v.start.value_or(oma::RationalTime::make(0, v.timebase).value());
-    const std::int64_t frames = v.frame_count.value_or(0);
+    std::optional<oma::RationalTime> duration = v.duration;
+    if (!duration && info->duration)
+        if (auto d = info->duration->rescaled(start.timebase(), oma::Rounding::Floor))
+            duration = *d;
+    const std::int64_t frames =
+        v.frame_count ? *v.frame_count
+        : duration    ? rate.time_to_frame(*duration, oma::Rounding::Floor).value_or(0)
+                      : 0;
     const auto per_frame = ed.timeline().to_ticks(rate.frame_to_time(1));
     const tl::TrackId track = ed.new_track_id();
-    if (!v.duration || frames <= 0 || !per_frame ||
+    if (!duration || frames <= 0 || !per_frame ||
         !ed.add_media({.id = media,
                        .start = start,
-                       .duration = *v.duration,
+                       .duration = *duration,
                        .has_video = true,
                        .has_audio = info->best_audio.has_value(),
                        .still = false}) ||
